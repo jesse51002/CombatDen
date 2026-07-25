@@ -41,6 +41,16 @@ const List<String> kKioskGroupFlowSteps = [
 /// [steps] is passed rather than derived so the same widget serves both the
 /// solo and group templates — see [kKioskSoloFlowSteps] /
 /// [kKioskGroupFlowSteps].
+///
+/// **It SCALES rather than clips on a narrow fold.** The rungs are intrinsically
+/// sized, so the 7-rung group template is wider than the 6-rung solo one and can
+/// out-measure a short fold's content rail — and a clipped rail loses exactly
+/// the rungs a member has not reached yet, which is the half that tells them how
+/// much is left. The `BoxFit.scaleDown` is a NO-OP whenever the rail fits (the
+/// normal case) and otherwise shrinks the whole rail **as a set**, so the discs,
+/// labels and connectors keep their proportions to each other instead of one
+/// being singled out. This is the same "a short fold scales, never overflows"
+/// rule the get-app modal's `ShrinkToFit` applies vertically.
 class KioskFlowRail extends StatelessWidget {
   final List<String> steps;
 
@@ -56,21 +66,24 @@ class KioskFlowRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        for (var i = 0; i < steps.length; i++) ...[
-          if (i > 0) _RailLink(done: i <= current),
-          _RailStep(
-            number: i + 1,
-            label: steps[i],
-            done: i < current,
-            now: i == current,
-          ),
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          for (var i = 0; i < steps.length; i++) ...[
+            if (i > 0) _RailLink(done: i <= current),
+            _RailStep(
+              number: i + 1,
+              label: steps[i],
+              done: i < current,
+              now: i == current,
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

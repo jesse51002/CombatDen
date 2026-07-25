@@ -154,20 +154,20 @@ void main() {
       expect(cubit.state.payer.hadTrial, isTrue);
       // The rule is per MEMBER, so the trial they never took is closed too.
       expect(
-        cubit.state.planBlocked(cubit.state.plans
+        cubit.state.planBlockReason(cubit.state.plans
             .firstWhere((p) => p.planId == trialPlan)),
-        isTrue,
+        KioskPlanBlockReason.trialUsed,
       );
       expect(
-        cubit.state.planBlocked(cubit.state.plans
+        cubit.state.planBlockReason(cubit.state.plans
             .firstWhere((p) => p.planId == secondTrialPlan)),
-        isTrue,
+        KioskPlanBlockReason.trialUsed,
       );
       // Everything that is not a trial is untouched.
       expect(
-        cubit.state.planBlocked(cubit.state.plans
+        cubit.state.planBlockReason(cubit.state.plans
             .firstWhere((p) => p.planId == monthlyPlan)),
-        isFalse,
+        isNull,
       );
       await cubit.close();
     });
@@ -192,9 +192,19 @@ void main() {
           await atPlansAsExisting([_membership(monthlyPlan, 'recurring')]);
 
       expect(cubit.state.payer.hadTrial, isFalse);
+      // The two block reasons are independent rules over different plan types:
+      // no trial in their history leaves every TRIAL plan open, while the
+      // recurring plan they hold is closed by the other rule (see
+      // `kiosk_signup_plan_block_test.dart`).
       for (final plan in cubit.state.plans) {
-        expect(cubit.state.planBlocked(plan), isFalse);
+        if (plan.planId == monthlyPlan) continue;
+        expect(cubit.state.planBlockReason(plan), isNull);
       }
+      expect(
+        cubit.state.planBlockReason(cubit.state.plans
+            .firstWhere((p) => p.planId == monthlyPlan)),
+        KioskPlanBlockReason.alreadyOnPlan,
+      );
       await cubit.close();
     });
 
@@ -231,7 +241,7 @@ void main() {
       expect(cubit.state.payer.hadTrial, isFalse);
       cubit.selectPlan(trialPlan);
       expect(cubit.state.payer.selectedPlanId, trialPlan);
-      expect(cubit.state.trialBlockActive, isFalse);
+      expect(cubit.state.planBlockActive, isNull);
       await cubit.close();
     });
   });
@@ -244,7 +254,7 @@ void main() {
       // It can never become the pick, so it can never reach the review and
       // fail at pay.
       expect(cubit.state.payer.selectedPlanId, isNull);
-      expect(cubit.state.trialBlockActive, isTrue);
+      expect(cubit.state.planBlockActive, KioskPlanBlockReason.trialUsed);
       // And it is never a silent no-op — the answer is one tap away.
       expect(cubit.state.popupCountdown, kKioskSignupPopupHold.inSeconds);
       await cubit.close();
@@ -254,16 +264,16 @@ void main() {
         () async {
       final cubit = await atPlansAsExisting([_membership(trialPlan, 'trial')]);
       cubit.selectPlan(trialPlan);
-      cubit.dismissTrialBlock();
+      cubit.dismissPlanBlock();
 
-      expect(cubit.state.trialBlockActive, isFalse);
+      expect(cubit.state.planBlockActive, isNull);
       expect(cubit.state.popupCountdown, 0);
       // Nothing blocked survives the dismissal.
       expect(cubit.state.payer.selectedPlanId, isNull);
 
       cubit.selectPlan(monthlyPlan);
       expect(cubit.state.payer.selectedPlanId, monthlyPlan);
-      expect(cubit.state.trialBlockActive, isFalse);
+      expect(cubit.state.planBlockActive, isNull);
       await cubit.close();
     });
 
@@ -271,11 +281,11 @@ void main() {
         () async {
       final cubit = await atPlansAsExisting([_membership(trialPlan, 'trial')]);
       cubit.selectPlan(trialPlan);
-      cubit.trialBlockHelp();
+      cubit.planBlockHelp();
 
       expect(cubit.state.step, KioskSignupStep.stop);
       expect(cubit.state.stopReason, KioskSignupStopReason.trialAlreadyUsed);
-      expect(cubit.state.trialBlockActive, isFalse);
+      expect(cubit.state.planBlockActive, isNull);
       verify(() => session.endFlow()).called(1);
       await cubit.close();
       // Still exactly once after the teardown — the latch holds.
@@ -320,7 +330,7 @@ void main() {
         cubit.continueToPlans();
         async.flushMicrotasks();
         cubit.selectPlan(trialPlan);
-        expect(cubit.state.trialBlockActive, isTrue);
+        expect(cubit.state.planBlockActive, KioskPlanBlockReason.trialUsed);
 
         // Halfway: still up, and visibly counting.
         async.elapse(const Duration(seconds: 30));
@@ -331,7 +341,7 @@ void main() {
         // The ordinary abandon path — `KioskSignupScreen` turns `abandoned`
         // into `goHome()`, and the flow count is released by the ONE latch.
         expect(cubit.state.abandoned, isTrue);
-        expect(cubit.state.trialBlockActive, isFalse);
+        expect(cubit.state.planBlockActive, isNull);
         verify(() => session.endFlow()).called(1);
         cubit.close();
         async.flushTimers();

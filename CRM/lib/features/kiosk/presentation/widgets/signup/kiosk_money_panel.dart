@@ -7,6 +7,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_labels.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_proration_note.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_two_charges_note.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
@@ -56,7 +57,7 @@ class KioskMoneyPanel extends StatelessWidget {
           _Lines(state: state),
           if (state.chargedProrated)
             KioskProrationNote(until: state.prorationUntil),
-          if (state.chargedTwiceToday) const _TwoChargesNote(),
+          if (state.chargedTwiceToday) const KioskTwoChargesNote(),
           KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
           Text(
             'Your receipt goes to $receiptEmail.',
@@ -122,27 +123,6 @@ class _Lines extends StatelessWidget {
             ],
           ),
       ],
-    );
-  }
-}
-
-/// The honest warning that the statement will show TWO charges today.
-///
-/// It appears only when both halves actually carry money — a $0 one-time line
-/// is a present invoice with nothing on it, and calling that "two charges"
-/// would be a lie about the member's own bank statement.
-class _TwoChargesNote extends StatelessWidget {
-  const _TwoChargesNote();
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      'This shows up as two separate charges today — one for the one-off '
-      'purchase and one for the membership.',
-      style: DesignConstants.kioskCaption.copyWith(
-        color: DesignConstants.text,
-        fontWeight: FontWeight.w500,
-      ),
     );
   }
 }

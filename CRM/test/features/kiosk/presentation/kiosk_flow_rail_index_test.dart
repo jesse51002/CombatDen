@@ -37,9 +37,11 @@ void main() {
     KioskSignupStep.waivers: (3, 4),
     KioskSignupStep.card: (4, 5),
     // One act from the member's side: the rail must not imply a step exists
-    // between reviewing and paying.
+    // between reviewing and paying — and the results receipt IS the outcome of
+    // paying, so it joins that arm rather than lengthening the rail.
     KioskSignupStep.review: (5, 6),
     KioskSignupStep.paying: (5, 6),
+    KioskSignupStep.results: (5, 6),
     KioskSignupStep.declined: (5, 6),
     KioskSignupStep.welcome: (5, 6),
     // A terminal is not a step and renders no rail; the value stays in range

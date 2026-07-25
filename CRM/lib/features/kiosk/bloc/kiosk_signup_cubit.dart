@@ -13,16 +13,17 @@ import 'package:crm/features/member_details/data/models/duplicate_member_match.d
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
-import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
@@ -31,15 +32,17 @@ import 'package:crm/features/memberships/data/repositories/memberships_repositor
 /// end. Matches the mockup's `--dur:15s`.
 const Duration kKioskSignupStopHold = Duration(seconds: 15);
 
-/// How long a BLOCKING POPUP (the decline, the trial block) holds before it
-/// returns home on its own.
+/// How long a BLOCKING signup surface (the decline popup, the plan block, the
+/// per-person results receipt) holds before it returns home on its own.
 ///
 /// **Every blocking overlay carries a visible countdown, inside the popup.**
 /// This is a shared community iPad: no screen may hold it forever, and a timer
 /// drawn behind a popup sneaks the surface away without the member seeing it
 /// go. It is deliberately longer than [kKioskSignupStopHold]: that 15 seconds
 /// is for a TERMINAL stop that can be reached with nobody standing there,
-/// while these are read-and-decide screens somebody is looking at.
+/// while these are read-and-decide screens somebody is looking at — which is
+/// also why the results screen shares this clock rather than naming a seventh
+/// one for the identical duration.
 const Duration kKioskSignupPopupHold = Duration(seconds: 60);
 
 /// How long the welcome screen holds before returning home on its own, so a
@@ -71,10 +74,13 @@ const Duration kKioskSignupStartTimeout = Duration(seconds: 90);
 /// ## Flow-count discipline (load-bearing)
 /// [KioskSessionCubit.beginFlow] fires exactly once, in the constructor,
 /// behind the [_flowStarted] latch. [_endFlowIfStarted] fires on entering
-/// [KioskSignupStep.welcome] or [KioskSignupStep.stop], on [abandon], and in
-/// [close] — the latch makes the pair exactly-once however many of those run.
+/// [KioskSignupStep.welcome] or [KioskSignupStep.stop], on an ALL-CREATED
+/// [KioskSignupStep.results], on [abandon], and in [close] — the latch makes
+/// the pair exactly-once however many of those run.
 /// [KioskSignupStep.declined] does **not** release (the member is still
-/// standing there and can retry) and [KioskSignupStep.paying] **never** does.
+/// standing there and can retry), a PARTIAL [KioskSignupStep.results] does not
+/// either (Retry is live on it, and a live charge must never run with no flow
+/// held), and [KioskSignupStep.paying] **never** does.
 /// An unbalanced count means the kiosk never signs itself out at its T+11h45
 /// lockout — the named failure mode in `CRM/CLAUDE.md`.
 ///
@@ -132,11 +138,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   Timer? _popupTimer;
   Timer? _searchDebounce;
 
-  /// Members whose trial history has already been read, so the plan step never
-  /// asks twice for the same person. A read that FAILED counts as asked: the
-  /// gate fails open, and hammering a flaky endpoint on every roster change
-  /// would buy nothing.
-  final Set<String> _trialChecked = <String>{};
+  /// Members whose membership history has already been read, so the plan step
+  /// never asks twice for the same person. A read that FAILED counts as asked:
+  /// both gates fail open, and hammering a flaky endpoint on every roster
+  /// change would buy nothing.
+  final Set<String> _planChecked = <String>{};
 
   /// Which name-search response is still wanted. Every fetch takes the next
   /// number and a landing response that no longer holds it is DISCARDED, so a
@@ -1148,9 +1154,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       activePersonIndex: order.first,
     ));
     _syncIdleTimer();
-    // Who may still take a trial, read once per person before a card is
+    // Which plans are closed to whom, read once per person before a card is
     // tapped, so a blocked card wears its mark on the first frame it can.
-    unawaited(_loadTrialEligibility());
+    unawaited(_loadPlanEligibility());
     if (state.plansLoading) return;
     if (state.plansFailed) {
       unawaited(_warmPlans());
@@ -1159,63 +1165,76 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     if (state.plans.isEmpty) _stop(KioskSignupStopReason.noPlansOffered);
   }
 
-  /// Read who on this roster has ALREADY had a trial at this gym.
+  /// Read which plans are closed to whom on this roster — the trial history
+  /// AND the recurring plans they already hold, from ONE response each.
   ///
   /// **Only for a person the kiosk did not create.** Somebody registered
   /// during this signup has no history by construction, so their answer is
   /// "no" with no call at all.
   ///
-  /// **It FAILS OPEN**, which is the exact opposite of the money-path reads
-  /// and is deliberate: this is a convenience gate, not a money-safety one.
-  /// A second trial slipping through costs the gym one free week and the desk
-  /// can undo it; blocking a legitimate first-timer because a read failed
-  /// sends a paying customer away. So a throw leaves [KioskSignupPerson.hadTrial]
-  /// false and the trial stays on offer.
+  /// **Both gates FAIL OPEN**, which is the exact opposite of the money-path
+  /// reads and is deliberate: these are convenience gates, not money-safety
+  /// ones. A second trial slipping through costs the gym one free week the desk
+  /// can undo; blocking a legitimate first-timer because a read failed sends a
+  /// paying customer away. And on a failed read the kiosk does not know WHICH
+  /// plan somebody holds, so a fail-closed posture there would have to block
+  /// every plan on the grid — the worst outcome available. So a throw leaves
+  /// [KioskSignupPerson.hadTrial] false, leaves
+  /// [KioskSignupPerson.heldRecurringPlanIds] empty, and every plan stays on
+  /// offer. The cost is the dead end §2.1 of the results design describes: a
+  /// member picking a plan they already hold reaches the review and gets a
+  /// retryable stop that can never succeed. That is accepted, not airtight.
   ///
-  /// **One field is taken and the rest is dropped on the floor.** The billing
+  /// **TWO facts are taken and the rest is dropped on the floor.** The billing
   /// detail is a heavy staff payload — rank, charges, redemptions, streak, an
   /// address — and a lobby iPad prints none of it. Nothing here renders, logs
-  /// or persists any part of the response beyond the single boolean below;
-  /// never reuse it to prefill a form.
-  Future<void> _loadTrialEligibility() async {
+  /// or persists any part of the response beyond the boolean and the plan ids
+  /// below; never reuse it to prefill a form.
+  Future<void> _loadPlanEligibility() async {
     final wanted = <String>{
       for (final person in state.persons)
         if (person.training &&
             person.wasExisting &&
             person.memberId != null &&
-            !_trialChecked.contains(person.memberId))
+            !_planChecked.contains(person.memberId))
           person.memberId!,
     };
     if (wanted.isEmpty) return;
-    _trialChecked.addAll(wanted);
+    _planChecked.addAll(wanted);
     for (final memberId in wanted) {
       bool hadTrial;
+      List<String> heldRecurring;
       try {
         final detail = await _memberRepo.getMemberDetail(memberId);
         // Every membership row the member has ever held, whatever its
         // lifecycle state — a trial taken and finished a year ago still
         // counts, which is the whole question being asked.
         hadTrial = detail.memberships.any((m) => m.planType == 'trial');
+        // The held-recurring set mirrors the backend's conflict SQL exactly:
+        // `plan_type = 'recurring'` AND `status IN ('active','frozen')`. Any
+        // wider status set would refuse a sale the backend would have taken.
+        heldRecurring = <String>{
+          for (final membership in detail.memberships)
+            if (membership.planType == 'recurring' &&
+                (membership.status == MembershipStatus.active ||
+                    membership.status == MembershipStatus.frozen))
+              membership.planId,
+        }.toList();
       } catch (e, st) {
-        log('Kiosk signup: trial history read failed (allowing the trial)',
+        log('Kiosk signup: membership history read failed (nothing blocked)',
             error: e, stackTrace: st);
         hadTrial = false;
+        heldRecurring = const [];
       }
       if (isClosed) return;
-      if (!hadTrial) continue;
+      if (!hadTrial && heldRecurring.isEmpty) continue;
       final persons = [
         for (final person in state.persons)
           if (person.memberId == memberId)
-            // A trial already picked in the window before this answer landed
-            // is dropped with it — a blocked plan that survives reaches the
-            // review and fails at pay, which is the dead end the block exists
-            // to prevent.
-            person.copyWith(
-              hadTrial: true,
-              selectedPlanId: _isTrial(person.selectedPlanId)
-                  ? null
-                  : person.selectedPlanId,
-            )
+            _clearBlockedPick(person.copyWith(
+              hadTrial: hadTrial,
+              heldRecurringPlanIds: heldRecurring,
+            ))
           else
             person,
       ];
@@ -1223,14 +1242,23 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     }
   }
 
-  bool _isTrial(String? planId) =>
-      state.planById(planId)?.planType == PlanType.trial;
+  /// Drop [person]'s pick when the answer that just landed closed it.
+  ///
+  /// A blocked plan that survives reaches the review and fails at pay, which is
+  /// the dead end the whole block exists to prevent — and the answer can land
+  /// after the member has already tapped.
+  KioskSignupPerson _clearBlockedPick(KioskSignupPerson person) {
+    final plan = state.planById(person.selectedPlanId);
+    if (plan == null) return person;
+    if (state.planBlockReasonFor(person, plan) == null) return person;
+    return person.copyWith(selectedPlanId: null);
+  }
 
   /// Pick a plan for the active person. ONE plan per person, always
   /// `quantity: 1` — a self-serve iPad sells one membership to one person, so
   /// there is no stepper to mis-tap.
   ///
-  /// **A trial this person has already had is never selected**, only
+  /// **A plan that is closed to this person is never selected**, only
   /// explained. The card stays tappable so the answer is one tap away — a
   /// greyed-out plan with no explanation is a worse dead end than the one it
   /// is trying to avoid — but the tap opens the popup instead of setting the
@@ -1238,16 +1266,17 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void selectPlan(String planId) {
     registerActivity();
     final plan = state.planById(planId);
-    if (plan != null && state.planBlocked(plan)) {
-      _openTrialBlock();
+    final reason = plan == null ? null : state.planBlockReason(plan);
+    if (reason != null) {
+      _openPlanBlock(reason);
       return;
     }
     _updateActivePerson((p) => p.copyWith(selectedPlanId: planId));
   }
 
-  /// "You've already had a trial" — the explanation behind a blocked card.
-  void _openTrialBlock() {
-    emit(state.copyWith(trialBlockActive: true));
+  /// The explanation behind a blocked card — one popup, whichever reason.
+  void _openPlanBlock(KioskPlanBlockReason reason) {
+    emit(state.copyWith(planBlockActive: reason));
     _startPopupCountdown();
   }
 
@@ -1256,23 +1285,29 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// The blocked plan was never selected, so there is nothing to undo; the
   /// clear below is the belt-and-braces guard that keeps that true if the tap
   /// path is ever refactored.
-  void dismissTrialBlock() {
+  void dismissPlanBlock() {
     _popupTimer?.cancel();
-    emit(state.copyWith(trialBlockActive: false, popupCountdown: 0));
-    final active = state.activePerson;
-    if (active.hadTrial && _isTrial(active.selectedPlanId)) {
-      _updateActivePerson((p) => p.copyWith(selectedPlanId: null));
-    }
+    emit(state.copyWith(planBlockActive: null, popupCountdown: 0));
+    _updateActivePerson(_clearBlockedPick);
     registerActivity();
   }
 
-  /// "Get help at the desk" from the trial block — the handoff the member
+  /// "Get help at the desk" from the plan block — the handoff the member
   /// CHOOSES. Nothing routes here on their behalf; the popup's primary sends
   /// them back to the plans they CAN pick.
-  void trialBlockHelp() {
+  void planBlockHelp() {
+    final reason = state.planBlockActive;
     _popupTimer?.cancel();
-    emit(state.copyWith(trialBlockActive: false, popupCountdown: 0));
-    _stop(KioskSignupStopReason.trialAlreadyUsed);
+    emit(state.copyWith(planBlockActive: null, popupCountdown: 0));
+    _stop(switch (reason) {
+      KioskPlanBlockReason.alreadyOnPlan => KioskSignupStopReason.alreadyOnPlan,
+      // A tap with no reason on state cannot happen (the popup is only up
+      // while one is set); the trial handoff is the safe fallback because it is
+      // the reason whose copy claims the least.
+      KioskPlanBlockReason.trialUsed ||
+      null =>
+        KioskSignupStopReason.trialAlreadyUsed,
+    });
   }
 
   /// Continue from the plan pick — to the NEXT training person's plan, or, once
@@ -1280,11 +1315,54 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   void continueFromPlans() {
     registerActivity();
     if (state.selectedPlan == null) return;
-    final order = state.trainingPersonIndexes;
-    final at = order.indexOf(state.activePersonIndex);
-    if (at >= 0 && at + 1 < order.length) {
-      emit(state.copyWith(activePersonIndex: order[at + 1]));
+    _advancePlanPerson();
+  }
+
+  /// "No membership" — this person is NOT getting one after all (founder
+  /// ruling: somebody may change their mind halfway through a family signup).
+  ///
+  /// **Group only.** Skipping the sole person of a solo signup would empty the
+  /// cart, and at least one person must get a membership — so the control is
+  /// not offered there at all.
+  ///
+  /// It reuses [KioskSignupPerson.training] rather than adding a parallel
+  /// "skipped" concept: not getting a membership is exactly what that flag
+  /// already means, so the roster check, the cart, the waiver queue and the
+  /// review all follow for free. Their plan is dropped with it, like every
+  /// other way that flag goes off.
+  ///
+  /// **Skipping EVERYBODY returns to the People step** rather than blocking
+  /// here. The roster is where they can tick somebody back on or take a person
+  /// off, and it already refuses to leave with an empty cart and says why — so
+  /// the backend's empty-cart rejection stays unreachable by construction.
+  void skipPlanForPerson() {
+    registerActivity();
+    if (!state.isGroup) return;
+    final skipped = state.activePersonIndex;
+    if (skipped < 0 || skipped >= state.persons.length) return;
+    final persons = [...state.persons];
+    persons[skipped] = persons[skipped].copyWith(
+      training: false,
+      selectedPlanId: null,
+    );
+    emit(state.copyWith(persons: persons));
+    if (!state.anyoneTraining) {
+      emit(state.copyWith(step: KioskSignupStep.people));
+      _syncIdleTimer();
       return;
+    }
+    _advancePlanPerson(from: skipped);
+  }
+
+  /// Move the plan step on: to the next training person after [from] (the
+  /// active person by default), or into the waiver run once nobody is left.
+  void _advancePlanPerson({int? from}) {
+    final at = from ?? state.activePersonIndex;
+    for (final index in state.trainingPersonIndexes) {
+      if (index > at) {
+        emit(state.copyWith(activePersonIndex: index));
+        return;
+      }
     }
     _enterWaiverRun();
   }
@@ -1778,11 +1856,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     );
     if (request == null) return;
     _sentAttempts.add(key);
+    final previous = state.startResult;
     suspendIdle();
     emit(state.copyWith(
       step: KioskSignupStep.paying,
       idempotencyKey: key,
-      failedItems: const [],
+      startResult: null,
     ));
     try {
       final result = await _memberRepo.startMemberships(
@@ -1792,12 +1871,26 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       if (isClosed) return;
       resumeIdle();
       // A 207 is a 2xx: a decline arrives as a RESULT in the body, never as an
-      // HTTP error, so the split is read off the items rather than the status.
-      if (result.hasFailures) {
-        _onDeclined(result.failed);
+      // HTTP error, so the split is read off the ITEMS rather than the status —
+      // and it is a THREE-way split, not two:
+      //
+      // * nothing to itemise → straight to welcome, for the same reason a 409
+      //   does: a receipt with no rows is worse than the warm welcome;
+      // * every item refused → the decline popup, whose "you haven't been
+      //   charged" is TRUE and whose retry ladder the founder settled;
+      // * anything else (all created, or a PARTIAL) → the results receipt.
+      //   On a partial money HAS moved for the group that cleared, so the
+      //   decline popup's copy would be a false statement about it.
+      final merged = _mergeStartResults(previous, result);
+      if (merged.results.isEmpty) {
+        _enterWelcome();
         return;
       }
-      _enterWelcome();
+      if (merged.results.every((item) => item.isFailed)) {
+        _onDeclined(merged);
+        return;
+      }
+      _enterResults(merged);
     } on WaiverGateException catch (e, st) {
       log('Kiosk signup: start waiver gate', error: e, stackTrace: st);
       if (isClosed) return;
@@ -1824,11 +1917,98 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     }
   }
 
+  // ── D7a · the results receipt ──
+
+  /// Fold a retry's response into the one it retried, so the receipt keeps
+  /// every membership THIS SIGNUP produced rather than only the last attempt's.
+  ///
+  /// A retry re-sends **only** the previously-failed items (see [_startItems]),
+  /// so its response names only those: without this fold, a partial that was
+  /// then retried successfully would print a one-row receipt headed "every
+  /// membership below started today" while silently omitting the one that
+  /// landed on the first attempt. A receipt that lies by omission about money
+  /// is the thing this screen exists to prevent.
+  ///
+  /// The newer outcome always REPLACES the older one for the same
+  /// (member, plan), so [KioskSignupState.failedItems] over the fold is
+  /// identical to the latest response's own failures — the retry set cannot
+  /// grow stale and nothing already created is ever re-sent.
+  ///
+  /// `chargeCount` / `multipleCharges` are carried from the latest response and
+  /// are deliberately unused by the kiosk: the two-charges note reads the
+  /// preview's AMOUNTS (§11.4), never these flags.
+  MemberMembershipsStartResponse _mergeStartResults(
+    MemberMembershipsStartResponse? previous,
+    MemberMembershipsStartResponse landed,
+  ) {
+    if (previous == null || previous.results.isEmpty) return landed;
+    String keyOf(MemberMembershipsStartResultItem item) =>
+        '${item.memberId}·${item.planId}';
+    final replaced = {for (final item in landed.results) keyOf(item)};
+    return MemberMembershipsStartResponse(
+      chargeCount: landed.chargeCount,
+      multipleCharges: landed.multipleCharges,
+      results: [
+        for (final item in previous.results)
+          if (!replaced.contains(keyOf(item))) item,
+        ...landed.results,
+      ],
+    );
+  }
+
+  /// The landed start, itemised per person.
+  ///
+  /// **The flow count is released only when every item was created.** Then the
+  /// money has landed, every row exists and there is nothing left to do but
+  /// read and tap Next — releasing here is EARLIER than the old welcome-only
+  /// release, which is strictly better for the T+11h45 lockout. On a PARTIAL it
+  /// deliberately does not: Retry is live on that screen and [pay] would run a
+  /// live charge with no flow held, which is exactly what §11.3 forbids. The
+  /// 60-second expiry's [abandon] releases it instead, exactly as the decline
+  /// popup relies on.
+  ///
+  /// [_enterWelcome] keeps its own release: [_flowStarted] is a latch, so on the
+  /// all-created path that call is a harmless no-op, and it is still the release
+  /// for every other route into welcome (the 409 replay, an empty result).
+  /// Deleting it is how the kiosk stops signing itself out at its lockout.
+  void _enterResults(MemberMembershipsStartResponse result) {
+    _idleTimer?.cancel();
+    _countdownTimer?.cancel();
+    final allCreated = result.results.every((item) => item.isCreated);
+    if (allCreated) _endFlowIfStarted();
+    emit(state.copyWith(
+      step: KioskSignupStep.results,
+      startResult: result,
+      submitting: false,
+      idleWarningActive: false,
+      idleCountdown: 0,
+      planBlockActive: null,
+    ));
+    _syncIdleTimer();
+    _startPopupCountdown();
+  }
+
+  /// "Next" — from the receipt to the welcome screen and its app push.
+  ///
+  /// Offered only on the all-created branch: a partial's decisions are Retry /
+  /// another card / the desk, and "continue without them" is a decision about
+  /// somebody's membership that belongs at the desk rather than on a lobby iPad.
+  void nextFromResults() {
+    registerActivity();
+    if (state.step != KioskSignupStep.results) return;
+    _popupTimer?.cancel();
+    _enterWelcome();
+  }
+
   // ── D8 · declined ──
 
-  /// A refused charge. The member row, the Stripe customer and every signature
-  /// are already committed and are NEVER re-executed — only the charge is
-  /// retried, from the decline popup.
+  /// EVERY membership in the cart was refused. The member row, the Stripe
+  /// customer and every signature are already committed and are NEVER
+  /// re-executed — only the charge is retried, from the decline popup.
+  ///
+  /// **All-failed only.** The popup states plainly that nothing was charged,
+  /// which is true exactly here; a PARTIAL goes to [_enterResults] instead,
+  /// because there money HAS moved for the group that cleared.
   ///
   /// **A decline never ends the signup, and no attempt is ever gated by a
   /// wait.** Mistakes are ordinary: the member may retry immediately — the
@@ -1843,9 +2023,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// from a cooldown: it decides how long a shared iPad may sit on this screen
   /// with nobody answering it, not how soon Retry may be tapped. Retry is live
   /// from the first frame.
-  void _onDeclined(List<MemberMembershipsStartResultItem> failed) {
+  void _onDeclined(MemberMembershipsStartResponse result) {
     emit(state.copyWith(
-      failedItems: failed,
+      startResult: result,
       step: KioskSignupStep.declined,
       submitting: false,
     ));
@@ -1853,13 +2033,15 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _startPopupCountdown();
   }
 
-  /// The blocking popups' shared clock — a plain per-second countdown that
-  /// abandons at zero.
+  /// The blocking surfaces' shared clock — a plain per-second countdown that
+  /// abandons at zero. The decline popup, the plan block and the results
+  /// receipt all ride it.
   ///
   /// Expiry runs the ordinary [abandon], so the session's flow count is
   /// released by the ONE latch every other exit uses. That matters most on the
-  /// decline, which deliberately does not release on entry (the member is
-  /// still standing there): if nobody answers it, this is what releases it.
+  /// decline and on a PARTIAL receipt, neither of which releases on entry (the
+  /// member is still standing there): if nobody answers, this is what releases
+  /// it.
   void _startPopupCountdown() {
     _popupTimer?.cancel();
     emit(state.copyWith(popupCountdown: kKioskSignupPopupHold.inSeconds));
@@ -1887,11 +2069,17 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// member is created, no waiver re-signed, no payer re-linked.
   ///
   /// [pay]'s synchronous `paying` guard + the sent-key latch keep a double-tap
-  /// to exactly one charge; the `declined`-step guard here stops a second tap
-  /// from minting a stray key over an in-flight charge.
+  /// to exactly one charge; the step guard here stops a second tap from minting
+  /// a stray key over an in-flight charge. It admits BOTH screens that offer a
+  /// retry — the all-failed decline popup and a PARTIAL's results receipt — and
+  /// nothing else: widening it further would let a stray key be minted from a
+  /// step with no landed response behind it.
   void retrySameCard() {
     registerActivity();
-    if (state.step != KioskSignupStep.declined) return;
+    if (state.step != KioskSignupStep.declined &&
+        state.step != KioskSignupStep.results) {
+      return;
+    }
     _popupTimer?.cancel();
     emit(state.copyWith(
       idempotencyKey: newIdempotencyKey(),
@@ -1940,6 +2128,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   // ── Welcome ──
 
+  /// The signup's terminal celebration.
+  ///
+  /// Its [_endFlowIfStarted] call stays even though the all-created results
+  /// screen has already released: [_flowStarted] is a latch, so the second call
+  /// is a no-op, and this is still the ONLY release for the other routes here
+  /// (the 409 idempotent replay and a landed start with nothing to itemise).
   void _enterWelcome() {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
@@ -1951,8 +2145,8 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       submitting: false,
       idleWarningActive: false,
       idleCountdown: 0,
-      failedItems: const [],
-      trialBlockActive: false,
+      startResult: null,
+      planBlockActive: null,
       popupCountdown: 0,
       welcomeCountdown: kKioskSignupWelcomeHold.inSeconds,
     ));
@@ -2009,7 +2203,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       idleCountdown: 0,
       abandonConfirmActive: false,
       removeConfirmIndex: null,
-      trialBlockActive: false,
+      planBlockActive: null,
       popupCountdown: 0,
       stopCountdown: kKioskSignupStopHold.inSeconds,
     ));
@@ -2100,7 +2294,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       abandoned: true,
       abandonConfirmActive: false,
       removeConfirmIndex: null,
-      trialBlockActive: false,
+      planBlockActive: null,
       popupCountdown: 0,
       idleWarningActive: false,
       idleCountdown: 0,
@@ -2140,10 +2334,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _countdownTimer?.cancel();
     if (_idleSuspended) return;
     // The terminals run their own clocks (or none): the stop screen has its
-    // 15s auto-return, the payment step must never be interrupted, and a
-    // finished flow has no draft left to abandon.
+    // 15s auto-return, the results receipt and the welcome their 60s ones, the
+    // payment step must never be interrupted, and a landed flow has no draft
+    // left to abandon.
     if (state.step == KioskSignupStep.paying ||
         state.step == KioskSignupStep.stop ||
+        state.step == KioskSignupStep.results ||
         state.step == KioskSignupStep.welcome) {
       return;
     }

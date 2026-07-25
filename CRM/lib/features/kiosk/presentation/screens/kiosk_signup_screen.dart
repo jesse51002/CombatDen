@@ -19,13 +19,14 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_paying_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_remove_confirm.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_details_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_optional_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_stop_screen.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_trial_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -88,7 +89,7 @@ class _KioskSignupBody extends StatelessWidget {
         child: Stack(
           children: const [
             _StepSwitcher(),
-            _TrialBlockOverlay(),
+            _PlanBlockOverlay(),
             _SignupIdleOverlay(),
             _AbandonOverlay(),
             _RemoveOverlay(),
@@ -134,6 +135,10 @@ class _StepSwitcher extends StatelessWidget {
           KioskSignupStep.card => const KioskCardStep(),
           KioskSignupStep.review => const KioskReviewStep(),
           KioskSignupStep.paying => const KioskPayingScreen(),
+          // The landed start, itemised. It covers all-created AND a partial;
+          // an ALL-failed start goes to the decline popup instead, where
+          // "nothing was charged" is true.
+          KioskSignupStep.results => const KioskResultsScreen(),
           KioskSignupStep.declined => const KioskDeclinedScreen(),
           KioskSignupStep.welcome => const KioskWelcomeScreen(),
         };
@@ -142,21 +147,22 @@ class _StepSwitcher extends StatelessWidget {
   }
 }
 
-/// "You've already had a trial", over the plan grid that raised it.
+/// Why a plan card cannot be picked, over the plan grid that raised it — one
+/// popup for both reasons (a trial already used, a membership already held).
 ///
 /// It is an OVERLAY rather than a step: the grid stays live behind it, so the
 /// primary is a dismiss with nothing to re-fetch and no scroll position to
 /// restore, and the rail keeps its honest length.
-class _TrialBlockOverlay extends StatelessWidget {
-  const _TrialBlockOverlay();
+class _PlanBlockOverlay extends StatelessWidget {
+  const _PlanBlockOverlay();
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
-      buildWhen: (prev, cur) => prev.trialBlockActive != cur.trialBlockActive,
+      buildWhen: (prev, cur) => prev.planBlockActive != cur.planBlockActive,
       builder: (context, state) {
-        if (!state.trialBlockActive) return const SizedBox.shrink();
-        return const KioskTrialBlock();
+        if (state.planBlockActive == null) return const SizedBox.shrink();
+        return const KioskPlanBlock();
       },
     );
   }

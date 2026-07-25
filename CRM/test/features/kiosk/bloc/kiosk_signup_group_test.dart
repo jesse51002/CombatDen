@@ -354,7 +354,7 @@ void main() {
               receiveTimeout: kKioskSignupStartTimeout,
             ),
       ]);
-      expect(cubit.state.step, KioskSignupStep.welcome);
+      expect(cubit.state.step, KioskSignupStep.results);
       await cubit.close();
     });
 
@@ -442,7 +442,13 @@ void main() {
         ),
       ).thenAnswer((_) async => _startResponse(failedMemberId: 'mem-2'));
       await cubit.pay();
-      expect(cubit.state.step, KioskSignupStep.declined);
+      // **A PARTIAL is the receipt, never the decline popup.** Money HAS moved
+      // for the group that cleared, so "you haven't been charged" would be a
+      // false statement about it — and the count stays HELD, because Retry is
+      // live on that screen and a live charge must never run unheld.
+      expect(cubit.state.step, KioskSignupStep.results);
+      expect(cubit.state.allCreated, isFalse);
+      verifyNever(() => session.endFlow());
 
       when(
         () => member.startMemberships(
@@ -657,6 +663,105 @@ void main() {
       expect(cubit.state.persons[1].linked, isFalse);
       // The body is re-read so nothing is signed against text nobody saw.
       verify(() => member.getAuthorizedPayerWaiver('mem-2')).called(2);
+      await cubit.close();
+    });
+  });
+
+  group('"No membership" on the plan step (the founder\'s skip)', () {
+    test('it is GROUP-only — a solo signup cannot empty its own cart',
+        () async {
+      final cubit = await atRoster();
+      cubit.continueToPlans();
+      expect(cubit.state.isGroup, isFalse);
+
+      // The control is not offered on a solo signup, and the cubit refuses it
+      // too: skipping the only person would send `memberships: []` and take a
+      // 400, and at least one person must get a membership.
+      cubit.skipPlanForPerson();
+      expect(cubit.state.step, KioskSignupStep.plans);
+      expect(cubit.state.payer.training, isTrue);
+      expect(cubit.state.anyoneTraining, isTrue);
+      await cubit.close();
+    });
+
+    test('skipping one person drops them from the CART and moves to the next',
+        () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      cubit.continueToPlans();
+      expect(cubit.state.activePersonIndex, 0);
+
+      // The payer changes their mind: no membership for them, on to the child.
+      cubit.skipPlanForPerson();
+      expect(cubit.state.step, KioskSignupStep.plans);
+      expect(cubit.state.activePersonIndex, 1);
+      // It reuses `training` rather than a parallel "skipped" concept, so the
+      // cart, the waiver queue and the review all follow for free.
+      expect(cubit.state.persons[0].training, isFalse);
+      expect(cubit.state.persons[0].selectedPlanId, isNull);
+      expect(cubit.state.trainingPersonIndexes, [1]);
+
+      cubit.selectPlan(kidsPlan);
+      cubit.continueFromPlans();
+      await _settle();
+      // Only the child is in the cart, and the parent is `payer_member_id`.
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+      await cubit.signWaiver(signerName: 'Marcus Bell');
+      expect(cubit.state.step, KioskSignupStep.card);
+      cubit.submitCard(paymentMethodId: 'pm_1');
+      await _settle();
+
+      final request = verify(() => member.previewStartMemberships(captureAny()))
+          .captured
+          .single as MemberMembershipsStartRequest;
+      expect(request.payerMemberId, 'mem-1');
+      expect(request.memberships.single.memberId, 'mem-2');
+      await cubit.close();
+    });
+
+    test('skipping the LAST person left goes straight into the waiver run',
+        () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      cubit.continueToPlans();
+      cubit.selectPlan(soloPlan);
+      cubit.continueFromPlans();
+      expect(cubit.state.activePersonIndex, 1);
+
+      // The child is skipped; the parent already picked, so there is nothing
+      // left to choose and the run begins.
+      cubit.skipPlanForPerson();
+      await _settle();
+      expect(cubit.state.step, KioskSignupStep.waivers);
+      expect(cubit.state.trainingPersonIndexes, [0]);
+      await cubit.close();
+    });
+
+    test('skipping EVERYBODY returns to the People step, never an empty cart',
+        () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      cubit.continueToPlans();
+
+      cubit.skipPlanForPerson();
+      expect(cubit.state.activePersonIndex, 1);
+      cubit.skipPlanForPerson();
+
+      // **The founder's own resolution.** The roster is where a person can be
+      // ticked back on or taken off, and it already refuses to leave with an
+      // empty cart and says why — so the backend's empty-cart 400 stays
+      // unreachable by construction.
+      expect(cubit.state.step, KioskSignupStep.people);
+      expect(cubit.state.anyoneTraining, isFalse);
+      // And Continue out of the roster is blocked while it holds.
+      cubit.continueToPlans();
+      expect(cubit.state.step, KioskSignupStep.people);
+      // Ticking anybody back on releases it immediately.
+      cubit.setPersonTraining(1, true);
+      cubit.continueToPlans();
+      expect(cubit.state.step, KioskSignupStep.plans);
+      expect(cubit.state.activePersonIndex, 1);
       await cubit.close();
     });
   });

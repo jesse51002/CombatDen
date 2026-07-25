@@ -1,26 +1,28 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 
-/// "You've already had a trial" — the answer behind a plan card the member
-/// cannot pick.
+/// The answer behind a plan card the member cannot pick — ONE popup, whichever
+/// reason closed it.
 ///
-/// **Trials are one to a member AT THE KIOSK.** Any trial in their history
-/// closes every trial plan on the grid, not just the one they took. Staff can
-/// still grant a repeat trial from the CRM; this is a self-serve rule, and the
-/// desk is the override the second button offers.
+/// Two reasons ride it today: a trial they have already had (a kiosk-only rule,
+/// one trial to a member, and the desk is still the override) and a RECURRING
+/// plan they already hold (the backend's own per-plan conflict, which would
+/// otherwise dead-end the whole signup on the review). A second modal for the
+/// second reason would fork the kiosk's one modal vocabulary, so the reason —
+/// not the popup — is what varies; every string and the glyph come from
+/// `kiosk_plan_block_copy.dart`.
 ///
 /// It is the kiosk's one modal vocabulary — the veil + centred popup card the
 /// decline screen wears — over the warm [DesignConstants.yellowDark] disc every
 /// handoff uses. Warm, never red: nothing is broken and nobody did anything
-/// wrong. The history glyph states the fact rather than the stop screen's
-/// person glyph, which is about WHO the member is.
+/// wrong.
 ///
 /// **The plan grid stays live behind it**, so "Pick a membership" is a dismiss
 /// rather than a navigation — nothing re-fetches and no scroll position is
@@ -29,8 +31,8 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart'
 /// **The countdown is inside the popup, and it is not a cooldown.** This is a
 /// shared community iPad: no screen may hold it forever, and a timer drawn
 /// behind a popup sneaks the surface away without the member seeing it go.
-class KioskTrialBlock extends StatelessWidget {
-  const KioskTrialBlock({super.key});
+class KioskPlanBlock extends StatelessWidget {
+  const KioskPlanBlock({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -38,10 +40,13 @@ class KioskTrialBlock extends StatelessWidget {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.popupCountdown != cur.popupCountdown ||
+          prev.planBlockActive != cur.planBlockActive ||
           prev.activePersonIndex != cur.activePersonIndex ||
           prev.persons != cur.persons ||
           prev.isGroup != cur.isGroup,
       builder: (context, state) {
+        final reason = state.planBlockActive;
+        if (reason == null) return const SizedBox.shrink();
         return SizedBox.expand(
           child: ColoredBox(
             color: DesignConstants.backgroundColor.withValues(alpha: 0.92),
@@ -64,22 +69,22 @@ class KioskTrialBlock extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     spacing: DesignConstants.spacingLarge,
                     children: [
-                      const _HistoryIcon(),
+                      _BlockIcon(reason: reason),
                       Text(
-                        'You\'ve already had a trial',
+                        kioskPlanBlockTitle(reason),
                         style: DesignConstants.kioskPanelTitle,
                         textAlign: TextAlign.center,
                       ),
                       Text(
-                        _body(state),
+                        kioskPlanBlockBody(state, reason),
                         style: DesignConstants.kioskBody.copyWith(
                           color: DesignConstants.text2nd,
                         ),
                         textAlign: TextAlign.center,
                       ),
                       _Actions(
-                        onPick: cubit.dismissTrialBlock,
-                        onHelp: cubit.trialBlockHelp,
+                        onPick: cubit.dismissPlanBlock,
+                        onHelp: cubit.planBlockHelp,
                       ),
                       KioskReturnTimer(
                         total: kKioskSignupPopupHold.inSeconds,
@@ -94,29 +99,6 @@ class KioskTrialBlock extends StatelessWidget {
         );
       },
     );
-  }
-
-  /// The plan step is walked once per training person, so in a GROUP the popup
-  /// must NAME whoever it is about: an unnamed block in the middle of a run of
-  /// named turns is ambiguous exactly when it matters most.
-  ///
-  /// It never names the PLAN. The rule is per member, not per plan — one trial
-  /// in their history closes all of them — so naming one would describe a
-  /// narrower rule than the grid is actually enforcing.
-  String _body(KioskSignupState state) {
-    const tail = 'Everything else on the list is open — or the coach at the '
-        'desk can talk through the options.';
-    if (!state.isGroup) {
-      return 'Trials are one to a member, and you\'ve already had yours. '
-          '$tail';
-    }
-    final first = state.activePerson.firstName.trim();
-    if (first.isEmpty) {
-      return 'Trials are one to a member, and they\'ve already had theirs. '
-          '$tail';
-    }
-    return 'Trials are one to a member, and $first has already had theirs. '
-        '$tail';
   }
 }
 
@@ -142,10 +124,12 @@ class _Actions extends StatelessWidget {
   }
 }
 
-/// The warm disc the kiosk's other handoffs wear, carrying a history glyph:
-/// this popup states a thing that already happened.
-class _HistoryIcon extends StatelessWidget {
-  const _HistoryIcon();
+/// The warm disc the kiosk's other handoffs wear, carrying the reason's own
+/// glyph.
+class _BlockIcon extends StatelessWidget {
+  final KioskPlanBlockReason reason;
+
+  const _BlockIcon({required this.reason});
 
   @override
   Widget build(BuildContext context) {
@@ -156,7 +140,7 @@ class _HistoryIcon extends StatelessWidget {
         shape: BoxShape.circle,
       ),
       child: Icon(
-        Symbols.history_sharp,
+        kioskPlanBlockGlyph(reason),
         size: DesignConstants.iconSizeBig,
         weight: DesignConstants.iconWeight,
         color: DesignConstants.okYellow,

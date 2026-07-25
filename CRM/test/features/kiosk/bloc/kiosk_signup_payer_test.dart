@@ -435,7 +435,7 @@ void main() {
         request.memberships.map((m) => m.memberId),
         containsAll(<String>['mem-dad', 'mem-1']),
       );
-      expect(cubit.state.step, KioskSignupStep.welcome);
+      expect(cubit.state.step, KioskSignupStep.results);
       await cubit.close();
     });
 

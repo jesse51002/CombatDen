@@ -14,17 +14,23 @@ description: >-
   committed state), the draft-clearing privacy rule and the shared-iPad autofill
   hazard, the fresh-card law (the entered card is ALWAYS saved as the payer's
   default and replaces theirs, which is what makes the lane self-serve for
-  existing members too), the kiosk-only ONE-TRIAL rule derived client-side from
-  the member's own history, the structural no-discounts rule, the TWO
+  existing members too), the TWO client-side PLAN-BLOCK rules derived from the
+  member's own history — the kiosk-only one-trial rule (per member) and the
+  already-held recurring membership (per plan, mirroring the backend's conflict
+  SQL exactly and deliberately narrower than the CRM's) — the structural
+  no-discounts rule, the TWO
   rejection shapes (a 200 with `skip_reason` vs a thrown error carrying a stable
   `code`), the TWO separate class lists (check-in window vs the forward-looking
-  showcase), the four gym-wide catalogues warmed once at entry, the six
-  independent timers (every blocking popup carries a visible 60s return
+  showcase), the four gym-wide catalogues warmed once at entry, the seven
+  independent timers (every blocking surface carries a visible 60s return
   countdown), the kiosk type ramp / AA contrast / fixed QR polarity
   design laws, the PINNED per-step identity band, the real-vs-illustrative
   data rule, and the built SOLO + GROUP self-serve **signup** lane (its own
   cubit, the new-here/already-a-member front door and the identify search, the
   double-charge defences, the three entry points into a seated payer, the
+  group-only "No membership" skip on the plan step, the THREE-way start-response
+  split into the per-person RESULTS receipt (all-created and PARTIAL) vs the
+  all-failed decline popup, the
   uncapped, no-wait decline model with same-card + new-card
   retry, and the CRM's
   Incomplete tab as the staff-side resolution for an abandoned draft). Load
@@ -37,7 +43,8 @@ description: >-
   runway", "beginFlow / endFlow", "kiosk escape / start over / cancel",
   "autofill on the kiosk", "skip_reason", "kiosk type ramp", "rotating QR",
   "kiosk signup", "duplicate payer", "already had a trial", "one trial per
-  member", "find my name", "someone else is
+  member", "already on that membership", "plan block", "kiosk results screen",
+  "partial signup", "no membership skip", "find my name", "someone else is
   paying", "decline retry", "retry same card", or "Incomplete tab".
 ---
 
@@ -57,7 +64,8 @@ their name (or, in Phase G, scans a QR), picks their class, gets checked in,
 and sees a retention **glance** — their streak, their points, this gym's
 reward tiles — before the screen resets for the next person. A brand-new
 member instead taps *"Start Trial / Membership"* and walks a self-serve **signup**
-spine — details, plan, waiver, card, review, pay, welcome (§10, §11), solo or
+spine — details, plan, waiver, card, review, pay, the per-person results receipt,
+welcome (§10, §11), solo or
 as a group/family — before landing on the same app-adoption push.
 
 **Why it exists.** Two reasons, both product, both load-bearing:
@@ -244,9 +252,11 @@ latch.** `beginFlow()` fires exactly once, in its constructor (reaching that
 constructor *is* the flow starting — `KioskFlowCubit.startSignup()` has already
 checked `canStartFlow`, and it deliberately does **not** call `beginFlow`
 itself, which would double-count). `_endFlowIfStarted()` fires on entering
-`welcome` or `stop`, on `abandon()`, and in `close()`; `declined` does **not**
-release (the member is still there and can retry) and `paying` **never** does.
-The latch makes the pair exactly-once however many of those run.
+`welcome`, `stop` or an ALL-CREATED `results`, on `abandon()`, and in `close()`;
+`declined` does **not** release (the member is still there and can retry), a
+PARTIAL `results` does not either (Retry is live on it), and `paying` **never**
+does. The latch makes the pair exactly-once however many of those run — see
+§11.3 for the full table.
 
 The signup cubit cannot navigate — `goHome()` is `KioskFlowCubit`'s — so every
 signup exit raises `KioskSignupState.abandoned` and `KioskSignupScreen`'s
@@ -339,6 +349,9 @@ that matters most:
   counterpart ruling: abandoned drafts surface in a staff-visible "incomplete
   signups" list in the CRM, so the front desk can finish or delete the shell —
   not a nightly sweep, which would destroy a signed waiver.)
+- **The results receipt**, on both branches. Money has moved by then, so there is
+  nothing to start over; it uses `KioskResultsFoot` rather than `KioskFlowFoot`
+  for exactly that reason (§11.6).
 
 `KioskEscapeFoot` (`widgets/kiosk_escape_foot.dart`) is the built instance: a
 hairline band pinned to the fold by `KioskStage`'s `footer` slot, so the class
@@ -451,6 +464,41 @@ search hit who is already on this roster. It is a **redirect**, not a rejection
 must refuse to INSERT a second entry for one member, which would be two cart
 items (and two charges) for one person.
 
+### Two plan-block reasons, ONE popup and ONE blocked visual
+
+A plan card on the grid can be closed to the person picking for exactly **two**
+reasons, and they are different rules with different scopes:
+
+| reason (`KioskPlanBlockReason`) | scope | tag on the card | names a plan? |
+| --- | --- | --- | --- |
+| `trialUsed` | per MEMBER — any prior trial closes EVERY trial plan | `Already used` | **no** |
+| `alreadyOnPlan` | per PLAN — this exact recurring plan is already held | `You have this` | **yes** |
+
+**One popup serves both** (`widgets/signup/kiosk_plan_block.dart`,
+`KioskPlanBlock`) and **one blocked visual serves both** (`KioskPlanCard`'s
+`blocked` state: `Opacity(0.45)`, the tag pinned top-LEFT over the hero because
+the top-right belongs to the select mark, the select mark dropped entirely, and
+the card still **tappable** so the tap opens the answer instead of a silent
+no-op). The only thing that varies by reason is the words:
+`presentation/kiosk_plan_block_copy.dart` maps a reason to its title, body, disc
+glyph and card tag, and **its switches are exhaustive on purpose** — a new reason
+cannot ship without words, exactly as `kiosk_signup_stop_copy.dart` works. A
+second modal or a second blocked treatment would fork the kiosk's one modal
+vocabulary for a consequence that is identical.
+
+**The inversion over whether the plan is NAMED is the rule, not a style drift.**
+The trial popup never names a plan because its rule is per member — naming one
+would describe a narrower rule than the grid is enforcing. The already-on-plan
+popup does name it, because its rule genuinely is per plan. The copy file carries
+a comment saying so; do not "fix" one of the two to match the other.
+
+Both reasons behave identically otherwise: the card can never become the
+selection (`selectPlan` turns the tap into `_openPlanBlock(reason)` instead of
+setting `selectedPlanId`), a late eligibility answer CLEARS a pick it
+invalidates, the popup's primary (`dismissPlanBlock`) returns to the live grid,
+and its outline hands off to the desk (`planBlockHelp` → the reason's own
+`KioskSignupStopReason`: `trialAlreadyUsed` or `alreadyOnPlan`).
+
 ### The one-trial rule — a KIOSK rule, enforced client-side
 
 **A member gets one trial at the kiosk, ever, and any prior trial closes EVERY
@@ -462,34 +510,90 @@ new column: this is a self-serve product rule, so it lives entirely in
 `KioskSignupCubit`. Do not "fix" it by pushing it into the backend.
 
 - **The signal is derived from the member's own history.** At the plans step
-  `_loadTrialEligibility` reads `MemberRepository.getMemberDetail` and asks
+  `_loadPlanEligibility` reads `MemberRepository.getMemberDetail` and asks
   `memberships.any((m) => m.planType == 'trial')` (`MembershipInfo.planType` is
   a plain `String?` there, not the `PlanType` enum). The backend applies **no
   lifecycle filter** to that list, so a trial cancelled or finished a year ago
   still counts — which is the question being asked. Never use a
   currently-active-trial flag instead.
-- **It reads ONE field and drops the rest.** The billing detail is a heavy staff
+- **It reads TWO facts and drops the rest.** The billing detail is a heavy staff
   payload (rank, charges, redemptions, streak, an address) and a lobby iPad
   prints none of it. Nothing renders, logs or persists any part of that response
-  beyond the single boolean; never reuse it to prefill a form.
+  beyond the trial boolean and the held-recurring plan ids below; never reuse it
+  to prefill a form.
 - **Only for a person the kiosk did not create.** `wasExisting` + a known
   `memberId`; somebody registered during this signup has no history by
   construction, so no call is made at all. Answers are cached per member id for
-  the flow.
+  the flow (`_planChecked`), and a FAILED read counts as asked.
 - **It FAILS OPEN** — the exact opposite of the money-path reads, and on
   purpose. A throw leaves `KioskSignupPerson.hadTrial` false and the trial stays
   on offer: a second trial slipping through costs one free week the desk can
   undo, while turning a legitimate first-timer away sends a paying customer out
   of the door.
-- **A blocked trial can never be SELECTED, and always EXPLAINS.** Its
-  `KioskPlanCard` renders used — dimmed, with an "Already used" tag top-LEFT
-  over the hero (the top-right belongs to the select mark) — and `selectPlan`
-  turns its tap into the `KioskTrialBlock` popup instead of setting
-  `selectedPlanId`. Both halves matter: an unselectable card keeps a blocked
-  plan off the review (where it would fail at pay), and the popup keeps it from
-  being a greyed-out dead end with no answer. The popup's primary returns to the
-  grid; its outline hands off to the desk via
-  `KioskSignupStopReason.trialAlreadyUsed`.
+- **A blocked trial can never be SELECTED, and always EXPLAINS** — see "Two
+  plan-block reasons" above for the shared mechanics. Both halves matter: an
+  unselectable card keeps a blocked plan off the review (where it would fail at
+  pay), and the popup keeps it from being a greyed-out dead end with no answer.
+
+### The already-on-plan rule — the backend's own conflict, enforced at PICK
+
+**A member may not start a RECURRING plan they already hold, and the kiosk closes
+that card on the grid rather than letting them find out at the review.**
+
+**Why it is a hard block, not an annotation.** The charge preview runs the SAME
+`MemberMembershipsStartValidation.validate` as the real start
+(`memberships_start_preview.py` and `memberships_start.py` both call it), which
+includes the per-plan duplicate-recurring check, and that raises a plain 400. The
+kiosk therefore hits it in `_loadPreview`, whose catch is
+`_stop(previewFailed)` — a **retryable** stop. So an unblocked card leads
+straight to "We couldn't work out your total just now" with a *Try again* that
+returns to a preview which can never succeed. In a **group** it is worse: the
+check runs per member inside one `validate()`, so **one child's already-held plan
+kills the entire family's signup** with that same generic message.
+
+**The rule mirrors the backend SQL exactly, and must not be widened.**
+`FastApiBackend/src/memberships/sql/member_memberships_check_existing.sql`
+conflicts on `plan_id = ANY(:plan_ids)` with `status IN ('active','frozen')` AND
+`mp.plan_type = 'recurring'`. So:
+
+- **per PLAN, not per member** — a member on "Unlimited Monthly" may freely buy a
+  DIFFERENT recurring plan, and the kiosk must offer it;
+- **`{active, frozen}` and nothing else** — `MembershipStatus` also carries
+  `trial`, `overdue` and `dormant`, and including any of them would refuse a sale
+  the backend would have accepted;
+- **recurring only** — one-time and trial packs are allowed to STACK, so a held
+  pack blocks nothing.
+
+**This is deliberately NARROWER than the CRM's own rule, and the divergence is
+the point.** `start_plan_rules.dart`'s `disabledPlanReasons` blocks
+`planType != 'one_time'` at `{active, trial, frozen, overdue}` — broader than the
+backend on two axes. At a desk a false block is visible and staff reason about
+it; at a kiosk it silently turns away a paying customer with no override. **Do
+not "align" the kiosk to the CRM's looser set** (whether the CRM's should be
+tightened is the founder's call). The kiosk therefore does not import
+`start_plan_rules.dart` at all — not because it is banned, but because its rule
+is intentionally a different rule.
+
+**Zero new requests, and the ids live on the PERSON.** The held set is derived
+from the SAME `getMemberDetail` response the trial rule already fetches, and is
+stored on `KioskSignupPerson.heldRecurringPlanIds` — never on the state root. The
+plan step is walked once per training person under a fixed layout, so a
+state-root map would be one stale read away from printing a parent's membership
+on a child's turn; per-person storage makes that leak **unrepresentable**,
+exactly as `hadTrial` does. `bloc/kiosk_signup_plan_block_test.dart` asserts it
+by advancing the active person and checking that the notice text *and* the
+blocked set both change with them.
+
+**It FAILS OPEN too, and the cost is stated rather than hidden.** On a read
+failure the kiosk does not know WHICH plan somebody holds, so a fail-closed
+posture would have to block the whole grid — the worst outcome available. The
+cost of failing open is the dead end above; it is accepted, not airtight.
+
+**The membership is STATED, not only marked.** `KioskInlineNotice` at the top of
+the plan step's body says which plan they are on before they start picking, so
+the marked card has an answer above it and not only behind a tap. It is
+self-gating (nothing held → no notice), so a brand-new member never sees it. See
+§8.1a for the body order and §9 for the privacy allow/deny list.
 
 **The picker offers the ROSTER first, then the CRM.** The people already on
 this signup are standing right there, so they are listed and directly pickable;
@@ -565,6 +669,33 @@ anybody releases it immediately.
 plan, their plan's waivers and a line in `memberships[]`. An unticked person is
 still created and still on the roster — a parent paying for their kids is
 exactly this, and so is a member who registers today and buys later.
+
+#### The plan step's "No membership" — changing your mind mid-way
+
+**Somebody halfway through a family signup may decide they don't want a
+membership after all** (founder ruling), so the plan step carries a
+**`No membership`** control in `KioskFlowFoot`'s right-hand Skip gutter —
+the same gutter the optional-details step's Skip uses, a full stage away from the
+escape and from the primary.
+
+- **GROUP only.** `onSkip` is null in a solo signup and `skipPlanForPerson`
+  refuses the call anyway: skipping the only person would empty the cart, and at
+  least one person must get a membership.
+- **It reuses `training`, never a parallel concept.** "Not getting a membership"
+  is precisely what that flag already means, so the cart, the waiver queue, the
+  review and the roster chip all follow for free. Their plan is dropped with it,
+  exactly as `setPersonTraining(_, false)` does.
+- **It advances to the next person who still needs a plan**, and to the waiver
+  run when nobody is left.
+- **Skipping EVERYBODY returns to the People step** (founder's explicit
+  resolution — better than a guard). The roster is where a person can be ticked
+  back on or removed, and it already blocks Continue on the empty cart and says
+  why ("Tick whoever's getting a membership…"), so the backend's empty-cart 400
+  stays unreachable by construction.
+
+The label answers the SCREEN ("Pick Ella's membership") rather than the
+navigation, and it deliberately avoids `KioskFlowFoot`'s default `Skip for now`,
+which would promise a later that does not exist here.
 
 #### Removing somebody asks first — the payer included
 
@@ -888,9 +1019,9 @@ Rules that hold across all four:
 
 ---
 
-## 7. Six clocks, and which one owns which screen
+## 7. Seven clocks, and which one owns which screen
 
-Six independent timers exist. Confusing them is a recurring source of bugs, so
+Seven independent timers exist. Confusing them is a recurring source of bugs, so
 name them precisely:
 
 | clock | length | scope | on expiry |
@@ -898,7 +1029,8 @@ name them precisely:
 | **Runway** (`KioskSessionCubit`) | 12h absolute, lockout at 11h45 | the whole session | sign out |
 | **Flow-idle** (`kKioskIdleTimeout`) | 5 min, then a 30s visible countdown (`kKioskIdleCountdown`) | any *engaged* flow page | `goHome()` — abandons the draft |
 | **Signup stop** (`kKioskSignupStopHold`) | 15s | a terminal signup stop only | abandon → `goHome()` |
-| **Signup popup** (`kKioskSignupPopupHold`) | 60s | a BLOCKING signup popup — the decline, the trial block | abandon → `goHome()` |
+| **Signup popup** (`kKioskSignupPopupHold`) | 60s | every BLOCKING read-and-decide signup surface — the decline popup, the plan block, and the per-person **results** receipt | abandon → `goHome()` |
+| **Signup welcome** (`kKioskSignupWelcomeHold`) | 60s | the signup's welcome terminal only | abandon → `goHome()` |
 | **Glance hold** (`kKioskGlanceHold`) | 10s, started at the LAST reveal beat | the glance only | `goHome()` |
 | **App modal** (`kKioskAppModalTimeout`) | 60s | the modal overlay only | `goHome()` |
 
@@ -909,14 +1041,25 @@ shared community iPad: no screen may hold it forever, and a countdown drawn
 behind a popup sneaks the surface away without the member seeing it go (founder
 ruling).
 
-Two things about that clock are easy to conflate and must not be:
+**The 60-second popup clock covers THREE surfaces, not one, and that is
+deliberate.** The decline popup, the plan block and the results receipt are the
+same kind of screen — a read-and-decide surface somebody is standing at — which
+is exactly why that constant is 60s and not the stop screen's 15s. A separate
+named constant for the results screen would add a row to this table for an
+identical duration, which is how a set of clocks desyncs.
+
+Three things about that clock are easy to conflate and must not be:
 
 - **It is a RETURN clock, never a cooldown.** It decides how long the iPad may
-  sit unanswered, not how soon an action may be taken. On the decline popup
-  "Retry" is live from the first frame, uncapped and unthrottled (§11.3a).
+  sit unanswered, not how soon an action may be taken. On the decline popup and
+  on a partial results receipt, Retry is live from the first frame, uncapped and
+  unthrottled (§11.3a).
 - **It is 60s, not the stop screen's 15s.** A terminal stop can be reached with
   nobody standing there; these are read-and-decide screens somebody is looking
   at, and 15 seconds is not enough to read three lines and choose.
+- **On the two surfaces that do NOT release the flow count on entry** (the
+  decline, and a PARTIAL results receipt) this clock is what finally releases it
+  when nobody answers.
 
 **Expiry runs the ordinary `abandon()`, never a new exit.** That is what keeps
 the flow count balanced by the one latch — and it matters most on the decline,
@@ -1081,6 +1224,15 @@ their own name is a strange way to address them.
 The same rule runs through the titles: **in a group, EVERY turn is named,
 including the payer's own.** An unnamed screen in the middle of a run of named
 ones is ambiguous exactly when it matters most.
+
+**The plan step's BODY has a fixed order: the notice, then the picked banner,
+then the grid.** Context before confirmation-of-the-action-just-taken. The
+`KioskInlineNotice` states the membership the active person already holds (§3's
+already-on-plan rule) and the `KioskPlanPickedBanner` confirms what they just
+tapped; reversed, the member reads a confirmation before the context that
+explains the marked card. Both **scroll with the body**, which is correct: they
+are read-once facts, not correctness controls like the pinned `KioskWhoFor`. The
+notice passes `onRetry: null` — its optional "Try again" has no meaning here.
 
 **The plan step confirms the pick, and returns to the top after one.** Tapping a
 card low in a tall grid otherwise gives no feedback and strands the member at
@@ -1328,6 +1480,43 @@ catalogue, feed or belts.
   opacity + ink only. `test/features/kiosk/presentation/kiosk_rank_slide_test.dart`
   pins all of it.
 
+### The lobby line on a member's OWN stored data
+
+The kiosk runs on a **shared lobby iPad**, so what it may print about a
+self-identified member is a short allow-list. Naming the PLAN a member holds, on
+their own signup turn, is inside the line the match card already draws (a full
+name plus a masked email). Everything else is outside it.
+
+**May appear:** the plan **name** of an `active`/`frozen` `recurring` membership
+held by the **active person**, and only when that plan is in the warmed
+catalogue. A held plan the gym no longer offers resolves to nothing and is
+silently omitted — it cannot be picked, so there is nothing to prevent, and
+storing its name would create a second source of truth for something the
+catalogue owns.
+
+**Must NOT appear, anywhere:**
+
+- **No price they pay.** The card shows the plan's own CATALOGUE price, which it
+  always did; nothing reveals their actual billed amount or their pinned price
+  version. (§3's structural no-discounts rule means the kiosk has no vocabulary
+  for the rest of it — keep it that way.)
+- **No dates.** No start date, no `nextDueDate`, no renewal date, no freeze
+  window.
+- **No status word.** "Frozen" / "Overdue" is billing state about a person,
+  printed in a lobby. A frozen plan is blocked and labelled `You have this`
+  identically to an active one: the member learns *that* they hold it, never
+  *how it is doing*.
+- **No one-time or trial packs.** They are not conflicts (they stack), so
+  surfacing them would be pure disclosure with no purchasing consequence.
+- **No count**, and **no other member's memberships, ever** — the notice and the
+  blocked set both read `state.activePerson`, which is what makes the group leak
+  unrepresentable rather than merely avoided (§3).
+
+The same rule governs the results receipt: it names the person and the plan and
+states the outcome, and it never prints a raw backend error string
+(`item.error` is Stripe or internal prose — right at a staff desk, wrong in a
+lobby) — see §11.6.
+
 Two smaller members of the same family:
 
 - The modal's step-2 email chip renders only for a **really-known** member
@@ -1386,7 +1575,8 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   structural. Built: the `KioskSignupStep` spine + flat `KioskSignupState`,
   the details and extra-details steps, the ONE `createMember` call carrying
   both, **the plan pick, the waiver run, the card, the review, the pay lock,
-  the decline and the welcome**, every front-desk stop, the lane's own 5-min
+  the per-person results receipt, the decline and the welcome**, every
+  front-desk stop, the lane's own 5-min
   idle guard, the abandon path, and the shared chrome under
   `presentation/widgets/signup/` (flow rail, three-slot foot, field box,
   consent check, DOB wheel, stop screen, abandon confirm). See §11 for the
@@ -1404,9 +1594,24 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   the same precedent `payerMatch` set on rung 1. See §3 for what the identify
   route seats.
 
-- **The one-trial rule and its popup.** `KioskTrialBlock` over the plan grid,
-  `KioskPlanCard`'s used/`Already used` state, and
-  `KioskSignupStopReason.trialAlreadyUsed`. See §3.
+- **The per-person results receipt.** `KioskSignupStep.results`, between
+  `paying` and `welcome`, drawn by `widgets/signup/kiosk_results_screen.dart`
+  over the new `kiosk_result_row.dart` and `kiosk_results_foot.dart` (and the
+  `kiosk_two_charges_note.dart` the review now shares). It answers BOTH a fully
+  successful start (a receipt, one `Next` into `welcome`) and a **partial** one
+  (the decline ladder at a narrower scope); an ALL-failed start still goes to the
+  decline popup. See §11.6.
+
+- **The two plan-block reasons and their ONE popup.** `KioskPlanBlock` over the
+  plan grid, `presentation/kiosk_plan_block_copy.dart` as the reason→words map,
+  `KioskPlanCard`'s `blocked` + `blockedLabel` state
+  (`Already used` / `You have this`), the plan step's `KioskInlineNotice`
+  stating the membership already held, and
+  `KioskSignupStopReason.trialAlreadyUsed` / `alreadyOnPlan` as the two desk
+  handoffs. See §3.
+
+- **The plan step's "No membership" skip** — group-only, reusing `training`, and
+  skipping everybody returns to the roster. See §3.
 
 - **Phase E — the GROUP (family) signup.** The roster loop is built on the same
   cubit: `people` (always visited — ruling 8), `personDetails`, `match`, the
@@ -1499,15 +1704,35 @@ not the first. The client latch has to stand on its own.
 
 | outcome | goes to |
 | --- | --- |
-| 201 (no failed items) | `welcome` |
-| **409** `MembershipStartReplayError` | `welcome` — an idempotent replay; the ORIGINAL start stands, and charging again is the one thing it must never become |
-| 207 (`results` carries failed items) | `declined`, carrying `failedItems` |
+| 201 / 207, **every item created** | `results` — the per-person receipt, one `Next` into `welcome` |
+| 201 / 207, **PARTIAL** (some created, some not — or any `unknown` status) | `results` — money HAS moved for the group that cleared, so the decline popup's "you haven't been charged" would be false |
+| 207, **every item failed** | `declined`, unchanged — the popup's copy is true exactly here, and it is where the founder's retry ladder lives |
+| a landed 2xx with **no items at all** | `welcome` — a receipt with no rows is worse than the warm welcome |
+| **409** `MembershipStartReplayError` | `welcome`, unchanged — an idempotent replay; the ORIGINAL start stands, charging again is the one thing it must never become, and the 409 body carries **no** `MemberMembershipsStartResponse`, so there is nothing to itemise |
 | 422 `WaiverGateException` | back to `waivers`, seeded with exactly the ids the server named |
 | 500 / transport | `stop` — "nothing was charged" |
 
-A 207 is a **2xx**, so the split is read off `result.hasFailures`, never off a
-status code. Treating a 409 as a failure would double-charge on the retry;
+A 207 is a **2xx**, so the split is read off the response's own ITEMS, never off
+a status code. Treating a 409 as a failure would double-charge on the retry;
 treating a 207 as a success would tell a member they joined when they did not.
+
+**The split is THREE ways, and the middle branch is a repaired honesty bug.**
+Every failure used to collapse onto `declined`, whose body states "You haven't
+been charged, and everything else you filled in is saved." On a partial that
+sentence is **false** — the succeeded charge group's money has moved. The
+three-way split fixes it without touching the decline popup: `declined` keeps the
+all-failed case where its copy is true, and the partial gets a screen that can be
+honest about split money.
+
+**Reachability, worth stating:** a partial needs a cart with **both** a
+one-time/trial plan and a recurring plan, where exactly one of the two charge
+groups failed. A kiosk **solo** cart is one person, one plan, one item, one charge
+group — so **partial failure is structurally group-only.**
+
+`unknown` (`MemberMembershipsStartStatus`'s forward-compatible fallback) is
+neither created nor failed, so it falls into the partial branch: the member is
+never told "you're all set" about a row the backend would not confirm, and that
+row's own line claims nothing about money in either direction.
 
 **The 422 route drops the named waivers from the signup's own signed set.** The
 server is authoritative — skipping a waiver it is blocking on loops the member
@@ -1515,13 +1740,23 @@ forever.
 
 ### 11.3 Flow-count discipline on the money screens
 
-`paying` **never** releases (a live charge is exactly what the T+11h45 grace
-window exists for) · `declined` **does not** release on entry (the member is
-still standing there and can retry, however many times) · `welcome` and every
-terminal `stop` release exactly once · a **retryable** stop
-(`plansUnavailable`, `previewFailed`) deliberately does **not** release,
-because "Try again" returns to a live flow; its auto-return `abandon()`
-releases it if the member walks off.
+| screen | releases on entry? | why |
+| --- | --- | --- |
+| `paying` | **never** | a live charge is exactly what the T+11h45 grace window exists for |
+| `results`, every item created | **yes** | the money has landed and every row exists; nothing is left but to read and tap Next. This is EARLIER than the old welcome-only release, which is strictly better for the lockout |
+| `results`, **partial** | **no** | Retry is live on that screen, and `pay()` would then run a live charge with no flow held — the exact thing this section forbids |
+| `declined` | **no** | the member is still standing there and can retry, however many times |
+| `welcome`, every terminal `stop` | **yes**, exactly once | |
+| a **retryable** stop (`plansUnavailable`, `previewFailed`) | **no** | "Try again" returns to a live flow |
+
+`_flowStarted` is a latch, so `_enterWelcome`'s own `_endFlowIfStarted()` is a
+harmless no-op on the all-created path — and it is still the ONLY release for
+every other route into welcome (the 409 replay, a landed start with nothing to
+itemise). **Never delete it**: deleting a release call is how the kiosk stops
+signing itself out at its lockout (`CRM/CLAUDE.md`, kiosk bullet 4).
+
+Wherever a screen does not release on entry, its own 60-second return countdown's
+`abandon()` releases it if the member walks off.
 
 ### 11.3a A decline is never an ending, and there is no wait between attempts
 
@@ -1605,7 +1840,15 @@ finally releases a declined screen nobody is standing at, through the ordinary
   `(oneTime?.total ?? 0) > 0 && (dueNow?.total ?? 0) > 0`
   (`start_preview_step.dart:276-278`). A $0 one-time line is a present invoice
   with nothing on it; calling that two charges lies about the member's own bank
-  statement.
+  statement. **ONE widget carries the sentence on both screens** —
+  `KioskTwoChargesNote`, called by the review's money panel and by the results
+  receipt — so the member reads the identical string before and after the card is
+  taken. **Never gate it on the start response's own `multiple_charges` flag**:
+  the backend computes that from the request's plan TYPES without looking at
+  amounts, so it is true even when one group's invoice is $0, which is precisely
+  the lie this predicate exists to avoid. The receipt's full condition is
+  `state.allCreated && state.chargedTwiceToday` — on a partial one of the two
+  charges did not happen, so "two separate charges" would be false there too.
 - **`declined` is a POPUP acknowledgement whose primary action retries the SAME
   card.** `KioskDeclinedScreen` is the kiosk's one modal vocabulary (veil +
   centered popup card) carrying the blameless reason ("Your bank declined the
@@ -1718,6 +1961,9 @@ finally releases a declined screen nobody is standing at, through the ordinary
   the terminal duplicate stop (§3).
   `test/features/kiosk/bloc/kiosk_signup_group_test.dart` holds the payee side;
   `bloc/kiosk_signup_payer_test.dart` holds the payer side.
+- **A partial failure is structurally group-only** (§11.2), so the results
+  receipt's partial branch is a group surface — and the retry it offers still
+  carries only `failedItems`, so nothing already created is re-charged (§11.6).
 - **A swapped payer keeps everyone's seat.** A CRM pick inserts at index 0 and
   shifts every index by one (`activePersonIndex` included); a roster pick swaps
   positions 0 and k and shifts nothing. Either way the person who started the
@@ -1747,6 +1993,65 @@ finally releases a declined screen nobody is standing at, through the ordinary
   clears the payer and asks who pays next (§3). See §3 for the membership check,
   the remove confirmation, and the no-payer state.
 
+### 11.6 The per-person results receipt
+
+**`KioskSignupStep.results` is the LEDGER, and the welcome screen stays the
+celebration.** The receipt answers "who got what, and did it start" — factual,
+with per-row square marks and no green confirmation disc. The welcome screen keeps
+`_Greeting`'s disc and the composed `get_app/` set, unchanged: two celebrations
+for one event teaches neither of them.
+
+It is entered only with a LANDED response in hand — `paying` owns in flight — and
+it draws two branches off one panel (§11.2 decides which):
+
+| branch | title / subtitle | actions | card chip |
+| --- | --- | --- | --- |
+| every item created | `You're all set` · `Your membership started today.` solo, `Every membership below started today.` in a group | one `Next` → `welcome` | no — the money already moved, so it is noise |
+| **partial** | `Some of these didn't go through` · `Have a look — you can try the rest on the same card.` | the decline popup's THREE, in its order and wired to its methods: **Retry the rest** (`retrySameCard`), **Try another card** (`retryCard`), **Get help at the desk** (`getHelpAtDesk`) | yes — which card was used is the fact a member wants before retrying |
+
+Rules the screen holds:
+
+- **The rail lights the `Pay` rung** and the templates stay 6 solo / 7 group.
+  The receipt IS the outcome of paying, so it joins that arm rather than adding a
+  rung. No identity strip: it is about the signup as a whole.
+- **Row order is the ROSTER's order** (payer first), not the response's, so the
+  receipt reads in the same order as the review the member just approved. Each row
+  is `<Person> · <Plan>`; an item whose member is not on the roster (unreachable
+  — `_startItems` builds from the roster) is appended last and degrades to the
+  **plan name alone**, never a stand-in human name (§9).
+- **Three sub-lines, one per status**: `created` → "Started today"; `failed` →
+  "Not started — nothing was charged for this one." (true by construction — the
+  failure granularity is the charge group, and a failed group's invoice did not
+  charge); `unknown` → "We couldn't confirm this one — the desk can check it for
+  you.", which claims nothing about money in either direction.
+- **No red, and no raw `item.error`.** Every kiosk failure surface is warm
+  `yellowDark` / `okYellow` — nothing is broken and nobody did anything wrong, and
+  a red row on a lobby iPad reads as a verdict on the person standing at it. The
+  backend's error string is Stripe or internal prose; the row states the
+  CONSEQUENCE in the kiosk's own words instead. There is also no right-hand status
+  word: the mark and the sub-line already carry the outcome.
+- **No escape, on either branch.** Money has moved; there is nothing to start
+  over. So the foot is **`KioskResultsFoot`**, built from
+  `KioskWelcomeScreen._Foot`'s shape (hairline → the 60s `KioskReturnTimer` →
+  centred actions) and deliberately **not** `KioskFlowFoot`, whose left gutter is
+  the ghost escape by construction.
+- **A partial's retry is still money-safe.** `retrySameCard`'s step guard admits
+  `declined || results` and nothing else; `_startItems` still re-sends only
+  `failedItems` and mints a NEW idempotency key, so nothing already created is
+  re-charged and no member, signature or link is re-executed.
+- **A retry's response is MERGED into the one it retried**
+  (`_mergeStartResults`), newer outcome replacing older for the same
+  (member, plan). A retry names only the previously-failed items, so without the
+  merge a partial-then-successful retry would print a one-row receipt headed
+  "every membership below started today" while omitting the row an earlier attempt
+  created. `failedItems` over the merge is identical to the latest response's own
+  failures, so the retry set cannot go stale.
+- **There is no fourth "continue anyway" on a partial.** The succeeded people are
+  real members either way; "continue without them" is a decision about somebody
+  else's membership that belongs at the desk, not on a lobby iPad. The consequence
+  to accept: a partial's 60-second expiry `abandon()`s, so its succeeded members
+  never see the get-app push. Only the adoption prompt is lost.
+
 ---
 
 ## Key files
@@ -1766,13 +2071,18 @@ finally releases a declined screen nobody is standing at, through the ordinary
   seated payer (`_offerPayerMatch`, `_offerIdentifiedMatch`,
   `confirmPayerMatch` / `declinePayerMatch` with its `payerMatchFromIdentify`
   fork, `openPayerPick` / `pickPayerRow` / `pickPayerFromRoster` over the ONE
-  `_seatPayer`, `canSwitchPayer`), the one-trial rule
-  (`_loadTrialEligibility` → `KioskSignupPerson.hadTrial`,
-  `KioskSignupState.planBlocked`, `selectPlan`'s explain-don't-select branch,
-  `dismissTrialBlock` / `trialBlockHelp`), the money path (`_buildStartRequest`
-  / `pay` / `_onDeclined` / `retrySameCard` (same card, new key) / `retryCard`
+  `_seatPayer`, `canSwitchPayer`), the TWO plan-block rules
+  (`_loadPlanEligibility` → `KioskSignupPerson.hadTrial` +
+  `heldRecurringPlanIds`; `KioskSignupState.planBlockReason` /
+  `planBlockReasonFor` / `heldPlanNames`; `selectPlan`'s
+  explain-don't-select branch; `_clearBlockedPick`; `_openPlanBlock` /
+  `dismissPlanBlock` / `planBlockHelp`), the plan step's group-only skip
+  (`skipPlanForPerson` / `_advancePlanPerson`), the money path
+  (`_buildStartRequest` / `pay`'s three-way split / `_enterResults` /
+  `_mergeStartResults` / `nextFromResults` / `_onDeclined` /
+  `retrySameCard` (same card, new key) / `retryCard`
   (new card) / `_enterWelcome`, the `_sentAttempts` latch,
-  `kKioskSignupStartTimeout`), the popups' shared return countdown
+  `kKioskSignupStartTimeout`), the blocking surfaces' shared return countdown
   (`_startPopupCountdown`, `kKioskSignupPopupHold`), the
   `KioskSignupStopReason`s and their `isRetryable` split, and the lane's own
   begin/endFlow latch + idle guard.
@@ -1787,14 +2097,21 @@ finally releases a declined screen nobody is standing at, through the ordinary
   `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
   `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
   `kiosk_inline_notice` (the lane's ONE warm "important, not your fault, not a
-  dead end" strip — the waiver notices, the picker's redirect, and the card
-  step's replacement notice),
+  dead end" strip — the waiver notices, the picker's redirect, the card step's
+  replacement notice, the plan step's already-held-membership notice, and the
+  partial receipt's "the ones marked Started are paid for"),
   `kiosk_entry_choice_step` + `kiosk_identify_step` (the front door),
-  `kiosk_trial_block` (the one-trial popup),
+  `kiosk_plan_block` (the ONE blocked-plan popup, over
+  `presentation/kiosk_plan_block_copy.dart`'s reason → title / body / glyph /
+  card-tag map),
   `kiosk_card_step` + `kiosk_secure_strip` + `kiosk_card_facts` (wrapping the
   shared `CardFieldBox`), `kiosk_review_step` + `kiosk_review_side_panel` +
-  `kiosk_money_panel` + `kiosk_buy_row` + `kiosk_card_chip`,
-  `kiosk_paying_screen`, `kiosk_declined_screen`, and `kiosk_welcome_screen`
+  `kiosk_money_panel` + `kiosk_buy_row` + `kiosk_card_chip` +
+  `kiosk_two_charges_note` (the ONE two-charges sentence, shared with the
+  receipt),
+  `kiosk_paying_screen`, `kiosk_results_screen` + `kiosk_result_row` +
+  `kiosk_results_foot` (the per-person receipt, §11.6),
+  `kiosk_declined_screen`, and `kiosk_welcome_screen`
   (which COMPOSES the shipped `get_app/` set off the flow cubit's warmed
   catalogues — zero fetches), plus the GROUP half: `kiosk_people_step` +
   `kiosk_roster_row` + `kiosk_person_adder`,
@@ -1842,9 +2159,16 @@ finally releases a declined screen nobody is standing at, through the ordinary
 **Backend:**
 
 - `GET /api/v1/members/{member_id}/billing` — the billing detail, consumed via
-  `MemberRepository.getMemberDetail`. The kiosk reads it for exactly ONE
-  boolean, the one-trial rule's `memberships.any((m) => m.planType == 'trial')`
-  (§3), and renders/logs/persists nothing else from it.
+  `MemberRepository.getMemberDetail`. The kiosk reads it for exactly TWO facts —
+  the one-trial rule's `memberships.any((m) => m.planType == 'trial')` and the
+  held-recurring plan ids (`planType == 'recurring'` at
+  `{active, frozen}`) — and renders/logs/persists nothing else from it (§3).
+- `FastApiBackend/src/memberships/sql/member_memberships_check_existing.sql` —
+  the duplicate-recurring conflict the kiosk's already-on-plan block mirrors
+  verbatim. It runs on the PREVIEW as well as the start
+  (`MemberMembershipsStartValidation.validate`, called by both
+  `memberships_start_preview.py` and `memberships_start.py`), which is why an
+  unblocked card dead-ends on a retryable stop (§3).
 - `FastApiBackend/src/checkin/service/checkin_member_gate.py` — the `is_member`
   split; `schema/checkin_schema.py` — `CheckinWarning`, `CheckinRequest`,
   `CheckinResponse` (incl. `class_streak_weeks` + `current_week_days`).
@@ -1861,7 +2185,9 @@ flow shipped.)
 `bloc/kiosk_signup_cubit_test.dart` (the signup lane's flow-count discipline,
 the one-call create, ruling 11's PUT-not-create, the stops, the idle guard),
 `bloc/kiosk_signup_money_test.dart` (the §11 money path: double-tap Pay = ONE
-repository call, the sent latch, 409-as-success, 207 → declined, 422 →
+repository call, the sent latch, 409-as-success, the THREE-way start split —
+all-created → `results` releasing the flow exactly once and `Next` → `welcome`,
+all-failed → `declined` holding it — the receipt's own 60s countdown, 422 →
 waivers, 500 → "nothing charged", the uncapped no-wait decline model — Retry
 re-sends the SAME card with a NEW key while "Try another card" re-enters, a
 double-tap Retry is one charge, and neither re-creates/re-signs anything — the
@@ -1870,7 +2196,10 @@ empty price-reduction fields + `paidWithCash: false` + `set_default`, and the
 due-today / two-charges arithmetic),
 `bloc/kiosk_signup_group_test.dart` (the §11.5 group rules: the payee 409
 offer, adopt-vs-recreate, link-before-start both ways, the per-training-person
-cart, the 207 partial retry, roster removal, the empty-cart guard, the search
+cart, the 207 partial — which lands on `results`, NOT the decline popup, and
+holds the flow count — and its failed-items-only retry, roster removal, the
+empty-cart guard, the plan step's group-only "No membership" skip including
+skip-everybody → People, the search
 debounce + sequence guard, and the per-member signature keying),
 `bloc/kiosk_signup_payer_test.dart` (the §3 seat rules: the entry fork, the
 identify search and its confirm-first tap, the duplicate 409 offer and where
@@ -1881,16 +2210,32 @@ and the existing-member skip / new-member edit round trip),
 closes every trial, a cancelled trial still counts, a member created here is
 never asked, the read FAILS OPEN, a blocked card explains without selecting,
 and the popup's countdown returns home releasing the flow exactly once),
+`bloc/kiosk_signup_plan_block_test.dart` (the §3 already-on-plan rule: the
+`recurring` + `{active, frozen}` scope mirrored exactly — a DIFFERENT recurring
+plan stays selectable (the over-block guard), `frozen` blocks without ever
+saying "frozen", `overdue` and a held one-time/trial pack block nothing, the read
+FAILS OPEN, the popup NAMES the plan while the trial popup does not, the desk
+handoff's own stop reason, a late answer clearing a pick, and the group leak
+guard — advancing the active person flips BOTH the notice and the blocked set),
 and the
 presentation guards `kiosk_type_ramp_test.dart`, `kiosk_group_steps_test.dart`
 (the roster / match / details screens compose at 1180×820 with the email
 masked, Edit only for people this signup created),
 `kiosk_signup_chrome_test.dart` (§8.1a: the pinned identity survives a scroll,
 a group names every turn, the card step names the PAYER and not the active
-person, the waiver box fills the fold, the §11.4 proration line renders only on
+person, the waiver box fills the fold, the GROUP rail SCALES rather than clips at
+either fold, the §11.4 proration line renders only on
 a prorated preview, and the §11.4 committing CTA — trial vs membership, the
 `$0` collapse, and no foot overflow at 1180×820 or 1024×700 with the longest
-label), `kiosk_flow_rail_index_test.dart` (every `KioskSignupStep`'s rung, by
+label),
+`kiosk_signup_surfaces_test.dart` (the founder-called-out surfaces at the real
+fold: the front door's two ways in, the payer picker's affordant rows, the
+deletable payer and its legible block, the plan pick's confirmation + BOTH block
+labels with the held-membership notice + the over-block guard, the decline
+popup's three live actions over its countdown, and §11.6's two receipt branches —
+five rows, one `Next` vs the three decline actions, both at 1180×820 and
+1024×700 with no overflow),
+`kiosk_flow_rail_index_test.dart` (every `KioskSignupStep`'s rung, by
 name — a miscount there is otherwise SILENT),
 `kiosk_get_app_modal_test.dart`
 (no overflow / no vertical scroll at 1180×820 and 1024×700),

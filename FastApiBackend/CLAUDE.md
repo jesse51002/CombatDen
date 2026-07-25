@@ -411,8 +411,15 @@ src/
   - Focus on clear, descriptive exception messages that help debugging
 - **Layer Separation**: API logs + handles, Services raise + describe
 
-**Billing / Stripe error status codes — never 502/503/504**
-- Stripe-or-upstream failures in billing endpoints always return **500 Internal Server Error**, never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. A partial batch result (some items succeeded, some failed) returns **207 Multi-Status** (a 2xx, also never auto-retried) with the per-item succeeded/failed split in the body; a total failure is 500.
+**Billing / Stripe error status codes — never 502/503/504, and a card decline is a RESULT**
+- **A system/upstream failure is a 500** — never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. This covers `PaymentsStripeError`, a lost subscription, a gateway/network failure, an unexpected exception — anything where OUR side or Stripe's malfunctioned.
+- **A CARD DECLINE is not a failure — it is a definitive business OUTCOME, returned as a 2xx RESULT with the reason in the body, never a 500.** A bank saying no means the system worked; reporting it as a 500 misreports an ordinary decline as an outage and buries genuine outages in monitoring. 207 satisfies the no-auto-retry rule exactly as well as 500 (it is a 2xx, so no proxy replays a money-moving op).
+  - **Start** (`POST /api/v1/member_memberships/`) — `MemberMembershipsStart` catches `stripe.CardError` and folds it into a per-item `failed` entry with the decline reason; the router maps any failed item to **207**. Even an ALL-failed start is a 2xx.
+  - **Retry-card** (`POST /api/v1/member_memberships/retry-card`) — the router turns `stripe.CardError` into a `MemberMembershipsRetryCardResponse` with `status=declined` + `decline_reason` on **207**; a collected charge is `status=paid` on 200. Single-item, so no list.
+  - The reason surfaced is Stripe's own `user_message` (what it writes for end-user display) — staff read it to know what to do next (expired → Update Card; insufficient funds → tell the member).
+  - Only `stripe.CardError` moves. Every other arm on those handlers is unchanged: `MembershipInTaskError` → 409, `ValueError` → 404/400, `PaymentsStripeError` → 500, bare `Exception` → 500. A system failure must never masquerade as a decline, and a decline must never masquerade as a system failure.
+- **A partial batch result** (some items succeeded, some failed) also returns **207 Multi-Status** with the per-item succeeded/failed split in the body.
+- **Clients must branch on the RESULT, not on the status class.** A 2xx no longer implies the money moved — the CRM's `retryMembershipCard` returns the typed outcome and the bloc branches on it, so a decline can't render as a collected payment.
 
 **Middleware**
 - CORS must be first in middleware stack

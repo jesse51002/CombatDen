@@ -138,11 +138,14 @@ int kioskFlowRailIndex(KioskSignupStep step, {required bool isGroup}) {
     KioskSignupStep.plans => isGroup ? 3 : 2,
     KioskSignupStep.waivers => isGroup ? 4 : 3,
     KioskSignupStep.card => isGroup ? 5 : 4,
-    // Review / Paying / Declined / Welcome all belong to the final "Pay"
-    // rung: they are one act from the member's side, and the rail must not
-    // imply a step exists between reviewing and paying.
+    // Review / Paying / Results / Declined / Welcome all belong to the final
+    // "Pay" rung: they are one act from the member's side, and the rail must
+    // not imply a step exists between reviewing and paying. The results
+    // receipt IS the outcome of paying, so it joins that arm rather than
+    // lengthening the rail.
     KioskSignupStep.review ||
     KioskSignupStep.paying ||
+    KioskSignupStep.results ||
     KioskSignupStep.declined ||
     KioskSignupStep.welcome =>
       isGroup ? 6 : 5,

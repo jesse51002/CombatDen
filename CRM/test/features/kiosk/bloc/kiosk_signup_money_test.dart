@@ -1,3 +1,4 @@
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -192,7 +193,7 @@ void main() {
       expect(payment.paymentMethodId, 'pm_1');
       expect(payment.setDefault, isTrue);
       expect(request.paidWithCash, isFalse);
-      expect(cubit.state.step, KioskSignupStep.welcome);
+      expect(cubit.state.step, KioskSignupStep.results);
       await cubit.close();
     });
 
@@ -265,16 +266,87 @@ void main() {
   });
 
   group('start-call response routing', () {
-    test('201 lands on welcome and releases the flow exactly once', () async {
+    test('201 with every item created lands on the RESULTS receipt and '
+        'releases the flow exactly once', () async {
       final cubit = await atReview();
       verifyNever(() => session.endFlow());
       await cubit.pay();
 
-      expect(cubit.state.step, KioskSignupStep.welcome);
+      // The receipt, not the welcome: the member reads what happened per
+      // person, then advances. Releasing here is EARLIER than the old
+      // welcome-only release, which is strictly better for the T+11h45 lockout.
+      expect(cubit.state.step, KioskSignupStep.results);
+      expect(cubit.state.allCreated, isTrue);
       verify(() => session.endFlow()).called(1);
+
+      // Next → welcome, and `_enterWelcome`'s own release is a latch no-op
+      // rather than a second decrement.
+      cubit.nextFromResults();
+      expect(cubit.state.step, KioskSignupStep.welcome);
+      verifyNever(() => session.endFlow());
       await cubit.close();
       // Still exactly once after teardown — the latch holds.
       verifyNever(() => session.endFlow());
+    });
+
+    test('the receipt carries its own 60-second return countdown, and the flow '
+        'is released EXACTLY once across it', () {
+      fakeAsync((async) {
+        final cubit = build();
+        cubit.submitDetails(
+          firstName: 'Marcus',
+          lastName: 'Bell',
+          email: 'marcus.bell@gmail.com',
+        );
+        cubit.submitExtraDetails();
+        async.elapse(Duration.zero);
+        cubit.continueToPlans();
+        cubit.selectPlan(planId);
+        cubit.continueFromPlans();
+        async.elapse(Duration.zero);
+        cubit.signWaiver(signerName: 'Marcus Bell');
+        async.elapse(Duration.zero);
+        cubit.submitCard(paymentMethodId: 'pm_1', brand: 'visa', last4: '4242');
+        async.elapse(Duration.zero);
+        cubit.pay();
+        async.elapse(Duration.zero);
+
+        expect(cubit.state.step, KioskSignupStep.results);
+        expect(cubit.state.popupCountdown, kKioskSignupPopupHold.inSeconds);
+        // Every item created, so the count is released on ENTRY.
+        verify(() => session.endFlow()).called(1);
+
+        // Halfway: still up, and visibly counting.
+        async.elapse(const Duration(seconds: 30));
+        expect(cubit.state.popupCountdown, 30);
+        expect(cubit.state.abandoned, isFalse);
+
+        async.elapse(kKioskSignupPopupHold);
+        // Expiry runs the ordinary abandon — and its own release is a latch
+        // no-op, so the pair stays exactly-once. An unbalanced count is what
+        // stops the kiosk signing itself out at its T+11h45 lockout.
+        expect(cubit.state.abandoned, isTrue);
+        verifyNever(() => session.endFlow());
+        cubit.close();
+        async.flushTimers();
+      });
+    });
+
+    test('ALL items refused stays on the decline popup, whose "nothing was '
+        'charged" is true there', () async {
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failed: true));
+      final cubit = await atReview();
+      await cubit.pay();
+
+      expect(cubit.state.step, KioskSignupStep.declined);
+      // And the member is still standing there, so the count is held.
+      verifyNever(() => session.endFlow());
+      await cubit.close();
     });
 
     test('409 is an idempotent REPLAY: treated as success, never re-charged',
@@ -549,6 +621,8 @@ void main() {
       expect(request.memberships.single.memberId, 'mem-new');
       // The card was NOT cleared or re-keyed — this is the same-card path.
       expect(cubit.state.cardAttempt, 0);
+      // The retry cleared the failure, so the receipt now reads all-created.
+      expect(cubit.state.failedItems, isEmpty);
       // Nothing already committed is re-executed.
       verifyNever(() => member.createMember(any()));
       verifyNever(
@@ -560,7 +634,7 @@ void main() {
           signerName: any(named: 'signerName'),
         ),
       );
-      expect(cubit.state.step, KioskSignupStep.welcome);
+      expect(cubit.state.step, KioskSignupStep.results);
       await cubit.close();
     });
 

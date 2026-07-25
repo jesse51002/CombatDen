@@ -16,6 +16,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -740,16 +741,35 @@ class MemberRepository {
   /// `POST /api/v1/member_memberships/retry-card` — re-charge the payer's
   /// SAVED DEFAULT card against the membership's open Stripe invoice. The
   /// cash-free sibling of [markMembershipPaidCash]: same body, no card
-  /// input. A declined card comes back as a 500 whose `detail` carries the
-  /// decline reason, so it rides [ServerException] to the dialog's terminal
-  /// error step rather than being swallowed.
-  Future<void> retryMembershipCard(
+  /// input.
+  ///
+  /// The bank's answer is the RETURN VALUE, not an exception: a collected
+  /// charge is `status: paid` (HTTP 200) and a decline is `status: declined`
+  /// (HTTP 207) carrying Stripe's reason — both 2xx, so both land here.
+  /// Callers MUST branch on [MemberMembershipsRetryCardResponse.isPaid];
+  /// treating a 2xx as success would render a decline as a collected
+  /// payment. Only a real failure throws: a 409 in-task conflict as
+  /// [MembershipInTaskException], anything else as [ServerException] /
+  /// [NetworkException] — including a 2xx whose body is not the documented
+  /// outcome shape (fail closed rather than imply money moved).
+  Future<MemberMembershipsRetryCardResponse> retryMembershipCard(
     MemberMembershipsRetryCardRequest req,
   ) async {
     try {
-      await _apiClient.post(
+      final response = await _apiClient.post(
         '/api/v1/member_memberships/retry-card',
         data: req.toJson(),
+      );
+      final body = response.data;
+      if (body is! Map) {
+        throw ServerException(
+          'Retry payment returned an unreadable response; check the '
+          'payment history before trying again.',
+          statusCode: response.statusCode,
+        );
+      }
+      return MemberMembershipsRetryCardResponse.fromJson(
+        body.cast<String, dynamic>(),
       );
     } on ServerException catch (e) {
       if (e.statusCode == 409) {

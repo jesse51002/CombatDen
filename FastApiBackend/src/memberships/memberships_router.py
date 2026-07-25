@@ -31,6 +31,8 @@ from src.memberships.memberships_schema import (
     MemberMembershipsRefundResponse,
     MemberMembershipsRemoveDiscountsRequest,
     MemberMembershipsRetryCardRequest,
+    MemberMembershipsRetryCardResponse,
+    MemberMembershipsRetryCardStatus,
     MemberMembershipsStartPreviewResponse,
     MemberMembershipsStartRequest,
     MemberMembershipsStartResponse,
@@ -1113,24 +1115,37 @@ async def mark_membership_paid_cash(
 
 @member_memberships_router.post(
     "/retry-card",
-    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=MemberMembershipsRetryCardResponse,
     summary="Retry the saved card on a recurring membership's open invoice",
     description=(
         "Charges the payer's saved default card for the membership's open "
-        "Stripe invoice. Recurring memberships only. A decline is a 500 whose "
-        "``detail`` carries Stripe's card-decline reason for staff."
+        "Stripe invoice. Recurring memberships only. A collected charge is "
+        "``paid`` (200); a bank DECLINE is a result, not a server failure — "
+        "``declined`` with Stripe's reason in ``decline_reason`` (207)."
     ),
     responses={
-        204: {"description": "Card charged successfully"},
+        200: {"description": "Card charged — status=paid"},
+        # Same model on the 207 so a client generator sees the decline body,
+        # not just a description.
+        207: {
+            "model": MemberMembershipsRetryCardResponse,
+            "description": (
+                "Card DECLINED — status=declined, decline_reason carries "
+                "Stripe's reason. Nothing collected; still overdue."
+            ),
+        },
         400: {"description": "Not recurring, no open invoice, or invalid state"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Membership not found"},
+        409: {"description": "Membership is inside an unfinished task"},
+        500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
 @inject
 async def retry_membership_card(
     request: MemberMembershipsRetryCardRequest,
+    response: Response,
     credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
     auth: Auth = Depends(Provide[DependencyInjector.auth]),
     memberships_service: MemberMembershipsService = Depends(
@@ -1139,7 +1154,7 @@ async def retry_membership_card(
     tasks_service: TasksService = Depends(
         Provide[DependencyInjector.tasks_service]
     ),
-) -> None:
+) -> MemberMembershipsRetryCardResponse:
     """Retry the payer's saved card on a recurring membership's open invoice."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
@@ -1170,21 +1185,29 @@ async def retry_membership_card(
             detail=error_msg,
         ) from None
     except stripe.CardError as exc:
-        # The whole point of a retry: staff need the DECLINE reason to know
-        # what to do next (expired -> Update Card; insufficient -> tell the
-        # member). Stripe writes ``user_message`` to be shown to an end user,
-        # so surface it. Still a 500, never a 502/503/504 — no proxy replays a
-        # money-moving retry.
+        # A bank saying no is a definitive business OUTCOME, not a server
+        # malfunction — so it is returned as a RESULT: 207 (a 2xx, never
+        # auto-replayed by a proxy, so a money-moving retry is still safe)
+        # carrying the decline in the body, exactly as the START path does with
+        # its per-item ``failed`` entry. Reporting it as a 500 would bury real
+        # outages in monitoring under ordinary declines.
+        #
+        # Staff need the DECLINE reason to know what to do next (expired ->
+        # Update Card; insufficient -> tell the member). Stripe writes
+        # ``user_message`` for end-user display, so surface that.
         logger.warning(
             "Retry card declined: item_id=%s, member_id=%s, code=%s",
             request.item_id,
             request.member_id,
             exc.code,
         )
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=(exc.user_message or str(exc)),
-        ) from None
+        response.status_code = status.HTTP_207_MULTI_STATUS
+        return MemberMembershipsRetryCardResponse(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            status=MemberMembershipsRetryCardStatus.declined,
+            decline_reason=(exc.user_message or str(exc)),
+        )
     except PaymentsStripeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1203,6 +1226,12 @@ async def retry_membership_card(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retry the card on membership",
         ) from None
+
+    return MemberMembershipsRetryCardResponse(
+        item_id=request.item_id,
+        member_id=request.member_id,
+        status=MemberMembershipsRetryCardStatus.paid,
+    )
 
 
 @member_memberships_router.post(

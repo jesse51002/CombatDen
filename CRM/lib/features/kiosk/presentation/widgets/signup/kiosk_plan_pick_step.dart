@@ -4,11 +4,14 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/fill_grid.dart';
 
@@ -104,6 +107,14 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
             foot: KioskFlowFoot(
               onPrimary: picked == null ? null : cubit.continueFromPlans,
               onBack: cubit.back,
+              // **"No membership" is GROUP-only** (founder ruling): somebody on
+              // a family signup may change their mind halfway through, but
+              // skipping the sole person of a solo signup would empty the cart,
+              // and at least one person must get a membership. Skipping
+              // everybody returns to the roster, where a person can be ticked
+              // back on — see `KioskSignupCubit.skipPlanForPerson`.
+              onSkip: state.isGroup ? cubit.skipPlanForPerson : null,
+              skipLabel: 'No membership',
             ),
             child: state.plansLoading && state.plans.isEmpty
                 ? const _Loading()
@@ -183,11 +194,19 @@ class _PlanGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final held = kioskHeldPlanNotice(state);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
+        // **Context first, then the confirmation of the action just taken**, in
+        // that fixed order. The notice STATES the membership this person already
+        // holds so the marked card below has an answer above it rather than only
+        // behind a tap; it is self-gating, so a brand-new member — the majority
+        // case — never sees it. It scrolls with the body on purpose: it is a
+        // read-once fact, not a correctness control like the pinned identity.
+        if (held != null) KioskInlineNotice(message: held),
         if (pickedPlanName != null)
           KioskPlanPickedBanner(planName: pickedPlanName!),
         FillGrid(
@@ -198,14 +217,11 @@ class _PlanGrid extends StatelessWidget {
           minColumns: 2,
           children: [
             for (final plan in state.plans)
-              KioskPlanCard(
+              _PlanTile(
+                state: state,
                 plan: plan,
                 selected: plan.planId == picked,
-                // A trial this person has already had renders used and can
-                // never be selected; the cubit turns its tap into the
-                // explanation instead.
-                blocked: state.planBlocked(plan),
-                onTap: () => onPick(plan.planId),
+                onPick: onPick,
               ),
           ],
         ),
@@ -217,6 +233,42 @@ class _PlanGrid extends StatelessWidget {
           textAlign: TextAlign.center,
         ),
       ],
+    );
+  }
+}
+
+/// One plan card, carrying whichever block reason closes it for the person
+/// currently picking.
+///
+/// The reason drives BOTH the tag and (through the cubit's own tap branch) the
+/// popup behind it, from the one copy file — so a card can never wear a tag that
+/// disagrees with the answer the tap gives.
+class _PlanTile extends StatelessWidget {
+  final KioskSignupState state;
+  final MembershipPlanResponse plan;
+  final bool selected;
+  final ValueChanged<String> onPick;
+
+  const _PlanTile({
+    required this.state,
+    required this.plan,
+    required this.selected,
+    required this.onPick,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final reason = state.planBlockReason(plan);
+    return KioskPlanCard(
+      plan: plan,
+      selected: selected,
+      // A plan closed to this person renders blocked and can never be
+      // selected; the cubit turns its tap into the explanation instead.
+      blocked: reason != null,
+      blockedLabel: reason == null
+          ? 'Already used'
+          : kioskPlanBlockTag(reason),
+      onTap: () => onPick(plan.planId),
     );
   }
 }

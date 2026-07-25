@@ -264,8 +264,16 @@ back to active because the DB says it's current.
   `paid_out_of_band`, no `payment_method`, no cash metadata. **Omitting both
   params is what makes Stripe charge the customer's saved DEFAULT card**, so this
   is the manual retry of a failed renewal charge. Same `invoice.paid` webhook
-  does the CRM write; a decline raises out of `pay_async` and is deliberately
-  left to propagate. Both methods share ONE private lookup,
+  does the CRM write; a `stripe.CardError` decline raises out of `pay_async` and
+  is deliberately left to propagate — this layer never classifies it, and the
+  `retry-card` ROUTER is what turns it into a 2xx `declined` RESULT (207) rather
+  than a 500, because a bank refusal is an outcome, not a malfunction
+  (`memberships-guide`). A pay that returns WITHOUT collecting (an off-session
+  invoice whose PaymentIntent needs SCA / 3-D Secure authentication — no decline
+  raised, invoice still `open`) is caught by `_require_card_collected` and turned
+  into a `PaymentsStripeError`, so it lands as a **500** with actionable wording
+  and is never booked as a phantom success — and never dressed up as a decline.
+  Both methods share ONE private lookup,
   `_find_open_subscription_invoice` (unknown subscription →
   `PaymentsResourceNotFoundError`, no open invoice → `ValueError`), so cash and
   card can never drift on what "the open invoice" is.

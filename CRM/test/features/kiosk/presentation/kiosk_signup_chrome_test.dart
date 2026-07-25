@@ -9,6 +9,7 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_proration_note.dart';
@@ -229,6 +230,31 @@ void main() {
       // Nobody to disambiguate from, so no strip either.
       expect(find.byType(KioskWhoFor), findsNothing);
       await cubit.close();
+    });
+
+    testWidgets('the GROUP rail scales instead of clipping on a short fold',
+        (tester) async {
+      // The 7-rung group template is intrinsically wider than the 6-rung solo
+      // one and out-measures a 1024-wide fold's content rail. A clipped rail
+      // loses exactly the rungs the member has not reached yet — the half that
+      // says how much is left — so it scales as a SET instead.
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        await createPayer();
+        await addElla();
+        cubit.continueToPlans();
+        await pump(tester, const KioskPlanPickStep(), size: size);
+
+        // Every rung is still present and legible at either fold.
+        for (final label in kKioskGroupFlowSteps) {
+          expect(find.text(label), findsOneWidget, reason: '$label at $size');
+        }
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the step rail overflowed at $size',
+        );
+        await cubit.close();
+      }
     });
 
     testWidgets('the identity stays put while the plan grid scrolls',

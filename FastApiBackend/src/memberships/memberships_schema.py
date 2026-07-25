@@ -294,6 +294,34 @@ class MemberMembershipsRetryCardRequest(BaseModel):
     idempotency_key: UUID
 
 
+class MemberMembershipsRetryCardStatus(StrEnum):
+    """Outcome of a card retry on ONE membership's open invoice."""
+
+    paid = "paid"
+    declined = "declined"
+
+
+class MemberMembershipsRetryCardResponse(BaseModel):
+    """The outcome of one card retry — a decline is a RESULT, not a failure.
+
+    ``paid`` (HTTP 200) — the bank collected; the open invoice is settled.
+    ``declined`` (HTTP 207) — the bank refused; nothing was collected and the
+    membership stays overdue, with ``decline_reason`` carrying Stripe's own
+    end-user wording so staff know what to do next (expired → Update Card;
+    insufficient funds → tell the member). A system/upstream failure is NOT
+    this shape — it is still a 500.
+
+    Single-item on purpose: this endpoint settles exactly ONE membership's
+    invoice, so the start path's ``results`` LIST would misrepresent it. The
+    2xx-with-the-reason-in-the-body contract is the same on both paths.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    status: MemberMembershipsRetryCardStatus
+    decline_reason: str | None = None
+
+
 class MemberMembershipsChargeCardRequest(BaseModel):
     """Charge an ad-hoc amount for a member, billed to an explicit payer.
 

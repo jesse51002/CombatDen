@@ -24,8 +24,12 @@ Scenarios:
    ``ValueError`` propagates and nothing is applied.
 4. ``test_settle_decline_propagates_and_applies_nothing`` — a Stripe decline
    propagates (a failed settle must never read as success) and applies nothing.
-5. ``test_endpoint_surfaces_card_decline_reason`` — the router maps a
-   ``CardError`` to a 500 whose detail is Stripe's own reason.
+5. ``test_endpoint_returns_card_decline_as_207_result`` — the router turns a
+   ``CardError`` into a 207 ``declined`` RESULT carrying Stripe's own reason.
+6. ``test_endpoint_returns_paid_on_success`` — a collected retry is a 200
+   ``paid`` result (the router leaves the response status alone).
+7. ``test_endpoint_non_card_stripe_failure_is_500`` — a system/upstream
+   failure is STILL a 500; only the decline moved.
 """
 
 from datetime import timedelta
@@ -34,11 +38,17 @@ from uuid import uuid4
 
 import pytest
 import stripe
+from fastapi import Response
 from schema.membership_plan import PlanType
 
+from src.memberships.memberships_schema import (
+    MemberMembershipsRetryCardRequest,
+    MemberMembershipsRetryCardStatus,
+)
 from src.memberships.service.memberships_settle import (
     MemberMembershipsSettle,
 )
+from src.payments.payments_exceptions import PaymentsStripeError
 from src.shared.gym_timezone import gym_today
 from src.shared.payer_profile import PayerProfile
 
@@ -275,34 +285,110 @@ async def test_settle_decline_propagates_and_applies_nothing() -> None:
     invoice_fetch.apply_invoice.assert_not_awaited()
 
 
-@pytest.mark.asyncio
-async def test_endpoint_surfaces_card_decline_reason() -> None:
-    """A declined retry returns 500 whose detail is Stripe's own reason.
+def _retry_request() -> MemberMembershipsRetryCardRequest:
+    """A real retry-card body (the response echoes its ids, so no MagicMock)."""
+    return MemberMembershipsRetryCardRequest(
+        item_id=uuid4(),
+        member_id=uuid4(),
+        idempotency_key=uuid4(),
+    )
 
-    Stripe writes ``user_message`` to be shown to an end user, so the handler
-    surfaces it rather than a generic "Failed to retry".
-    """
-    from fastapi import HTTPException
 
-    from src.memberships.memberships_router import retry_membership_card
-
+def _retry_router_doubles(*, side_effect=None):
+    """``(auth, service, tasks_service)`` doubles for the retry-card handler."""
     auth = MagicMock()
     auth.get_current_user = MagicMock(return_value={})
     auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+
+    service = MagicMock()
+    service.retry_card = AsyncMock(side_effect=side_effect, return_value=None)
+
+    tasks_service = MagicMock()
+    tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
+    return auth, service, tasks_service
+
+
+@pytest.mark.asyncio
+async def test_endpoint_returns_card_decline_as_207_result() -> None:
+    """A declined retry is a 207 RESULT carrying Stripe's own reason.
+
+    A bank refusal is a definitive business outcome, not a server malfunction,
+    so it comes back as data on a 2xx (never auto-replayed by a proxy) exactly
+    like the start path's per-item ``failed`` entry — never a 500, which would
+    bury genuine outages in monitoring. Stripe writes ``user_message`` for
+    end-user display, so that is the reason surfaced.
+    """
+    from src.memberships.memberships_router import retry_membership_card
 
     decline = stripe.CardError(
         "Your card has insufficient funds.",
         param=None,
         code="card_declined",
     )
-    service = MagicMock()
-    service.retry_card = AsyncMock(side_effect=decline)
-    tasks_service = MagicMock()
-    tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
+    auth, service, tasks_service = _retry_router_doubles(side_effect=decline)
+    request = _retry_request()
+    response = Response()
+
+    result = await retry_membership_card(
+        request=request,
+        response=response,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    assert response.status_code == 207
+    assert result.status == MemberMembershipsRetryCardStatus.declined
+    assert result.decline_reason == "Your card has insufficient funds."
+    assert result.item_id == request.item_id
+    assert result.member_id == request.member_id
+
+
+@pytest.mark.asyncio
+async def test_endpoint_returns_paid_on_success() -> None:
+    """A collected retry is a ``paid`` result and leaves the status at 200."""
+    from src.memberships.memberships_router import retry_membership_card
+
+    auth, service, tasks_service = _retry_router_doubles()
+    request = _retry_request()
+    response = Response()
+
+    result = await retry_membership_card(
+        request=request,
+        response=response,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    # The handler never touches ``response.status_code`` on success, so the
+    # route's declared 200 stands (207 is the decline-only signal).
+    assert response.status_code == 200
+    assert result.status == MemberMembershipsRetryCardStatus.paid
+    assert result.decline_reason is None
+
+
+@pytest.mark.asyncio
+async def test_endpoint_non_card_stripe_failure_is_500() -> None:
+    """A system/upstream Stripe failure is STILL a 500 — only the decline moved.
+
+    ``PaymentsStripeError`` is not a bank refusal (an SCA-required invoice, a
+    gateway failure), so it must never come back as a 2xx ``declined`` result:
+    that would tell staff the member's card was refused when the system broke.
+    """
+    from fastapi import HTTPException
+
+    from src.memberships.memberships_router import retry_membership_card
+
+    boom = PaymentsStripeError("Stripe is having a bad day")
+    auth, service, tasks_service = _retry_router_doubles(side_effect=boom)
 
     with pytest.raises(HTTPException) as caught:
         await retry_membership_card(
-            request=MagicMock(),
+            request=_retry_request(),
+            response=Response(),
             credentials=MagicMock(),
             auth=auth,
             memberships_service=service,
@@ -310,4 +396,4 @@ async def test_endpoint_surfaces_card_decline_reason() -> None:
         )
 
     assert caught.value.status_code == 500
-    assert caught.value.detail == "Your card has insufficient funds."
+    assert caught.value.detail == "Stripe is having a bad day"

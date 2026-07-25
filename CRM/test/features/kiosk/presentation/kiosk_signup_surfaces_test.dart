@@ -9,9 +9,11 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_declined_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_entry_choice_step.dart';
@@ -22,7 +24,9 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_trial_block.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_result_row.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
@@ -225,6 +229,83 @@ void main() {
     cubit.confirmRemovePerson();
   }
 
+  /// Adopt an EXISTING member (so their history is read at all) and land on the
+  /// plan grid with [detail] as that history and [plans] as the catalogue.
+  Future<void> atPlansAsExisting(
+    WidgetTester tester, {
+    required MemberDetailResponse detail,
+    required List<MembershipPlanResponse> plans,
+  }) async {
+    when(() => memberships.listPlans(any())).thenAnswer((_) async => plans);
+    when(() => member.getMemberDetail(any())).thenAnswer((_) async => detail);
+    cubit = newCubit();
+    cubit.startAsExistingMember();
+    await cubit.pickPayerRow(
+      AllViewRow(
+        memberId: 'mem-old',
+        name: 'Marcus Bell',
+        email: 'marcus.bell@gmail.com',
+        membershipStatus: MembershipStatus.active,
+        membershipText: 'Monthly',
+      ),
+    );
+    cubit.confirmPayerMatch();
+    cubit.continueToPlans();
+    await tester.pump();
+  }
+
+  /// Walk a GROUP of [people] (the payer plus payees) all the way to a landed
+  /// start, and hand it [landed].
+  ///
+  /// It walks the real spine — create, roster, one plan each, the per-person
+  /// waiver run, the card — so the results screen is reached exactly as a member
+  /// reaches it, roster order and all.
+  Future<void> atGroupResults(
+    WidgetTester tester, {
+    required int people,
+    required MemberMembershipsStartResponse landed,
+  }) async {
+    createSeq = 0;
+    cubit = newCubit();
+    await createPayer();
+    for (var i = 1; i < people; i++) {
+      await cubit.addPerson(
+        firstName: 'Kid$i',
+        lastName: 'Bell',
+        email: 'kid$i.bell@gmail.com',
+      );
+      cubit.skipPersonDetails();
+    }
+    cubit.continueToPlans();
+    await tester.pump();
+    for (var i = 0; i < people; i++) {
+      cubit.selectPlan('plan-1');
+      cubit.continueFromPlans();
+      await tester.pump();
+    }
+    // The waiver run is grouped by PERSON: each payee's payer-auth then their
+    // own liability waiver, the payer's own last.
+    var guard = 0;
+    while (cubit.state.step == KioskSignupStep.waivers && guard++ < 40) {
+      if (cubit.state.payerAuthPending) {
+        await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      } else {
+        await cubit.signWaiver(signerName: 'Marcus Bell');
+      }
+      await tester.pump();
+    }
+    expect(cubit.state.step, KioskSignupStep.card);
+    cubit.submitCard(paymentMethodId: 'pm_1', brand: 'visa', last4: '4242');
+    await tester.pump();
+    when(
+      () => member.startMemberships(
+        any(),
+        receiveTimeout: any(named: 'receiveTimeout'),
+      ),
+    ).thenAnswer((_) async => landed);
+    await cubit.pay();
+  }
+
   /// Walk a solo signup to the review, then decline the charge [times] times.
   ///
   /// Uses `tester.pump()` (never `Future.delayed`) to flush the cubit's
@@ -424,24 +505,11 @@ void main() {
 
     testWidgets('a trial the member has already had renders USED and explains '
         'instead of selecting', (tester) async {
-      when(() => memberships.listPlans(any()))
-          .thenAnswer((_) async => [_plan(), _trialPlan()]);
-      when(() => member.getMemberDetail(any()))
-          .thenAnswer((_) async => _detailWithTrial());
-      cubit = newCubit();
-      cubit.startAsExistingMember();
-      await cubit.pickPayerRow(
-        AllViewRow(
-          memberId: 'mem-old',
-          name: 'Marcus Bell',
-          email: 'marcus.bell@gmail.com',
-          membershipStatus: MembershipStatus.active,
-          membershipText: 'Monthly',
-        ),
+      await atPlansAsExisting(
+        tester,
+        detail: _detailWithTrial(),
+        plans: [_plan(), _trialPlan()],
       );
-      cubit.confirmPayerMatch();
-      cubit.continueToPlans();
-      await tester.pump();
       await pump(tester, const KioskPlanPickStep());
 
       // The card wears its mark before anybody taps it.
@@ -453,7 +521,10 @@ void main() {
       // the review and fail at pay, and a greyed-out card with no answer is a
       // worse dead end than the one it prevents.
       expect(cubit.state.activePerson.selectedPlanId, isNull);
-      expect(cubit.state.trialBlockActive, isTrue);
+      expect(
+        cubit.state.planBlockActive,
+        KioskPlanBlockReason.trialUsed,
+      );
       expect(find.byType(KioskPlanPickedBanner), findsNothing);
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -462,14 +533,23 @@ void main() {
     testWidgets('the trial popup carries its countdown and both ways out at '
         'either fold', (tester) async {
       for (final size in const [Size(1180, 820), Size(1024, 700)]) {
-        cubit = newCubit();
-        await pump(tester, const KioskTrialBlock(), size: size);
+        await atPlansAsExisting(
+          tester,
+          detail: _detailWithTrial(),
+          plans: [_plan(), _trialPlan()],
+        );
+        cubit.selectPlan('plan-trial');
+        await pump(tester, const KioskPlanBlock(), size: size);
 
         expect(find.text('You\'ve already had a trial'), findsOneWidget);
         expect(
           find.textContaining('Trials are one to a member'),
           findsOneWidget,
         );
+        // The trial popup deliberately never names a PLAN: the rule is per
+        // member, so naming one would describe a narrower rule than the grid
+        // is enforcing.
+        expect(find.textContaining('Two-week trial'), findsNothing);
         expect(
           find.widgetWithText(KioskPrimaryButton, 'Pick a membership'),
           findsOneWidget,
@@ -487,6 +567,66 @@ void main() {
         );
         await cubit.close();
       }
+    });
+
+    testWidgets('a membership the member already holds is marked "You have '
+        'this", stated in a notice, and explains by NAME', (tester) async {
+      await atPlansAsExisting(
+        tester,
+        detail: _detailHolding('plan-1', 'recurring'),
+        plans: [_plan(), _secondRecurringPlan()],
+      );
+      await pump(tester, const KioskPlanPickStep());
+
+      // The card wears the held label, never the spent-trial one.
+      expect(find.text('You have this'), findsOneWidget);
+      expect(find.text('Already used'), findsNothing);
+      // And the fact is STATED above the grid rather than living only behind a
+      // tap — the founder asked for the current membership to be named.
+      expect(
+        find.textContaining('You\'re on Unlimited right now'),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.widgetWithText(KioskPlanCard, 'Unlimited'));
+      await tester.pump();
+      expect(cubit.state.activePerson.selectedPlanId, isNull);
+      expect(
+        cubit.state.planBlockActive,
+        KioskPlanBlockReason.alreadyOnPlan,
+      );
+
+      await pump(tester, const KioskPlanBlock());
+      expect(find.text('You already have this membership'), findsOneWidget);
+      // **This popup DOES name the plan** — the backend's rule is per plan, so
+      // naming it describes the rule exactly.
+      expect(find.textContaining('You\'re on Unlimited right now'), findsWidgets);
+      // The lobby-privacy line: a plan NAME and nothing else. No price they
+      // pay, no dates, no status word.
+      expect(find.textContaining('frozen'), findsNothing);
+      expect(find.textContaining('Frozen'), findsNothing);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+
+    testWidgets('a DIFFERENT recurring plan stays fully selectable — the '
+        'over-block guard', (tester) async {
+      await atPlansAsExisting(
+        tester,
+        detail: _detailHolding('plan-1', 'recurring'),
+        plans: [_plan(), _secondRecurringPlan()],
+      );
+      await pump(tester, const KioskPlanPickStep());
+
+      // The rule is PER PLAN: a member on one recurring plan may still buy a
+      // different one, and a false block at a kiosk turns away a paying
+      // customer with no staff override.
+      await tester.tap(find.widgetWithText(KioskPlanCard, 'Two classes a week'));
+      await tester.pump();
+      expect(cubit.state.activePerson.selectedPlanId, 'plan-2');
+      expect(cubit.state.planBlockActive, isNull);
+      expect(tester.takeException(), isNull);
+      await cubit.close();
     });
   });
 
@@ -547,6 +687,128 @@ void main() {
       // Three stacked buttons plus the countdown at the real fold (1180x820)
       // must not overflow.
       expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
+  });
+
+  group('E · the per-person results receipt', () {
+    testWidgets('every membership created reads as a receipt with ONE Next, at '
+        'either fold', (tester) async {
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        await atGroupResults(
+          tester,
+          people: 5,
+          landed: _multiResponse(const ['mem-1', 'mem-2', 'mem-3', 'mem-4',
+            'mem-5']),
+        );
+        expect(cubit.state.step, KioskSignupStep.results);
+        await pump(tester, const KioskResultsScreen(), size: size);
+
+        expect(find.text('You\'re all set'), findsOneWidget);
+        expect(find.text('Every membership below started today.'),
+            findsOneWidget);
+        // Five rows, named person AND plan, all on the roster's order.
+        expect(find.byType(KioskResultRow), findsNWidgets(5));
+        expect(find.text('Marcus Bell · Unlimited'), findsOneWidget);
+        expect(find.text('Started today'), findsNWidgets(5));
+        // The receipt says where the receipt went.
+        expect(
+          find.textContaining('Your receipt is on its way to '
+              'marcus.bell@gmail.com'),
+          findsOneWidget,
+        );
+        // ONE advance, and no escape: money has moved, so there is nothing to
+        // start over — the terminal rule every kiosk terminal follows.
+        expect(
+          find.widgetWithText(KioskPrimaryButton, 'Next'),
+          findsOneWidget,
+        );
+        expect(find.text('Start over'), findsNothing);
+        expect(find.text('Retry the rest'), findsNothing);
+        // No screen may hold a shared iPad forever.
+        expect(find.byType(KioskReturnTimer), findsOneWidget);
+        // The card chip is noise once the money has landed.
+        expect(find.byType(KioskCardChip), findsNothing);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the all-created receipt overflowed at $size',
+        );
+        await cubit.close();
+      }
+    });
+
+    testWidgets('a PARTIAL carries the three decline actions AND the countdown, '
+        'at either fold', (tester) async {
+      for (final size in const [Size(1180, 820), Size(1024, 700)]) {
+        await atGroupResults(
+          tester,
+          people: 5,
+          landed: _multiResponse(
+            const ['mem-1', 'mem-2', 'mem-3', 'mem-4', 'mem-5'],
+            failed: const {'mem-4', 'mem-5'},
+          ),
+        );
+        expect(cubit.state.step, KioskSignupStep.results);
+        await pump(tester, const KioskResultsScreen(), size: size);
+
+        expect(find.text('Some of these didn\'t go through'), findsOneWidget);
+        // The one thing a member needs before deciding: what a retry touches.
+        expect(
+          find.textContaining('The ones marked Started are paid for'),
+          findsOneWidget,
+        );
+        expect(find.text('Started today'), findsNWidgets(3));
+        expect(
+          find.text('Not started — nothing was charged for this one.'),
+          findsNWidgets(2),
+        );
+        // The decline popup's ladder, at a narrower scope — "the rest", because
+        // rows above it visibly succeeded.
+        expect(
+          find.widgetWithText(KioskPrimaryButton, 'Retry the rest'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(KioskOutlineButton, 'Try another card'),
+          findsOneWidget,
+        );
+        expect(
+          find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
+          findsOneWidget,
+        );
+        // BOTH halves: the actions and the return countdown. Conflating the
+        // clock with a cooldown once took the countdown out with it.
+        expect(find.byType(KioskReturnTimer), findsOneWidget);
+        // Which card was used is the fact a member wants before retrying.
+        expect(find.byType(KioskCardChip), findsOneWidget);
+        // No "Next" — continuing without them is a desk decision.
+        expect(find.text('Next'), findsNothing);
+        expect(find.text('Start over'), findsNothing);
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'the partial receipt overflowed at $size',
+        );
+        await cubit.close();
+      }
+    });
+
+    testWidgets('a PARTIAL never lands on the decline popup — its copy would '
+        'be false about money that moved', (tester) async {
+      await atGroupResults(
+        tester,
+        people: 2,
+        landed: _multiResponse(
+          const ['mem-1', 'mem-2'],
+          failed: const {'mem-2'},
+        ),
+      );
+
+      // The bug guard. `KioskDeclinedScreen` states "You haven't been charged",
+      // which is TRUE only when every item failed.
+      expect(cubit.state.step, isNot(KioskSignupStep.declined));
+      expect(cubit.state.step, KioskSignupStep.results);
       await cubit.close();
     });
   });
@@ -630,6 +892,30 @@ MemberMembershipsStartResponse _startResponse({bool failed = false}) =>
       ],
     );
 
+/// One result item per member id, every one on the same plan. Ids in [failed]
+/// come back refused, so a partial is a real mixed response.
+MemberMembershipsStartResponse _multiResponse(
+  List<String> memberIds, {
+  Set<String> failed = const {},
+}) =>
+    MemberMembershipsStartResponse(
+      chargeCount: 1,
+      multipleCharges: false,
+      results: [
+        for (final id in memberIds)
+          MemberMembershipsStartResultItem(
+            memberId: id,
+            planId: 'plan-1',
+            planType: PlanType.recurring,
+            status: failed.contains(id)
+                ? MemberMembershipsStartStatus.failed
+                : MemberMembershipsStartStatus.created,
+            itemId: failed.contains(id) ? null : 'item-$id',
+            error: failed.contains(id) ? 'card_declined' : null,
+          ),
+      ],
+    );
+
 CrmMembersListResponse _page(List<MemberRow> rows) => CrmMembersListResponse(
       view: MembersListView.all,
       filters: const MembersListFilters(),
@@ -656,6 +942,62 @@ MembershipPlanResponse _trialPlan() => MembershipPlanResponse(
         price: 0,
         isActive: true,
         createdAt: DateTime.utc(2026),
+      ),
+    );
+
+/// A second recurring plan, so "a DIFFERENT recurring plan is still on offer"
+/// is a real assertion rather than an absence.
+MembershipPlanResponse _secondRecurringPlan() => MembershipPlanResponse(
+      planId: 'plan-2',
+      gymId: 'gym-1',
+      planName: 'Two classes a week',
+      imageUrl: '',
+      planType: PlanType.recurring,
+      durationAmount: 1,
+      isPublic: true,
+      createdAt: DateTime.utc(2026),
+      waiverIds: const ['waiver-1'],
+      activePrice: MembershipPlanPriceResponse(
+        priceId: 'price-2',
+        planId: 'plan-2',
+        gymId: 'gym-1',
+        stripePriceId: 'price_stripe_2',
+        price: 6900,
+        isActive: true,
+        createdAt: DateTime.utc(2026),
+      ),
+    );
+
+/// A member who currently HOLDS [planId] — an active membership of that type.
+MemberDetailResponse _detailHolding(String planId, String planType) =>
+    MemberDetailResponse(
+      memberId: 'mem-old',
+      gymId: 'gym-1',
+      firstName: 'Marcus',
+      lastName: 'Bell',
+      membershipOverview: 'History',
+      totalMonthlyRecurringPrice: 0,
+      totalMembershipCount: 1,
+      personalInfo: const PersonalInfo(),
+      memberships: [
+        MembershipInfo(
+          planId: planId,
+          planName: 'Unlimited',
+          planType: planType,
+          status: MembershipStatus.active,
+          itemId: 'item-held',
+          paidByMemberId: 'mem-old',
+          baseCost: 14900,
+          durationAmount: 1,
+          durationUnit: 'month',
+          totalPrice: 14900,
+          startDate: DateTime.utc(2025),
+        ),
+      ],
+      retention: const Retention(
+        classStreakWeeks: 0,
+        pointsBalance: 0,
+        videosWatched: 0,
       ),
     );
 

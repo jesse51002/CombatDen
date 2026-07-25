@@ -18,8 +18,10 @@ Pure unit tests (no DB / Stripe / network):
 
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
+from fastapi import Response
 
 from src.main import _handle_lock_busy_error
 from src.memberships.memberships_router import (
@@ -33,6 +35,9 @@ from src.memberships.memberships_router import (
     retry_membership_card,
     start_membership,
     unfreeze_membership,
+)
+from src.memberships.memberships_schema import (
+    MemberMembershipsRetryCardRequest,
 )
 from src.memberships.service.memberships_freeze import (
     MemberMembershipsFreeze,
@@ -135,8 +140,14 @@ async def test_retry_card_uses_staff_only_guard() -> None:
     tasks_service = MagicMock()
     tasks_service.assert_memberships_not_in_task = AsyncMock(return_value=None)
 
+    # A real body: the handler now returns a typed outcome echoing these ids.
     await retry_membership_card(
-        request=MagicMock(),
+        request=MemberMembershipsRetryCardRequest(
+            item_id=uuid4(),
+            member_id=uuid4(),
+            idempotency_key=uuid4(),
+        ),
+        response=Response(),
         credentials=MagicMock(),
         auth=auth,
         memberships_service=service,

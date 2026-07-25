@@ -19,18 +19,28 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels
 /// the `onAccent` tick, resting as a quiet ring so an unpicked card still
 /// invites the tap.
 ///
-/// **A [blocked] card is used up, not missing.** It is dimmed, carries an
-/// "Already used" tag over its hero and drops the select mark entirely — it can
-/// never become the pick. It stays TAPPABLE on purpose: a greyed-out plan with
-/// no explanation is a worse dead end than the one it prevents, so the tap
-/// opens the answer instead of setting the selection.
+/// **A [blocked] card is closed, not missing.** It is dimmed, carries a tag
+/// over its hero and drops the select mark entirely — it can never become the
+/// pick. It stays TAPPABLE on purpose: a greyed-out plan with no explanation is
+/// a worse dead end than the one it prevents, so the tap opens the answer
+/// instead of setting the selection.
+///
+/// **ONE blocked visual, two labels.** [blockedLabel] is the only thing that
+/// varies by reason ("Already used" for a spent trial, "You have this" for a
+/// membership they currently hold) — a second blocked treatment would teach a
+/// member two things where the consequence is identical.
 class KioskPlanCard extends StatelessWidget {
   final MembershipPlanResponse plan;
   final bool selected;
 
-  /// This plan is closed to the person picking — a trial they have already
-  /// had. Renders used, and its tap explains rather than selects.
+  /// This plan is closed to the person picking. Renders blocked, and its tap
+  /// explains rather than selects.
   final bool blocked;
+
+  /// The tag pinned over a blocked card's hero. Comes from
+  /// `kiosk_plan_block_copy.dart`'s reason switch at the call site, so the tag
+  /// and the popup behind it can never disagree about why.
+  final String blockedLabel;
 
   final VoidCallback onTap;
 
@@ -40,6 +50,7 @@ class KioskPlanCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.blocked = false,
+    this.blockedLabel = 'Already used',
   });
 
   @override
@@ -82,10 +93,10 @@ class KioskPlanCard extends StatelessWidget {
             // Top-LEFT: the top-right corner is the select mark's, and the two
             // must never argue over the same pixel.
             if (blocked)
-              const Positioned(
+              Positioned(
                 top: DesignConstants.spacingMedium,
                 left: DesignConstants.spacingMedium,
-                child: _UsedTag(),
+                child: _BlockedTag(label: blockedLabel),
               )
             else
               Positioned(
@@ -105,11 +116,12 @@ class KioskPlanCard extends StatelessWidget {
 /// WHICH plan is the one they already used.
 const double _blockedOpacity = 0.45;
 
-/// The "Already used" mark, on a scrim so it survives any hero photo. It rides
-/// the ramp's smallest role, which is the one reserved for a tag pinned on
-/// artwork.
-class _UsedTag extends StatelessWidget {
-  const _UsedTag();
+/// The blocked mark, on a scrim so it survives any hero photo. It rides the
+/// ramp's smallest role, which is the one reserved for a tag pinned on artwork.
+class _BlockedTag extends StatelessWidget {
+  final String label;
+
+  const _BlockedTag({required this.label});
 
   @override
   Widget build(BuildContext context) {
@@ -123,7 +135,7 @@ class _UsedTag extends StatelessWidget {
           color: DesignConstants.backgroundColor.withValues(alpha: 0.82),
           borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
         ),
-        child: Text('Already used', style: DesignConstants.kioskTag),
+        child: Text(label, style: DesignConstants.kioskTag),
       ),
     );
   }

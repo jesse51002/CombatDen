@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
@@ -14,8 +15,8 @@ import 'package:crm/features/memberships/data/models/waiver_response.dart';
 ///
 /// Solo: [entry] → [details] → [extraDetails] *(the member is created here)*
 /// → [people] → [plans] → [waivers] → [card] → [review] → [paying] →
-/// [welcome]. An existing member takes [entry] → [identify] → [payerMatch]
-/// instead and lands straight on [people].
+/// [results] → [welcome]. An existing member takes [entry] → [identify] →
+/// [payerMatch] instead and lands straight on [people].
 /// Group adds the roster loop ([personDetails], [match]) off [people].
 ///
 /// [plans] comes BEFORE [waivers] deliberately: a plan's `waiverIds` is a
@@ -76,7 +77,17 @@ enum KioskSignupStep {
   /// D7 — the start call is in flight. No buttons, no escape, no idle guard.
   paying,
 
-  /// D8 — the charge was refused. Retries PAY only.
+  /// D7a — the start landed and the per-person receipt says what happened.
+  ///
+  /// It is entered with a response in hand, never while anything is in
+  /// flight, and it covers TWO outcomes: every membership created (a receipt,
+  /// with one Next into [welcome]) and a PARTIAL — some created, some not —
+  /// where money HAS moved for the group that cleared, so the decline popup's
+  /// "you haven't been charged" would be false. An ALL-failed start goes to
+  /// [declined] instead, where that copy is true.
+  results,
+
+  /// D8 — every membership in the cart was refused. Retries PAY only.
   declined,
 
   /// The signup succeeded.
@@ -84,6 +95,31 @@ enum KioskSignupStep {
 
   /// A terminal front-desk handoff ([KioskSignupState.stopReason] says which).
   stop,
+}
+
+/// Why a plan on the grid is closed to the person currently picking.
+///
+/// The two reasons are different rules with different scopes, and the
+/// difference is load-bearing for the words each one uses:
+///
+/// * [trialUsed] is per MEMBER — any trial in their history closes EVERY trial
+///   plan — so its copy never names a plan, or it would describe a narrower
+///   rule than the grid is enforcing.
+/// * [alreadyOnPlan] is per PLAN — the backend conflicts on
+///   `plan_id = ANY(:plan_ids)` — so its copy DOES name the plan, because
+///   naming it describes the rule exactly.
+///
+/// The copy for each lives in `presentation/kiosk_plan_block_copy.dart`, whose
+/// switches are exhaustive on purpose: a new reason cannot ship without words.
+enum KioskPlanBlockReason {
+  /// A trial plan, for somebody who has already had a trial here. A kiosk-only
+  /// rule (§3) — staff may still grant a repeat trial from the CRM.
+  trialUsed,
+
+  /// A RECURRING plan this member already holds `active` or `frozen`. The
+  /// backend refuses it on the preview AND the start, so an unblocked card
+  /// dead-ends the whole signup on a retryable stop that can never succeed.
+  alreadyOnPlan,
 }
 
 /// How complete one roster person's optional details are — the readout the
@@ -132,6 +168,13 @@ enum KioskSignupStopReason {
   /// popup — the popup's own primary sends them back to the plan grid, which
   /// is the ordinary way out.
   trialAlreadyUsed,
+
+  /// This member already holds the RECURRING plan they tapped, and one member
+  /// holds one of a given recurring plan. Reached only when they CHOOSE the
+  /// desk from the plan-block popup — the popup's own primary sends them back
+  /// to the grid, where every other plan is still open (the rule is per plan,
+  /// so a DIFFERENT recurring plan is a perfectly good sale).
+  alreadyOnPlan,
 
   /// `POST /members/` came back 400 — the gym has no Stripe Connect account,
   /// so no member (and no customer) can be created at all. A gym-setup
@@ -306,9 +349,24 @@ class KioskSignupPerson extends Equatable {
   /// It is read once, at plan-pick, and only for a person whose account
   /// predates this signup: somebody created here has no history by
   /// construction. The read **fails OPEN** (see
-  /// `KioskSignupCubit._loadTrialEligibility`), so this stays false when the
+  /// `KioskSignupCubit._loadPlanEligibility`), so this stays false when the
   /// check cannot answer.
   final bool hadTrial;
+
+  /// The RECURRING plans this member already holds `active` or `frozen` — the
+  /// plans the backend would refuse to start again for them.
+  ///
+  /// **It lives on the PERSON, never on the state root, and that is the group
+  /// privacy guard.** The plan step is walked once per training person under a
+  /// fixed layout, so a state-root map would be one stale read away from
+  /// printing a parent's membership on a child's turn. Per-person storage makes
+  /// that leak unrepresentable, exactly as [hadTrial] does.
+  ///
+  /// Read from the SAME `getMemberDetail` response as [hadTrial] (no second
+  /// request) and it **fails OPEN** for the same reason: on a read error the
+  /// kiosk does not know WHICH plan they hold, so failing closed would block
+  /// every plan and turn a paying customer away.
+  final List<String> heldRecurringPlanIds;
 
   final KioskSignupDetailsStatus detailsStatus;
 
@@ -331,6 +389,7 @@ class KioskSignupPerson extends Equatable {
     this.wasExisting = false,
     this.linked = false,
     this.hadTrial = false,
+    this.heldRecurringPlanIds = const [],
     this.detailsStatus = KioskSignupDetailsStatus.none,
     this.selectedPlanId,
   });
@@ -357,6 +416,7 @@ class KioskSignupPerson extends Equatable {
     bool? wasExisting,
     bool? linked,
     bool? hadTrial,
+    List<String>? heldRecurringPlanIds,
     KioskSignupDetailsStatus? detailsStatus,
     Object? selectedPlanId = _keep,
   }) {
@@ -377,6 +437,8 @@ class KioskSignupPerson extends Equatable {
       wasExisting: wasExisting ?? this.wasExisting,
       linked: linked ?? this.linked,
       hadTrial: hadTrial ?? this.hadTrial,
+      heldRecurringPlanIds:
+          heldRecurringPlanIds ?? this.heldRecurringPlanIds,
       detailsStatus: detailsStatus ?? this.detailsStatus,
       selectedPlanId: identical(selectedPlanId, _keep)
           ? this.selectedPlanId
@@ -401,6 +463,7 @@ class KioskSignupPerson extends Equatable {
         wasExisting,
         linked,
         hadTrial,
+        heldRecurringPlanIds,
         detailsStatus,
         selectedPlanId,
       ];
@@ -596,19 +659,32 @@ class KioskSignupState extends Equatable {
   /// after a decline mints a NEW key; a double-tap reuses this one.
   final String? idempotencyKey;
 
-  /// The failed items from a 207 — a decline arrives as a RESULT in the body,
-  /// not as an HTTP error, so this is what "declined" actually means.
-  final List<MemberMembershipsStartResultItem> failedItems;
+  /// The landed start response — the per-person outcome the results screen
+  /// draws and the retry set is derived from.
+  ///
+  /// **One source, so the displayed set and the retry set cannot drift.** A
+  /// second field holding the failures independently is exactly the drift
+  /// hazard this repo's one-source rules exist to avoid, so [failedItems] is a
+  /// getter over this rather than a field of its own.
+  ///
+  /// On a partial RETRY the response is MERGED into this one (see
+  /// `KioskSignupCubit._enterResults`), so the receipt keeps listing the
+  /// memberships an earlier attempt created — a screen headed "every
+  /// membership below started today" that omitted one would lie by omission.
+  final MemberMembershipsStartResponse? startResult;
 
   /// Seconds left on the welcome screen's auto-return. 0 off the welcome.
   final int welcomeCountdown;
 
-  // ── Blocking popups (the decline, the trial block) ──
-  /// The "you've already had a trial" popup is up over the plan grid.
-  final bool trialBlockActive;
+  // ── Blocking popups (the decline, the plan block) ──
+  /// Which plan-block popup is up over the plan grid, or null when none is.
+  ///
+  /// One popup, one reason enum — the alternative was a second modal for the
+  /// second reason, which would fork the kiosk's one modal vocabulary.
+  final KioskPlanBlockReason? planBlockActive;
 
-  /// Seconds left on whichever blocking popup is up — the decline or the
-  /// trial block. 0 when neither is.
+  /// Seconds left on whichever blocking popup is up — the decline, the results
+  /// receipt or the plan block. 0 when none is.
   ///
   /// **Every blocking overlay carries a visible countdown**: this is a shared
   /// community iPad and no screen may hold it forever. Expiry runs the
@@ -679,9 +755,9 @@ class KioskSignupState extends Equatable {
     this.preview,
     this.previewLoading = false,
     this.idempotencyKey,
-    this.failedItems = const [],
+    this.startResult,
     this.welcomeCountdown = 0,
-    this.trialBlockActive = false,
+    this.planBlockActive,
     this.popupCountdown = 0,
     this.stopReason,
     this.stopCountdown = 0,
@@ -690,6 +766,28 @@ class KioskSignupState extends Equatable {
     this.abandonConfirmActive = false,
     this.abandoned = false,
   });
+
+  /// The per-person outcomes the landed start reported, in the RESPONSE's own
+  /// order. The results screen re-orders them by the roster.
+  List<MemberMembershipsStartResultItem> get startItems =>
+      startResult?.results ?? const [];
+
+  /// The items a start refused — **what "declined" and "partial" both mean.**
+  /// A decline arrives as a RESULT in a 2xx body, never as an HTTP error.
+  ///
+  /// Derived from [startResult] rather than stored, so the set the receipt
+  /// draws and the set a retry re-sends are the same set by construction.
+  List<MemberMembershipsStartResultItem> get failedItems =>
+      startResult?.failed ?? const [];
+
+  /// Whether every membership in the landed start was created — the results
+  /// screen's own branch, and the gate on the two-charges note.
+  ///
+  /// An `unknown` status is neither created nor failed, so it falls OUT of
+  /// this: the member is never told "you're all set" about a row the backend
+  /// would not confirm.
+  bool get allCreated =>
+      startItems.isNotEmpty && startItems.every((r) => r.isCreated);
 
   /// The person the per-person steps are acting on. Index 0 (the payer) is
   /// the fallback, so this can never throw on a corrupt index.
@@ -856,15 +954,59 @@ class KioskSignupState extends Equatable {
   MembershipPlanResponse? get selectedPlan =>
       planById(activePerson.selectedPlanId);
 
-  /// Whether [plan] is closed to the person currently picking.
+  /// Why [plan] is closed to the person currently picking, or null when it is
+  /// open to them.
+  KioskPlanBlockReason? planBlockReason(MembershipPlanResponse plan) =>
+      planBlockReasonFor(activePerson, plan);
+
+  /// Why [plan] is closed to [person] specifically — the per-person form, so a
+  /// late eligibility answer can re-test a pick that has already been made.
   ///
-  /// **Any prior trial blocks EVERY trial**, not just the one they had: at the
-  /// kiosk a trial is one to a member, so a member with any trial in their
-  /// history sees every trial plan marked used and non-selectable. Staff can
-  /// still grant a repeat trial from the CRM — this is a kiosk-only rule, not
-  /// a backend one.
-  bool planBlocked(MembershipPlanResponse plan) =>
-      plan.planType == PlanType.trial && activePerson.hadTrial;
+  /// **Two rules, two scopes, and neither may be widened:**
+  ///
+  /// * [KioskPlanBlockReason.trialUsed] — **any prior trial blocks EVERY
+  ///   trial**, not just the one they had: at the kiosk a trial is one to a
+  ///   member. Staff can still grant a repeat trial from the CRM; this is a
+  ///   kiosk-only rule, not a backend one.
+  /// * [KioskPlanBlockReason.alreadyOnPlan] — a RECURRING plan they already
+  ///   hold. This one mirrors the backend's own conflict SQL exactly
+  ///   (`plan_type = 'recurring'` AND `status IN ('active','frozen')`, keyed on
+  ///   `plan_id`), so a member on "Unlimited Monthly" may still buy a
+  ///   DIFFERENT recurring plan. **It is deliberately NARROWER than the CRM's
+  ///   own `disabledPlanReasons`** (which also blocks a held trial plan and an
+  ///   `overdue` status): at a desk a false block is visible and staff reason
+  ///   about it, while at a kiosk it silently turns away a paying customer with
+  ///   no override. Do not "align" this to the CRM's looser set.
+  KioskPlanBlockReason? planBlockReasonFor(
+    KioskSignupPerson person,
+    MembershipPlanResponse plan,
+  ) {
+    if (plan.planType == PlanType.trial && person.hadTrial) {
+      return KioskPlanBlockReason.trialUsed;
+    }
+    if (plan.planType == PlanType.recurring &&
+        person.heldRecurringPlanIds.contains(plan.planId)) {
+      return KioskPlanBlockReason.alreadyOnPlan;
+    }
+    return null;
+  }
+
+  /// The catalogue names of the recurring plans the ACTIVE person already
+  /// holds, in the catalogue's own order — what the plan step's notice and the
+  /// already-on-plan popup both state.
+  ///
+  /// A held plan the gym no longer offers resolves to nothing and is silently
+  /// omitted: it cannot be picked, so there is nothing to prevent, and storing
+  /// its name would create a second source of truth for something the warmed
+  /// catalogue owns.
+  List<String> get heldPlanNames {
+    final held = activePerson.heldRecurringPlanIds;
+    if (held.isEmpty) return const [];
+    return [
+      for (final plan in plans)
+        if (held.contains(plan.planId)) plan.planName,
+    ];
+  }
 
   /// Whether EVERY training person's pick is a trial — the discriminator
   /// behind the review's "Sign Trial" / "Sign Membership" verb.
@@ -998,9 +1140,9 @@ class KioskSignupState extends Equatable {
     Object? preview = _keep,
     bool? previewLoading,
     Object? idempotencyKey = _keep,
-    List<MemberMembershipsStartResultItem>? failedItems,
+    Object? startResult = _keep,
     int? welcomeCountdown,
-    bool? trialBlockActive,
+    Object? planBlockActive = _keep,
     int? popupCountdown,
     Object? stopReason = _keep,
     int? stopCountdown,
@@ -1070,9 +1212,13 @@ class KioskSignupState extends Equatable {
       idempotencyKey: identical(idempotencyKey, _keep)
           ? this.idempotencyKey
           : idempotencyKey as String?,
-      failedItems: failedItems ?? this.failedItems,
+      startResult: identical(startResult, _keep)
+          ? this.startResult
+          : startResult as MemberMembershipsStartResponse?,
       welcomeCountdown: welcomeCountdown ?? this.welcomeCountdown,
-      trialBlockActive: trialBlockActive ?? this.trialBlockActive,
+      planBlockActive: identical(planBlockActive, _keep)
+          ? this.planBlockActive
+          : planBlockActive as KioskPlanBlockReason?,
       popupCountdown: popupCountdown ?? this.popupCountdown,
       stopReason: identical(stopReason, _keep)
           ? this.stopReason
@@ -1128,9 +1274,9 @@ class KioskSignupState extends Equatable {
         preview,
         previewLoading,
         idempotencyKey,
-        failedItems,
+        startResult,
         welcomeCountdown,
-        trialBlockActive,
+        planBlockActive,
         popupCountdown,
         stopReason,
         stopCountdown,
