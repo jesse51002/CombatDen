@@ -163,9 +163,53 @@ class MemberMembershipsStart(MemberMembershipsBase):
         # ``_converge_recurring_group``.
         one_time_committed = False
         if one_time:
-            one_time_committed = await self._charge_one_time_group(
-                request, one_time,
-            )
+            try:
+                one_time_committed = await self._charge_one_time_group(
+                    request, one_time,
+                )
+            except Exception:
+                # A NON-card failure on the one-time leg (a decline never
+                # reaches here — it is data, folded in by that arm). It cleaned
+                # up its OWN group and re-raised, but `_insert_all` committed
+                # EVERY row of the request in one insert, so the recurring rows
+                # are sitting there `not_added` — and their converge below is
+                # now never going to run, which is precisely what makes them
+                # provably UN-BILLED: no `stripe_item_id`, no subscription item,
+                # and the payer lock this op holds keeps the reconciler's push
+                # sweep from converging them behind our back. So they are safe
+                # to delete, and leaving them STRANDS the member behind a
+                # permanent failure over a charge that never happened:
+                #  - EVERY retry dies in `_insert_all`, whatever key it carries.
+                #    `trg_recurring_no_active_memberships` is a BEFORE INSERT
+                #    trigger that counts an uncancelled `not_added` row as
+                #    active (it skips only `preview_add`), so the ghost rejects
+                #    the replacement row with a raw DB error -> the router's
+                #    500. It fires BEFORE the INSERT's
+                #    `ON CONFLICT (idempotency_key) DO NOTHING` is resolved, so
+                #    a same-key retry never even reaches the RETURNING-shortfall
+                #    check that would have called it a 409 replay.
+                #  - and nothing can explain that to staff, because the row is
+                #    invisible: validation reads `member_memberships_status`,
+                #    which HIDES `not_added`, so the request clears every check
+                #    and then 500s on a membership nobody can see.
+                # So the member cannot buy that recurring plan until the
+                # reconciler's orphan sweep happens to run. `_crm_insert` says
+                # this must never happen ("rather than committing a ghost
+                # `not_added` row that is never charged or cleaned up"); this is
+                # the arm that was breaking that promise.
+                #
+                # ONLY the recurring group is swept. The one-time group is
+                # deliberately left to its own arm, because it may ALREADY BE
+                # BILLED — `charge_one_time` pays the invoice and THEN does its
+                # writeback, so a post-payment failure lands in that same arm —
+                # and a billed line is never un-billed here.
+                #
+                # The raise still reaches the router as a 500, unchanged: the
+                # recurring side collected nothing and now holds no rows, so
+                # "nothing created and nothing charged" stays literally true for
+                # it.
+                await self._cleanup_states(recurring)
+                raise
         if recurring:
             await self._converge_recurring_group(
                 request,
@@ -305,10 +349,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
             return False
         except Exception:
             # Any NON-card failure (a Stripe system/gateway error, a network
-            # timeout, a rate limit) is NOT a decline. Clean up the un-billed
-            # pending rows (nothing half-committed) and propagate so the router
-            # returns a non-retryable 500 — a system failure must never
-            # masquerade as "your card was declined".
+            # timeout, a rate limit) is NOT a decline. Clean up THIS group's
+            # pending rows and propagate so the router returns a non-retryable
+            # 500 — a system failure must never masquerade as "your card was
+            # declined". The same request's RECURRING rows are swept by the
+            # matching arm in ``start`` (they are provably un-billed, which this
+            # group may not be), so no ghost row outlives the raise.
             await self._cleanup_states(group)
             raise
         await self._verify_group(group, keep_unverified=True)
