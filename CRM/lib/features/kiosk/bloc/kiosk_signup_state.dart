@@ -669,9 +669,15 @@ class KioskSignupState extends Equatable {
   /// draws and the retry set is derived from.
   ///
   /// **One source, so the displayed set and the retry set cannot drift.** A
-  /// second field holding the failures independently is exactly the drift
-  /// hazard this repo's one-source rules exist to avoid, so [failedItems] is a
-  /// getter over this rather than a field of its own.
+  /// second field holding the outcomes independently is exactly the drift
+  /// hazard this repo's one-source rules exist to avoid, so [failedItems] (what
+  /// the receipt marks) and [retryMemberIds] (what a retry re-sends) are both
+  /// getters over this rather than fields of their own.
+  ///
+  /// **Its NULLNESS is load-bearing**: null means no start has landed for the
+  /// request being assembled, which is what tells [isBeingCharged] to carry the
+  /// whole cart. [KioskSignupCubit.pay] clears it as it emits `paying`, so a
+  /// request built after that point is a first attempt again.
   ///
   /// On a partial RETRY the response is MERGED into this one (see
   /// `KioskSignupCubit._enterResults`), so the receipt keeps listing the
@@ -781,10 +787,63 @@ class KioskSignupState extends Equatable {
   /// The items a start refused — **what "declined" and "partial" both mean.**
   /// A decline arrives as a RESULT in a 2xx body, never as an HTTP error.
   ///
-  /// Derived from [startResult] rather than stored, so the set the receipt
-  /// draws and the set a retry re-sends are the same set by construction.
+  /// Derived from [startResult] rather than stored, so nothing can drift out of
+  /// step with the response the receipt draws.
+  ///
+  /// **This is the DISPLAY set, never the retry set.** A retry sends
+  /// [retryMemberIds] — everything the backend did not confirm as `created` —
+  /// which is a SUPERSET: an `unknown` row is refused nothing and confirmed
+  /// nothing, so it is absent here and present there.
   List<MemberMembershipsStartResultItem> get failedItems =>
       startResult?.failed ?? const [];
+
+  /// The member ids a RETRY may re-send: every item of the landed start that
+  /// the backend did **not** confirm as `created`.
+  ///
+  /// **Null means nothing has landed, which is not the same as an empty set,
+  /// and that difference is the double-charge defence.** `null` says "first
+  /// attempt — send the cart"; an EMPTY set says "the landed start left nothing
+  /// to re-send" and must send nothing at all. Collapsing the two (an
+  /// `isEmpty` → "then send everything" fallback) re-posts memberships that
+  /// already exist — and because every retry mints a NEW idempotency key, the
+  /// backend's `ON CONFLICT (idempotency_key)` replay guard cannot dedupe it,
+  /// so the member is charged twice. Carrying the distinction in the TYPE is
+  /// what keeps a caller from having to remember it.
+  ///
+  /// It keys on "not created" rather than on `failed` for the same reason: a
+  /// `[created, unknown]` response has NO failed rows, so a failure-keyed set
+  /// would be empty on a receipt that still offers Retry.
+  Set<String>? get retryMemberIds => startResult == null
+      ? null
+      : <String>{
+          for (final item in startItems)
+            if (!item.isCreated) item.memberId,
+        };
+
+  /// Whether a retry has anything left to send — **the one gate on re-firing
+  /// the charge.**
+  ///
+  /// It is false on an all-created receipt, so "retry from a screen where every
+  /// membership already started" is unrepresentable rather than a step list
+  /// somebody has to remember not to widen.
+  bool get canRetryStart => retryMemberIds?.isNotEmpty ?? false;
+
+  /// Whether [person] is in the request the kiosk would assemble **right now**
+  /// — a training person with a member id, narrowed to [retryMemberIds] once a
+  /// start has landed.
+  ///
+  /// **One predicate, three readers**: the cart items
+  /// (`KioskSignupCubit._startItems`), the payee links the start demands
+  /// ([everyPayeeLinked] and the waiver run that collects them), and the
+  /// by-person attribution of a preview line (`kioskLineLabel`). What is
+  /// charged, what must be authorized and who is NAMED therefore cannot
+  /// disagree — the way they did while a retry re-priced the whole cart and the
+  /// waiver run asked a skipped person to authorize a payer.
+  bool isBeingCharged(KioskSignupPerson person) {
+    final memberId = person.memberId;
+    if (!person.training || memberId == null) return false;
+    return retryMemberIds?.contains(memberId) ?? true;
+  }
 
   /// Whether every membership in the landed start was created — the results
   /// screen's own branch, and the gate on the two-charges note.
@@ -901,11 +960,22 @@ class KioskSignupState extends Equatable {
           if (persons[i].memberId != null && !(hasPayer && i == 0)) i,
       ];
 
-  /// Whether every payee has been authorized. The start call NEVER links, so
-  /// this has to be true before a request is even assembled.
+  /// Whether every payee the request will CARRY has authorized the payer. The
+  /// start call NEVER links, so this has to be true before a request is even
+  /// assembled.
+  ///
+  /// **The scope is [isBeingCharged], not "everyone on the roster", and it
+  /// mirrors the backend's own rule exactly**: `_check_links`
+  /// (`memberships_start_validation.py`) reads the member ids of
+  /// `request.memberships` minus the payer — so a person who is not getting a
+  /// membership is not in the request and no authorization is owed for them.
+  /// Demanding one would also mean ASKING for it, and a signature authorizing
+  /// somebody to pay for a membership that is not being bought is consent taken
+  /// for nothing (the waiver run reads the same predicate, so the run collects
+  /// exactly the links this gate requires).
   bool get everyPayeeLinked {
     for (var i = 1; i < persons.length; i++) {
-      if (!persons[i].linked) return false;
+      if (isBeingCharged(persons[i]) && !persons[i].linked) return false;
     }
     return true;
   }

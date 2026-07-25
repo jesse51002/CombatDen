@@ -796,13 +796,16 @@ account (not onboarded) fails closed: the field never mounts, mirroring the
 backend's `paymentsUnavailable` stop.
 
 **Every attempt gets a genuinely FRESH field.** The `CardField` is a Stripe
-iframe whose web platform view is CACHED across mounts, so a retry after a
-decline would otherwise reuse the iframe still holding the declined number and
-the member could not type a new card at all. The step keys `CardFieldBox`
-(`fieldKey: ValueKey('kiosk-card-${state.cardAttempt}')`), and `retryCard()`
-bumps `cardAttempt` — so returning to the card step mounts a brand-new, empty
-iframe. `CardFieldBox` exposes an optional `fieldKey` (null for every non-kiosk
-caller) for exactly this.
+iframe whose web platform view is CACHED across mounts, so re-entering the step
+would otherwise reuse the iframe still holding the last number typed while the
+step's own `_complete` flag resets to false — leaving *Review* permanently
+unreachable and the member unable to type anything at all. The step keys
+`CardFieldBox` (`fieldKey: ValueKey('kiosk-card-${state.cardAttempt}')`), and
+**every route back into the step bumps `cardAttempt`** — `retryCard()` after a
+decline, and `back()` out of the review — so it always mounts a brand-new, empty
+iframe. Both routes drop the tokenized card, the key and the preview with it, so
+state never claims a card the member cannot see. `CardFieldBox` exposes an
+optional `fieldKey` (null for every non-kiosk caller) for exactly this.
 
 **The step names the PAYER, pinned, and reads them off the roster's payer seat
 — never off `activePersonIndex`.** In a family the active person is usually a
@@ -1808,8 +1811,9 @@ from the first frame. The two were conflated once, and the countdown went out
 with the cooldown; the surfaces test now asserts both halves.
 
 None of it weakens the money-safety properties: **both** retry paths mint a NEW
-idempotency key, re-send **only** `state.failedItems`, and never re-create a
-member, re-sign a waiver or re-link a payer. `pay()`'s synchronous `paying`
+idempotency key, re-send **only** what the landed start did not CREATE
+(`state.retryMemberIds` — see §11.5), and never re-create a member, re-sign a
+waiver or re-link a payer. `pay()`'s synchronous `paying`
 guard + the sent-key latch keep a double-tap (of Retry or of Pay) to exactly one
 charge, and a 500 / transport failure is still the "nothing was charged" stop —
 this is the 207 path only. The popup's own 60-second return countdown is what
@@ -1898,7 +1902,18 @@ finally releases a declined screen nobody is standing at, through the ordinary
 - **A waiver read/sign failure is an INLINE retry, never a stop.** By that point
   a member row and a Stripe customer exist; ending the signup over one flaky
   call orphans them for nothing. A **preview** failure is different — it is a
-  retryable stop, because a review with no figures on it is a blank screen.
+  retryable stop, because a review with no figures on it is a blank screen. **A
+  request that cannot be ASSEMBLED takes the same stop**, for the same reason: a
+  bare return leaves the review on a spinner that never resolves, and a kiosk
+  screen with no countdown and no way on is fatal. That stop is scoped to the
+  review step, the only step that renders a preview and the only place its "Try
+  again" returns to (a retry's re-price rides alongside a live charge — §11.6).
+- **No money-path return is ever silent.** `pay()` with no card, or with a
+  request that will not assemble, ends on the `paymentFailed` stop rather than
+  returning — nothing left the device, so "nothing was charged" is exactly true,
+  and there is a 15-second countdown home. A quiet return there parked the iPad:
+  `retrySameCard` cancels the popup's own return countdown before it calls
+  `pay()`, and the decline screen deliberately has no escape (§2).
 - **Signed stays signed.** Signatures append to `KioskSignupState.signedWaivers`
   and are keyed on the MEMBER (`signedWaiverIdsFor(memberId)`); walking Back
   skips what that person already signed and nothing un-signs it. Back out of
@@ -1989,16 +2004,30 @@ Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
   `_buildStartRequest` returns null unless `KioskSignupState.everyPayeeLinked`.
   That one guard covers the preview and the charge alike: a roster with an
   unauthorized payee cannot assemble a request at all, let alone send one.
+  **Its scope is the payees the request CARRIES** (`isBeingCharged`), which is
+  the backend's own scope verbatim — `_check_links`
+  (`memberships_start_validation.py`) reads `request.memberships`' member ids
+  minus the payer. Demanding a link from somebody who is not in the cart both
+  dead-ends the whole family on an unassemblable request AND means asking them
+  to authorize a payer for a membership they are not buying.
 - **`PUT /members/{payee}/link` signs and links in ONE call** and commits
   immediately — there is no group transaction and no rollback. A 409 means the
   gym republished the payer-auth agreement, so the body reloads and the payer
   re-signs; nothing is recorded against text nobody saw.
 - **Waivers are grouped by PERSON, not by document** (ruling 9): every payee
-  first (their payer-auth, then their own liability waivers), the payer's own
+  **who is getting a membership** first (their payer-auth, then their own
+  liability waivers), the payer's own
   liability waiver last. `waiverPersonQueue` / `waiverPersonIndex` drive it, and
   `payerAuthPending` is what splits the one `waivers` step between
   `KioskPayerWaiverStep` and `KioskWaiverStep`. The iPad changes hands once per
   person.
+  **Somebody who Skipped (§3) is not walked at all** — the queue reads the same
+  `isBeingCharged` predicate `everyPayeeLinked` does, so the run collects
+  exactly the links the start demands and the two cannot disagree. Asking a
+  skipped person for a payer authorization is consent taken from the wrong
+  person for a purchase that is not happening; the payer's own rung has always
+  worked this way (`training || gated`) and the payees now match it. Anything a
+  server gate named stays in the queue either way — the gate is authoritative.
 - **A signature is keyed on (member, waiver).** Two children on the same plan
   each sign that plan's waiver; keying on the waiver id alone would skip the
   second child and hand the backend an unsigned member at the start.
@@ -2008,10 +2037,26 @@ Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
   guard: a roster with nobody ticked would send `memberships: []` and take a
   400, so it cannot leave the People step — see §3 for the control and the
   legible block.
-- **A 207 retry carries ONLY the failed items.** `_startItems` filters to
-  `state.failedItems` whenever it is non-empty, so anything already created
-  stands and is never re-charged — and no member, signature or link is ever
-  re-executed. The retry mints a new `pm_` and a new key.
+- **A retry carries ONLY what did not get CREATED, and an empty retry set sends
+  NOTHING.** `_startItems` filters through
+  `KioskSignupState.isBeingCharged`, over
+  `KioskSignupState.retryMemberIds` — every landed item that is not `created`.
+  **The null-vs-empty distinction in that getter IS the defence:** `null` means
+  nothing has landed (a first attempt, send the cart), an EMPTY set means the
+  landed start left nothing to re-send. Collapsing them — the shipped bug, an
+  `isNotEmpty`-guarded filter over `failedItems` — re-sent the WHOLE cart for a
+  `[created, unknown]` partial (no row is `failed` there) under the fresh
+  idempotency key every retry mints, which the backend's
+  `ON CONFLICT (idempotency_key)` guard cannot dedupe: a second real charge on a
+  membership that had already started. Keying on "not created" rather than on
+  `failed` is the other half — `failedItems` is the DISPLAY set the receipt
+  marks, never the retry set. Nothing already created is re-charged, and no
+  member, signature or link is ever re-executed. The retry mints a new key (and
+  `retryCard` a new `pm_`).
+- **`retrySameCard` cannot fire from an all-created state at all.** Its gate is
+  `KioskSignupState.canRetryStart` (the retry set is non-empty), not the step —
+  the all-created receipt is `results` too, and the step check alone let it
+  re-post the entire cart from a screen where every membership had started.
 - **Roster removal is offered only while it is FREE.** There is no unlink call,
   so `canRemovePerson` goes false the moment that person is linked or has
   signed anything. A person created but never linked simply drops out of the
@@ -2037,8 +2082,8 @@ Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
   `test/features/kiosk/bloc/kiosk_signup_group_test.dart` holds the payee side;
   `bloc/kiosk_signup_payer_test.dart` holds the payer side.
 - **A partial failure is structurally group-only** (§11.2), so the results
-  receipt's partial branch is a group surface — and the retry it offers still
-  carries only `failedItems`, so nothing already created is re-charged (§11.6).
+  receipt's partial branch is a group surface — and the retry it offers carries
+  only the un-created items, so nothing already created is re-charged (§11.6).
 - **A swapped payer keeps everyone's seat.** A CRM pick inserts at index 0 and
   shifts every index by one (`activePersonIndex` included); a roster pick swaps
   positions 0 and k and shifts nothing. Either way the person who started the
@@ -2110,17 +2155,31 @@ Rules the screen holds:
   `KioskWelcomeScreen._Foot`'s shape (hairline → the 60s `KioskReturnTimer` →
   centred actions) and deliberately **not** `KioskFlowFoot`, whose left gutter is
   the ghost escape by construction.
-- **A partial's retry is still money-safe.** `retrySameCard`'s step guard admits
-  `declined || results` and nothing else; `_startItems` still re-sends only
-  `failedItems` and mints a NEW idempotency key, so nothing already created is
-  re-charged and no member, signature or link is re-executed.
+- **A partial's retry is still money-safe.** `retrySameCard` is gated on
+  `canRetryStart` — a landed start with something un-created — and then on the
+  step (`declined || results`); `_startItems` re-sends only the un-created items
+  and mints a NEW idempotency key, so nothing already created is re-charged and
+  no member, signature or link is re-executed (§11.5).
+- **A partial's retry also RE-PRICES.** `state.preview` prices the whole cart,
+  and the paying screen states that figure as *what is being taken* — so
+  `retrySameCard` clears it and re-runs `_loadPreview()` against the same
+  filtered items the charge carries (what `retryCard` gets for free by passing
+  back through the card step). Two consequences that are easy to undo: the
+  preview must be fired BEFORE `pay()` (which clears `startResult`, the thing
+  that narrows both requests), and a preview failure there is SILENT — the
+  retryable stop belongs to the review step alone, or a failed read would yank
+  the member off a landed receipt mid-charge. `KioskPayingScreen` renders the
+  amount only while a preview stands behind it, because `dueTodayMinorUnits`
+  falls back to `0` and "$0.00 is being taken" is a worse lie than saying
+  nothing.
 - **A retry's response is MERGED into the one it retried**
   (`_mergeStartResults`), newer outcome replacing older for the same
-  (member, plan). A retry names only the previously-failed items, so without the
-  merge a partial-then-successful retry would print a one-row receipt headed
+  (member, plan). A retry names only the previously un-created items, so without
+  the merge a partial-then-successful retry would print a one-row receipt headed
   "every membership below started today" while omitting the row an earlier attempt
-  created. `failedItems` over the merge is identical to the latest response's own
-  failures, so the retry set cannot go stale.
+  created. Because a retry carries EVERY un-created item, `retryMemberIds` over
+  the merge is identical to the latest response's own un-created set — the retry
+  set cannot go stale, and nothing already created can re-enter it.
 - **There is no fourth "continue anyway" on a partial.** The succeeded people are
   real members either way; "continue without them" is a decision about somebody
   else's membership that belongs at the desk, not on a lobby iPad. The consequence
@@ -2156,9 +2215,13 @@ Rules the screen holds:
   already-signed skip (`_loadPriorWaiverStatus` → `_priorSatisfiedWaiverIds` /
   `_satisfiedWaiverIdsFor`, folded into `_enterLiability`'s queue — §11.4a), the
   money path
-  (`_buildStartRequest` / `pay`'s three-way split / `_enterResults` /
+  (`_buildStartRequest` / `_startItems` over
+  `KioskSignupState.isBeingCharged` → `retryMemberIds` / `canRetryStart` —
+  the ONE "who does the next request carry" predicate, shared with
+  `everyPayeeLinked`, the waiver run and `kiosk_money_labels`
+  (§11.5) — / `pay`'s three-way split / `_enterResults` /
   `_mergeStartResults` / `nextFromResults` / `_onDeclined` /
-  `retrySameCard` (same card, new key) / `retryCard`
+  `retrySameCard` (same card, new key, re-priced) / `retryCard`
   (new card) / `_enterWelcome`, the `_sentAttempts` latch,
   `kKioskSignupStartTimeout`), the blocking surfaces' shared return countdown
   (`_startPopupCountdown`, `kKioskSignupPopupHold`), the
@@ -2269,19 +2332,29 @@ all-failed → `declined` holding it — the receipt's own 60s countdown, 422 �
 waivers, 500 → "nothing charged", the uncapped no-wait decline model — Retry
 re-sends the SAME card with a NEW key while "Try another card" re-enters, a
 double-tap Retry is one charge, and neither re-creates/re-signs anything — the
-two retryable stops, the request builder's
+two retryable stops, Back out of the review handing the card step a genuinely
+EMPTY field (the `cardAttempt` bump, §3), the request builder's
 empty price-reduction fields + `paidWithCash: false` + `set_default`, and the
 due-today / two-charges arithmetic),
 `bloc/kiosk_signup_group_test.dart` (the §11.5 group rules: the payee 409
-offer, adopt-vs-recreate, link-before-start both ways, the per-training-person
+offer, adopt-vs-recreate, link-before-start both ways — including that neither
+dead end is SILENT (an unassemblable preview and an unassemblable Pay each land
+on a stop with a countdown) — the per-training-person
 cart, the 207 partial — which lands on `results`, NOT the decline popup, and
-holds the flow count — and its failed-items-only retry, roster removal, the
+holds the flow count — the **un-created-items-only retry** and its three
+regression guards (a `[created, unknown]` partial re-sends ONLY the unconfirmed
+row, an ALL-CREATED receipt has nothing to retry and its clock is left alone,
+and a retry RE-PRICES against the same filtered items), the waiver run asking
+consent only of the people being charged (a SKIPPED payee is never asked to
+authorize the payer and no longer blocks the start), roster removal, the
 empty-cart guard, the plan step's group-only "Skip" control including
 skip-everybody → People, the search
 debounce + sequence guard, and the per-member signature keying),
 `bloc/kiosk_signup_payer_test.dart` (the §3 seat rules: the entry fork, the
 identify search and its confirm-first tap, the duplicate 409 offer and where
-each "no" goes, the picker's roster-redirect, adoption that never creates a
+each "no" goes, the picker's roster-redirect — including the person at index 0
+once the payer has been DELETED, who is a real candidate and gets the redirect
+rather than a dropped tap — adoption that never creates a
 member, the link-before-charge invariant after a payer swap, `canSwitchPayer`,
 and the existing-member skip / new-member edit round trip),
 `bloc/kiosk_signup_trial_test.dart` (the §3 one-trial rule: any prior trial

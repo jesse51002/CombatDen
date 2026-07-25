@@ -865,6 +865,31 @@ void main() {
       await cubit.close();
     });
 
+    test('a CRM hit for the person at index 0 still REDIRECTS once the payer '
+        'has been deleted', () async {
+      final cubit = await withElla();
+      cubit.askRemovePerson(0);
+      cubit.confirmRemovePerson();
+      expect(cubit.state.hasPayer, isFalse);
+      // Ella is the only person left and now sits at index 0 — a legitimate
+      // candidate, because nobody is paying.
+      expect(cubit.state.payerCandidateIndexes, [0]);
+
+      // Tapping her CRM row must answer with "she's on the roster above", not
+      // drop the tap on the floor: the index-0 refusal is about whoever is
+      // ALREADY paying, and there is nobody paying here. Silently ignoring it
+      // left her unseatable from the search AND unexplained.
+      await cubit.pickPayerRow(_row('mem-2', 'Ella Bell'));
+      expect(cubit.state.payerAlreadyInSignup, isTrue);
+      // Still never inserted a second time — one member is one cart item.
+      expect(cubit.state.persons, hasLength(1));
+      expect(cubit.state.hasPayer, isFalse);
+      // And the roster route still seats her, through the one seat path.
+      await cubit.pickPayerFromRoster(0);
+      expect(cubit.state.payer.memberId, 'mem-2');
+      await cubit.close();
+    });
+
     test('a solo payer is NOT removable — deleting the only person is not a '
         'thing', () async {
       final cubit = await submitPayer(build());

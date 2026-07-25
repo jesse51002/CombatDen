@@ -490,6 +490,13 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// A hit that is ALREADY on the roster is a redirect, not a rejection: they
   /// are listed above and directly pickable, and inserting a second entry for
   /// one member would put two cart items on one person.
+  ///
+  /// **The one silent no-op is whoever is ALREADY paying** — picking them
+  /// changes nothing and there is nothing to redirect them to. It is tested the
+  /// way [pickPayerFromRoster] tests it, on `hasPayer && index == 0` rather than
+  /// on the index alone: once the payer has been DELETED, index 0 holds an
+  /// ordinary candidate, and refusing them there dropped the tap on the floor —
+  /// no seat, and not even the "they're on the roster above" notice.
   Future<void> pickPayerRow(MemberRow row) async {
     registerActivity();
     if (state.step == KioskSignupStep.identify) {
@@ -497,8 +504,8 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       return;
     }
     final at = state.persons.indexWhere((p) => p.memberId == row.memberId);
-    if (at == 0) return;
-    if (at > 0) {
+    if (at >= 0) {
+      if (state.hasPayer && at == 0) return;
       emit(state.copyWith(payerAlreadyInSignup: true));
       return;
     }
@@ -1088,6 +1095,28 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       _syncIdleTimer();
       return;
     }
+    // **Back into the card step must hand over a genuinely EMPTY field.** The
+    // Stripe `CardField`'s web platform view is CACHED across mounts, so
+    // re-entering the step re-shows the card already typed while the step's own
+    // `_complete` flag resets to false — which makes "Review" permanently
+    // unreachable and leaves the member unable to type anything at all.
+    // Bumping `cardAttempt` re-keys the field into a brand-new empty iframe,
+    // exactly as [retryCard] does after a decline, and the card facts, the key
+    // and the preview go with it so state never claims a card the member cannot
+    // see.
+    if (previous == KioskSignupStep.card) {
+      emit(state.copyWith(
+        step: previous,
+        cardAttempt: state.cardAttempt + 1,
+        paymentMethodId: null,
+        cardBrand: null,
+        cardLast4: null,
+        idempotencyKey: null,
+        preview: null,
+      ));
+      _syncIdleTimer();
+      return;
+    }
     // Backing out of the match offer drops the draft it was about — nothing
     // was written for them, and leaving a half-added person on state would
     // make the next "Add someone new" open pre-filled with someone else.
@@ -1474,6 +1503,16 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// (their payer-auth link, then their own liability waivers), and the payer's
   /// own liability waiver last. The iPad changes hands once per person, which
   /// is how a family actually passes a tablet.
+  ///
+  /// **Only the people the request will CARRY are walked** — plus anyone a
+  /// server gate named, which is authoritative either way. Somebody who Skipped
+  /// (or was never ticked) is not in the cart, so the backend requires no
+  /// payer authorization for them (`_check_links` reads the request's own member
+  /// ids), and asking them to authorize a payer for a membership they are not
+  /// buying is a signature taken for nothing — consent from the wrong person.
+  /// The queue and [KioskSignupState.everyPayeeLinked] read the same
+  /// [KioskSignupState.isBeingCharged] predicate, so the run collects exactly
+  /// the links the start demands and the two can never disagree.
   void _enterWaiverRun() {
     final gated = <int>{
       for (final item in state.waiverGate)
@@ -1481,10 +1520,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
           if (state.persons[i].memberId == item.memberId) i,
     };
     final queue = <int>[
-      for (var i = 1; i < state.persons.length; i++) i,
+      for (var i = 1; i < state.persons.length; i++)
+        if (state.isBeingCharged(state.persons[i]) || gated.contains(i)) i,
       // The payer signs last, and only when they have something to sign: their
       // own plan's waivers, or one the server named at a gate.
-      if (state.persons.first.training || gated.contains(0)) 0,
+      if (state.isBeingCharged(state.persons.first) || gated.contains(0)) 0,
     ];
     emit(state.copyWith(waiverPersonQueue: queue, waiverPersonIndex: 0));
     _openWaiverPerson(0);
@@ -1850,9 +1890,25 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// The server-side charge preview of the fully assembled request — staged,
   /// never committed. It runs on the default 30s timeout and it CAN fail, so
   /// a failure gets its own retryable stop rather than a blank screen.
+  ///
+  /// **A request that cannot be ASSEMBLED is the same outcome as one that
+  /// failed, and gets the same stop.** The review renders its spinner off
+  /// `preview == null`, so returning here without emitting anything left the
+  /// step spinning forever with no countdown and no way on — the one thing a
+  /// kiosk screen may never be.
+  ///
+  /// **The stop belongs to the review step only**, because that is the only
+  /// step that renders the preview and the only place its "Try again" returns
+  /// to. A preview reloaded for a retry ([retrySameCard]) rides alongside a
+  /// live charge, and stopping from there would yank the member off a landed
+  /// receipt mid-charge.
   Future<void> _loadPreview() async {
     final request = _buildStartRequest(idempotencyKey: newIdempotencyKey());
-    if (request == null) return;
+    if (request == null) {
+      log('Kiosk signup: charge preview could not be assembled');
+      _failPreview();
+      return;
+    }
     emit(state.copyWith(previewLoading: true));
     try {
       final preview = await _memberRepo.previewStartMemberships(request);
@@ -1866,9 +1922,16 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     } catch (e, st) {
       log('Kiosk signup: charge preview failed', error: e, stackTrace: st);
       if (isClosed) return;
-      emit(state.copyWith(previewLoading: false));
-      _stop(KioskSignupStopReason.previewFailed);
+      _failPreview();
     }
+  }
+
+  /// A preview that could not be produced: the review's retryable stop, and
+  /// nothing at all anywhere else (see [_loadPreview]).
+  void _failPreview() {
+    emit(state.copyWith(previewLoading: false));
+    if (state.step != KioskSignupStep.review) return;
+    _stop(KioskSignupStopReason.previewFailed);
   }
 
   /// **The ONE place a start request is assembled**, for the preview and for
@@ -1909,22 +1972,29 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     );
   }
 
-  /// One item per training person with a picked, priced plan. Quantity is
+  /// One item per person the next request must carry — every training person
+  /// with a picked, priced plan on a first attempt, and after a landed start
+  /// exactly the people whose membership was **not created**. Quantity is
   /// always 1 — the kiosk sells one membership to one person.
   ///
-  /// **After a partial failure (207) it carries the FAILED items only.**
-  /// Anything the backend already created stands and must never be re-sent: a
-  /// retry re-charges the whole cart otherwise, and no member, signature or
-  /// link is ever re-executed.
+  /// **A retry never re-sends a `created` item, and an empty retry set sends
+  /// NOTHING.** Both halves live in [KioskSignupState.isBeingCharged] over
+  /// [KioskSignupState.retryMemberIds], whose `null`-vs-empty distinction is
+  /// the double-charge defence: `null` is "nothing has landed, send the cart",
+  /// an empty set is "nothing left to send". The two must never collapse into
+  /// one — a filter that only applied `whenever the failure set is non-empty`
+  /// re-sent the WHOLE cart for a `[created, unknown]` partial (no row is
+  /// `failed` there), under the fresh idempotency key a retry mints, which the
+  /// backend's `ON CONFLICT (idempotency_key)` guard cannot dedupe. That is a
+  /// second real charge on a membership that already started.
+  ///
+  /// Nothing else is ever re-executed by a retry: no member is created, no
+  /// waiver re-signed, no payer re-linked.
   List<MemberMembershipsStartItem> _startItems() {
-    final retryOnly = <String>{
-      for (final failed in state.failedItems) failed.memberId,
-    };
     final items = <MemberMembershipsStartItem>[];
     for (final person in state.persons) {
       final memberId = person.memberId;
-      if (!person.training || memberId == null) continue;
-      if (retryOnly.isNotEmpty && !retryOnly.contains(memberId)) continue;
+      if (memberId == null || !state.isBeingCharged(person)) continue;
       final price = state.planById(person.selectedPlanId)?.activePrice;
       if (price == null) continue;
       items.add(
@@ -1957,7 +2027,19 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   Future<void> pay() async {
     if (state.step == KioskSignupStep.paying) return;
     final paymentMethodId = state.paymentMethodId;
-    if (paymentMethodId == null) return;
+    // **Nothing to charge with is a handoff, never a silent return.** By the
+    // time Pay is live the review's primary has a real preview behind it, so
+    // this is an anomaly — and a bare `return` is the worst outcome available:
+    // [retrySameCard] has already cancelled the popup's return countdown before
+    // it calls this, so returning quietly parks a shared iPad on a popup with
+    // no clock, no escape (§2 — the decline screen deliberately has none) and
+    // no way home. There is ALWAYS a countdown home. "Nothing was charged" is
+    // exactly true here, because nothing was sent.
+    if (paymentMethodId == null) {
+      log('Kiosk signup: pay with no card on state');
+      _stop(KioskSignupStopReason.paymentFailed);
+      return;
+    }
     final key = state.idempotencyKey ?? newIdempotencyKey();
     if (_sentAttempts.contains(key)) {
       _stop(KioskSignupStopReason.paymentUnconfirmed);
@@ -1975,7 +2057,14 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
         setDefault: true,
       ),
     );
-    if (request == null) return;
+    // Nothing to send — an unassemblable request, or a retry set with nothing
+    // left in it. Same rule as the null card above: a countdown home, not a
+    // dead screen. Nothing left the device, so "nothing was charged" holds.
+    if (request == null) {
+      log('Kiosk signup: start request could not be assembled');
+      _stop(KioskSignupStopReason.paymentFailed);
+      return;
+    }
     _sentAttempts.add(key);
     final previous = state.startResult;
     suspendIdle();
@@ -2043,17 +2132,18 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// Fold a retry's response into the one it retried, so the receipt keeps
   /// every membership THIS SIGNUP produced rather than only the last attempt's.
   ///
-  /// A retry re-sends **only** the previously-failed items (see [_startItems]),
-  /// so its response names only those: without this fold, a partial that was
-  /// then retried successfully would print a one-row receipt headed "every
-  /// membership below started today" while silently omitting the one that
-  /// landed on the first attempt. A receipt that lies by omission about money
-  /// is the thing this screen exists to prevent.
+  /// A retry re-sends **only** the items the previous start did not create (see
+  /// [_startItems]), so its response names only those: without this fold, a
+  /// partial that was then retried successfully would print a one-row receipt
+  /// headed "every membership below started today" while silently omitting the
+  /// one that landed on the first attempt. A receipt that lies by omission about
+  /// money is the thing this screen exists to prevent.
   ///
   /// The newer outcome always REPLACES the older one for the same
-  /// (member, plan), so [KioskSignupState.failedItems] over the fold is
-  /// identical to the latest response's own failures — the retry set cannot
-  /// grow stale and nothing already created is ever re-sent.
+  /// (member, plan), and a retry carries EVERY un-created item — so
+  /// [KioskSignupState.retryMemberIds] over the fold is identical to the latest
+  /// response's own un-created set. The retry set cannot grow stale, and
+  /// nothing already created can re-enter it.
   ///
   /// `chargeCount` / `multipleCharges` are carried from the latest response and
   /// are deliberately unused by the kiosk: the two-charges note reads the
@@ -2186,8 +2276,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// and mints a **NEW** idempotency key, then re-fires [pay]. A new key is
   /// mandatory — reusing the already-sent key would replay the decline through
   /// the [_sentAttempts] latch instead of making a genuine fresh attempt.
-  /// Nothing else re-runs: [_startItems] re-sends only `failedItems`, and no
-  /// member is created, no waiver re-signed, no payer re-linked.
+  /// Nothing else re-runs: [_startItems] re-sends only what the landed start did
+  /// not create, and no member is created, no waiver re-signed, no payer
+  /// re-linked.
   ///
   /// [pay]'s synchronous `paying` guard + the sent-key latch keep a double-tap
   /// to exactly one charge; the step guard here stops a second tap from minting
@@ -2197,6 +2288,14 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// step with no landed response behind it.
   void retrySameCard() {
     registerActivity();
+    // **A retry exists only where a landed start left something un-created.**
+    // This is the gate, not the step list: an ALL-CREATED receipt is `results`
+    // too, and re-firing [pay] from there re-posted the WHOLE cart under a
+    // fresh idempotency key — a second real charge on memberships that had
+    // already started, which the backend's replay guard cannot dedupe because
+    // the key is new. Reading [KioskSignupState.canRetryStart] makes that state
+    // unrepresentable rather than a screen somebody has to remember to exclude.
+    if (!state.canRetryStart) return;
     if (state.step != KioskSignupStep.declined &&
         state.step != KioskSignupStep.results) {
       return;
@@ -2205,7 +2304,23 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     emit(state.copyWith(
       idempotencyKey: newIdempotencyKey(),
       popupCountdown: 0,
+      // **The preview on state prices the WHOLE cart, and this retry does
+      // not.** The paying screen states that figure as what is being taken, so
+      // keeping it would watch a member through "$200.00" while $100 is
+      // charged. Cleared here (nothing states a stale amount) and re-priced
+      // below against the same filtered items the charge carries — the sibling
+      // [retryCard] gets this for free by passing through the card step.
+      preview: null,
     ));
+    // **The order is load-bearing.** Both requests are narrowed by
+    // `state.startResult`, which [pay] clears the instant it emits `paying`, so
+    // a preview fired afterwards would re-price the whole cart and put the
+    // wrong number back on the screen. `_loadPreview` builds its request
+    // synchronously, before its first await, so calling it first is enough.
+    // A preview failure is silent here (see [_failPreview]): the charge is the
+    // authoritative thing on this screen, and Retry must never be gated on a
+    // read.
+    unawaited(_loadPreview());
     unawaited(pay());
   }
 

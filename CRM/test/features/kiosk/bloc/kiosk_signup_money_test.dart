@@ -807,6 +807,39 @@ void main() {
     });
   });
 
+  group('Back out of the review', () {
+    test('it hands the card step a genuinely EMPTY field', () async {
+      final cubit = await atReview();
+      expect(cubit.state.cardAttempt, 0);
+      cubit.back();
+
+      expect(cubit.state.step, KioskSignupStep.card);
+      // The Stripe `CardField`'s web platform view is CACHED across mounts, so
+      // without a NEW key the returning step re-shows the card already typed
+      // while the step's own `_complete` flag resets to false — "Review" then
+      // never becomes tappable again and the member cannot type anything at
+      // all. Same bump `retryCard` does after a decline.
+      expect(cubit.state.cardAttempt, 1);
+      // And state agrees with what is on the screen: no card, no key, no
+      // priced review behind it.
+      expect(cubit.state.paymentMethodId, isNull);
+      expect(cubit.state.cardBrand, isNull);
+      expect(cubit.state.cardLast4, isNull);
+      expect(cubit.state.idempotencyKey, isNull);
+      expect(cubit.state.preview, isNull);
+
+      // Re-entering the card carries the flow forward exactly as the first
+      // pass did — a fresh key, a fresh preview, nothing re-created.
+      clearInteractions(member);
+      cubit.submitCard(paymentMethodId: 'pm_2', brand: 'visa', last4: '1881');
+      await _settle();
+      expect(cubit.state.step, KioskSignupStep.review);
+      expect(cubit.state.preview, isNotNull);
+      verifyNever(() => member.createMember(any()));
+      await cubit.close();
+    });
+  });
+
   group('the review preview', () {
     test('a waiver gate on the preview routes back to the waiver step',
         () async {

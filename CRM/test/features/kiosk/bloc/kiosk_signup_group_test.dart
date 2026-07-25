@@ -173,15 +173,18 @@ void main() {
   }
 
   /// Add one brand-new payee and skip their optional block.
-  Future<void> addElla(KioskSignupCubit cubit) async {
+  Future<void> addPayee(KioskSignupCubit cubit, String firstName) async {
     await cubit.addPerson(
-      firstName: 'Ella',
+      firstName: firstName,
       lastName: 'Bell',
-      email: 'ella.bell@gmail.com',
+      email: '${firstName.toLowerCase()}.bell@gmail.com',
     );
     expect(cubit.state.step, KioskSignupStep.personDetails);
     cubit.skipPersonDetails();
   }
+
+  /// The roster's usual second person — Ella, `mem-2`.
+  Future<void> addElla(KioskSignupCubit cubit) => addPayee(cubit, 'Ella');
 
   /// Walk the whole two-person group from the roster to the review.
   Future<void> walkGroupToReview(KioskSignupCubit cubit) async {
@@ -358,7 +361,8 @@ void main() {
       await cubit.close();
     });
 
-    test('an UNLINKED payee means no request is assembled at all', () async {
+    test('an UNLINKED payee means no request is assembled at all, and neither '
+        'dead end is silent', () async {
       final cubit = await atRoster();
       await addElla(cubit);
       expect(cubit.state.everyPayeeLinked, isFalse);
@@ -369,6 +373,15 @@ void main() {
       await _settle();
       verifyNever(() => member.previewStartMemberships(any()));
 
+      // **Never a permanent spinner.** The review renders its spinner off
+      // `preview == null`, so a request that cannot even be ASSEMBLED has to
+      // land on the same retryable stop a FAILED preview does — a kiosk screen
+      // with no figure, no countdown and no way on is fatal.
+      expect(cubit.state.step, KioskSignupStep.stop);
+      expect(cubit.state.stopReason, KioskSignupStopReason.previewFailed);
+      expect(cubit.state.stopReason!.isRetryable, isTrue);
+      expect(cubit.state.stopCountdown, kKioskSignupStopHold.inSeconds);
+
       await cubit.pay();
       verifyNever(
         () => member.startMemberships(
@@ -376,7 +389,232 @@ void main() {
           receiveTimeout: any(named: 'receiveTimeout'),
         ),
       );
-      expect(cubit.state.step, isNot(KioskSignupStep.paying));
+      // And Pay with nothing to send is a handoff WITH a clock, never a silent
+      // return: `retrySameCard` cancels the popup's own return countdown before
+      // it calls `pay()`, so a quiet return there parks a shared iPad on a
+      // popup with no countdown and no escape. Nothing was sent, so "nothing
+      // was charged" is exactly true.
+      expect(cubit.state.step, KioskSignupStep.stop);
+      expect(cubit.state.stopReason, KioskSignupStopReason.paymentFailed);
+      expect(cubit.state.stopCountdown, kKioskSignupStopHold.inSeconds);
+      await cubit.close();
+    });
+  });
+
+  group('a retry re-sends only what did NOT start', () {
+    test('a [created, unknown] partial re-sends ONLY the unconfirmed '
+        'membership, never the one that already started', () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      await walkGroupToReview(cubit);
+
+      // The payer's membership was created; the child's came back with a status
+      // this client does not recognise, which `MemberMembershipsStartStatus`
+      // parses to `unknown` — **neither created nor failed.** A retry set keyed
+      // on FAILURES is therefore empty here, and an empty set that falls back
+      // to "then send everything" re-charges the membership that already
+      // started, under the fresh idempotency key every retry mints — which the
+      // backend's `ON CONFLICT (idempotency_key)` guard cannot dedupe.
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(unknownMemberId: 'mem-2'));
+      await cubit.pay();
+
+      // The partial receipt, where Retry is live.
+      expect(cubit.state.step, KioskSignupStep.results);
+      expect(cubit.state.allCreated, isFalse);
+      // The display set and the retry set are deliberately NOT the same set:
+      // nothing was refused, and one row is still unconfirmed.
+      expect(cubit.state.failedItems, isEmpty);
+      expect(cubit.state.retryMemberIds, {'mem-2'});
+      expect(cubit.state.canRetryStart, isTrue);
+
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(only: 'mem-2'));
+      cubit.retrySameCard();
+      await _settle();
+
+      final sent = verify(
+        () => member.startMemberships(
+          captureAny(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).captured.cast<MemberMembershipsStartRequest>();
+      expect(sent.length, 2);
+      // **The double-charge guard.** One item, and not the payer's.
+      expect(sent.last.memberships.map((m) => m.memberId).toList(), ['mem-2']);
+      expect(sent.last.idempotencyKey, isNot(sent.first.idempotencyKey));
+      // The same card, never re-typed, and nothing else re-executed.
+      expect(sent.last.payment?.paymentMethodId, 'pm_1');
+      verify(() => member.createMember(any())).called(2);
+      verify(
+        () => member.linkMemberAccount(
+          any(),
+          payerMemberId: any(named: 'payerMemberId'),
+          waiverVersionId: any(named: 'waiverVersionId'),
+          signerName: any(named: 'signerName'),
+          consentAcknowledged: any(named: 'consentAcknowledged'),
+        ),
+      ).called(1);
+      // The merge folded the retry into the first response, so the receipt
+      // still lists both memberships — and now reads all-created.
+      expect(cubit.state.startItems, hasLength(2));
+      expect(cubit.state.allCreated, isTrue);
+      await cubit.close();
+    });
+
+    test('an ALL-CREATED receipt has nothing to retry: Retry posts nothing and '
+        'leaves the receipt (and its clock) alone', () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      await walkGroupToReview(cubit);
+      await cubit.pay();
+
+      expect(cubit.state.step, KioskSignupStep.results);
+      expect(cubit.state.allCreated, isTrue);
+      expect(cubit.state.retryMemberIds, isEmpty);
+      expect(cubit.state.canRetryStart, isFalse);
+      final countdown = cubit.state.popupCountdown;
+      final key = cubit.state.idempotencyKey;
+
+      // The all-created receipt offers `Next`, not Retry — but the CUBIT is
+      // the guard: re-firing the charge from a screen where every membership
+      // already started re-posted the WHOLE cart under a new key.
+      cubit.retrySameCard();
+      await _settle();
+
+      verify(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).called(1);
+      expect(cubit.state.step, KioskSignupStep.results);
+      // The retry never began, so it must not have cancelled the clock that
+      // takes the iPad home, nor minted a stray key.
+      expect(cubit.state.popupCountdown, countdown);
+      expect(cubit.state.idempotencyKey, key);
+      await cubit.close();
+    });
+
+    test('a partial retry RE-PRICES against the same filtered items, so the '
+        'paying screen cannot state the whole cart\'s amount', () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      await walkGroupToReview(cubit);
+
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failedMemberId: 'mem-2'));
+      await cubit.pay();
+      expect(cubit.state.step, KioskSignupStep.results);
+
+      cubit.retrySameCard();
+      // The full-cart figure is dropped the instant the retry starts: the
+      // paying screen states `dueTodayMinorUnits` as what is being taken, and
+      // this retry takes only the child's membership.
+      expect(cubit.state.preview, isNull);
+      await _settle();
+
+      final previews = verify(
+        () => member.previewStartMemberships(captureAny()),
+      ).captured.cast<MemberMembershipsStartRequest>();
+      expect(previews, hasLength(2));
+      // The review priced BOTH memberships...
+      expect(previews.first.memberships, hasLength(2));
+      // ...and the retry re-prices exactly what it re-sends.
+      expect(
+        previews.last.memberships.map((m) => m.memberId).toList(),
+        ['mem-2'],
+      );
+      expect(cubit.state.preview, isNotNull);
+      await cubit.close();
+    });
+  });
+
+  group('consent is asked only of the people being charged', () {
+    test('a payee who SKIPPED is never asked to authorize the payer, and the '
+        'start no longer waits on their link', () async {
+      final cubit = await atRoster();
+      await addElla(cubit); // mem-2, index 1
+      await addPayee(cubit, 'Theo'); // mem-3, index 2
+      cubit.continueToPlans();
+
+      cubit.selectPlan(soloPlan);
+      cubit.continueFromPlans();
+      expect(cubit.state.activePersonIndex, 1);
+      cubit.selectPlan(kidsPlan);
+      cubit.continueFromPlans();
+      // Theo changes his mind halfway through the family signup.
+      expect(cubit.state.activePersonIndex, 2);
+      cubit.skipPlanForPerson();
+      await _settle();
+
+      // **The run walks only the people in the cart.** Theo is not one of
+      // them, so asking him to authorize the payer for a membership he is not
+      // buying would be consent taken from the wrong person for nothing.
+      expect(cubit.state.waiverPersonQueue, [1, 0]);
+      expect(cubit.state.payerAuthPending, isTrue);
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+      await cubit.signWaiver(signerName: 'Marcus Bell'); // Ella's liability
+      await _settle();
+      await cubit.signWaiver(signerName: 'Marcus Bell'); // the payer's own
+      expect(cubit.state.step, KioskSignupStep.card);
+
+      verify(() => member.getAuthorizedPayerWaiver('mem-2')).called(1);
+      verifyNever(() => member.getAuthorizedPayerWaiver('mem-3'));
+      verifyNever(
+        () => member.linkMemberAccount(
+          'mem-3',
+          payerMemberId: any(named: 'payerMemberId'),
+          waiverVersionId: any(named: 'waiverVersionId'),
+          signerName: any(named: 'signerName'),
+          consentAcknowledged: any(named: 'consentAcknowledged'),
+        ),
+      );
+      expect(cubit.state.persons[2].linked, isFalse);
+
+      // And an unlinked SKIPPED payee no longer blocks the charge. The backend
+      // scopes the authorization rule to the request's own member ids
+      // (`_check_links` in `memberships_start_validation.py`), and Theo is not
+      // one of them — so demanding his link would dead-end the whole family.
+      expect(cubit.state.everyPayeeLinked, isTrue);
+      cubit.submitCard(paymentMethodId: 'pm_1');
+      await _settle();
+
+      final request = verify(() => member.previewStartMemberships(captureAny()))
+          .captured
+          .single as MemberMembershipsStartRequest;
+      expect(
+        request.memberships.map((m) => m.memberId).toList(),
+        ['mem-1', 'mem-2'],
+      );
+      await cubit.close();
+    });
+
+    test('ticking a skipped person back on brings their link back with them',
+        () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      cubit.setPersonTraining(1, false);
+
+      // Nobody but the payer is in the cart, so nothing is owed for Ella.
+      expect(cubit.state.everyPayeeLinked, isTrue);
+      cubit.setPersonTraining(1, true);
+      // Back in the cart, back to needing authorization — one predicate drives
+      // both, so the two can never disagree.
+      expect(cubit.state.everyPayeeLinked, isFalse);
       await cubit.close();
     });
   });
@@ -879,12 +1117,21 @@ MemberMembershipsStartPreview _preview() => MemberMembershipsStartPreview(
     );
 
 /// The start breakdown. [failedMemberId] fails exactly that member's item;
-/// [only] narrows the results to one member (what a retry gets back).
+/// [unknownMemberId] gives that member the forward-compatible `unknown` status
+/// (neither created NOR failed — the shape a `[created, unknown]` partial
+/// takes); [only] narrows the results to one member (what a retry gets back).
 MemberMembershipsStartResponse _startResponse({
   String? failedMemberId,
+  String? unknownMemberId,
   String? only,
 }) {
   final ids = only == null ? const ['mem-1', 'mem-2'] : [only];
+  MemberMembershipsStartStatus statusOf(String id) {
+    if (id == failedMemberId) return MemberMembershipsStartStatus.failed;
+    if (id == unknownMemberId) return MemberMembershipsStartStatus.unknown;
+    return MemberMembershipsStartStatus.created;
+  }
+
   return MemberMembershipsStartResponse(
     chargeCount: 1,
     multipleCharges: false,
@@ -894,11 +1141,13 @@ MemberMembershipsStartResponse _startResponse({
           memberId: id,
           planId: id == 'mem-1' ? 'plan-1' : 'plan-2',
           planType: PlanType.recurring,
-          status: id == failedMemberId
-              ? MemberMembershipsStartStatus.failed
-              : MemberMembershipsStartStatus.created,
-          itemId: id == failedMemberId ? null : 'item-$id',
-          error: id == failedMemberId ? 'card_declined' : null,
+          status: statusOf(id),
+          itemId: statusOf(id) == MemberMembershipsStartStatus.created
+              ? 'item-$id'
+              : null,
+          error: statusOf(id) == MemberMembershipsStartStatus.failed
+              ? 'card_declined'
+              : null,
         ),
     ],
   );
