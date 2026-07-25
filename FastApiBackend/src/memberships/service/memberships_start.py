@@ -2,19 +2,15 @@
 
 At most two charges per request. Billed charges are never un-billed.
 
-Failure reporting follows one rule: **the response never claims less — and never
-more — than what actually happened.**
+The response never claims less — or more — than what actually happened. A
+DEFINITIVE answer about the money is per-item DATA on the router's 207, either
+way it went: the bank refused (``card declined: …``) or nobody refused and the
+money still did not arrive (``not collected: …`` — SCA / 3-D Secure). Neither is
+an outage, and each carries different advice, so they never share a prefix.
 
-A DEFINITIVE answer about the money is per-item DATA on the router's 207,
-whichever way it went: the bank refused (``card declined: …``) or nobody
-refused and the money still did not arrive (``not collected: …`` — the
-off-session PaymentIntent needs SCA / 3-D Secure). Neither is an outage, and
-each carries different advice for the front desk, so they never share a prefix.
-
-A system failure raises → 500 *while nothing has been collected*; once the
-one-time leg of the same request has charged, the same system failure becomes
-per-item DATA too (``system failure: …`` → 207), because a 500 whose contract
-reads "nothing created" would be a lie about money that moved.
+A system failure raises → 500 only *while nothing has been collected*; once the
+one-time leg has charged it becomes per-item DATA too (``system failure: …`` →
+207), because a 500 reading "nothing created" would lie about money that moved.
 """
 
 from __future__ import annotations
@@ -69,18 +65,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The three reason prefixes stamped on a ``failed`` result item's ``error``.
-# They are the greppable, stable discriminator between the ways a start can fail
-# once it has begun: the BANK said no, NOBODY collected, or OUR side broke.
-# Staff act on each differently (another card / collect another way / finish it
-# at the desk) and monitoring must not confuse an ordinary decline with an
-# outage, so none is ever phrased as another. Part of the API contract — see
-# ``MemberMembershipsStartResultItem``; the prose after the prefix is free to
-# change, the prefix is not.
-#
-# None of them may be a prefix of another, or a client switching on "starts
-# with" would classify one outcome as a different one and give the member the
-# wrong advice (test-locked in ``tests/memberships/test_start_207_contract.py``).
+# The reason prefix on a ``failed`` item's ``error``: the BANK said no, NOBODY
+# collected, or OUR side broke. Staff act on each differently and clients switch
+# on "starts with", so none may be a prefix of another or phrased as another.
+# Contract — test-locked in ``tests/memberships/test_start_207_contract.py``.
 CARD_DECLINED_PREFIX = "card declined: "
 NOT_COLLECTED_PREFIX = "not collected: "
 SYSTEM_FAILURE_PREFIX = "system failure: "
@@ -153,14 +141,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     payment.payment_method_id,
                 )
             except stripe.CardError as exc:
-                # A GENUINE bank decline while saving the entered card as the
-                # payer's default. This runs BEFORE `_insert_all`, so no rows,
-                # discounts or charges exist yet — nothing was billed and there
-                # is nothing to clean up. Surface it as the per-item `failed`
-                # breakdown the client already consumes (the router maps any
-                # failed item -> 207), NOT a 500. A NON-card Stripe / system
-                # failure is deliberately NOT caught here — it stays a
-                # non-retryable 500, because a system failure is not a decline.
+                # Runs BEFORE `_insert_all`, so there is nothing to clean up. A
+                # decline is per-item data (router -> 207); a NON-card failure
+                # is deliberately not caught here and stays a 500.
                 return self._declined_before_charge(states, str(exc))
 
         # Pre-sync before inserting to establish a clean DB↔Stripe baseline.
@@ -169,11 +152,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         await self._insert_all(request, payer, plan_prices, states)
 
-        # Whether the one-time leg of THIS request already committed a charge.
-        # It decides how a later NON-card failure in the recurring converge is
-        # reported: once money has moved and live rows are kept, the request can
-        # no longer honestly answer the router's 500 ("nothing created") — see
-        # ``_converge_recurring_group``.
+        # Whether THIS request's one-time leg already charged — decides how a
+        # later recurring NON-card failure is reported (see that method).
         one_time_committed = False
         if one_time:
             try:
@@ -181,46 +161,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
                     request, one_time,
                 )
             except Exception:
-                # A NON-card failure on the one-time leg (a decline never
-                # reaches here — it is data, folded in by that arm). It cleaned
-                # up its OWN group and re-raised, but `_insert_all` committed
-                # EVERY row of the request in one insert, so the recurring rows
-                # are sitting there `not_added` — and their converge below is
-                # now never going to run, which is precisely what makes them
-                # provably UN-BILLED: no `stripe_item_id`, no subscription item,
-                # and the payer lock this op holds keeps the reconciler's push
-                # sweep from converging them behind our back. So they are safe
-                # to delete, and leaving them STRANDS the member behind a
-                # permanent failure over a charge that never happened:
-                #  - EVERY retry dies in `_insert_all`, whatever key it carries.
-                #    `trg_recurring_no_active_memberships` is a BEFORE INSERT
-                #    trigger that counts an uncancelled `not_added` row as
-                #    active (it skips only `preview_add`), so the ghost rejects
-                #    the replacement row with a raw DB error -> the router's
-                #    500. It fires BEFORE the INSERT's
-                #    `ON CONFLICT (idempotency_key) DO NOTHING` is resolved, so
-                #    a same-key retry never even reaches the RETURNING-shortfall
-                #    check that would have called it a 409 replay.
-                #  - and nothing can explain that to staff, because the row is
-                #    invisible: validation reads `member_memberships_status`,
-                #    which HIDES `not_added`, so the request clears every check
-                #    and then 500s on a membership nobody can see.
-                # So the member cannot buy that recurring plan until the
-                # reconciler's orphan sweep happens to run. `_crm_insert` says
-                # this must never happen ("rather than committing a ghost
-                # `not_added` row that is never charged or cleaned up"); this is
-                # the arm that was breaking that promise.
-                #
-                # ONLY the recurring group is swept. The one-time group is
-                # deliberately left to its own arm, because it may ALREADY BE
-                # BILLED — `charge_one_time` pays the invoice and THEN does its
-                # writeback, so a post-payment failure lands in that same arm —
-                # and a billed line is never un-billed here.
-                #
-                # The raise still reaches the router as a 500, unchanged: the
-                # recurring side collected nothing and now holds no rows, so
-                # "nothing created and nothing charged" stays literally true for
-                # it.
+                # `_insert_all` committed the RECURRING rows too and their
+                # converge will never run — provably un-billed, and an
+                # uncancelled `not_added` row trips
+                # `trg_recurring_no_active_memberships` on EVERY later retry (a
+                # raw-DB 500 staff cannot even see). Sweep ONLY recurring: the
+                # one-time group pays BEFORE its writeback, so it may be billed.
                 await self._cleanup_states(recurring)
                 raise
         if recurring:
@@ -268,12 +214,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
     ) -> MemberMembershipsStartResponse:
         """Build an all-``failed`` breakdown for a decline BEFORE any insert.
 
-        The card was declined while being promoted to the payer's default
-        (``_set_default_card``), which runs before ``_insert_all`` — so no rows,
-        discounts or charges exist and there is nothing to clean up. Every
-        requested membership is marked ``failed`` with the decline reason and
-        ``charge_count`` is 0 (nothing was ever charged). The router maps the
-        failed items to a 207, the decline contract the client already consumes.
+        ``_set_default_card`` runs before ``_insert_all``, so no rows, discounts
+        or charges exist and there is nothing to clean up: every item is
+        ``failed`` with the decline reason and ``charge_count`` is 0 -> 207.
         """
         for state in states:
             state.status = MemberMembershipsStartStatus.failed
@@ -325,17 +268,12 @@ class MemberMembershipsStart(MemberMembershipsBase):
         group: list[MemberMembershipsStartItemState],
     ) -> bool:
         """Charge one consolidated invoice for the one-time group.
-        Keeps rows on success — billed lines are never un-billed.
 
-        Returns:
-            Whether the charge COMMITTED — i.e. the invoice went through and its
-            rows are kept (``_verify_group(keep_unverified=True)`` never un-bills
-            a billed line, so a kept-but-unconfirmed row still counts). ``False``
-            on either DEFINITIVE non-collection — a bank decline or a
-            ``PaymentsNotCollectedError`` — where the group's rows were cleaned
-            up and nothing was collected. A system failure raises instead, so it
-            never returns. The recurring arm needs this answer to know whether a
-            later failure can still claim "nothing created".
+        Returns whether the charge COMMITTED: ``True`` keeps the rows (billed
+        lines are never un-billed, so a kept-but-unconfirmed row counts),
+        ``False`` on either definitive non-collection (decline / SCA), whose
+        rows were cleaned. A system failure raises. The recurring arm needs this
+        to know whether a later failure can still claim "nothing created".
         """
         payment = request.payment
         one_off_pm = (
@@ -353,58 +291,33 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 payment_method_id=one_off_pm,
             )
         except stripe.CardError as exc:
-            # A GENUINE bank decline on the one-time invoice — a definitive
-            # result, not a server failure. Fail the group (its un-billed
-            # pending rows are cleaned up) so the response carries a `failed`
-            # item -> the router's 207 decline contract, never a 500.
+            # A bank decline is a definitive result, not a server failure: fail
+            # the group (its un-billed rows are cleaned) -> the router's 207.
             await self._fail_group(
                 group, f"{CARD_DECLINED_PREFIX}{exc}", cleanup=True,
             )
             return False
         except PaymentsNotCollectedError as exc:
-            # The THIRD outcome, and the one the kiosk path had no answer for:
-            # `invoices.pay` RETURNED, nobody refused, and the money still did
-            # not arrive (the off-session PaymentIntent needs SCA / 3-D Secure).
-            # Just as DEFINITIVE as a decline, so it rides the same 2xx RESULT
-            # contract — but with its OWN prefix, because the advice differs:
-            # "try another card" is wrong when no bank said no.
-            #
-            # Without this the request booked a membership nobody paid for:
-            # `create_invoice_payment` returned status="open", the writeback
-            # stamped the rows `applied`, this method returned True, and the
-            # member walked out unpaid on a 201.
-            #
-            # `cleanup=True` is what keeps the rows from looking billed: the
-            # raise happened BEFORE `PaymentSyncOneTime._writeback`, so they
-            # still carry a NULL `stripe_item_id` and `not_added` — provably
-            # un-billed, exactly like the decline arm above, so deleting them is
-            # correct rather than an un-billing. `_verify_group` is never
-            # reached, so its keep_unverified=True cannot preserve them either.
-            #
-            # It MUST sit above the blanket arm below: `PaymentsNotCollectedError`
-            # subclasses `PaymentsStripeError`, which subclasses `Exception`, so
-            # the generic arm would otherwise raise it into a 500 — burying a
-            # definitive business outcome as an outage.
+            # Nobody refused and the money still did not arrive (SCA) — as
+            # DEFINITIVE as a decline, same 2xx contract, but its OWN prefix
+            # because "try another card" is the wrong advice. `cleanup=True` is
+            # safe ONLY because the raise beat `PaymentSyncOneTime._writeback`:
+            # the rows are still NULL `stripe_item_id` + `not_added`, provably
+            # un-billed. MUST stay above the blanket arm — it subclasses it.
             await self._fail_group(
                 group, f"{NOT_COLLECTED_PREFIX}{exc}", cleanup=True,
             )
             return False
         except Exception:
-            # A SYSTEM failure (a Stripe gateway error, a network timeout, a
-            # rate limit) — not a decline and not a definitive non-collection,
-            # both of which are answered above. Clean up THIS group's pending
-            # rows and propagate so the router returns a non-retryable 500 — a
-            # system failure must never masquerade as "your card was declined"
-            # or as "nobody collected". The same request's RECURRING rows are
-            # swept by the matching arm in ``start`` (they are provably
-            # un-billed, which this group may not be), so no ghost row outlives
-            # the raise.
+            # A SYSTEM failure — never dressed up as a decline or a
+            # non-collection, both answered above. Clean THIS group and
+            # propagate to a non-retryable 500. The request's RECURRING rows are
+            # swept by the matching arm in ``start`` (this group may be billed).
             await self._cleanup_states(group)
             raise
         await self._verify_group(group, keep_unverified=True)
-        # The invoice went through. Even a row whose writeback could not be
-        # confirmed is KEPT and flagged (billed lines are never un-billed), so
-        # from here on this request has moved money whatever else fails.
+        # The invoice went through: even an unconfirmed writeback KEEPS its row
+        # (billed lines are never un-billed), so money has moved from here on.
         return True
 
     async def _set_default_card(
@@ -443,43 +356,26 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 proration_behavior=request.proration_behavior,
             )
         except stripe.CardError as exc:
-            # A GENUINE bank decline on the recurring first invoice (the card
-            # path's `error_if_incomplete` 402s the create/update and leaves no
-            # subscription / rolls the item change back). A definitive result,
-            # not a server failure: fail the group (its un-billed pending rows
-            # are cleaned up) so the response carries a `failed` item -> the
-            # router's 207 decline contract, never a 500.
+            # A bank decline on the recurring first invoice
+            # (`error_if_incomplete` 402s the create/update, leaving no
+            # subscription). Definitive: fail + clean -> the router's 207.
             await self._fail_group(
                 group, f"{CARD_DECLINED_PREFIX}{exc}", cleanup=True,
             )
             return
         except Exception as exc:
-            # Any NON-card failure (a Stripe system/gateway error, a lost
-            # subscription, a network timeout) is NOT a decline, and is never
-            # dressed up as one. Either way the recurring group's un-billed
-            # pending rows go (nothing half-committed); what differs is how the
-            # request ANSWERS.
+            # A NON-card failure, never dressed up as a decline. Either way the
+            # group's un-billed rows go; what differs is how the request ANSWERS.
             await self._cleanup_states(group)
             if not one_time_committed:
-                # Nothing in this request ever collected, so "the whole start
-                # failed and nothing was created" is the literal truth:
-                # propagate and let the router answer a non-retryable 500.
+                # Nothing in this request collected, so "nothing was created" is
+                # literally true: propagate to a non-retryable 500.
                 raise
-            # The one-time leg of this SAME request already charged, and
-            # `_verify_group(keep_unverified=True)` deliberately KEEPS those
-            # billed rows — so a live membership exists and money has moved. The
-            # 500's contract says "nothing created", which would now be a flat
-            # lie about a collected charge; the house rule is that a 2xx no
-            # longer implies money moved and the client branches on the per-item
-            # result. So report the truth per item instead: these recurring
-            # items `failed` -> the router's 207, carrying a SYSTEM-FAILURE
-            # reason that is unmistakably not a bank decline (another card
-            # cannot fix this; staff must finish it). 207 is a 2xx, so no proxy
-            # auto-replays this money-moving request either.
-            #
-            # Swallowing the exception is what would otherwise make the outage
-            # invisible — the router never sees it — so it is logged HERE, with
-            # the stack, before the group is folded into the response.
+            # The one-time leg already charged and `keep_unverified=True` KEPT
+            # those billed rows, so a 500 saying "nothing created" would lie
+            # about money that moved. Report per item instead -> the router's
+            # 207 (a 2xx, so no proxy replays it). Swallowing the exception is
+            # what would make the outage invisible, so log it with its stack.
             logger.error(
                 "Start: the recurring converge failed AFTER the one-time leg "
                 "already collected (payer_member_id=%s, gym_id=%s). The "
@@ -491,10 +387,8 @@ class MemberMembershipsStart(MemberMembershipsBase):
             )
             await self._fail_group(
                 group,
-                # No form of the word "decline" appears here on purpose: this
-                # reason is read by staff (and matched by clients) and the card
-                # was never the problem — saying so in passing invites exactly
-                # the misread the prefix exists to prevent.
+                # No form of "decline" appears here on purpose: staff read this
+                # prose, and the card was never the problem.
                 (
                     f"{SYSTEM_FAILURE_PREFIX}the recurring memberships could "
                     f"not be set up ({type(exc).__name__}). The card was not "

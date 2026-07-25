@@ -409,8 +409,9 @@ class MemberMembershipsChargeCardResponse(BaseModel):
     A collected charge is still 204 with no body — the success contract is
     unchanged. This reuses retry-card's status vocabulary (``decline_reason``
     is the same "why nothing was collected" slot), so a client branches on
-    ``status``, never on the 2xx class. Only ``not_collected`` is reachable
-    here today; a decline on this route is still a 500 — see the router.
+    ``status``, never on the 2xx class. Both non-collecting outcomes are
+    reachable here: ``declined`` (the bank refused) and ``not_collected``
+    (SCA). ``paid`` never is — a collected charge has no body at all.
     """
 
     member_id: UUID

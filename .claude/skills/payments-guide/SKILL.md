@@ -366,7 +366,8 @@ back to active because the DB says it's current.
   500** — start (per-item `failed` + the `not collected: ` prefix), retry-card
   and charge-card (both `status=not_collected` + the same reason wording).
   Charge-card keeps its **204/no-body success** contract and adds the 207 body
-  only for this outcome (`memberships-guide`). It raises
+  for this outcome and for a `stripe.CardError` decline (`memberships-guide`).
+  It raises
   `PaymentsNotCollectedError` **only on a
   positively-read non-`paid` status** — `isinstance(status, str) and status !=
   "paid"`. That narrowing is load-bearing: on the charge path the answer is

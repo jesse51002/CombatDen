@@ -348,10 +348,8 @@ async def unfreeze_membership(
     ),
     responses={
         201: {"description": "All memberships created (full breakdown)"},
-        # Same model on the 207 as on the 201 so a client generator sees the
-        # per-item breakdown BODY, not just a description. This is the primary
-        # kiosk decline surface — the client has to read `results[]` to know
-        # which memberships exist and why the rest do not.
+        # Same model as the 201 so a generated client sees the breakdown BODY:
+        # this is the primary kiosk decline surface, read via `results[]`.
         207: {
             "model": MemberMembershipsStartResponse,
             "description": (
@@ -458,14 +456,9 @@ async def start_membership(
             detail="Failed to start memberships",
         ) from None
 
-    # Any failed charge group → 207 partial; all-created stays 201. The item's
-    # `error` prefix says WHICH kind of failure it was — `card declined: ` (the
-    # bank refused), `not collected: ` (nobody refused and the money still did
-    # not arrive: the charge needs SCA / 3-D Secure authentication) or
-    # `system failure: ` (our side broke after an earlier charge in this same
-    # request already collected, so a 500 claiming "nothing created" would have
-    # been a lie). The status alone can't carry that, which is exactly why
-    # clients branch on the item.
+    # Any failed charge group → 207 partial; all-created stays 201. The status
+    # alone cannot say WHICH kind of failure, which is why clients branch on the
+    # item's `error` prefix (see the prefixes in `memberships_start.py`).
     if any(
         item.status == MemberMembershipsStartStatus.failed
         for item in result.results
@@ -1323,16 +1316,11 @@ async def retry_membership_card(
             detail=error_msg,
         ) from None
     except stripe.CardError as exc:
-        # A bank saying no is a definitive business OUTCOME, not a server
-        # malfunction — so it is returned as a RESULT: 207 (a 2xx, never
-        # auto-replayed by a proxy, so a money-moving retry is still safe)
-        # carrying the decline in the body, exactly as the START path does with
-        # its per-item ``failed`` entry. Reporting it as a 500 would bury real
-        # outages in monitoring under ordinary declines.
-        #
-        # Staff need the DECLINE reason to know what to do next (expired ->
-        # Update Card; insufficient -> tell the member). Stripe writes
-        # ``user_message`` for end-user display, so surface that.
+        # A bank saying no is a definitive OUTCOME, not a malfunction: a 207
+        # RESULT (a 2xx, so no proxy replays a money-moving retry), never a 500
+        # that would bury real outages under ordinary declines. Stripe's
+        # ``user_message`` is its end-user wording, which is what tells staff
+        # what to do next (expired -> Update Card).
         logger.warning(
             "Retry card declined: item_id=%s, member_id=%s, code=%s",
             request.item_id,
@@ -1347,21 +1335,11 @@ async def retry_membership_card(
             decline_reason=(exc.user_message or str(exc)),
         )
     except PaymentsNotCollectedError as exc:
-        # NOT a decline and NOT a malfunction: Stripe accepted the pay call but
-        # the invoice never reached ``paid`` because the off-session
-        # PaymentIntent needs authentication (SCA / 3-D Secure) the member has
-        # to complete. That is just as DEFINITIVE as a decline — "we could not
-        # collect on this card, staff must act" — so it rides the same 2xx
-        # RESULT contract (207, never auto-replayed by a proxy) instead of the
-        # 500 an unrecognised Stripe failure gets, which would bury genuine
-        # outages under an ordinary business outcome.
-        #
-        # Its OWN status, though: telling staff "declined" here would send them
-        # to "try another card" when the bank never refused. The service's
-        # message is written for the front desk, so surface it verbatim.
-        #
-        # MUST stay ABOVE the ``PaymentsStripeError`` arm — this is a subclass,
-        # so the base arm would otherwise win and 500 it.
+        # Nobody refused and the invoice never reached ``paid`` (SCA) — just as
+        # DEFINITIVE as a decline, so the same 207 RESULT contract. Its OWN
+        # status, though: "declined" would send staff to "try another card" when
+        # the bank never refused. MUST stay ABOVE the ``PaymentsStripeError``
+        # arm — it is a subclass, so the base arm would otherwise 500 it.
         logger.warning(
             "Retry card not collected (needs authentication): item_id=%s, "
             "member_id=%s",
@@ -1408,9 +1386,10 @@ async def retry_membership_card(
     description=(
         "Creates and pays a one-off Stripe invoice for amount_cents. "
         "paid_cash marks it out-of-band; payment_method_id bills a one-off "
-        "card. A collected charge is 204; a DEFINITIVE non-collection (the "
-        "payment needs authentication the member must complete) is a result, "
-        "not a server failure — 207 with status=not_collected."
+        "card. A collected charge is 204; a DEFINITIVE answer about the money "
+        "(the bank refused, or the payment needs authentication the member "
+        "must complete) is a result, not a server failure — 207 with "
+        "status=declined or status=not_collected."
     ),
     responses={
         204: {"description": "Card charged successfully"},
@@ -1419,10 +1398,11 @@ async def retry_membership_card(
         207: {
             "model": MemberMembershipsChargeCardResponse,
             "description": (
-                "Nothing collected. status=not_collected (nobody refused, but "
+                "Nothing collected. status=declined (the bank refused — offer "
+                "another card) or status=not_collected (nobody refused, but "
                 "the payment needs extra authorization the member has to "
                 "complete — collect another way); ``decline_reason`` carries "
-                "the reason."
+                "the reason on both."
             ),
         },
         400: {"description": "Invalid request or gym mismatch"},
@@ -1465,13 +1445,29 @@ async def charge_member_card(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
         ) from None
+    except stripe.CardError as exc:
+        # The bank refused — a DEFINITIVE outcome, so a 207 RESULT, not the 500
+        # a malfunction gets. Stripe's ``user_message`` is its end-user wording,
+        # which is what tells staff what to do next (expired -> Update Card).
+        logger.warning(
+            "Charge card declined: member_id=%s, paid_by_member_id=%s, code=%s",
+            request.member_id,
+            request.paid_by_member_id,
+            exc.code,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content=MemberMembershipsChargeCardResponse(
+                member_id=request.member_id,
+                paid_by_member_id=request.paid_by_member_id,
+                status=MemberMembershipsRetryCardStatus.declined,
+                decline_reason=(exc.user_message or str(exc)),
+            ).model_dump(mode="json"),
+        )
     except PaymentsNotCollectedError as exc:
         # Nobody refused and nothing arrived (SCA) — a DEFINITIVE outcome, so a
-        # 207 RESULT carrying the reason, not the 500 a malfunction gets. Only
-        # the success path stays 204/no body. MUST sit above the
-        # PaymentsStripeError arm — this is a subclass, so the base arm would
-        # otherwise win. Contract: CLAUDE.md "Billing / Stripe error status
-        # codes".
+        # 207 RESULT; only success stays 204/no body. MUST sit above the
+        # PaymentsStripeError arm — it is a subclass, so the base arm would win.
         logger.warning(
             "Charge card not collected (needs authentication): member_id=%s, "
             "paid_by_member_id=%s, amount_cents=%s",

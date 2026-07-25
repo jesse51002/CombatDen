@@ -30,10 +30,14 @@ outcomes this endpoint can answer with:
    NOT-COLLECTED (``PaymentsNotCollectedError``: nothing refused, nothing
    collected — SCA) is a 207 RESULT carrying its own reason, never the 500 it
    used to get by falling through to the base ``PaymentsStripeError`` arm.
-7. ``test_endpoint_success_is_still_204_with_no_body`` — the SUCCESS contract
+7. ``test_endpoint_returns_card_decline_as_207_result`` — a bank DECLINE is
+   likewise a 207 RESULT carrying Stripe's own end-user wording. ``CardError``
+   subclasses none of the typed arms, so without its own arm it lands on the
+   blanket ``except Exception`` and the reason is lost entirely.
+8. ``test_endpoint_success_is_still_204_with_no_body`` — the SUCCESS contract
    is untouched: a collected charge stays 204 with an empty body, so every
    existing caller keeps working.
-8. ``test_endpoint_unrecognised_stripe_failure_is_still_500`` — the base
+9. ``test_endpoint_unrecognised_stripe_failure_is_still_500`` — the base
    ``PaymentsStripeError`` is STILL a 500. This is the ORDERING guard: the
    not-collected arm must sit ABOVE it (subclass), and this test is what fails
    if the two are ever swapped.
@@ -44,6 +48,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+import stripe
 
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
@@ -401,6 +406,44 @@ async def test_endpoint_returns_not_collected_as_207_result() -> None:
     assert body["decline_reason"] == reason
     assert "declin" not in body["decline_reason"].lower()
     # The identity echo staff need: whose charge, and whose card went uncharged.
+    assert body["member_id"] == str(request.member_id)
+    assert body["paid_by_member_id"] == str(request.paid_by_member_id)
+
+
+async def test_endpoint_returns_card_decline_as_207_result() -> None:
+    """A bank DECLINE is a 207 RESULT carrying the bank's own reason.
+
+    ``stripe.CardError`` subclasses neither ``ValueError`` nor
+    ``PaymentsStripeError``, so without its own arm it fell past every typed
+    arm onto the blanket ``except Exception`` — a 500 whose ``detail`` was the
+    generic "Failed to charge member card", with the bank's reason discarded.
+    Expired card / insufficient funds at the front desk is far more common here
+    than the SCA case.
+    """
+    from src.memberships.memberships_router import charge_member_card
+
+    auth, service = _charge_router_doubles(
+        side_effect=stripe.CardError(
+            "Your card has expired.",
+            param=None,
+            code="expired_card",
+        ),
+    )
+    request = _charge_request()
+
+    result = await charge_member_card(
+        request=request,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    assert result.status_code == 207
+    body = json.loads(result.body)
+    assert body["status"] == MemberMembershipsRetryCardStatus.declined
+    # Stripe's end-user wording, not a swallowed generic — this is what tells
+    # staff to ask for another card.
+    assert body["decline_reason"] == "Your card has expired."
     assert body["member_id"] == str(request.member_id)
     assert body["paid_by_member_id"] == str(request.paid_by_member_id)
 
