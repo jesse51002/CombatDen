@@ -17,6 +17,13 @@ class GymCreateRequest(BaseModel):
 
     gym_name: str = Field(min_length=1, max_length=255)
     gym_description: str | None = None
+    # Free-text street address, OPTIONAL at onboarding: the owner may
+    # type it on the "Name Your Gym" wizard step or leave it blank and
+    # set it later in CRM Settings. Nullable on the row, so an omitted
+    # or null value simply means "no address set" — deliberately NOT in
+    # the strip/require-non-empty validator below (that guards the
+    # REQUIRED strings only), matching gym_description.
+    address: str | None = None
     timezone: str = "America/Chicago"
     owner_first_name: str = Field(min_length=1, max_length=255)
     owner_last_name: str = Field(min_length=1, max_length=255)

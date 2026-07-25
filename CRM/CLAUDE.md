@@ -358,7 +358,6 @@ Scoped / significant dependencies:
 - `supabase_flutter` — auth (JWT for `ApiClient`, session refresh) and real-time DB for the CRM stack. Gated in `main.dart`; absent from the theme-browser target.
 - `flutter_stripe` / `flutter_stripe_web` / `stripe_js` — Stripe payment collection: the member-detail billing dialogs, and the **kiosk signup's card step** (`features/kiosk/.../signup/kiosk_card_step.dart`), which wraps the same shared `CardFieldBox` and tokenizes with `Stripe.instance.createPaymentMethod`. The kiosk holds only the resulting `pm_…` id plus the brand/last-four — never card data, never a saved-card list, and it names the payer the card attaches to (the fresh-card law; see the `kiosk-guide` skill).
 - **DI is manual constructor injection — CRM code does not use a service locator.** Repositories and blocs are constructed inline at their `RepositoryProvider` / `BlocProvider` `create:` sites. `get_it` is declared in `pubspec.yaml` and pulled transitively by `theme_flutter`, but nothing in `lib/` references it — do not introduce a service locator.
-- `get_it` — service locator for DI across CRM features.
 - `json_annotation` / `json_serializable` / `build_runner` — code-gen for API response models (`*.g.dart`).
 - `flutter_dotenv` — loads `.env.dev` / `.env.prod` at startup for Supabase / Stripe / `API_BASE_URL` (see *Configuration*).
 - `intl` — date/currency formatting. `uuid` — local UUIDs for optimistic creates. `stream_transform` — bloc stream operators (debounce/switchMap).

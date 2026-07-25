@@ -145,6 +145,10 @@ class GymsCreateService:
                 {
                     "gym_name": request.gym_name,
                     "gym_description": request.gym_description,
+                    # Optional at onboarding — None when the owner skipped
+                    # the wizard's address field (they can set it later in
+                    # CRM Settings).
+                    "address": request.address,
                     "timezone": request.timezone,
                 },
             )
