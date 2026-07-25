@@ -69,9 +69,19 @@ def create_attendance(
     instance_exceptions: list[ClassInstanceExceptionCreate],
     range_exceptions: list[ClassRangeExceptionCreate],
 ) -> tuple[list[GymClassCreate], list[MemberAttendanceCreate]]:
-    """Seed member_attendance for the past month. Returns the
-    attendance-eligible class subset alongside the rows, so `create_signups`
-    can scope its past sign-ups to the exact same occurrences.
+    """Seed member_attendance over each class's already-occurred history.
+
+    The pool per eligible class is the EARLIEST `instances_per_class` (30)
+    occurrences that have already happened, walked from that class's own
+    recurrence start_date (60-200 days back) — so the sampled window spans
+    months from where each class began, not a trailing 30 days. Every covered
+    member attends a random subset of that pool, capped at
+    MAX_CLASSES_ATTENDED_PER_MEMBER.
+
+    Returns the attendance-eligible class subset alongside the rows, so
+    `create_signups` can scope its past sign-ups to the exact same
+    occurrences. Also writes back the two member columns the attendance
+    determines: `last_class` and the earned `points_balance`.
     """
     eligible_classes = classes_generator.select_attendance_eligible_classes(classes)
     attendance = classes_generator.generate_attendance(
@@ -99,6 +109,20 @@ def create_attendance(
             client.table("members").update({"last_class": last_ts}).eq(
                 "member_id", str(member_id)
             ).execute()
+
+    # Award the points the attendance earned. The live check-in adds a class's
+    # points_worth to the member in the same transaction as the attendance
+    # INSERT, so the seed reproduces that side-effect instead of leaving a
+    # balance unrelated to anything. Runs before bootstrap/rewards.
+    # create_redemptions, which debits this earned total — so the member rows
+    # already carry it when a redemption is priced against it. Empty map when
+    # there is no attendance (those rows already hold 0).
+    for member_id, balance in classes_generator.award_attendance_points(
+        members, classes, attendance
+    ).items():
+        client.table("members").update({"points_balance": balance}).eq(
+            "member_id", str(member_id)
+        ).execute()
 
     return eligible_classes, attendance
 
