@@ -104,10 +104,22 @@ class GymWithRoleResponse(GymResponse):
     caller's role for that gym). ``theme_preference`` is the caller's
     own CRM appearance choice for that gym, so the admin app can
     hydrate the theme at login.
+
+    ``stripe_account_id`` is the gym's Stripe Connect connected-account
+    id (``acct_…``); ``None`` until the gym finishes Stripe onboarding.
+    It is exposed HERE — on this authenticated staff read — and
+    deliberately NOT on the base ``GymResponse`` (whose "no Stripe
+    state" contract stays intact). The id is client-safe: it rides in
+    the browser in every Connect direct-charge integration, and the CRM
+    needs it to set the Stripe.js connected-account context so a
+    browser-tokenized card is minted on the gym's connected account
+    (attach is connected-account-scoped, so a platform-minted card
+    cannot attach to a connected-account customer).
     """
 
     employee_type: EmployeeType
     theme_preference: ThemeMode
+    stripe_account_id: str | None = None
 
 
 class EmployeeThemeUpdateData(BaseModel):
@@ -156,6 +168,21 @@ class GymThemeResponse(BaseModel):
 
     gym_id: UUID
     theme_design_id: str
+
+
+class GymAppLinksResponse(BaseModel):
+    """Resolved member-app store links for a gym (public read).
+
+    Returned by ``GET /api/v1/gyms/{gym_id}/app-links`` — the public
+    per-gym app-download page (opened from a QR on any phone). Each link
+    resolves to the gym's own white-label listing
+    (``gyms.app_store_url`` / ``gyms.play_store_url``) when set, else the
+    CombatDen default listing (``settings.combatden_app_store_url`` /
+    ``combatden_play_store_url``). Both are therefore always populated.
+    """
+
+    ios_url: str
+    android_url: str
 
 
 class GymCreateResponse(BaseModel):

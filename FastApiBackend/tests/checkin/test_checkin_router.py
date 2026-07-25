@@ -1,16 +1,20 @@
 """Smoke + edge tests for the checkin router.
 
-The gated check-in flow runs many DB queries plus the cycle-counts service, so
-these router tests override the resolver + member-gate providers with doubles
-and assert the router's wiring (auth -> resolve -> gate -> serialization). The
-gating *logic* is unit-tested directly in
-``checkin/test_checkin_plan_selector.py``.
+Doubles the resolver + member-gate providers and asserts the router's wiring
+(auth -> resolve -> gate -> serialization). The gating LOGIC is unit-tested in
+``test_checkin_plan_selector.py``, the type -> status contract in
+``test_checkin_error_mapping.py``; the status cases here are smoke coverage.
 """
 
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
+from src.checkin.checkin_exceptions import (
+    CheckinClassFullError,
+    CheckinClassNotFoundError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.batch_checkin_schema import (
     BatchCheckinItemResult,
     BatchCheckinItemStatus,
@@ -21,6 +25,7 @@ from src.checkin.schema.checkin_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
     CheckinWarning,
+    StreakResult,
 )
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
@@ -29,19 +34,29 @@ from src.checkin.schema.signup_schema import (
 from src.main import app
 
 _STUB_STREAK_WEEKS = 3
+# Mon + Wed + Fri attended this week (Monday-first, index 0 = Mon .. 6 = Sun).
+_STUB_WEEK_DAYS = [True, False, True, False, True, False, False]
 
 
-def _override_checkin(response: CheckinResponse) -> None:
-    """Double the resolver + member gate + streak service so the single-checkin
-    handler returns ``response`` (enriched with a stub streak) without touching
-    the DB. Caller resets via ``_reset_checkin``.
+def _override_checkin(
+    response: CheckinResponse, *, streak_error: Exception | None = None
+) -> None:
+    """Double the resolver + member gate + streak service so the handler
+    returns ``response`` without touching the DB; reset via ``_reset_checkin``.
+    ``streak_error`` makes the streak read RAISE instead.
     """
     resolver = MagicMock()
     resolver.resolve = AsyncMock(return_value=MagicMock())
     gate = MagicMock()
     gate.checkin_member = AsyncMock(return_value=response)
     streak = MagicMock()
-    streak.get_streak = AsyncMock(return_value=_STUB_STREAK_WEEKS)
+    streak.get_streak_details = AsyncMock(
+        side_effect=streak_error,
+        return_value=StreakResult(
+            weeks=_STUB_STREAK_WEEKS,
+            current_week_days=list(_STUB_WEEK_DAYS),
+        ),
+    )
     app.container.checkin_class_resolver.override(resolver)
     app.container.checkin_member_gate.override(gate)
     app.container.streak_service.override(streak)
@@ -106,8 +121,9 @@ def test_checkin_records_when_a_plan_covers_the_class(
     body = resp.json()
     assert body["log_id"] == log_id
     assert body["already_checked_in"] is False
-    # A recorded check-in folds in the member's streak.
+    # A recorded check-in folds in the member's streak + current-week strip.
     assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
+    assert body["current_week_days"] == _STUB_WEEK_DAYS
     assert body["chosen_plan_id"] == str(plan_id)
     assert body["chosen_item_id"] == str(item_id)
     assert body["points_awarded"] == 50
@@ -117,11 +133,10 @@ def test_checkin_records_when_a_plan_covers_the_class(
 def test_checkin_idempotent_repeat_also_folds_in_the_streak(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """An already-checked-in repeat is a real attendance too: the gate's
-    repeat builder leaves ``class_streak_weeks`` at 0, and it is the ROUTER
-    that folds the streak into the response — for repeats exactly like fresh
-    check-ins (the fold condition is ``log_id is not None OR
-    already_checked_in``)."""
+    """A repeat is a real attendance too, so the router folds the streak in for
+    it exactly like a fresh check-in. The fold condition is
+    ``log_id is not None`` — a repeat echoes the existing row's id, while only a
+    rejection / needs-confirmation (nothing written) stays at the defaults."""
     class_id = str(uuid4())
     response = CheckinResponse(
         log_id=str(uuid4()),
@@ -153,6 +168,52 @@ def test_checkin_idempotent_repeat_also_folds_in_the_streak(
     body = resp.json()
     assert body["already_checked_in"] is True
     assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
+
+
+def test_streak_failure_cannot_fail_a_recorded_checkin(
+    client, auth_headers, fake_member_id, fake_gym_id
+):
+    """A DECORATIVE read must never undo a COMMITTED write.
+
+    The streak fold runs after the attendance row and points are committed, so
+    letting its failure reach the handler's 500 arm would tell the member they
+    were not checked in while the row exists. The check-in still reports
+    success; the strip stays at its schema defaults.
+    """
+    log_id = str(uuid4())
+    class_id = str(uuid4())
+    response = CheckinResponse(
+        log_id=log_id,
+        member_id=fake_member_id,
+        class_id=class_id,
+        already_checked_in=False,
+        chosen_plan_id=None,
+        chosen_item_id=None,
+        points_awarded=50,
+        memberships=[],
+    )
+    _override_checkin(response, streak_error=RuntimeError("streak query died"))
+    try:
+        resp = client.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": fake_member_id,
+                "gym_id": fake_gym_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        _reset_checkin()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["log_id"] == log_id
+    assert body["points_awarded"] == 50
+    assert body["class_streak_weeks"] == 0
+    assert body["current_week_days"] == [False] * 7
 
 
 def test_checkin_rejected_when_no_plan_covers(
@@ -202,9 +263,8 @@ def test_checkin_rejected_when_no_plan_covers(
 def test_checkin_staff_needs_confirmation(
     client, auth_headers, fake_member_id, fake_gym_id
 ):
-    """A staff (is_member=False) check-in the gate warns on, without an override,
-    is held for confirmation: 200, log_id null, requires_confirmation true, the
-    warning, nothing written."""
+    """A warned staff (is_member=False) check-in without an override is held
+    for confirmation: 200, null log_id, requires_confirmation, nothing written."""
     class_id = str(uuid4())
     response = CheckinResponse(
         log_id=None,
@@ -291,15 +351,10 @@ def test_checkin_idempotent_returns_already_checked_in(
     assert body["points_awarded"] == 0
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/checkin/batch
+# ── POST /api/v1/checkin/batch ─────────────────────────────────────────
 #
-# class_id + occurrence_date now ride in the body (not the path). The batch
-# service is overridden with a double; these assert the router's status-code
-# mapping (207 on any processed mix, 500 on total failure, 404/400 on an
-# unresolved occurrence, 422 on an empty member list) + serialization. The batch
-# FLOW is unit-tested in checkin/test_batch_checkin_service.py.
-# ---------------------------------------------------------------------------
+# Status-code mapping + serialization only, over a doubled batch service. The
+# batch FLOW is unit-tested in test_batch_checkin_service.py.
 
 _BATCH_CLASS_ID = uuid4()
 _BATCH_OCCURRENCE_DATE = "2026-06-01"
@@ -308,7 +363,7 @@ _BATCH_URL = "/api/v1/checkin/batch"
 
 
 def _batch_body(gym_id, member_ids: list[str]) -> dict:
-    """A batch request body with class_id + occurrence_date/time in the body."""
+    """A batch request body."""
     return {
         "gym_id": gym_id,
         "class_id": str(_BATCH_CLASS_ID),
@@ -413,8 +468,9 @@ def test_batch_checkin_total_failure_returns_500(
 def test_batch_checkin_class_not_found_returns_404(
     client, auth_headers, fake_gym_id
 ):
-    """A ValueError mentioning 'not found' maps to 404 before any member work."""
-    _override_batch(side_effect=ValueError("Class not found"))
+    """404 before any member work, by TYPE — the full table lives in
+    test_checkin_error_mapping.py."""
+    _override_batch(side_effect=CheckinClassNotFoundError("Class not found"))
     try:
         resp = client.post(
             _BATCH_URL,
@@ -430,9 +486,10 @@ def test_batch_checkin_class_not_found_returns_404(
 def test_batch_checkin_invalid_occurrence_returns_400(
     client, auth_headers, fake_gym_id
 ):
-    """A non-'not found' ValueError (not a real occurrence) maps to 400."""
+    """400, not 404: occurrences are computed, so a bad slot is a bad address
+    rather than a missing resource."""
     _override_batch(
-        side_effect=ValueError(
+        side_effect=CheckinOccurrenceNotFoundError(
             "No class occurrence on 2026-06-01 for this class"
         )
     )
@@ -460,9 +517,7 @@ def test_batch_checkin_empty_member_ids_returns_422(
     assert resp.status_code == 422
 
 
-# ---------------------------------------------------------------------------
-# POST /api/v1/signup, DELETE /api/v1/signup
-# ---------------------------------------------------------------------------
+# ── POST /api/v1/signup, DELETE /api/v1/signup ─────────────────────────
 
 
 def _signup_body(gym_id: str, member_id: str, class_id: str) -> dict:
@@ -524,9 +579,9 @@ def test_signup_idempotent_repeat_returns_existing_id(
 
 
 def test_signup_full_class_returns_400(client, auth_headers, fake_gym_id):
-    """A ValueError('Class is full') from the service maps to 400."""
+    """A CheckinClassFullError from the service maps to 400."""
     service = MagicMock()
-    service.create = AsyncMock(side_effect=ValueError("Class is full"))
+    service.create = AsyncMock(side_effect=CheckinClassFullError("Class is full"))
     app.container.signup_service.override(service)
     try:
         resp = client.post(
@@ -542,9 +597,11 @@ def test_signup_full_class_returns_400(client, auth_headers, fake_gym_id):
 
 
 def test_signup_unknown_class_returns_404(client, auth_headers, fake_gym_id):
-    """A ValueError('Class not found') from the service maps to 404."""
+    """A CheckinClassNotFoundError from the service maps to 404."""
     service = MagicMock()
-    service.create = AsyncMock(side_effect=ValueError("Class not found"))
+    service.create = AsyncMock(
+        side_effect=CheckinClassNotFoundError("Class not found")
+    )
     app.container.signup_service.override(service)
     try:
         resp = client.post(
@@ -593,9 +650,8 @@ def test_remove_signup_missing_params_returns_422(client, auth_headers) -> None:
 
 
 def test_attendees_returns_list(client, auth_headers, fake_gym_id):
-    """GET /api/v1/checkin/attendees returns the combined roster: an attended
-    member (with billing attribution) and a signed-up-only member (attendance
-    fields null)."""
+    """The combined roster: an attended member (with billing attribution) plus a
+    signed-up-only member (attendance fields null)."""
     class_id = uuid4()
     member_a, member_b = uuid4(), uuid4()
     plan_id, item_id = uuid4(), uuid4()
@@ -669,8 +725,7 @@ def test_streak_returns_zero_when_no_attendance(
     """GET /api/v1/streak returns 0 weeks for a never-attended member."""
     streak_result = MagicMock()
     streak_result.all.return_value = []
-    # Same mocked result serves both the gym-timezone lookup
-    # (``scalar_one``) and the week-bucket query (``all``).
+    # One mocked result serves both the gym-timezone lookup and the buckets.
     streak_result.scalar_one.return_value = "America/Chicago"
 
     session = db_pool_mock.session.return_value

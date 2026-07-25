@@ -15,6 +15,8 @@ Endpoints:
       ThemeService design id (branding).
     * ``PUT /api/v1/gyms/{gym_id}/employees/me/theme`` — save the
       caller's CRM theme preference (system/light/dark).
+    * ``GET /api/v1/gyms/{gym_id}/app-links`` — PUBLIC (unauthenticated)
+      resolved member-app store links for the per-gym download page.
 """
 
 import logging
@@ -29,6 +31,7 @@ from src.core.dependencies import DependencyInjector
 from src.gyms.schema.gyms_schema import (
     EmployeeThemeResponse,
     EmployeeThemeUpdateRequest,
+    GymAppLinksResponse,
     GymCreateRequest,
     GymCreateResponse,
     GymOnboardingLinkResponse,
@@ -485,4 +488,50 @@ async def update_my_theme(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update theme preference",
+        ) from None
+
+
+# ── App-download links (PUBLIC) ───────────────────────────────
+
+
+@gyms_router.get(
+    "/{gym_id}/app-links",
+    response_model=GymAppLinksResponse,
+    summary="Resolved member-app store links for a gym (PUBLIC)",
+    description=(
+        "PUBLIC / unauthenticated: the per-gym app-download page is "
+        "opened from a QR code on any phone, so this read carries no "
+        "auth. Returns the gym's resolved iOS + Android member-app "
+        "store links — each is the gym's own white-label listing "
+        "(``gyms.app_store_url`` / ``play_store_url``) when set, else "
+        "the CombatDen default listing. Only the two store URLs are "
+        "exposed (public app-listing info); an unknown gym is 404."
+    ),
+    responses={
+        200: {"description": "Resolved app links"},
+        404: {"description": "Gym not found"},
+    },
+)
+@inject
+async def get_app_links(
+    gym_id: UUID,
+    gyms_service: GymsService = Depends(Provide[DependencyInjector.gyms_service]),
+) -> GymAppLinksResponse:
+    """Return a gym's resolved member-app store links (no auth)."""
+    try:
+        return await gyms_service.get_app_links(gym_id)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to resolve app links: gym_id=%s",
+            gym_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to resolve app links",
         ) from None

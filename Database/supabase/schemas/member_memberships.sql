@@ -44,9 +44,12 @@ CREATE TABLE member_memberships_unfiltered (
     -- Service_role writeback. 'not_added' = pending sync; 'applied'/'deleted' after Stripe confirms.
     stripe_sync_status stripe_sync_status NOT NULL DEFAULT 'not_added',
 
-    -- Idempotency token for one-time/trial start rows. Derived as uuid5(request_key, member:price).
-    -- Retried requests reproduce the same key and collide on the partial unique index below.
-    -- NULL for recurring (blocked by trg_recurring_no_active_memberships) and preview rows.
+    -- Idempotency token stamped on EVERY real start row (one-time, trial AND recurring).
+    -- Derived as uuid5(request_key, member:price); retried requests reproduce the same key
+    -- and collide on the partial unique index below. NULL only for preview_add rows.
+    -- Recurring rows carry it because trg_recurring_no_active_memberships is a SELECT COUNT
+    -- in a BEFORE INSERT trigger -- correct, but NOT race-safe: two concurrent re-fires both
+    -- read before either commits and both pass it. The unique index is what serializes them.
     idempotency_key UUID,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -75,7 +78,7 @@ CREATE INDEX idx_member_memberships_paid_by
     ON member_memberships_unfiltered (paid_by_member_id)
     WHERE cancel_date IS NULL;
 
--- Backs one-time start idempotency: retried rows collide here and are dropped by ON CONFLICT DO NOTHING.
+-- Backs start idempotency for every plan type: retried rows collide here and are dropped by ON CONFLICT DO NOTHING.
 CREATE UNIQUE INDEX idx_member_memberships_idempotency_key
     ON member_memberships_unfiltered (idempotency_key)
     WHERE idempotency_key IS NOT NULL;

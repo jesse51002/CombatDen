@@ -1056,3 +1056,73 @@ class TestClassHistoryPointsWorth:
             assert mine[0]["points_worth"] == expected_points
         finally:
             _delete_raw_attendance(member_id, class_id, original_date)
+
+
+class TestCurrentWeekDaysStrip:
+    """The kiosk-glance strip: ``StreakService.get_streak_details`` returns a
+    length-7, Monday-first (index 0 = Mon .. 6 = Sun) ``current_week_days``
+    list -- True on each gym-local weekday the member attended THIS gym-local
+    week -- exercised against the real ``current_week_days.sql`` (a live DB
+    session). Uses the attendance-free member so the strip is fully determined
+    by the rows this test inserts, and buckets against the SAME gym-local
+    Monday anchor as the week count (they cannot disagree)."""
+
+    def test_strip_flags_attended_gym_local_weekdays_monday_first(
+        self, seed_ids: dict
+    ) -> None:
+        member_row = seed_ids["attendance_free_member"]
+        class_id = seed_ids["any_class_id"]
+        tz_name = seed_ids["gym_timezone"]
+        if member_row is None or class_id is None or tz_name is None:
+            pytest.skip(
+                "Seed missing an attendance-free member / class / gym timezone"
+            )
+        member_id = str(member_row["member_id"])
+        class_id = str(class_id)
+        gym_tz = ZoneInfo(tz_name)
+
+        # This gym-local week's Monday, plus the Wednesday in the same week.
+        today_gym = datetime.now(UTC).astimezone(gym_tz).date()
+        current_monday = today_gym - timedelta(days=today_gym.weekday())
+        wednesday = current_monday + timedelta(days=2)
+
+        # Mid-day gym-local instants -> unambiguously inside the gym-local
+        # week (well clear of any midnight-UTC rollover edge, which its own
+        # regression test above already covers).
+        def _noon_utc(day: date) -> datetime:
+            return datetime.combine(
+                day, time(12, 0), tzinfo=gym_tz
+            ).astimezone(UTC)
+
+        _insert_raw_attendance(
+            member_id, class_id, current_monday, time(12, 0),
+            _noon_utc(current_monday),
+        )
+        _insert_raw_attendance(
+            member_id, class_id, wednesday, time(12, 0),
+            _noon_utc(wednesday),
+        )
+        try:
+
+            async def _run() -> tuple[list[bool], int]:
+                pool = DirectDatabasePool()
+                try:
+                    details = await StreakService(pool).get_streak_details(
+                        UUID(member_id), UUID(GYM_ID)
+                    )
+                    return details.current_week_days, details.weeks
+                finally:
+                    await pool.engine.dispose()
+
+            current_week_days, weeks = _run_async(_run())
+
+            # Monday (index 0) and Wednesday (index 2) flagged, all else False.
+            assert current_week_days == [
+                True, False, True, False, False, False, False,
+            ]
+            # Both derive from the same gym-local Monday anchor: attendance
+            # only this week -> exactly a 1-week streak.
+            assert weeks == 1
+        finally:
+            _delete_raw_attendance(member_id, class_id, current_monday)
+            _delete_raw_attendance(member_id, class_id, wednesday)

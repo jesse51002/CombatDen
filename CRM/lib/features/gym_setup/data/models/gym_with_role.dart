@@ -34,6 +34,15 @@ class GymWithRole {
   /// gym's saved branding.
   final String? themeDesignId;
 
+  /// The gym's Stripe Connect connected-account id (`gyms.stripe_account_id`,
+  /// an `acct_…`); null until the gym finishes Stripe onboarding. The auth gate
+  /// hands it to [SelectedGym.setActiveGym], which applies it to the Stripe.js
+  /// client via `stripeAccountContext` so browser-tokenized cards are minted on
+  /// the gym's connected account (a platform-owned card cannot attach to a
+  /// connected-account customer). Client-safe — it rides in the browser in
+  /// every Connect direct-charge integration.
+  final String? stripeAccountId;
+
   /// When the gym was created (`gyms.created_at`); null on an older backend
   /// that doesn't yet return the field. The Settings → Reports & exports
   /// month picker floors its year list at this year (falling back to a fixed
@@ -49,6 +58,7 @@ class GymWithRole {
     this.gymDescription,
     this.address,
     this.themeDesignId,
+    this.stripeAccountId,
     this.logoUrl,
     this.createdAt,
   });
@@ -66,6 +76,7 @@ class GymWithRole {
       themePreference:
           themeModeFromApi(json['theme_preference'] as String?),
       themeDesignId: json['theme_design_id'] as String?,
+      stripeAccountId: json['stripe_account_id'] as String?,
       createdAt: createdAtRaw == null ? null : DateTime.tryParse(createdAtRaw),
     );
   }

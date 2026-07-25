@@ -9,7 +9,7 @@ import 'package:crm/showcase/showcase_assets.dart';
 import 'package:crm/showcase/showcase_slots.dart';
 import 'package:crm/showcase/showcase_tokens.dart';
 import 'package:crm/showcase/support/showcase_scaffold.dart';
-import 'package:crm/showcase/support/staggered_reveal.dart';
+import 'package:crm/shared/widgets/animation/staggered_reveal.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:theme_flutter/theme/theme_text.dart';

@@ -33,6 +33,7 @@ from typing import NamedTuple
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from constants import MAX_CLASSES_ATTENDED_PER_MEMBER
 from dateutil.relativedelta import relativedelta
 
 from schema.gym_class import (
@@ -869,6 +870,8 @@ def generate_attendance(
     the occurrence's ORIGINAL slot (original_date + the owning version's
     original_time) with `occurred_at` as the denormalized effective UTC
     instant.
+
+    A member's subset is capped at MAX_CLASSES_ATTENDED_PER_MEMBER.
     """
     today = date.today()
     window_end = today + timedelta(days=FUTURE_SIGNUP_HORIZON_DAYS)
@@ -917,7 +920,9 @@ def generate_attendance(
         if random.random() < 0.05:
             continue  # ~5% of covered members still never attended
 
-        n_attended = random.randint(1, min(15, len(eligible)))
+        n_attended = random.randint(
+            1, min(MAX_CLASSES_ATTENDED_PER_MEMBER, len(eligible))
+        )
         for class_id, occ, cover in random.sample(eligible, n_attended):
             attendance.append(
                 MemberAttendanceCreate(
@@ -942,6 +947,35 @@ def generate_attendance(
             )
 
     return attendance
+
+
+def award_attendance_points(
+    members: list[MemberCreate],
+    classes: list[GymClassCreate],
+    attendance: list[MemberAttendanceCreate],
+) -> dict[UUID, int]:
+    """Give each member the points their seeded attendance earned them.
+
+    The seed's mirror of the live check-in side-effect (each attendance adds
+    its class's `points_worth`), so a balance is a figure a CRM reader can add
+    up from the member's own attendance list.
+
+    Mutates `MemberCreate.points_balance` in place and returns the
+    {member_id: balance} write-back map -- a member with no attendance is
+    absent, their row already holding 0.
+
+    Assignment, not accumulation, so a second call over the same attendance is
+    a no-op rather than a double award. Must run BEFORE redemptions, which
+    debit this earned total.
+    """
+    points_worth = {cls.class_id: cls.points_worth for cls in classes}
+    earned: dict[UUID, int] = defaultdict(int)
+    for row in attendance:
+        earned[row.member_id] += points_worth[row.class_id]
+    for member in members:
+        if member.member_id in earned:
+            member.points_balance = earned[member.member_id]
+    return dict(earned)
 
 
 def _effective_capacity(

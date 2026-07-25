@@ -276,6 +276,30 @@ class MarkPaidCashRequested extends MemberDetailEvent {
   List<Object?> get props => [itemId, memberId];
 }
 
+/// Re-charges the payer's SAVED DEFAULT card against the overdue
+/// membership's open invoice. Same handles as
+/// [MarkPaidCashRequested] — the two settle the same open invoice,
+/// one on the card and one out of band. Takes no card: the backend
+/// bills whatever is on file.
+class RetryCardPaymentRequested extends MemberDetailEvent {
+  final String itemId;
+  final String memberId;
+  const RetryCardPaymentRequested({
+    required this.itemId,
+    required this.memberId,
+  });
+
+  @override
+  List<Object?> get props => [itemId, memberId];
+}
+
+/// Clears the retry-payment outcome (error) when the retry dialog
+/// opens, so a prior decline doesn't flash (mirrors
+/// [CancelOneTimeOutcomeCleared]).
+class RetryCardPaymentOutcomeCleared extends MemberDetailEvent {
+  const RetryCardPaymentOutcomeCleared();
+}
+
 /// Commits adding applied-discount rows to a membership
 /// — the named [discountIds] (by discount id, any type incl. a
 /// `linked` family discount) frozen at their active value

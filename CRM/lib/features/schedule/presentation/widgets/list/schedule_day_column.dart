@@ -63,6 +63,7 @@ class _DayCards extends StatelessWidget {
             signupCount: e.signupCount,
             occurrenceInPast: e.occurrenceInPast,
             isCancelled: e.isCancelled,
+            isPaused: !e.isActive,
             onTap: () => onClassTap(e),
           ),
       ],

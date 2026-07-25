@@ -1,25 +1,19 @@
 """Live-DB integration for the video RAG read surface (single rec + click).
 
-Drives the real endpoints against the shared local Supabase over an ASGI
-transport. ``auth`` is overridden always-pass for the happy-path tests; the
-403 test wires the REAL ``verify_gym_employee_for_member`` behind a fake JWT
-payload so a caller who is not staff of the member's gym is rejected. The LLM
-client is overridden with a deterministic stub — its embedding is a fixed
-vector sized to ``settings.video_embedding_dim`` (no provider call) that the
-seeded
-``video_rag`` row also carries so retrieval is clean, and its summary call
-returns a canned taste paragraph (no chat model call).
+Drives the real endpoints against the shared local Supabase over ASGI. ``auth``
+is always-pass except in the 403 test, which wires the REAL
+``verify_gym_employee_for_member`` behind a fake JWT payload. The LLM client is
+a deterministic stub: a fixed embedding sized to ``settings.video_embedding_dim``
+(the seeded ``video_rag`` row carries the same vector, so retrieval is exact)
+and a canned taste summary — no provider calls.
 
-The rec surface serves ONE rotating-category recommendation and records it, so a
-GET returns ``{rec_id, category, video}`` and appends a ``member_video_recs``
-row. The per-member RAG profile is columns on ``members``
-(``video_profile_summary`` / ``video_profile_embedding`` / …), not a sidecar
-table. These tests require the pending video-worker-RAG migration (pgvector, the
-``video_rag`` / ``member_video_recs`` tables, the ``members.video_profile_*``
-columns, and ``member_video_recs.clicked_at``). Until it is applied on the
-shared local DB, the rec/click tests fail at the query — the expected
-"pending migration apply" state, not a code fault. The 403 test only reads
-``members`` / ``gym_employees`` and passes regardless.
+**Every test that seeds videos runs against ``rag_gym``, its OWN throwaway
+gym.** The feed/rec reads rank a candidate set scoped to ONE gym, so "my seeded
+video is the pick" only asserts anything when the gym's feed holds nothing
+else; the shared seeded gym's feed is a live, growing pool spanning every
+rotation genre, which would make the precondition seed luck. The two tests that
+seed NO videos stay on the seeded ``gym_id``, where their ``members`` /
+``gym_employees`` setup lives.
 """
 
 from __future__ import annotations
@@ -39,12 +33,10 @@ from src.shared.auth import Auth
 from src.shared.database import DirectDatabasePool
 
 _AUTH_HEADERS = {"Authorization": "Bearer fake-jwt"}
-# Sized to the cross-service embedding contract so the test vector always matches
-# the vector(N) column width (tracks video_embedding_dim through model changes).
+# Read from settings so the test vector tracks the vector(N) column width.
 _EMBEDDING_DIM = settings.video_embedding_dim
-# One shared deterministic vector: the member profile embeddings AND the seeded
-# video_rag row use it, so cosine distance is 0 (similarity 1) and retrieval is
-# deterministic without an OpenAI call.
+# One shared vector for the member profile AND the seeded video_rag row, so
+# cosine distance is 0 and retrieval is deterministic without a provider call.
 _VEC = [0.02] * _EMBEDDING_DIM
 _VEC_LITERAL = "[" + ",".join(str(x) for x in _VEC) + "]"
 
@@ -57,12 +49,10 @@ def _vec(nonzero: dict[int, float]) -> str:
     return "[" + ",".join(str(x) for x in arr) + "]"
 
 
-# Crafted vectors for the ranking tests. Cosine distance (`<=>`) to _MEMBER_VEC:
-#   _VEC_NEAR  → 0.0     (identical direction)
-#   _VEC_NEAR2 → ~0.0012 (a 0.05 nudge on axis 1)
-#   _VEC_FAR   → 1.0     (orthogonal)
-# A tight #1↔#2 gap (~0.0012) with a fat spread (the far cluster) is what lets
-# 0.1σ (~0.06) exceed the gap so the owner boost / served penalty can flip #1↔#2.
+# Crafted for the ranking tests — cosine distance (`<=>`) to _MEMBER_VEC is 0.0
+# / ~0.0012 / 1.0. A tight #1↔#2 gap with a fat spread (the far cluster) is what
+# lets 0.1σ (~0.06) exceed the gap, so the owner boost / served penalty can flip
+# the top two. Retuning these numbers breaks both flip tests.
 _MEMBER_VEC = _vec({0: 1.0})
 _VEC_NEAR = _vec({0: 1.0})
 _VEC_NEAR2 = _vec({0: 1.0, 1: 0.05})
@@ -154,10 +144,59 @@ async def _delete_rag_seed(
 
 
 @pytest.fixture
+async def rag_gym(db_pool: DirectDatabasePool) -> AsyncGenerator[UUID]:
+    """A throwaway gym whose video feed starts EMPTY — the candidate set the
+    seeding tests own outright. Function-scoped, so each test starts clean.
+
+    Created by direct INSERT rather than ``POST /api/v1/gyms/`` on purpose: the
+    API path provisions a Stripe Connect account and nothing here bills.
+
+    Teardown is FK-safe and touches only THIS gym, never the seeded gym or the
+    shared video pool: ``member_activities`` (no cascade from ``members``) →
+    this gym's videos (cascading ``video_rag`` / ``gym_video_feed`` /
+    ``member_video_recs``) → ``members`` (no cascade from ``gyms``) → the gym.
+    """
+    async with db_pool.session() as session, session.begin():
+        row = (
+            (
+                await session.execute(
+                    text(
+                        "INSERT INTO gyms (gym_name) VALUES (:name) "
+                        "RETURNING gym_id"
+                    ),
+                    {"name": f"ZZ RAG Test Gym {uuid4().hex[:8]}"},
+                )
+            )
+            .mappings()
+            .fetchone()
+        )
+    gym = UUID(str(row["gym_id"]))
+    try:
+        yield gym
+    finally:
+        async with db_pool.session() as session, session.begin():
+            await session.execute(
+                text(
+                    "DELETE FROM member_activities WHERE member_id IN "
+                    "(SELECT member_id FROM members WHERE gym_id = :g)"
+                ),
+                {"g": str(gym)},
+            )
+            await session.execute(
+                text("DELETE FROM video WHERE gym_id = :g"), {"g": str(gym)}
+            )
+            await session.execute(
+                text("DELETE FROM members WHERE gym_id = :g"), {"g": str(gym)}
+            )
+            await session.execute(
+                text("DELETE FROM gyms WHERE gym_id = :g"), {"g": str(gym)}
+            )
+
+
+@pytest.fixture
 async def rag_client() -> AsyncGenerator[AsyncClient]:
-    """ASGI client with auth always-pass, the REAL db_pool, and the embedding
-    provider stubbed (deterministic, no OpenAI). Resets the profile singleton so
-    it rebuilds against the stub."""
+    """ASGI client with auth always-pass, the REAL db_pool, and the LLM client
+    stubbed. Resets the profile singleton so it rebuilds against the stub."""
     container = app.container
     auth = _always_pass_auth()
     container.auth.override(auth)
@@ -187,20 +226,19 @@ def _always_pass_auth() -> MagicMock:
 
 
 async def test_rec_returns_served_video_and_records(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """The GET serves ONE rotating-category rec and records it: the rotation
-    starts at ``educational`` (the seeded video's genre), so the first GET
-    returns the seeded video with its rec_id and appends a member_video_recs row
-    (the append-only log grows 0 → 1 → 2 as the only-educational video is
-    re-served; count is derived, not a stored counter)."""
-    member_id = await _insert_member(db_pool, gym_id)
+    """The GET serves ONE rotating-category rec and records it, appending to the
+    append-only ``member_video_recs`` log (0 → 1 → 2; the count is derived, not
+    a stored counter). Needs ``rag_gym``: the second serve's rotation index
+    advances off ``educational`` and only wraps back when no OTHER genre has a
+    candidate."""
+    member_id = await _insert_member(db_pool, rag_gym)
     video_id = "ragvid_0001"
-    await _seed_served_rag_video(db_pool, gym_id, video_id)
-    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
+    await _seed_served_rag_video(db_pool, rag_gym, video_id)
+    base = f"/api/v1/gyms/{rag_gym}/members/{member_id}/video-rec"
     try:
-        # First serve: rotation start (educational) yields the seeded video and
-        # records exactly one row.
+        # First serve: the rotation starts at the seeded video's genre.
         resp = await rag_client.get(base, headers=_AUTH_HEADERS)
         assert resp.status_code == 200
         body = resp.json()
@@ -209,8 +247,7 @@ async def test_rec_returns_served_video_and_records(
         assert body["rec_id"]
         assert await _rec_count(db_pool, member_id, video_id) == 1
 
-        # Second serve: only educational has a video, so it is served again and
-        # the append-only log grows 1 → 2 rows for this video.
+        # Second serve: no other genre has a candidate, so it wraps back.
         resp2 = await rag_client.get(base, headers=_AUTH_HEADERS)
         assert resp2.status_code == 200
         assert video_id in resp2.json()["video"]["url"]
@@ -220,22 +257,20 @@ async def test_rec_returns_served_video_and_records(
 
 
 async def test_rec_click_stamps_and_logs(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """Serving a rec then POSTing a click stamps ``clicked_at`` on that rec,
-    logs a ``video_clicked`` activity, and returns ``clicked=true``; a repeat
-    click is idempotent (``clicked=false``, no second activity)."""
-    member_id = await _insert_member(db_pool, gym_id)
+    """A click stamps ``clicked_at``, logs a ``video_clicked`` activity and
+    returns ``clicked=true``; a repeat is idempotent. Needs ``rag_gym`` so the
+    seeded video is the ONLY thing the rec can serve — the assertions name it."""
+    member_id = await _insert_member(db_pool, rag_gym)
     video_id = "ragvid_0003"
-    await _seed_served_rag_video(db_pool, gym_id, video_id)
-    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
+    await _seed_served_rag_video(db_pool, rag_gym, video_id)
+    base = f"/api/v1/gyms/{rag_gym}/members/{member_id}/video-rec"
     try:
-        # Serve a rec — the GET records it and returns its rec_id to click.
         served = await rag_client.get(base, headers=_AUTH_HEADERS)
         rec_id = served.json()["rec_id"]
         assert rec_id is not None
 
-        # First click: stamped + logged.
         resp = await rag_client.post(
             f"{base}/{rec_id}/click", headers=_AUTH_HEADERS
         )
@@ -246,7 +281,7 @@ async def test_rec_click_stamps_and_logs(
         assert await _clicked_at_set(db_pool, rec_id) is True
         assert await _video_click_activity_count(db_pool, member_id) == 1
 
-        # Repeat click: idempotent (no re-stamp, no second activity).
+        # No re-stamp, no second activity.
         repeat = await rag_client.post(
             f"{base}/{rec_id}/click", headers=_AUTH_HEADERS
         )
@@ -266,10 +301,9 @@ async def test_rec_click_stamps_and_logs(
 async def test_rec_wrong_gym_returns_404(
     rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """A caller authorized to view the member (auth always-passes here) but
-    asking about a DIFFERENT gym_id than the member's own gym is rejected with
-    404 — the security fix: the path gym_id must be verified against the
-    member's real gym, not trusted blindly."""
+    """A caller authorized for the member (auth always-passes here) but asking
+    about a DIFFERENT gym gets 404: the path gym_id is verified against the
+    member's real gym, never trusted."""
     member_id = await _insert_member(db_pool, gym_id)
     wrong_gym_id = uuid4()
     try:
@@ -289,10 +323,8 @@ async def test_rec_wrong_gym_returns_404(
 async def test_rec_forbidden_for_non_viewer(
     db_pool: DirectDatabasePool, gym_id: UUID
 ) -> None:
-    """A caller who is not an owner/admin of the member's gym gets 403 (the
-    real verify_gym_employee_for_member behind a fake JWT payload). Touches
-    only members / gym_employees / auth.users, so it passes regardless of the
-    RAG migration state."""
+    """A caller who is not an owner/admin of the member's gym gets 403, through
+    the REAL ``verify_gym_employee_for_member`` behind a fake JWT payload."""
     container = app.container
     member_id = await _insert_member(db_pool, gym_id)
     real_auth = Auth(container.db_pool())
@@ -381,8 +413,7 @@ async def _seed_owner_video(
 async def _set_member_embedding(
     db_pool: DirectDatabasePool, member_id: UUID, vec_literal: str
 ) -> None:
-    """Seed the member's taste embedding directly (bypasses the LLM build path).
-    Writes members.video_profile_* — fails until the RAG migration is applied."""
+    """Seed the member's taste embedding directly, bypassing the LLM build."""
     async with db_pool.session() as session, session.begin():
         await session.execute(
             text(
@@ -445,17 +476,18 @@ async def _delete_member_and_videos(
 
 
 async def test_feed_serves_only_enriched(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """The unified served feed shows an enriched owner video and HIDES an
-    accepted-but-un-enriched one (INNER JOIN video_rag). No member_id, so no
-    members.video_profile_* read — runs without the members-column migration."""
+    """The served feed shows an enriched owner video and HIDES an
+    accepted-but-un-enriched one (the INNER JOIN on ``video_rag``). Needs
+    ``rag_gym`` so the page is exactly these two rows — otherwise the presence
+    half depends on ``enr`` landing inside the first ``limit`` ranked rows."""
     enr, bare = "feedenr01", "feedbare01"
-    await _seed_owner_video(db_pool, gym_id, enr, enriched=True)
-    await _seed_owner_video(db_pool, gym_id, bare, enriched=False)
+    await _seed_owner_video(db_pool, rag_gym, enr, enriched=True)
+    await _seed_owner_video(db_pool, rag_gym, bare, enriched=False)
     try:
         resp = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos?video_type=educational&limit=100",
+            f"/api/v1/gyms/{rag_gym}/videos?video_type=educational&limit=100",
             headers=_AUTH_HEADERS,
         )
         assert resp.status_code == 200
@@ -469,15 +501,15 @@ async def test_feed_serves_only_enriched(
 
 
 async def test_owner_listing_shows_unenriched(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
     """The ungated owner listing shows an owner video BEFORE enrichment, flagged
     ``enriched=false`` (LEFT JOIN video_rag) — the opposite of the served feed."""
     bare = "ownerbare01"
-    await _seed_owner_video(db_pool, gym_id, bare, enriched=False)
+    await _seed_owner_video(db_pool, rag_gym, bare, enriched=False)
     try:
         resp = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos/owner?limit=100",
+            f"/api/v1/gyms/{rag_gym}/videos/owner?limit=100",
             headers=_AUTH_HEADERS,
         )
         assert resp.status_code == 200
@@ -490,24 +522,24 @@ async def test_owner_listing_shows_unenriched(
 
 
 async def test_pending_invisible_in_all_lists(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """A 'pending' scan_status row (worker candidate, enriched or not) is invisible
-    in the accepted feed, the rejected feed, AND the owner listing."""
+    """A 'pending' row is invisible in the accepted feed, the rejected feed AND
+    the owner listing."""
     pend = "pending01"
     await _seed_owner_video(
-        db_pool, gym_id, pend, enriched=True, scan_status="pending"
+        db_pool, rag_gym, pend, enriched=True, scan_status="pending"
     )
     try:
         acc = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos?limit=100", headers=_AUTH_HEADERS
+            f"/api/v1/gyms/{rag_gym}/videos?limit=100", headers=_AUTH_HEADERS
         )
         rej = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos?rejected=true&limit=100",
+            f"/api/v1/gyms/{rag_gym}/videos?rejected=true&limit=100",
             headers=_AUTH_HEADERS,
         )
         own = await rag_client.get(
-            f"/api/v1/gyms/{gym_id}/videos/owner?limit=100",
+            f"/api/v1/gyms/{rag_gym}/videos/owner?limit=100",
             headers=_AUTH_HEADERS,
         )
         assert pend not in [v["video_id"] for v in acc.json()["videos"]]
@@ -521,31 +553,30 @@ async def test_pending_invisible_in_all_lists(
 
 
 async def test_personalized_served_penalty_flips_top_pick(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """With a member embedding bound, A (cosine 0) leads B (cosine ~0.0012). After
-    A is served once (a fresh member_video_recs row), the decayed served penalty
-    (~0.1σ) exceeds the tiny A↔B gap and B becomes the top pick. Three far videos
-    (cosine 1.0) inflate σ. Migration-gated on members.video_profile_*."""
-    member_id = await _insert_member(db_pool, gym_id)
+    """A leads B on cosine until A is served once, after which the decayed
+    served penalty (~0.1σ) exceeds the tiny A↔B gap and B takes the top spot.
+    The three far videos are there to inflate σ. Needs ``rag_gym``: σ is a
+    window over the WHOLE candidate set, so these five videos must BE it."""
+    member_id = await _insert_member(db_pool, rag_gym)
     a, b = "flipa01", "flipb01"
     far = ["flipf01", "flipf02", "flipf03"]
     url = (
-        f"/api/v1/gyms/{gym_id}/videos"
+        f"/api/v1/gyms/{rag_gym}/videos"
         f"?video_type=educational&member_id={member_id}&limit=100"
     )
     try:
-        # Seed inside the try so a setup failure (e.g. missing video_profile_*
-        # before the migration) still triggers cleanup.
+        # Seed inside the try so a setup failure still triggers cleanup.
         await _seed_owner_video(
-            db_pool, gym_id, a, embedding=_VEC_NEAR, relevance=0
+            db_pool, rag_gym, a, embedding=_VEC_NEAR, relevance=0
         )
         await _seed_owner_video(
-            db_pool, gym_id, b, embedding=_VEC_NEAR2, relevance=1
+            db_pool, rag_gym, b, embedding=_VEC_NEAR2, relevance=1
         )
         for i, f in enumerate(far):
             await _seed_owner_video(
-                db_pool, gym_id, f, embedding=_VEC_FAR, relevance=10 + i
+                db_pool, rag_gym, f, embedding=_VEC_FAR, relevance=10 + i
             )
         await _set_member_embedding(db_pool, member_id, _MEMBER_VEC)
 
@@ -553,7 +584,7 @@ async def test_personalized_served_penalty_flips_top_pick(
         ids_before = [v["video_id"] for v in before.json()["videos"]]
         assert ids_before[0] == a  # closest by cosine wins pre-penalty
 
-        await _record_served(db_pool, member_id, gym_id, a)
+        await _record_served(db_pool, member_id, rag_gym, a)
 
         after = await rag_client.get(url, headers=_AUTH_HEADERS)
         ids_after = [v["video_id"] for v in after.json()["videos"]]
@@ -564,30 +595,28 @@ async def test_personalized_served_penalty_flips_top_pick(
 
 
 async def test_rec_advances_across_consecutive_calls(
-    rag_client: AsyncClient, db_pool: DirectDatabasePool, gym_id: UUID
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
 ) -> None:
-    """Two consecutive rec GETs return DIFFERENT videos: the first serves A (the
-    closest educational pick), and the decayed served penalty it records pushes A
-    below B on the next serve (needed ~5 clustered candidates — 2 near at cosine
-    0/0.0012 plus 3 orthogonal at cosine 1.0 to fatten σ — for 0.1σ to clear the
-    #1↔#2 gap). No already-served anti-join. Migration-gated on
-    members.video_profile_*."""
-    member_id = await _insert_member(db_pool, gym_id)
+    """Two consecutive rec GETs return DIFFERENT videos, purely from the decayed
+    served penalty the first serve records — there is NO already-served
+    anti-join. Needs ``rag_gym`` twice over: the second GET's rotation index
+    advances off ``educational`` and only falls back when no other genre has a
+    candidate, and σ is a window over the whole candidate set."""
+    member_id = await _insert_member(db_pool, rag_gym)
     a, b = "adva01", "advb01"
     far = ["advf01", "advf02", "advf03"]
-    base = f"/api/v1/gyms/{gym_id}/members/{member_id}/video-rec"
+    base = f"/api/v1/gyms/{rag_gym}/members/{member_id}/video-rec"
     try:
-        # Seed inside the try so a setup failure (e.g. missing video_profile_*
-        # before the migration) still triggers cleanup.
+        # Seed inside the try so a setup failure still triggers cleanup.
         await _seed_owner_video(
-            db_pool, gym_id, a, embedding=_VEC_NEAR, relevance=0
+            db_pool, rag_gym, a, embedding=_VEC_NEAR, relevance=0
         )
         await _seed_owner_video(
-            db_pool, gym_id, b, embedding=_VEC_NEAR2, relevance=1
+            db_pool, rag_gym, b, embedding=_VEC_NEAR2, relevance=1
         )
         for i, f in enumerate(far):
             await _seed_owner_video(
-                db_pool, gym_id, f, embedding=_VEC_FAR, relevance=10 + i
+                db_pool, rag_gym, f, embedding=_VEC_FAR, relevance=10 + i
             )
         await _set_member_embedding(db_pool, member_id, _MEMBER_VEC)
 

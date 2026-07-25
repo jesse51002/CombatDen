@@ -19,16 +19,19 @@ description: >-
   write time), archive semantics (payer_auth never archivable via the API; a
   custom archive strips its id from every plan's waiver_ids), parametrization
   (the {{placeholders}} catalog waiver_parameters.py, backend auto-fill + caller
-  waiver_args, CRM display-only preview render), and the legal evidence columns
+  waiver_args, CRM display-only preview render), the legal evidence columns
   (signer_name, forced-true consent_acknowledged, version pin, rendered_body,
   content_hash, NOT-NULL ip/user_agent, esign_disclosure_version,
-  operator_employee_id witness). Load this whenever you touch anything
+  operator_employee_id witness), and the TYPED exception hierarchy
+  (WaiversError(ValueError) + 7 subclasses carrying only status_code, no code
+  enum — the status comes off the type, never off "reload"/"not found" in the
+  message). Load this whenever you touch anything
   waiver-shaped: gym_waivers / gym_waiver_versions / member_waiver_signatures,
   waiver_type / the payer-auth waiver, signing a waiver, rendering
   {{placeholders}}, requires_resign / the re-sign floor, the membership-start
   waiver gate (membership_plans.waiver_ids), the authorize-payer link, the ESIGN
-  disclosure, or "why was this member blocked from buying a membership / what
-  did they sign".
+  disclosure, a waiver endpoint's status code / error mapping, or "why was this
+  member blocked from buying a membership / what did they sign".
 ---
 
 # Waivers Guide
@@ -147,8 +150,10 @@ exposed via the facade `WaiversService.sign_waiver`. It:
 1. Resolves the waiver's current version + template body + gym name + the signing
    member's name (`sql/waiver_current_version_for_sign.sql`).
 2. **Version-locks**: the client echoes the `waiver_version_id` it displayed; if
-   it ≠ the current version → `ValueError("...reload...")` (→ **409**). Archived /
-   missing / no-current-version / member-not-in-gym → `"...not found..."` (→ 404).
+   it ≠ the current version → `WaiverVersionStaleError` (→ **409**). Archived /
+   missing → `WaiverNotFoundError`, no current version →
+   `WaiverVersionNotFoundError`, member-not-in-gym → `WaiverSignerNotInGymError`
+   (all → 404). See *Typed exceptions* below.
 3. Renders the template with auto args + `waiver_args`; `content_hash` =
    sha256(rendered); inserts via `sql/member_waiver_signatures_insert.sql`.
 4. Owns its **own committed transaction**; returns `WaiverSignatureResponse`.
@@ -170,10 +175,66 @@ display (SQL `waiver_payer_auth_for_member.sql`; seed insert
 `waivers_insert_payer_auth.sql`).
 
 **Archive** (`DELETE /` → `WaiversDelete.delete_waiver`): refuses the
-payer-auth waiver (service-level guard — the DB trigger only blocks client
-roles), and in the same transaction strips the archived waiver's id from every
-plan's `waiver_ids` (`sql/membership_plans_strip_waiver_id.sql`) so plans stay
-truthful.
+payer-auth waiver with `WaiverPayerAuthNotArchivableError` (→ 400; service-level
+guard — the DB trigger only blocks client roles), and in the same transaction
+strips the archived waiver's id from every plan's `waiver_ids`
+(`sql/membership_plans_strip_waiver_id.sql`) so plans stay truthful.
+
+## Typed exceptions — the status comes off the TYPE, never the prose
+
+`src/waivers/waivers_exceptions.py`. Base `WaiversError(ValueError)` —
+waivers is an INPUT-VALIDATION domain, so the base is a `ValueError` and the
+hierarchy is **additive**: every pre-existing `except ValueError` arm (the
+waivers router's own, the members router's linked-account arms, the gyms
+router's create arm) keeps behaving as before. Each concrete type declares its
+own `status_code`; the routers read `exc.status_code` off the instance.
+
+| Type | Status | Raised when |
+|---|---|---|
+| `WaiverNotFoundError` | 404 | no non-archived waiver with that id in the gym |
+| `WaiverVersionNotFoundError` | 404 | a version the request named / the waiver points at is gone (incl. "no readable current version" on a read) |
+| `WaiverSignerNotInGymError` | 404 | the signature INSERT trips the `(member_id, gym_id)` composite FK |
+| `WaiverPayerAuthMissingError` | 404 | the gym has no `payer_auth` waiver |
+| `WaiverNoCurrentVersionError` | 400 | a flag-only `requires_resign` update targets a waiver with no `current_version_id` |
+| `WaiverPayerAuthNotArchivableError` | 400 | someone tried to archive the payer-auth waiver |
+| `WaiverVersionStaleError` | 409 | the echoed `waiver_version_id` is not the current one |
+
+**There is deliberately NO `code` enum** (same call as `members`): no CRM caller
+branches past the status — the sign surfaces react to 409-vs-404-vs-400 and
+render `detail` as prose — and a code cannot reach the wire without the one
+global `app.add_exception_handler` formatter in `src/main.py`. Declaring one
+without that handler test-locks strings into the public contract that nobody can
+read. `tests/waivers/test_waivers_error_mapping.py` asserts positively that no
+`code` attribute exists, so the half-wired state cannot creep back.
+
+⚠ **Two gotchas worth knowing before you touch this:**
+- The 409 used to hang off `if "reload" in str(exc).lower()`. **Nothing about
+  the word "reload" says "conflict"** — a copy edit to the signer-facing message
+  would have demoted a version-lock conflict to a 400, inviting the client to
+  re-submit the version it had just been told was stale. This is the canonical
+  example of why status-by-prose is banned repo-wide.
+- `get_payer_auth_waiver_for_member` answered **404 on the read route and 400 on
+  the link route from ONE raise**, because its message happens not to contain
+  "not found". It is 404 everywhere now (the status the read path documents), so
+  `PUT /members/{member_id}/link` returns 404 — not 400 — when a gym has no
+  payer-auth waiver.
+- Two statuses (`WaiverNoCurrentVersionError` 400 and the 404s) are **inherited
+  from the prose dispatch, not chosen** — statuses are a contract, so the
+  refactor preserved them. The module docstring records which; if one looks
+  wrong, report it rather than changing it.
+
+Router arms: every handler catches `WaiversError` and maps `exc.status_code`.
+Only `PUT /waivers/` also keeps a generic `except ValueError` → 400, because the
+shared `validate_mutable_columns` guard really does raise a plain `ValueError`
+on a rename. `GET /waivers/{waiver_id}` and
+`GET /members/{id}/authorized-payer-waiver` previously mapped **any**
+`ValueError` to 404 — and pydantic's `ValidationError` IS a `ValueError`, so a
+stored body that no longer fit the response model reported the waiver as
+MISSING; both are typed arms now, so that is a logged 500.
+`PUT /members/{member_id}/link` is **half** typed on purpose: a `WaiversError`
+arm above handles the waiver half, and the prose arm below keeps its `KNOWN GAP`
+comment for the `src/memberships/` half (a money domain — its base must stay on
+`Exception`).
 
 **Plans-only-custom guard**: `membership_plans.waiver_ids` is JSONB with no FK,
 so plan create/update validate it via
@@ -303,4 +364,10 @@ waiver selector shows `custom` waivers only.
   archive guard + plan strip) + `tests/plans/test_plan_waiver_ids_guard.py`
   (the plans-only-custom guard) +
   `tests/memberships/test_start_waiver_gate.py` (the floor logic); the
-  `db_writes.authorize_payer` helper drives the real link.
+  `db_writes.authorize_payer` helper drives the real link. The
+  type → status contract is hermetic:
+  `tests/waivers/test_waivers_error_mapping.py` drives the whole table through
+  the live app with **message-hostile** fixtures (a 404 message with no "not
+  found", a 400 message that contains it, a 409 message with neither "reload"
+  nor "not found"). Assert the TYPE, never `match="reload"` / `match="not
+  found"` — matching the prose is the coupling the typed hierarchy removed.

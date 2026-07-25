@@ -213,6 +213,23 @@ class MemberMembershipsStartResultItem(BaseModel):
     failure reason when ``status = failed``. Failure granularity is the
     charge group (the one-time invoice / the recurring converge), so
     same-group items share fate.
+
+    ``error`` is prefixed so a client (and the front desk reading the receipt)
+    can tell the kinds of failure apart without parsing prose:
+
+    * ``card declined: …`` — the CARD did not collect: the bank refused it, or
+      the charge came back needing authentication (SCA / 3-D Secure) nobody
+      completed. Nothing was collected for this group and nothing was booked;
+      offering another card is the right next step either way.
+    * ``system failure: …`` — OUR side broke. Only reachable when an earlier
+      charge in the SAME request already collected, which is why the response is
+      a 207 rather than a 500 (see ``MemberMembershipsStart``): another card
+      will not help, staff have to finish the job.
+
+    The first is a DEFINITIVE answer about the money and never implies an
+    outage; the second is the outage. The prefixes are a stable part of the
+    contract — reword the text after them freely, never the prefix itself, and
+    never let one become a prefix of the other.
     """
 
     member_id: UUID
@@ -286,6 +303,68 @@ class MemberMembershipsMarkPaidCashRequest(BaseModel):
     idempotency_key: UUID
 
 
+class MemberMembershipsRetryCardRequest(BaseModel):
+    """Retry the payer's saved card on a recurring membership's open invoice."""
+
+    item_id: UUID
+    member_id: UUID
+    idempotency_key: UUID
+
+
+class MemberMembershipsRetryCardStatus(StrEnum):
+    """Outcome of a card retry on ONE membership's open invoice.
+
+    Three outcomes, all of them DATA: the bank collected, the bank refused, or
+    nobody refused but the money did not arrive either. Only ``paid`` means
+    money moved — see :class:`MemberMembershipsRetryCardResponse`.
+
+    Retry-card is the ONE path that still tells ``not_collected`` apart, because
+    there staff are deliberately repairing a card. Start and charge-card report
+    a non-collection as the ordinary card failure it is.
+    """
+
+    paid = "paid"
+    declined = "declined"
+    not_collected = "not_collected"
+
+
+class MemberMembershipsRetryCardResponse(BaseModel):
+    """The outcome of one card retry — a definitive answer is a RESULT, not a
+    failure.
+
+    ``paid`` (HTTP 200) — the bank collected; the open invoice is settled. The
+    ONLY outcome that means money moved.
+
+    ``declined`` (HTTP 207) — the bank refused; nothing was collected and the
+    membership stays overdue, with ``decline_reason`` carrying Stripe's own
+    end-user wording so staff know what to do next (expired → Update Card;
+    insufficient funds → tell the member).
+
+    ``not_collected`` (HTTP 207) — nothing was refused, but nothing was
+    collected either: the off-session invoice's PaymentIntent needs
+    authentication (SCA / 3-D Secure) the member has to complete, so it came
+    back still ``open``. A distinct outcome from ``declined`` on purpose — the
+    bank never said no, so "try another card" is the wrong advice; staff have to
+    collect another way. Raised as ``PaymentsNotCollectedError``.
+
+    A system/upstream failure is NOT any of these shapes — it is still a 500.
+
+    ``decline_reason`` is the one "why nothing was collected" slot, populated on
+    BOTH non-``paid`` outcomes (Stripe's decline wording on ``declined``, the
+    authorization-needed explanation on ``not_collected``); the machine-readable
+    discriminator is ``status``, never the prose.
+
+    Single-item on purpose: this endpoint settles exactly ONE membership's
+    invoice, so the start path's ``results`` LIST would misrepresent it. The
+    2xx-with-the-reason-in-the-body contract is the same on both paths.
+    """
+
+    item_id: UUID
+    member_id: UUID
+    status: MemberMembershipsRetryCardStatus
+    decline_reason: str | None = None
+
+
 class MemberMembershipsChargeCardRequest(BaseModel):
     """Charge an ad-hoc amount for a member, billed to an explicit payer.
 
@@ -323,6 +402,25 @@ class MemberMembershipsChargeCardRequest(BaseModel):
                 "(a cash settle charges no card)",
             )
         return self
+
+
+class MemberMembershipsChargeCardResponse(BaseModel):
+    """The **207** body when an ad-hoc charge collected NOTHING.
+
+    A collected charge is still 204 with no body — the success contract is
+    unchanged. This reuses retry-card's status vocabulary (``decline_reason``
+    is the same "why nothing was collected" slot), so a client branches on
+    ``status``, never on the 2xx class. Only ``declined`` is reachable here: a
+    card that did not collect is ONE outcome on this route, whether the bank
+    refused it or the pay returned without collecting (SCA). ``not_collected``
+    belongs to retry-card alone; ``paid`` never appears, because a collected
+    charge has no body at all.
+    """
+
+    member_id: UUID
+    paid_by_member_id: UUID
+    status: MemberMembershipsRetryCardStatus
+    decline_reason: str | None = None
 
 
 class MemberMembershipsRefundRequest(BaseModel):

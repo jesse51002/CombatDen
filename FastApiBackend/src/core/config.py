@@ -294,7 +294,17 @@ class Settings(BaseSettings):
     # invoice.lines page holds only Stripe's default 10, so a >10-line invoice
     # (large family / class-pack) is paged in full at this limit.
     invoice_line_items_page_limit: int = 100
-    subscription_open_invoice_limit: int = 1
+    # A settle (cash or card retry) pays the NEWEST open invoice, but we fetch
+    # several so a stacked backlog is DETECTED rather than silently ignored —
+    # paying the newest advances next_due_date, which would drop the member off
+    # every overdue surface while older invoices stayed unpaid.
+    #
+    # Stacking is rare by construction: Stripe leaves later invoices as DRAFTS
+    # while past_due and auto-closes them once the sub is `unpaid`, and the
+    # recommended cancel end-action terminates the sub inside the ~2-3 week
+    # retry window, before the next monthly renewal. This limit is the guard
+    # for the one branch that can stack (end-action = leave past_due).
+    subscription_open_invoice_limit: int = 20
 
     # Billing cycle anchors
     monthly_billing_anchor_day: int = 1  # 1st of month
@@ -322,6 +332,18 @@ class Settings(BaseSettings):
     task_item_max_attempts: int = 3
     task_item_retry_delay_seconds: int = 10
     task_stale_running_seconds: int = 120
+
+    # CombatDen default member-app store listings — the fallback the public
+    # GET /api/v1/gyms/{gym_id}/app-links endpoint returns when a gym has NOT
+    # set its own white-label listing (gyms.app_store_url / play_store_url are
+    # NULL). These feed the per-gym app-download page in Kiosk Mode's
+    # app-adoption funnel. PLACEHOLDER values: the CombatDen member app is not
+    # published to the stores yet, so these point at generic store-search URLs
+    # until real listings exist — override via APP env vars once published.
+    combatden_app_store_url: str = "https://apps.apple.com/app/combatden"
+    combatden_play_store_url: str = (
+        "https://play.google.com/store/apps/details?id=net.combatden.app"
+    )
 
     # Presets: email allowlist for the preset import endpoint.
     # Comma-separated; controls who may call POST /api/v1/gyms/{id}/presets/import.

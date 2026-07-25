@@ -31,3 +31,7 @@ class GymCreate(SeedModel):
     # ThemeService design id selected for this gym's member app (branding only;
     # ThemeService stays a separate service). The app id is a hardcoded constant.
     theme_design_id: str | None = None
+    # Per-gym white-label member-app store listings (public app-download page).
+    # The seed never sets them; NULL falls back to the CombatDen default listing.
+    app_store_url: str | None = None
+    play_store_url: str | None = None

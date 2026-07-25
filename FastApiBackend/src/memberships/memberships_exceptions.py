@@ -7,17 +7,20 @@ from uuid import UUID
 
 
 class MembershipStartReplayError(Exception):
-    """A retried one-time/trial start was detected as an idempotent replay.
+    """A retried start was detected as an idempotent replay.
 
-    ``_crm_insert`` stamps a deterministic per-row idempotency key on the real
-    start's one-time/trial pending rows; the INSERT's
-    ``ON CONFLICT (idempotency_key) DO NOTHING`` drops a retry's duplicate rows
-    because the original (completed) start already inserted them. The resulting
-    ``RETURNING`` shortfall is detected and surfaced as this error so Phase B is
-    NOT re-run — the original rows, their discounts, and their charge stand
-    untouched and nothing is duplicated. The router maps it to HTTP 409 (a
-    retryable conflict), never a 5xx. (The same shortfall would also arise if
-    two requested rows collapsed onto one ``(member_id, price_id)`` key, but the
+    ``_crm_insert`` stamps a deterministic per-row idempotency key on EVERY one
+    of the real start's pending rows — one-time, trial AND recurring; the
+    INSERT's ``ON CONFLICT (idempotency_key) DO NOTHING`` drops a retry's
+    duplicate rows because the original start already inserted them. The
+    resulting ``RETURNING`` shortfall is detected and surfaced as this error so
+    Phase B is NOT re-run — the original rows, their discounts, and their charge
+    stand untouched and nothing is duplicated. It covers a MIXED cart too: any
+    shortfall, whichever plan types collided, rejects the whole request rather
+    than half-applying it (the check runs before the commit, so the rows that
+    did insert are rolled back). The router maps it to HTTP 409 (a retryable
+    conflict), never a 5xx. (The same shortfall would also arise if two
+    requested rows collapsed onto one ``(member_id, price_id)`` key, but the
     request dedup makes that impossible.)
     """
 
@@ -27,7 +30,7 @@ class MembershipStartReplayError(Exception):
         super().__init__(
             f"member_memberships insert returned {returned} rows for "
             f"{requested} requested — a duplicate-suppressed idempotent start "
-            "replay (one-time/trial rows already exist for this request's "
+            "replay (membership rows already exist for this request's "
             "idempotency key). The original memberships stand; nothing was "
             "re-inserted, re-discounted, or re-charged.",
         )

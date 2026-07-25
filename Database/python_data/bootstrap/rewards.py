@@ -35,6 +35,9 @@ def create_redemptions(
     (production is debit-on-request), so the post-debit balances are
     written back to the already-inserted member rows — same pattern as
     the classes bootstrap's last_class backfill.
+
+    Must run AFTER the attendance bootstrap, which awards and writes the
+    balances this debits.
     """
     rows, debited_balances = redemptions_generator.generate(
         gym_id, members, rewards, pending_ratio=pending_ratio

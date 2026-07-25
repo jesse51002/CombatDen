@@ -20,6 +20,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverResponse,
     WaiverVersionResponse,
 )
+from src.waivers.waivers_exceptions import WaiverNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,7 @@ class WaiversBase:
         """Fetch a non-deleted waiver summary row.
 
         Raises:
-            ValueError: If the waiver is not found.
+            WaiverNotFoundError: If the waiver is missing or archived (404).
         """
         sql = load_sql(SQL_DIR / "waivers_get_by_id.sql")
         async with self._db_pool.session() as session:
@@ -69,7 +70,7 @@ class WaiversBase:
             row = result.mappings().fetchone()
 
         if not row:
-            raise ValueError(f"Waiver {waiver_id} not found")
+            raise WaiverNotFoundError(f"Waiver {waiver_id} not found")
         return dict(row)
 
     async def _get_version(
@@ -97,7 +98,7 @@ class WaiversBase:
         """Load a waiver summary and embed its current version (with body).
 
         Raises:
-            ValueError: If the waiver is not found.
+            WaiverNotFoundError: If the waiver is missing or archived (404).
         """
         response = self._build_summary_response(
             await self._get_waiver(waiver_id, gym_id),

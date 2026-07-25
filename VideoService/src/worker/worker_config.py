@@ -82,10 +82,19 @@ class WorkerSettings(BaseSettings):
     worker_enrich_concurrency: int = 8
 
     # --- budgets -------------------------------------------------------------
-    # Cap per query on the YouTube search (the API's search.list maxResults, ≤50).
-    worker_max_results_per_query: int = 20
+    # Cap per query on the YouTube search (the API's search.list maxResults, ≤50)
+    # — pinned AT the cap, because maxResults does not affect quota: search.list
+    # costs a flat 100 units per call at any page size, and the follow-up
+    # videos.list batches ≤50 ids into one 1-unit call. A smaller page throws
+    # away candidates already paid for at full price.
+    worker_max_results_per_query: int = 50
     # Hard cap on candidates scanned in one run (tier 1 first, then tier 2).
-    scan_budget_per_run: int = 1000
+    # Sized above one gym scrape's raw yield (video_query_count 25 ×
+    # worker_max_results_per_query 50 = 1250) so the deeper page size actually
+    # reaches scan instead of being truncated here; tier 2 tops up from the
+    # shared pool. Scan is text-only (~$0.001/video) and enrich is once-per-video
+    # pool-wide, so the extra headroom is cheap.
+    scan_budget_per_run: int = 1500
     # Videos judged per scan LLM call.
     scan_batch_size: int = 12
     # Enrich sweep batch: videos per sweep chunk == texts per embed call == the

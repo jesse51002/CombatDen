@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/showcase/showcase_tokens.dart';
-import 'package:crm/showcase/support/staggered_reveal.dart';
+import 'package:crm/shared/widgets/animation/staggered_reveal.dart';
 import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 
 /// One day in the streak week strip (clone of MobileApp's `MockStreakDay`).

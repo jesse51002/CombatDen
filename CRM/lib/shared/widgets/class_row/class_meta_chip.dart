@@ -9,22 +9,29 @@ class ClassMetaChip extends StatelessWidget {
   final String text;
   final Color color;
 
+  /// Label style override — the admin body size (`p`) by default. The kiosk
+  /// class card passes a kiosk-ramp token so the chip scales with the rest of
+  /// that card's type instead of staying at admin scale.
+  final TextStyle? textStyle;
+
   const ClassMetaChip({
     super.key,
     required this.icon,
     required this.text,
     required this.color,
+    this.textStyle,
   });
 
   @override
   Widget build(BuildContext context) {
+    final style = textStyle ?? DesignConstants.p;
     return Row(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.center,
       spacing: DesignConstants.spacingSmall,
       children: [
         Icon(icon, size: DesignConstants.iconSizeTiny, color: color, weight: DesignConstants.iconWeight),
-        Text(text, style: DesignConstants.p.copyWith(color: color)),
+        Text(text, style: style.copyWith(color: color)),
       ],
     );
   }

@@ -10,11 +10,16 @@ import 'package:crm/features/member_details/presentation/dialogs/freeze/months_s
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/shared/widgets/warning_message.dart';
 
 /// Collects a freeze duration (1–12 months) and shows, inline, which of
 /// the member's own memberships will be paused (and who pays each when
 /// it is not the member themselves). Dispatches [FreezeAccountRequested];
 /// the bloc fills member id / gym id / idempotency key from state.
+///
+/// When any membership being paused is `overdue`, a non-blocking warning
+/// leads the body: a frozen membership bills $0 and stops reading as
+/// overdue, so freezing over an unpaid invoice buries it.
 class FreezeAccountDialog extends StatefulWidget {
   final MemberDetailResponse member;
 
@@ -97,6 +102,13 @@ class _FreezeAccountDialogState
               m.status == MembershipStatus.overdue,
         )
         .toList();
+    // A freeze on someone who owes money hides the debt: a frozen
+    // membership bills $0 and stops reading as overdue, so the open
+    // invoice quietly drops off every surface staff watch. Warn, never
+    // block — freezing an overdue member is sometimes the right call.
+    final hasOverdue = toFreeze.any(
+      (m) => m.status == MembershipStatus.overdue,
+    );
     return AppDialog(
       title: 'Freeze member',
       body: Column(
@@ -113,6 +125,15 @@ class _FreezeAccountDialogState
               color: DesignConstants.text2nd,
             ),
           ),
+          if (hasOverdue)
+            const WarningMessage(
+              title: 'Payment overdue',
+              message:
+                  'While frozen the membership bills \$0 and stops '
+                  'showing as overdue, so the unpaid invoice is easy '
+                  'to lose track of. Collect or retry the payment '
+                  'first if you can.',
+            ),
           if (toFreeze.isNotEmpty)
             _FreezeImpact(
               memberships: toFreeze,

@@ -21,6 +21,10 @@ SELECT g.gym_id,
        g.sub_rank_type,
        g.logo_url,
        g.theme_design_id,
+       -- Client-safe connected-account id (NULL until onboarded). The CRM
+       -- uses it to set the Stripe.js connected-account context so a
+       -- browser-tokenized card is minted on the gym's connected account.
+       g.stripe_account_id,
        ge.employee_type,
        ge.theme_preference
 FROM gyms g

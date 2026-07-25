@@ -1,4 +1,6 @@
-"""Hermetic regression guard for the `:param::type` SQL bind footgun.
+"""Hermetic regression guards for two SQL-templating footguns: the
+`:param::type` bind cast, and a `{variable}` placeholder written inside a
+`--` comment (which `load_sql`'s `format_map` expands anyway).
 
 A production bug shipped where ``membership_plans_insert.sql`` cast bind
 parameters with ``:waiver_ids::jsonb``.
@@ -63,6 +65,48 @@ def test_no_bind_param_immediately_followed_by_cast() -> None:
         "text() will not bind it (asyncpg raises 'syntax error at or near "
         '":"'
         "'). Use CAST(:param AS TYPE) instead:\n  " + "\n  ".join(offenders)
+    )
+
+
+# A single-brace ``{name}`` template placeholder. ``load_sql`` runs
+# ``str.format_map`` over the WHOLE file, so one of these inside a ``--``
+# comment is expanded exactly like real SQL. ``{{name}}`` is the escape (it
+# renders as literal ``{name}``) and is legitimate prose — e.g. the waiver
+# template's ``{{placeholders}}`` — so it must NOT match.
+_TEMPLATE_VAR_IN_COMMENT = re.compile(
+    r"(?<!\{)\{[A-Za-z_][A-Za-z0-9_]*\}(?!\})",
+)
+
+
+def test_no_template_placeholder_inside_a_sql_comment() -> None:
+    """No production .sql names a `{variable}` inside a `--` comment.
+
+    ``load_sql``'s ``format_map`` does not know what a comment is. A comment
+    that documents its own template variable in braces gets the whole injected
+    SQL spliced into the comment block: the first injected line stays
+    commented, every later line lands as bare SQL mid-file, and the query dies
+    with an opaque ``syntax error`` pointing at code that reads as correct.
+    This bit ``incomplete_view.sql``, whose header said "the predicate injected
+    as ``{is_incomplete}``".
+
+    Name the variable WITHOUT braces in prose. ``{{escaped}}`` is fine.
+    """
+    offenders: list[str] = []
+    for sql_file in _SRC_DIR.rglob("*.sql"):
+        text = sql_file.read_text(encoding="utf-8")
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            comment = line.split("--", 1)
+            if len(comment) < 2:
+                continue
+            for match in _TEMPLATE_VAR_IN_COMMENT.finditer(comment[1]):
+                rel = sql_file.relative_to(_SRC_DIR.parent)
+                offenders.append(f"{rel}:{lineno}: {match.group(0)}")
+
+    assert not offenders, (
+        "A `{variable}` template placeholder appears inside a SQL `--` "
+        "comment. load_sql format_maps the whole file, comments included, so "
+        "the injected SQL is spliced into the comment and the file stops "
+        "parsing. Drop the braces in prose:\n  " + "\n  ".join(offenders)
     )
 
 

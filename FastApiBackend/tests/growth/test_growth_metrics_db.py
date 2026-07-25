@@ -696,3 +696,64 @@ async def test_prune_deletes_retired_keeps_registry(db_pool) -> None:
         await _delete_metric_row(db_pool, bogus)
         if survivor_created:
             await _delete_metric_row(db_pool, survivor)
+
+
+async def test_overdue_segment_counts_only_active_memberships(
+    db_pool, created
+) -> None:
+    """Growth's overdue money counts ACTIVE memberships only.
+
+    The members list, its tally and this tile all share ONE predicate
+    (``src/shared/sql/membership_overdue.sql``). This locks in the half of
+    that claim the shape-only smoke tests can't see: two past-due
+    memberships, one active and one whose subject member is frozen, must
+    contribute 12000 and 0 respectively. A frozen membership bills $0
+    through the sync, so counting it would overstate collectable revenue.
+    """
+    hero_def = REGISTRY_BY_KEY["revenue_hero"]
+    before = await _run_metric(db_pool, hero_def)
+
+    stale_due = date.today() - timedelta(days=10)
+    async with db_pool.session() as session:
+        plan_id, price_id = await _insert_recurring_plan(session, 12000)
+
+        active_member = await _insert_member(session)
+        active_item = await _insert_membership(
+            session, active_member, plan_id, price_id, 12000,
+            date.today() - timedelta(days=60),
+        )
+        frozen_member = await _insert_member(session)
+        frozen_item = await _insert_membership(
+            session, frozen_member, plan_id, price_id, 9000,
+            date.today() - timedelta(days=60),
+        )
+        # Both are past due...
+        await session.execute(
+            text(
+                "UPDATE member_memberships_unfiltered SET next_due_date = :d "
+                "WHERE item_id IN (:a, :b)"
+            ),
+            {"d": stale_due, "a": str(active_item), "b": str(frozen_item)},
+        )
+        # ...but the second member is frozen across today, which the
+        # member_memberships_status view derives from the SUBJECT member.
+        await session.execute(
+            text(
+                "UPDATE members SET freeze_start_date = :s, freeze_end_date = :e "
+                "WHERE member_id = :m"
+            ),
+            {
+                "s": date.today() - timedelta(days=5),
+                "e": date.today() + timedelta(days=5),
+                "m": str(frozen_member),
+            },
+        )
+        await session.commit()
+    created.track_member(active_member)
+    created.track_member(frozen_member)
+    created.track_plan_db(plan_id)
+
+    after = await _run_metric(db_pool, hero_def)
+
+    # Only the active membership's 12000 lands; the frozen 9000 does not.
+    assert _segment(after, "overdue") - _segment(before, "overdue") == 12000

@@ -4,8 +4,9 @@ The backend `POST /api/v1/members/` provisions a Stripe customer for every
 member (the gym must have a Stripe Connect account). It accepts the full
 identity + contact profile: gym_id / first_name / last_name /
 (email, current_rank_id) plus the contact columns (phone, address,
-emergency_contact_*, photo_url) and an optional `payment_method_id`. There is
-no `user_id` FK — a member's self-access is a verified Supabase auth account
+date_of_birth, emergency_contact_*, photo_url) and an optional
+`payment_method_id`. There is no `user_id` FK — a member's self-access is a
+verified Supabase auth account
 whose email matches this row's `email` (compared lowercase), so a member who
 gets a real login (the first `AUTH_MEMBERS_PER_GYM`) simply needs an auth
 user created with that SAME email; nothing is stamped onto the member row for
@@ -64,10 +65,17 @@ class CreateAllResult:
 
 
 def _contact_fields(member: MemberPlan) -> dict:
-    """Contact / profile columns the create + update endpoints accept."""
+    """Contact / profile columns the create + update endpoints accept.
+
+    Every value must be JSON-native: this dict is both the POST body and the
+    expected side of the re-run drift diff, whose actual comes back from
+    PostgREST as an ISO string — so a `date` object would read as drifted on
+    every re-run and re-PUT the whole roster.
+    """
     return {
         "phone": member.phone,
         "address": member.address,
+        "date_of_birth": member.date_of_birth.isoformat(),
         "emergency_contact_name": member.emergency_contact_name,
         "emergency_contact_phone": member.emergency_contact_phone,
         "emergency_contact_email": member.emergency_contact_email,

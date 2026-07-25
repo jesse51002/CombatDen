@@ -29,7 +29,7 @@ import pytest
 BASE = "/api/v1/members"
 
 # Valid MembersListView values per OpenAPI enum
-VALID_VIEWS = {"all", "trial", "frozen", "overdue"}
+VALID_VIEWS = {"all", "trial", "frozen", "overdue", "incomplete"}
 
 # Valid CrmMemberStatus values per OpenAPI enum
 VALID_CRM_STATUSES = {
@@ -253,7 +253,8 @@ class TestListMembersValidation:
                 "view": "active",  # not in MembersListView enum
             },
         )
-        # 'active' is not a valid MembersListView (only all/trial/frozen/overdue)
+        # 'active' is not a valid MembersListView (only
+        # all/trial/frozen/overdue/incomplete)
         assert resp.status_code == 422, (
             f"Invalid view='active' should return 422, got {resp.status_code}"
         )
@@ -301,15 +302,23 @@ class TestMemberCounts:
         )
 
     def test_response_shape(self, api: httpx.Client, gym_id: str) -> None:
-        """MembersListTotalCounts has active/trial/frozen/overdue — no 'all' bucket."""
+        """Counts carry the per-status buckets — never an 'all' bucket."""
         resp = api.get(f"{BASE}/counts", params={"gym_id": gym_id})
         assert resp.status_code == 200
         body = resp.json()
-        for field in ("active", "trial", "frozen", "overdue"):
+        for field in (
+            "active",
+            "trial",
+            "frozen",
+            "overdue",
+            "dormant",
+            "incomplete",
+        ):
             assert field in body, f"counts missing '{field}'"
             assert isinstance(body[field], int), f"counts.{field} not int"
         assert "all" not in body, (
-            "counts must NOT have an 'all' key — OG contract has active/trial/frozen/overdue"
+            "counts must NOT have an 'all' key — the contract is one bucket "
+            "per status, and 'all' is a VIEW, not a status"
         )
 
     def test_all_counts_are_nonnegative(

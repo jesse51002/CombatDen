@@ -1,14 +1,14 @@
-"""Shared CRM membership-status derivation.
+"""Shared CRM DORMANT derivation + members-list badge precedence.
 
 Neither "overdue" nor "dormant" is a stored/DB status — the
 ``member_memberships_status`` view only derives
 ``active / frozen / cancelled / ended``. Every CRM read-path that needs
-those distinctions derives them the same way, and this module is the
-single source of both rules so the members list, its tallies, its
-filters, and the member detail endpoints stay in agreement.
+those distinctions derives them the same way. This module owns the
+DORMANT half; the OVERDUE half lives in
+``src/shared/membership_status.py`` (see there for why it is in
+``shared``: ``members`` imports ``src.checkin``, so a rule the check-in
+gate also needs cannot live here without creating a package cycle).
 
-- **Overdue**: a non-cancelled membership whose ``next_due_date`` has
-  passed the gym's local date. A per-row rule, decided in Python.
 - **Dormant**: a member who holds only short (trial / one_time) live
   packs and has gone quiet — an AGGREGATE over all of a member's
   memberships, so the rule itself lives in SQL
@@ -16,13 +16,19 @@ filters, and the member detail endpoints stay in agreement.
   :func:`load_member_dormant_sql`) and Python only decides where the
   resulting flag sits in the badge precedence
   (:func:`is_member_dormant`).
+- **Incomplete**: an unfinished signup. Also an aggregate over the
+  member's whole membership set (as subject AND as payer), so it too
+  lives in SQL (``sql/crm_views/_member_incomplete.sql``, loaded by
+  :func:`load_member_incomplete_sql` — the source of truth for each
+  clause). No badge precedence: it is a list view + a tally, never a
+  row badge.
+- **Overdue**: an ACTIVE membership whose ``next_due_date`` has passed
+  the gym's local date — ``src.shared.membership_status``.
 
 This module is a class-less *concern module* — free functions by
 design, the sanctioned exception to the no-loose-module-level-functions
 rule.
 """
-
-from datetime import date
 
 from src.members import SQL_DIR
 from src.members.schema.members_crm_members_list_schema import (
@@ -36,7 +42,9 @@ from src.shared.sql_loader import load_sql
 #
 # - overdue wins because money owed is a different, more urgent action
 #   (collect) than a quiet member (re-engage); hiding a payment problem
-#   behind "dormant" would be a regression.
+#   behind "dormant" would be a regression. Note overdue is ACTIVE-only
+#   (src/shared/membership_status.py), so it can no longer collide with
+#   frozen at all — a paused membership bills $0 and is never overdue.
 # - frozen wins because a freeze is an explicit, staff-initiated pause
 #   with an end date — the member's absence is expected and already
 #   labelled, so calling them dormant would be noise, not news.
@@ -62,26 +70,7 @@ DORMANT_YIELDS_TO: frozenset[CrmMemberStatus] = frozenset(
 )
 
 DORMANT_SQL_PATH = SQL_DIR / "crm_views" / "_member_dormant.sql"
-
-
-def is_membership_overdue(
-    status: str,
-    next_due: date | None,
-    today: date,
-) -> bool:
-    """Return whether a membership row is overdue.
-
-    Args:
-        status: The raw DB membership status (``CrmMemberStatus`` is a
-            ``StrEnum`` so a raw DB string compares equal to it).
-        next_due: The membership's next due date, if any.
-        today: The gym's local current date.
-
-    Returns:
-        ``True`` when the membership is not cancelled and its next due
-        date has already passed.
-    """
-    return status != CrmMemberStatus.cancelled and next_due is not None and next_due < today
+INCOMPLETE_SQL_PATH = SQL_DIR / "crm_views" / "_member_incomplete.sql"
 
 
 def is_member_dormant(
@@ -129,5 +118,30 @@ def load_member_dormant_sql(
     """
     return load_sql(
         DORMANT_SQL_PATH,
+        {"member_id": member_id_expr, "gym_id": gym_id_expr},
+    )
+
+
+def load_member_incomplete_sql(
+    member_id_expr: str,
+    gym_id_expr: str,
+) -> str:
+    """Load the correlated incomplete-signup predicate for an outer query.
+
+    The one text backs the Incomplete tab's list (``incomplete_view.sql``)
+    and its tally (``total_counts.sql``), so the two can never drift.
+    Unlike the dormancy predicate it binds no parameters.
+
+    Args:
+        member_id_expr: SQL expression for the outer query's member id
+            (e.g. ``"p.member_id"``).
+        gym_id_expr: SQL expression for the outer query's gym id (e.g.
+            ``"p.gym_id"``).
+
+    Returns:
+        A self-contained boolean SQL expression.
+    """
+    return load_sql(
+        INCOMPLETE_SQL_PATH,
         {"member_id": member_id_expr, "gym_id": gym_id_expr},
     )

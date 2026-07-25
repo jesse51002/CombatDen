@@ -1,0 +1,36 @@
+-- Canonical OVERDUE derivation. THE one text for every surface.
+--
+-- A per-ROW boolean predicate (contrast members' _member_dormant.sql, which is
+-- a member-LEVEL aggregate and therefore a correlated subquery). The same text
+-- is injected as a WHERE predicate (the Overdue tab, the members-list status
+-- filter, and that filter's negation), as a scalar-subquery predicate (the
+-- tally), and inside analytics aggregates (the revenue tiles, the status mix).
+-- One text, so the badge, the tally, the filter and the money tiles can never
+-- disagree about who owes. Its Python twin is is_membership_overdue() in
+-- src/shared/membership_status.py -- change one and you must change the other.
+--
+-- The only things it needs from the outer query are supplied as structural
+-- template variables:
+--   alias -- the membership row alias (e.g. "m", "mms")
+--   today -- the gym-LOCAL current date expression (e.g.
+--            "(now() AT TIME ZONE g.timezone)::date", or a precomputed
+--            bounds-CTE column such as "b.today"). NEVER a bare UTC date.
+--
+-- A membership is OVERDUE when ALL THREE hold:
+--   1. it is ACTIVE. A frozen membership is deliberately paused and bills $0
+--      (the sync prices it as a synthetic 100%-off), and a cancelled or ended
+--      one is finished -- none of the three is money the gym can still
+--      collect, so counting them would overstate recoverable revenue and
+--      would hide the more accurate "Frozen" badge behind an "Overdue" one.
+--   2. it HAS a next due date. A one-time pack never gets one (see
+--      sync/sql/apply_one_time_membership_sync.sql), so NULL is not overdue.
+--   3. that date is strictly in the PAST -- the due-date DAY itself is not
+--      yet overdue.
+--
+-- WHY THIS IS A USABLE DUNNING SIGNAL: next_due_date only ever advances when
+-- an invoice is actually PAID (the invoice.paid webhook) or is stamped by the
+-- payment-sync writeback from the subscription's current_period_end. A failed
+-- renewal therefore simply leaves it behind, with no need to read Stripe.
+{alias}.status = 'active'
+    AND {alias}.next_due_date IS NOT NULL
+    AND {alias}.next_due_date < {today}

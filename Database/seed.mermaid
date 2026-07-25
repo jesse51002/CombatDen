@@ -161,7 +161,7 @@ flowchart TB
   %% ── Attendance (simple split) ──
   Attendance["✅ Attendance"]
   Attendance -->|"per class"| a_occ["owned occurrences (versions + exceptions resolved)<br/>≤30 per class (½ inactive skipped)"]
-  Attendance -->|"95%"| a_yes["attended · covered members attend a 1–15 subset"]
+  Attendance -->|"95%"| a_yes["attended · covered members attend a 1–40 subset<br/>points_worth per class is banked as points_balance"]
   Attendance -->|"5%"| a_no["never attended"]
 
   %% ── Class sign-ups (reservations, NOT attendance -- member_attendance is
@@ -177,11 +177,11 @@ flowchart TB
   Signups -.->|"future · ≤7-day horizon<br/>active classes only"| sg_future["future sign-ups only<br/>no attendance yet · capacity-capped"]
 
   %% ── Rewards ×4 + redemptions (two simple splits) ──
-  Rewards["🎁 Rewards ×4 (50–500 pts)"]
+  Rewards["🎁 Rewards ×4 (1000–2500 pts · priced from the preset catalogue)"]
   Rewards -->|"~80%"| rw_active["active"]
   Rewards -->|"~20%"| rw_inactive["inactive"]
   Rewards -->|"60%"| rd_none["members redeeming none"]
-  Rewards -->|"40%"| rd_some["members redeeming 1–2"]
+  Rewards -->|"40% roll, then affordability"| rd_some["members redeeming · ~5–19 per gym<br/>a rich member still skips a reward they can't afford"]
   rd_some -->|"~70%"| rd_approved["status=approved"]
   rd_some -->|"~30%"| rd_pending["status=pending (pending_ratio=0.3 default)"]
 

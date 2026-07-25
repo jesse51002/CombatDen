@@ -423,10 +423,14 @@ class CreatedResources:
         self.rewards.append(reward.reward_id)
         return reward
 
-    async def payment_method(self) -> str:
+    async def payment_method(self, **kwargs) -> str:
         # Payment methods are intentionally not cleaned up (Stripe allows
         # unlimited test PMs and they cannot be deleted, only detached).
-        return await create_payment_method(self.stripe_client, self.connect_opts)
+        # ``token=`` selects the test card (default: a card that always
+        # succeeds); see ``create_payment_method``.
+        return await create_payment_method(
+            self.stripe_client, self.connect_opts, **kwargs
+        )
 
     async def test_clock(self, frozen_time: datetime) -> str:
         clock_id = await create_test_clock(

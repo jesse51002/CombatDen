@@ -1,14 +1,12 @@
 """Standalone waiver signing path (``WaiversSignatures.sign_waiver``).
 
-Covers the version-lock (the echoed version must equal the waiver's current
-version), the server-captured audit fields (ip / user-agent / operator / esign
-disclosure), and the not-found / stale-version error paths, plus the request
-schema's consent + signer-name validators.
+Covers the version-lock, the server-captured audit fields (ip / user-agent /
+operator / esign disclosure), the not-found and stale-version paths, and the
+request schema's consent + signer-name validators.
 
-Requires the legal-hardening migration (``20260702040000_waiver_signature_
-legal_hardening``) to be applied — the signature INSERT writes the new columns
-(``esign_disclosure_version`` / ``operator_employee_id``) and relies on the
-NOT NULL ip/user-agent.
+Requires migration ``20260702040000_waiver_signature_legal_hardening``: the
+signature INSERT writes ``esign_disclosure_version`` / ``operator_employee_id``
+and relies on the NOT NULL ip/user-agent.
 """
 
 import uuid
@@ -25,6 +23,11 @@ from src.waivers.schema.waivers_schema import (
     WaiverSignRequest,
 )
 from src.waivers.service.waivers_service import WaiversService
+from src.waivers.waivers_exceptions import (
+    WaiverNotFoundError,
+    WaiverSignerNotInGymError,
+    WaiverVersionStaleError,
+)
 
 
 async def _delete_waiver_rows(db_pool, waiver_id) -> None:
@@ -139,7 +142,12 @@ async def test_sign_renders_placeholders(db_pool, gym_id, created):
 
 
 async def test_sign_stale_version_rejected(db_pool, gym_id, created):
-    """Echoing a version that is not the current one is rejected (→ 409)."""
+    """Echoing a version that is not the current one is rejected (→ 409).
+
+    Asserts the TYPE, not ``match="reload"`` — the 409 must never depend on a
+    word in the prose. The type -> status half is locked in
+    ``test_waivers_error_mapping.py``.
+    """
     svc = WaiversService(db_pool)
     member = await created.member(gym_id)
     operator_id = await _an_employee_id(db_pool, gym_id)
@@ -147,7 +155,7 @@ async def test_sign_stale_version_rejected(db_pool, gym_id, created):
         WaiverCreateRequest(gym_id=gym_id, name="Stale", body="# body"),
     )
     try:
-        with pytest.raises(ValueError, match="reload"):
+        with pytest.raises(WaiverVersionStaleError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=member.member_id,
@@ -174,7 +182,7 @@ async def test_sign_archived_waiver_not_found(db_pool, gym_id, created):
     try:
         v1 = waiver.current_version
         await svc.delete_waiver(waiver.waiver_id, gym_id)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(WaiverNotFoundError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=member.member_id,
@@ -199,7 +207,7 @@ async def test_sign_member_not_in_gym(db_pool, gym_id):
     )
     try:
         v1 = waiver.current_version
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(WaiverSignerNotInGymError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=uuid.uuid4(),  # not a member of this gym
@@ -241,9 +249,9 @@ def test_sign_request_rejects_blank_signer_name():
 
 def test_render_tolerates_markdown_escaped_tokens() -> None:
     """A markdown serializer may store a token backslash-escaped
-    (``\\{\\{member\\_name\\}\\}``) — it displays identically in the editor,
-    so the renderer must fill it exactly like the clean form. Regression:
-    live testing shipped bodies in this shape and nothing rendered."""
+    (``\\{\\{member\\_name\\}\\}``) — it looks identical in the editor, so the
+    renderer must fill it exactly like the clean form. Live bodies ship in this
+    shape; without this, nothing renders."""
     from src.waivers.service.waivers_signatures import WaiversSignatures
 
     escaped = (
@@ -265,12 +273,10 @@ def test_render_tolerates_markdown_escaped_tokens() -> None:
 
 
 def test_render_never_expands_tokens_inside_values() -> None:
-    """Substitution is a single pass: a signer typing a literal token into
-    the free-text name field (the only caller-typed value) must land
-    verbatim in the frozen legal ``rendered_body``, never be expanded by a
-    later key (placeholder injection). Regression for the sequential
-    str.replace implementation, where ``signer_name = "{{gym_name}}"`` got
-    rewritten to the gym's name by the subsequent gym_name pass."""
+    """Substitution must stay a SINGLE pass. A signer typing a literal token
+    into the free-text name field (the only caller-typed value) must land
+    verbatim in the frozen legal ``rendered_body``, never be expanded by a later
+    key — a sequential ``str.replace`` reintroduces that injection."""
     from src.waivers.service.waivers_signatures import WaiversSignatures
 
     rendered = WaiversSignatures._render(
@@ -287,15 +293,11 @@ def test_render_never_expands_tokens_inside_values() -> None:
 
 
 def test_build_args_covers_the_placeholder_catalog() -> None:
-    """``_build_args`` must fill exactly the catalog's key set.
+    """``_build_args`` must fill exactly the ``WaiverParameter`` key set.
 
-    ``WaiverParameter`` (``Database/python_data/schema/waiver_parameters.py``)
-    is the single source of truth for which ``{{placeholder}}`` tokens exist.
-    This locks the backend's actual fill (auto-filled fields + this test's
-    caller-supplied ``payee_name`` extra) to that catalog, so adding a new
-    catalog token without either wiring an auto-fill in ``_build_args`` or
-    documenting it as a caller extra (passed here, as ``payee_name`` is)
-    fails this test loudly instead of silently drifting.
+    That catalog is the single source of truth for which ``{{placeholder}}``
+    tokens exist, so adding one without either wiring an auto-fill or passing
+    it as a caller extra (as ``payee_name`` is here) fails loudly.
     """
     from schema.waiver_parameters import WAIVER_PARAMETERS, WaiverParameter
 
@@ -315,9 +317,9 @@ def test_build_args_covers_the_placeholder_catalog() -> None:
 
 
 async def test_member_status_union_and_floor(db_pool, gym_id, created):
-    """The by-member status is the UNION of required + ever-signed: a signed
-    waiver attached to NO plan still shows (required=False, meets the floor);
-    a later material edit flips it to needs-re-sign (meets_floor=False)."""
+    """By-member status is the UNION of required + ever-signed: a signed waiver
+    on NO plan still shows (required=False, meets the floor), and a later
+    material edit flips it to needs-re-sign (meets_floor=False)."""
     from src.waivers.schema.waivers_schema import (
         WaiverUpdateData,
         WaiverUpdateRequest,

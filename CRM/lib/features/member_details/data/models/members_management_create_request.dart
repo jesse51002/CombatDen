@@ -19,6 +19,10 @@ class MembersManagementCreateRequest extends Equatable {
   final String lastName;
   final String? email;
   final String? phone;
+
+  /// Date of birth as a bare `YYYY-MM-DD` calendar date — never an instant. A
+  /// birthday has no timezone, and the backend column is a `DATE`.
+  final String? dateOfBirth;
   final String? address;
   final String? emergencyContactName;
   final String? emergencyContactPhone;
@@ -35,6 +39,7 @@ class MembersManagementCreateRequest extends Equatable {
     required this.lastName,
     this.email,
     this.phone,
+    this.dateOfBirth,
     this.address,
     this.emergencyContactName,
     this.emergencyContactPhone,
@@ -53,6 +58,7 @@ class MembersManagementCreateRequest extends Equatable {
       'last_name': lastName,
       if (email != null) 'email': email,
       if (phone != null) 'phone': phone,
+      if (dateOfBirth != null) 'date_of_birth': dateOfBirth,
       if (address != null) 'address': address,
       if (emergencyContactName != null)
         'emergency_contact_name': emergencyContactName,
@@ -79,6 +85,7 @@ class MembersManagementCreateRequest extends Equatable {
       lastName: lastName,
       email: email,
       phone: phone,
+      dateOfBirth: dateOfBirth,
       address: address,
       emergencyContactName: emergencyContactName,
       emergencyContactPhone: emergencyContactPhone,
@@ -98,6 +105,7 @@ class MembersManagementCreateRequest extends Equatable {
         lastName,
         email,
         phone,
+        dateOfBirth,
         address,
         emergencyContactName,
         emergencyContactPhone,

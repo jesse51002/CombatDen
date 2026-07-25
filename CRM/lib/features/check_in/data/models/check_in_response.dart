@@ -5,6 +5,18 @@ import 'package:crm/features/check_in/data/models/check_in_warning.dart';
 
 part 'check_in_response.g.dart';
 
+/// A week with no attendance — the safe default for [CheckInResponse.currentWeekDays]
+/// when the backend omits it (older backend) or the response is degraded.
+const List<bool> _kEmptyWeekDays = [
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+  false,
+];
+
 /// Response for the single check-in (`POST /api/v1/checkin`).
 ///
 /// Mirrors the backend `CheckinResponse`. A CRM (staff) check-in that is clean
@@ -16,7 +28,11 @@ part 'check_in_response.g.dart';
 /// resend the identical request with `ignore_warnings: true` to record it. An
 /// idempotent repeat returns the existing [logId] with [alreadyCheckedIn] true
 /// and no points. [classStreakWeeks] is the member's weekly attendance streak
-/// after this check-in (0 when not recorded). [skipReason] is the kiosk-only
+/// after this check-in (0 when not recorded). [currentWeekDays] holds the
+/// per-weekday attendance for the current gym-local week, Monday-first
+/// (index 0 = Monday … 6 = Sunday); all-false by default so an older backend
+/// or a degraded response never breaks the kiosk glance. [skipReason] is the
+/// kiosk-only
 /// rejection reason — always null for the CRM (`is_member: false`); parsed for
 /// contract completeness.
 @JsonSerializable(
@@ -41,6 +57,13 @@ class CheckInResponse extends Equatable {
   @JsonKey(defaultValue: 0)
   final int classStreakWeeks;
 
+  /// Per-weekday attendance for the CURRENT gym-local week, **Monday-first**:
+  /// index 0 = Monday … 6 = Sunday, each true if the member attended a class
+  /// that weekday. Defaults to a length-7 all-false list when the backend
+  /// omits it, so the kiosk glance's week strip never crashes.
+  @JsonKey(defaultValue: _kEmptyWeekDays)
+  final List<bool> currentWeekDays;
+
   const CheckInResponse({
     this.logId,
     required this.memberId,
@@ -53,6 +76,7 @@ class CheckInResponse extends Equatable {
     this.warnings = const [],
     this.requiresConfirmation = false,
     this.classStreakWeeks = 0,
+    this.currentWeekDays = _kEmptyWeekDays,
   });
 
   factory CheckInResponse.fromJson(Map<String, dynamic> json) =>
@@ -78,5 +102,6 @@ class CheckInResponse extends Equatable {
         warnings,
         requiresConfirmation,
         classStreakWeeks,
+        currentWeekDays,
       ];
 }

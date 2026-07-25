@@ -4,7 +4,10 @@ Each member is a unified identity + billing/contact row (the merged `members`
 table). The seed creates the identity shell via the backend, then sets billing
 columns. This generator assigns every member:
 
-  - demographics (name, email, phone, address, emergency contacts, points)
+  - demographics (name, email, phone, address, date of birth, emergency
+    contacts). Points are NOT set here: a member's balance is earned from
+    their attendance later in the engagement phase (generators/classes.
+    award_attendance_points), so it starts at 0.
   - a current_rank_id picked from the gym's cloned ladder
   - a billing lifecycle: a current membership and/or closed history, derived
     so the CRM status views populate with a realistic spread (active, trial,
@@ -32,8 +35,12 @@ from constants import (
     CHILD_SELF_PAY_FRACTION,
     CUSTOM_DISCOUNT_PROBABILITY,
     DISCOUNTS_PER_MEMBERSHIP_MAX,
+    LINKED_CHILD_MAX_AGE_YEARS,
+    LINKED_CHILD_MIN_AGE_YEARS,
     LINKED_FAMILY_FRACTION,
     MAX_LINKED_CHILDREN_PER_PARENT,
+    MEMBER_MAX_AGE_YEARS,
+    MEMBER_MIN_AGE_YEARS,
     MEMBERS_PER_GYM,
     TEST_MEMBER_EMAIL,
     UNIT_DAYS,
@@ -99,9 +106,15 @@ class MemberPlan:
     email: str
     phone: str
     address: str
+    # Always populated (nullable in the DB, but blank reads as broken on the
+    # CRM member page). Adult band, except a linked child, which
+    # _form_linked_families re-draws into the minor band.
+    date_of_birth: date
     emergency_contact_name: str
     emergency_contact_phone: str
     emergency_contact_email: str
+    # Starts at 0 and is EARNED, never drawn: award_attendance_points sets it
+    # from the member's seeded attendance, and redemptions debit it.
     points_balance: int
     current_rank_id: uuid.UUID | None
     # Leaf position within current_rank_id's main rank: an index in
@@ -147,6 +160,16 @@ def _random_phone() -> str:
     return f"+1{random.randint(2000000000, 9999999999)}"
 
 
+def _random_birth_date(min_age: int, max_age: int) -> date:
+    """A plausible birth date inside the given age band (adult or minor).
+
+    Faker draws from the same PRNG `Faker.seed(SEED)` fixes, so a re-run
+    reproduces the same dates and the idempotency layer's email-keyed lookups
+    still match.
+    """
+    return fake.date_of_birth(minimum_age=min_age, maximum_age=max_age)
+
+
 def _demographics(
     handle: str,
     current_rank_id: uuid.UUID | None,
@@ -159,10 +182,11 @@ def _demographics(
         email=fake.unique.email(),
         phone=_random_phone(),
         address=fake.address().replace("\n", ", "),
+        date_of_birth=_random_birth_date(MEMBER_MIN_AGE_YEARS, MEMBER_MAX_AGE_YEARS),
         emergency_contact_name=fake.name(),
         emergency_contact_phone=_random_phone(),
         emergency_contact_email=fake.email(),
-        points_balance=random.randint(0, 500),
+        points_balance=0,
         current_rank_id=current_rank_id,
         current_sub_index=current_sub_index,
     )
@@ -414,6 +438,10 @@ def _form_linked_families(
     layer, not the billing key). Regular discounts are drawn per membership in
     ``_assign_discounts`` (family members included, like any other membership).
 
+    Who is a child is only decided HERE — the partition needs the built
+    MemberPlan list — so each child's adult date of birth is re-drawn into the
+    minor band as it is picked.
+
     Operates on member *indices* (never reorders `members`, since create_all
     keys the first AUTH_MEMBERS_PER_GYM members to real auth logins by position).
     Returns the set of indices that belong to a family (roots + children) so the
@@ -434,6 +462,10 @@ def _form_linked_families(
         for _ in range(num_children):
             child = linkable.pop()
             members[child].linked_primary_handle = members[root].local_handle
+            # A linked child is a minor: re-draw into the child band.
+            members[child].date_of_birth = _random_birth_date(
+                LINKED_CHILD_MIN_AGE_YEARS, LINKED_CHILD_MAX_AGE_YEARS
+            )
             # Each child carries its own membership (any recurring plan — not
             # necessarily the parent's). ~CHILD_SELF_PAY_FRACTION self-pay it on
             # their own card + own subscription; the rest ride the parent's.
@@ -461,8 +493,10 @@ def build_plans(
     distinct regular discounts (pre-drawn here; applied after the membership is
     started). Additionally, ~CUSTOM_DISCOUNT_PROBABILITY of live memberships also
     receive one inline custom discount (a one-shot DiscountValue minted at start).
-    Family linking (a paying parent + cardless children under it) is unchanged;
-    linked/family discounts are no longer seeded.
+    Family linking puts a paying parent over 1-MAX_LINKED_CHILDREN_PER_PARENT
+    children, each on their own membership: ~CHILD_SELF_PAY_FRACTION of them
+    carry their own card and subscription, the rest ride the parent's. Linked/
+    family discounts are not seeded.
     """
     members: list[MemberPlan] = [
         _demographics(f"{gym_handle}/member{i}", *_pick_leaf(ranks))

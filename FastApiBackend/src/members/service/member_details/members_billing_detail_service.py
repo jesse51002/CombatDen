@@ -14,6 +14,7 @@ import src.shared.db_schema_path  # noqa: F401
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.members import SQL_DIR
+from src.members.members_exceptions import MemberNotFoundError
 from src.members.schema.members_billing_schema import (
     BillingCardOnFile,
     BillingPaysForMember,
@@ -37,10 +38,10 @@ from src.members.service.member_details.members_billing_grouper import (
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
 )
-from src.members.service.members_status_mapping import (
+from src.shared.database import DirectDatabasePool
+from src.shared.membership_status import (
     is_membership_overdue,
 )
-from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 _DETAILS_SQL = SQL_DIR / "member_details"
@@ -85,12 +86,16 @@ class MembersBillingDetailService:
             and supplementary billing data.
 
         Raises:
-            ValueError: If no billing profile found for the member.
+            MemberNotFoundError: If the member has no row to read (-> 404).
+                TYPED so the routes can catch it narrowly: a blanket
+                ``except ValueError`` would also swallow a pydantic
+                ``ValidationError`` from this large payload and report a
+                member who exists as missing.
         """
         rows = await self._fetch_family_rows(member_id)
 
         if not rows:
-            raise ValueError(f"No billing profile found for member_id={member_id}")
+            raise MemberNotFoundError(f"Member {member_id} not found")
 
         target_row = self._find_target_profile(rows, member_id)
         gym_id = target_row["gym_id"]
@@ -209,6 +214,7 @@ class MembersBillingDetailService:
                 phone=target_row["phone"],
                 email=target_row["email"],
                 address=target_row["address"],
+                date_of_birth=target_row["date_of_birth"],
                 emergency_contact_name=(target_row["emergency_contact_name"]),
                 emergency_contact_phone=(target_row["emergency_contact_phone"]),
                 emergency_contact_email=(target_row["emergency_contact_email"]),
@@ -240,12 +246,16 @@ class MembersBillingDetailService:
             The first row matching the queried user.
 
         Raises:
-            ValueError: If no matching row is found.
+            MemberNotFoundError: If no matching row is found (-> 404). The
+                query is keyed on this member, so a result set without their
+                row means the member row itself is gone.
         """
         for row in rows:
             if row["member_id"] == member_id:
                 return row
-        raise ValueError(f"No profile found for member_id={member_id}")
+        raise MemberNotFoundError(
+            f"Member {member_id} not found in its own detail read",
+        )
 
     def _scan_membership_flags(
         self,

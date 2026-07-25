@@ -179,6 +179,30 @@ void main() {
     );
 
     blocTest<MembersListBloc, MembersListState>(
+      'switching to Incomplete asks the backend for that view',
+      build: build,
+      seed: () => loaded(view: MembersListView.all),
+      act: (b) => b.add(
+        const MembersListViewChanged(
+          MembersListView.incomplete,
+        ),
+      ),
+      expect: () => [
+        const MembersListLoading(),
+        isA<MembersListLoaded>().having(
+            (s) => s.activeView, 'activeView',
+            MembersListView.incomplete),
+      ],
+      verify: (_) {
+        final req = verify(
+          () => listRepo.getMembersList(captureAny()),
+        ).captured.last as CrmMembersListRequest;
+        expect(req.view, MembersListView.incomplete);
+        expect(req.gymId, 'gym-1');
+      },
+    );
+
+    blocTest<MembersListBloc, MembersListState>(
       'removing a plan filter drops just that plan id',
       build: build,
       seed: () => loaded(

@@ -17,6 +17,8 @@ import 'package:crm/features/member_details/data/models/member_memberships_mark_
 import 'package:crm/features/member_details/data/models/member_memberships_unfreeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -25,6 +27,14 @@ import 'package:crm/features/memberships/data/models/promotion_choice.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
+
+/// Shown when a retry came back NOT paid but carried no reason — a
+/// decline with an empty message, or a status this build doesn't know.
+/// It never claims the card was refused (we can't prove that), only
+/// that nothing is confirmed collected.
+const String _kRetryUnconfirmed =
+    'The payment was not confirmed. Check the payment history before '
+    'trying again.';
 
 /// BLoC for the Specific Member Detail screen.
 class MemberDetailBloc
@@ -99,6 +109,10 @@ class MemberDetailBloc
     on<FreezeAccountRequested>(_onFreezeAccount);
     on<UnfreezeAccountRequested>(_onUnfreezeAccount);
     on<MarkPaidCashRequested>(_onMarkPaidCash);
+    on<RetryCardPaymentRequested>(_onRetryCardPayment);
+    on<RetryCardPaymentOutcomeCleared>(
+      _onRetryCardPaymentOutcomeCleared,
+    );
 
     on<AddDiscountsRequested>(_onAddDiscounts);
     on<RemoveDiscountsRequested>(_onRemoveDiscounts);
@@ -793,6 +807,107 @@ class MemberDetailBloc
         ),
       ),
     );
+  }
+
+  /// The retry-payment dialog's mutation — the cash-free sibling of
+  /// [_onMarkPaidCash]. Unlike that one it does NOT ride
+  /// [_runMutation]: a decline is the expected outcome and has to
+  /// reach the dialog's own terminal error step, so the outcome lands
+  /// on `isRetryingPayment` / `retryPaymentSuccess` /
+  /// `retryPaymentError` and the screen-level overlay + error dialog
+  /// stay out of the way (mirrors [_onCancelOneTimeMembership]).
+  ///
+  /// A DECLINE IS A 2xx RESULT, not an exception: the backend returns
+  /// `status: declined` on a 207 with the bank's reason. So the
+  /// outcome is branched on explicitly and only an `isPaid` result
+  /// takes the success path — a thrown error is now only a real
+  /// system failure. Treating any returned outcome as success would
+  /// render a decline as a collected payment.
+  Future<void> _onRetryCardPayment(
+    RetryCardPaymentRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(
+      isRetryingPayment: true,
+      clearRetryPaymentOutcome: true,
+    ));
+    // The catch covers ONLY a system failure (500 / transport / in-task
+    // conflict); the bank's own answer comes back as `outcome`.
+    final MemberMembershipsRetryCardResponse outcome;
+    try {
+      outcome = await _repository.retryMembershipCard(
+        MemberMembershipsRetryCardRequest(
+          itemId: event.itemId,
+          memberId: event.memberId,
+          idempotencyKey: const Uuid().v4(),
+        ),
+      );
+    } catch (e, stackTrace) {
+      log('Retry card payment failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isRetryingPayment: false,
+        retryPaymentError: e is ServerException
+            ? (e.detail ?? e.message)
+            : e.toString(),
+      ));
+      return;
+    }
+
+    // Not paid = not collected: the dialog's terminal error step, never the
+    // success step. Anything but an explicit `paid` lands here.
+    if (!outcome.isPaid) {
+      log(
+        'Retry card payment declined: ${outcome.status.value} '
+        '${outcome.declineReason ?? ''}',
+      );
+      final declined = state;
+      if (declined is! MemberDetailLoaded) return;
+      emit(declined.copyWith(
+        isRetryingPayment: false,
+        retryPaymentError: outcome.declineReason ?? _kRetryUnconfirmed,
+      ));
+      return;
+    }
+
+    // The charge went through. Commit success now so a follow-up
+    // refresh failure can't make a real payment look failed.
+    final committed = state;
+    if (committed is! MemberDetailLoaded) return;
+    emit(committed.copyWith(
+      isRetryingPayment: false,
+      retryPaymentSuccess: committed.retryPaymentSuccess + 1,
+      refreshToken: committed.refreshToken + 1,
+    ));
+    try {
+      final refreshed =
+          await _repository.getMemberDetail(s.member.memberId);
+      final latest = state;
+      if (latest is MemberDetailLoaded) {
+        emit(latest.copyWith(member: refreshed));
+      }
+    } catch (e, stackTrace) {
+      log(
+        'Retry succeeded but member refresh failed (non-fatal)',
+        error: e,
+        stackTrace: stackTrace,
+      );
+    }
+    // Stripe marks the invoice paid out of band (webhook), so poll the
+    // billing surfaces the way mark-paid-cash / charge do.
+    _startInvoicePolling();
+  }
+
+  void _onRetryCardPaymentOutcomeCleared(
+    RetryCardPaymentOutcomeCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearRetryPaymentOutcome: true));
   }
 
   Future<void> _onAddDiscounts(

@@ -1,17 +1,12 @@
 """Unit tests for the member portal router (/api/v1/member/...).
 
-Mocks at the same seam as the other router tests: the ``client`` fixture
-(auth + db_pool overridden) plus a per-service container override, so no DB is
-touched. What these assert:
-
-* the right GATE runs on every route — ``verify_member_self`` with the PATH
-  ``gym_id`` on every gym-scoped route, ``verify_verified_account`` on the
-  identity entry point (which has no member to scope yet);
-* the hardwired gate semantics actually reach the services (the redemption is
-  always ``auto_approve=False``, the feed is always ``rejected=False``, the
-  reward catalog is always ``include_inactive=False``) and are not
-  client-selectable;
-* the router's status-code mapping (service errors → HTTP codes).
+Same seam as the other router tests: the ``client`` fixture plus a per-service
+container override, so no DB is touched. Three things are locked here — the
+right GATE on every route (``verify_member_self`` carrying the PATH ``gym_id``;
+``verify_verified_account`` on the identity entry point, which has no member to
+scope yet); that the hardwired semantics reach the services and are NOT
+client-selectable (``auto_approve=False``, ``rejected=False``,
+``include_inactive=False``); and the status-code mapping.
 """
 
 from datetime import UTC, date, datetime, time
@@ -23,11 +18,21 @@ from schema.member_reward_redemption import RewardRedemptionStatus
 from schema.video import VideoGenre
 
 import src.shared.db_schema_path  # noqa: F401  — resolves ``from schema.*``
+from src.checkin.checkin_exceptions import (
+    CheckinClassDeletedError,
+    CheckinClassFullError,
+    CheckinClassInactiveError,
+    CheckinClassNotFoundError,
+    CheckinErrorCode,
+    CheckinOccurrenceCancelledError,
+    CheckinOccurrenceNotFoundError,
+)
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
     MemberClassHistoryRow,
     MemberClassHistoryStatus,
 )
+from src.checkin.schema.checkin_schema import StreakResult
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
@@ -242,8 +247,8 @@ def test_list_my_members_uses_verified_account_gate(
     # an "Open in Maps" link without a second call.
     assert members[0]["gym_address"] == "1200 Combat Ave, Austin, TX 78701"
     auth_mock.verify_verified_account.assert_awaited()
-    # The email + caller_id (the JWT sub) both come from the gate, never from
-    # the client — the identity query pins the caller's own confirmed account.
+    # Email + caller_id both come from the gate, never the client: the identity
+    # query pins the caller's OWN confirmed account.
     portal_service_mock.list_members_for_email.assert_awaited_once_with(
         "test@example.com", fake_user_id
     )
@@ -342,10 +347,18 @@ def test_rank_progress_allows_an_empty_series(
     assert resp.json()["points"] == []
 
 
-def test_get_streak_gates_and_returns_weeks(
+def test_get_streak_gates_and_returns_weeks_and_week_strip(
     client, auth_headers, auth_mock, streak_service_mock, fake_gym_id, fake_member_id
 ):
-    streak_service_mock.get_streak = AsyncMock(return_value=4)
+    """The member's own strip must be FILLED, not the schema default.
+
+    All-False is not "unknown", it MEANS "has not attended this week" — so the
+    route must run ``get_streak_details`` and report the computed strip, or a
+    Mon/Wed/Fri member sees a blank week the staff route shows filled."""
+    week_days = [True, False, True, False, True, False, False]
+    streak_service_mock.get_streak_details = AsyncMock(
+        return_value=StreakResult(weeks=4, current_week_days=list(week_days))
+    )
 
     resp = client.get(
         f"{_base(fake_gym_id, fake_member_id)}/streak", headers=auth_headers
@@ -353,6 +366,10 @@ def test_get_streak_gates_and_returns_weeks(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["class_streak_weeks"] == 4
+    assert resp.json()["current_week_days"] == week_days
+    streak_service_mock.get_streak_details.assert_awaited_once_with(
+        UUID(fake_member_id), UUID(fake_gym_id)
+    )
     auth_mock.verify_member_self.assert_awaited_once_with(
         UUID(fake_member_id),
         auth_mock.get_current_user.return_value,
@@ -485,10 +502,48 @@ def test_create_signup_uses_the_path_member_not_the_body(
     auth_mock.verify_member_self.assert_awaited()
 
 
-def test_create_signup_maps_full_class_to_400(
-    client, auth_headers, signup_service_mock, fake_gym_id, fake_member_id
+@pytest.mark.parametrize(
+    ("exc_type", "expected", "expected_code"),
+    [
+        (CheckinClassNotFoundError, 404, CheckinErrorCode.class_not_found),
+        (CheckinClassDeletedError, 400, CheckinErrorCode.class_deleted),
+        (CheckinClassInactiveError, 400, CheckinErrorCode.class_inactive),
+        (
+            CheckinOccurrenceNotFoundError,
+            400,
+            CheckinErrorCode.occurrence_not_found,
+        ),
+        (
+            CheckinOccurrenceCancelledError,
+            400,
+            CheckinErrorCode.occurrence_cancelled,
+        ),
+        (CheckinClassFullError, 400, CheckinErrorCode.class_full),
+    ],
+)
+def test_create_signup_maps_error_type_to_status_and_code(
+    client,
+    auth_headers,
+    signup_service_mock,
+    fake_gym_id,
+    fake_member_id,
+    exc_type,
+    expected,
+    expected_code,
 ):
-    signup_service_mock.create = AsyncMock(side_effect=ValueError("Class is full"))
+    """The member-facing route dispatches on the exception TYPE, exactly like
+    the staff ``POST /api/v1/signup`` — same service, statuses and ``code``.
+
+    Only a type dispatch keeps the two routes in agreement: under prose
+    matching, rewording one message moves the member status while the staff one
+    stays put. The messages here are hostile to that on purpose.
+    """
+    message = (
+        "no such class at this gym"
+        if expected == 404
+        else "the thing was not found, and yet this is a 400"
+    )
+    signup_service_mock.create = AsyncMock(side_effect=exc_type(message))
 
     resp = client.post(
         f"{_base(fake_gym_id, fake_member_id)}/signup",
@@ -496,14 +551,19 @@ def test_create_signup_maps_full_class_to_400(
         headers=auth_headers,
     )
 
-    assert resp.status_code == 400
-    assert resp.json()["detail"] == "Class is full"
+    assert resp.status_code == expected, resp.text
+    body = resp.json()
+    assert isinstance(body["detail"], str)
+    assert body["detail"] == message
+    assert body["code"] == expected_code.value
 
 
-def test_create_signup_maps_missing_class_to_404(
+def test_create_signup_foreign_value_error_still_400(
     client, auth_headers, signup_service_mock, fake_gym_id, fake_member_id
 ):
-    signup_service_mock.create = AsyncMock(side_effect=ValueError("Class not found"))
+    """An unmapped ValueError stays the generic bad-input 400 (and carries no
+    ``code``) — the same fallback the staff route keeps."""
+    signup_service_mock.create = AsyncMock(side_effect=ValueError("something odd"))
 
     resp = client.post(
         f"{_base(fake_gym_id, fake_member_id)}/signup",
@@ -511,7 +571,8 @@ def test_create_signup_maps_missing_class_to_404(
         headers=auth_headers,
     )
 
-    assert resp.status_code == 404
+    assert resp.status_code == 400, resp.text
+    assert "code" not in resp.json()
 
 
 def test_remove_signup_gates_and_delegates(

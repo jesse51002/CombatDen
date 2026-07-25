@@ -669,7 +669,7 @@ class DependencyInjector(containers.DeclarativeContainer):
     # ── Payment sync ─────────────────────────────────────────────
     # Shared payer resolver, injected wherever payer resolution is needed: the
     # sync and the lifecycle / validation callers (start, charge_card,
-    # mark_paid_cash).
+    # mark_paid_cash, retry_card).
     payer_resolver = providers.Factory(
         PayerResolver,
         db_pool=db_pool,
@@ -841,6 +841,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         members_management_service=members_management_service,
         waivers_service=waivers_service,
         invoice_fetch_runner=memberships_invoice_fetch_runner,
+        invoice_fetch=member_memberships_invoice_fetch,
     )
     member_memberships_refund_service = providers.Factory(
         MemberMembershipsRefund,
@@ -909,6 +910,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         waivers_service=waivers_service,
         classes_versions_service=classes_versions_service,
         ranks_members=ranks_members,
+        combatden_app_store_url=settings.combatden_app_store_url,
+        combatden_play_store_url=settings.combatden_play_store_url,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────
