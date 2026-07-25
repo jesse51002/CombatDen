@@ -259,6 +259,33 @@ back to active because the DB says it's current.
   `payment_method_id` is mutually exclusive with `paid_out_of_band`
   (model-validated). A `$0` invoice auto-pays at finalize and skips the pay step
   entirely, so a one-off card is never attached for a zero-total charge.
+  > **⚠️ Step order is load-bearing: READ the lines, THEN charge.** The
+  > sequence is create invoice → create items → **finalize** →
+  > `_all_invoice_lines` → `_order_lines` → **`_pay_invoice`** → assemble the
+  > response. Finalizing is what CREATES the lines; paying only moves `status`
+  > and `amount_paid` and never adds, removes, re-orders or re-prices a line
+  > (verified live on the pinned dahlia API), so the item→line map is identical
+  > either side of the pay — but building it AFTER the pay puts a raise inside
+  > the money window. `_all_invoice_lines` makes a **network** call as soon as
+  > `invoice.lines.has_more` (a cart of more than 10 lines — a large family or
+  > a class-pack signup) and `_order_lines` raises for an absent invoice item;
+  > either raise propagates out through `PaymentSyncOneTime` (`_execute` is a
+  > bare `return await`) into `MemberMembershipsStart._charge_one_time_group`'s
+  > blanket `except` → `_cleanup_states` → `_delete_pending`, so Stripe keeps
+  > the money while the membership rows are deleted. Read first and that same
+  > failure costs nothing: nothing is charged, so cleaning up the un-billed
+  > rows is the honest answer.
+  > **Nothing after the collection point may raise**, for the same reason
+  > `PaymentSyncOneTime._writeback` is unconditionally best-effort (C-025) —
+  > that hardening lives DOWNSTREAM of this service, so it cannot catch a raise
+  > from inside it. The post-pay assembly is therefore pure attribute access on
+  > objects already in hand, wrapped by `_response_after_collection`, which logs
+  > and returns a degraded response (invoice id + the pre-pay `(line id,
+  > amount)` pairs + the request's customer/currency) rather than raise. Guards:
+  > `tests/payments/test_payments_charge_ordering.py` (the recorded Stripe call
+  > ORDER, so moving a read back below the charge fails loudly) and
+  > `tests/sync/test_one_time_charge_window.py` (the same invariant at the
+  > `charge_one_time` boundary the start op wraps).
 - `refund_payment` — refund a **charge** (full or partial), by the original
   `stripe_charge_id` (what `member_charges` stores and what the `refund.*`
   webhook keys on — no PaymentIntent lookup). The response carries the refund's

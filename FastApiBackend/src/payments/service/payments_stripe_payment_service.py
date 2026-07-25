@@ -87,6 +87,10 @@ class PaymentsStripePaymentService:
         amount) with its own item-level discount coupons. The returned
         ``line_item_ids`` are in the same order as ``request.items`` so a caller
         can map each item to its Stripe line id.
+
+        **The step order is load-bearing.** Every read runs BEFORE the charge
+        and everything after it is pure attribute access — see the two banner
+        comments below.
         """
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
         base_key = request.idempotency_key
@@ -129,27 +133,110 @@ class PaymentsStripePaymentService:
             ),
         )
 
+        invoice_id = invoice.id
+
+        # ── Read the item -> line map BEFORE any money moves ──────────
+        # FINALIZING is what creates the lines; paying only moves ``status``
+        # and ``amount_paid`` and never adds, removes, re-orders or re-prices a
+        # line (verified live against the pinned dahlia API: across
+        # ``invoices.pay`` a 12-line invoice's line ids, order, subtotals,
+        # ``discount_amounts`` and post-discount amounts are identical). So the
+        # map can be built here — and if building it fails, NOTHING has been
+        # charged, so a caller cleaning up its un-billed rows is exactly right
+        # and the member is honestly told nothing happened.
+        #
+        # These two steps used to run AFTER the pay, which put a raise inside
+        # the money window: ``_all_invoice_lines`` makes a NETWORK call as soon
+        # as ``lines.has_more`` (a cart of more than 10 lines — a large family
+        # or a class-pack signup) and ``_order_lines`` raises for an absent
+        # invoice item. Either raise propagated out through
+        # ``PaymentSyncOneTime`` to ``MemberMembershipsStart``'s blanket
+        # ``except``, which deletes the pending membership rows — while Stripe
+        # keeps the money.
+        all_lines = await self._all_invoice_lines(invoice, stripe_account_id)
+        ordered_lines = self._order_lines(all_lines, invoice_item_ids)
+
         # Zero-amount invoices are auto-marked paid at finalization, so paying
-        # again raises "Invoice is already paid".
-        if invoice.status != "paid":
+        # again raises "Invoice is already paid". Their lines were read above
+        # like any other invoice's — the pre-read changes nothing for them.
+        if invoice.status != INVOICE_STATUS_PAID:
             invoice = await self._pay_invoice(
-                invoice.id,
+                invoice_id,
                 request,
                 stripe_account_id,
             )
 
-        all_lines = await self._all_invoice_lines(invoice, stripe_account_id)
-        ordered_lines = self._order_lines(all_lines, invoice_item_ids)
-        return PaymentsInvoicePaymentResponse(
-            stripe_invoice_id=invoice.id,
-            stripe_customer_id=invoice.customer,
-            amount_paid=invoice.amount_paid,
-            currency=invoice.currency,
-            status=invoice.status,
-            line_item_ids=[line_id for line_id, _ in ordered_lines],
-            line_amounts=[amount for _, amount in ordered_lines],
-            metadata=invoice.metadata.to_dict() if invoice.metadata else {},
+        # ── PAST THIS LINE THE MONEY IS COLLECTED ─────────────────────
+        return self._response_after_collection(
+            invoice,
+            request,
+            invoice_id,
+            ordered_lines,
         )
+
+    def _response_after_collection(
+        self,
+        invoice: stripe.Invoice,
+        request: PaymentsInvoicePaymentCreateRequest,
+        invoice_id: str,
+        ordered_lines: list[tuple[str, int]],
+    ) -> PaymentsInvoicePaymentResponse:
+        """Assemble the charge response after collection — NEVER raises.
+
+        Every value here is plain attribute access on objects already in hand
+        (the reads that can hit the network run before the charge), so the
+        guard should be unreachable. It exists because of what a raise past
+        this point COSTS, not because one is expected: **once money is
+        collected, nothing downstream may un-bill it.** A raise here propagates
+        to ``MemberMembershipsStart._charge_one_time_group``'s blanket
+        ``except``, which deletes the membership rows the member has just paid
+        for. ``PaymentSyncOneTime._writeback`` was hardened for exactly this
+        reason (C-025); this is the same rule applied one layer up, where the
+        collection actually happens.
+
+        The degraded response claims nothing it cannot support: the invoice id
+        and the ``(line id, amount)`` pairs were captured before the charge,
+        the customer and currency come off the request, and the invoice's own
+        ``status`` / ``amount_paid`` are still preferred when they read back
+        cleanly.
+        """
+        try:
+            return PaymentsInvoicePaymentResponse(
+                stripe_invoice_id=invoice.id,
+                stripe_customer_id=invoice.customer,
+                amount_paid=invoice.amount_paid,
+                currency=invoice.currency,
+                status=invoice.status,
+                line_item_ids=[line_id for line_id, _ in ordered_lines],
+                line_amounts=[amount for _, amount in ordered_lines],
+                metadata=invoice.metadata.to_dict() if invoice.metadata else {},
+            )
+        except Exception:
+            logger.error(
+                "Failed to assemble the response for invoice %s AFTER the "
+                "charge was collected; returning a degraded response rather "
+                "than raising, because a raise here would un-bill a paid "
+                "invoice. status/amount_paid may be reconstructed.",
+                invoice_id,
+                exc_info=True,
+            )
+            status = getattr(invoice, "status", None)
+            amount_paid = getattr(invoice, "amount_paid", None)
+            return PaymentsInvoicePaymentResponse(
+                stripe_invoice_id=invoice_id,
+                stripe_customer_id=request.stripe_customer_id,
+                amount_paid=(
+                    amount_paid
+                    if isinstance(amount_paid, int)
+                    else sum(amount for _, amount in ordered_lines)
+                ),
+                currency=request.currency,
+                status=(
+                    status if isinstance(status, str) else INVOICE_STATUS_PAID
+                ),
+                line_item_ids=[line_id for line_id, _ in ordered_lines],
+                line_amounts=[amount for _, amount in ordered_lines],
+            )
 
     async def _pay_invoice(
         self,
@@ -278,10 +365,14 @@ class PaymentsStripePaymentService:
         The embedded ``invoice.lines.data`` is only Stripe's first page
         (default 10), so a >10-item itemized invoice (large family /
         class-pack) would silently truncate and ``_order_lines`` would then
-        raise for the dropped items **after** the invoice was already charged.
-        We keep the embedded first page and follow ``has_more`` through the
-        dedicated line-items endpoint so the item->line map is complete. The
-        common (<=10-item) case needs no extra request.
+        raise for the dropped items. We keep the embedded first page and follow
+        ``has_more`` through the dedicated line-items endpoint so the
+        item->line map is complete. The common (<=10-item) case needs no extra
+        request.
+
+        **This is a network call, so it must run BEFORE the invoice is paid**
+        (``create_invoice_payment`` calls it right after finalize) — a failure
+        here after collection would un-bill a paid invoice.
         """
         lines: list[stripe.InvoiceLineItem] = list(invoice.lines.data)
         if not getattr(invoice.lines, "has_more", False):
