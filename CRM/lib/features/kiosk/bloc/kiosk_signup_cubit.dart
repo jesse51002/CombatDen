@@ -62,6 +62,29 @@ const Duration kKioskSignupWelcomeHold = Duration(seconds: 60);
 /// fast.
 const Duration kKioskSignupStartTimeout = Duration(seconds: 90);
 
+/// One member's answer from the plan-history read, carried per member so a
+/// concurrent gather can never mix two rosters' answers up.
+///
+/// A read that FAILED is represented as the fail-OPEN answer itself (no trial,
+/// nothing held) rather than as an absence: the plan gates block on a positive
+/// fact, so "we don't know" and "nothing to block" are the same instruction
+/// there. The waiver twin below is the exact opposite and says so in its type.
+typedef _KioskPlanHistory = ({
+  String memberId,
+  bool hadTrial,
+  List<String> heldRecurring,
+});
+
+/// One member's answer from the prior-signature read.
+///
+/// **`satisfied == null` is the fail-CLOSED signal and is a different thing from
+/// an empty set.** Null means the read did not land, so NOTHING may be skipped
+/// for that member; an empty set means the server answered and named nothing
+/// compliant. Carrying the distinction in the TYPE is what stops a caller
+/// collapsing the two — the same reason `KioskSignupState.retryMemberIds` is
+/// nullable.
+typedef _KioskWaiverHistory = ({String memberId, Set<String>? satisfied});
+
 /// The kiosk SELF-SERVE SIGNUP lane — a sibling of [KioskFlowCubit], not more
 /// fields on it.
 ///
@@ -1245,6 +1268,9 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// address — and a lobby iPad prints none of it. Nothing here renders, logs
   /// or persists any part of the response beyond the boolean and the plan ids
   /// below; never reuse it to prefill a form.
+  ///
+  /// **The roster is read CONCURRENTLY** — see [_readPlanHistory] for why that
+  /// cannot bleed one member's failure into another's answer.
   Future<void> _loadPlanEligibility() async {
     final wanted = <String>{
       for (final person in state.persons)
@@ -1256,44 +1282,96 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     };
     if (wanted.isEmpty) return;
     _planChecked.addAll(wanted);
-    for (final memberId in wanted) {
-      bool hadTrial;
-      List<String> heldRecurring;
-      try {
-        final detail = await _memberRepo.getMemberDetail(memberId);
+    final answers = await Future.wait(wanted.map(_readPlanHistory));
+    if (isClosed) return;
+    // Only an answer that actually CLOSES something is written back, exactly as
+    // the serial version did: a clean history leaves the person untouched rather
+    // than emitting a no-op.
+    final closing = <String, _KioskPlanHistory>{
+      for (final answer in answers)
+        if (answer.hadTrial || answer.heldRecurring.isNotEmpty)
+          answer.memberId: answer,
+    };
+    if (closing.isEmpty) return;
+    // ONE emit for the whole roster now that the reads land together — a
+    // per-person emit would repaint the grid once per member for no gain.
+    final persons = <KioskSignupPerson>[];
+    for (final person in state.persons) {
+      final answer = closing[person.memberId];
+      if (answer == null) {
+        persons.add(person);
+        continue;
+      }
+      persons.add(_clearBlockedPick(person.copyWith(
+        hadTrial: answer.hadTrial,
+        heldRecurringPlanIds: answer.heldRecurring,
+      )));
+    }
+    emit(state.copyWith(persons: persons));
+  }
+
+  /// One member's plan history, reduced to the TWO facts the grid needs.
+  ///
+  /// **It never throws, and that is what keeps [Future.wait] honest here.**
+  /// `Future.wait` propagates the FIRST error and cancels nothing, so a throwing
+  /// read would discard every sibling's answer — on this path that means a
+  /// second member's held plan silently going unblocked because the first
+  /// member's read timed out. Catching inside the per-member future makes the
+  /// gathered list total: one member's failure is one member's fail-OPEN answer.
+  ///
+  /// **The fail-OPEN posture is unchanged** (and is the deliberate inverse of
+  /// [_readSatisfiedWaivers]): a read that threw answers "no trial, nothing
+  /// held", so every plan stays on offer. Blocking a legitimate first-timer
+  /// because a read failed sends a paying customer out of the door, and on a
+  /// failed read the kiosk does not know WHICH plan somebody holds — a
+  /// fail-closed posture would have to close the whole grid.
+  Future<_KioskPlanHistory> _readPlanHistory(String memberId) async {
+    try {
+      final detail = await _memberRepo.getMemberDetail(memberId);
+      return (
+        memberId: memberId,
         // Every membership row the member has ever held, whatever its
         // lifecycle state — a trial taken and finished a year ago still
         // counts, which is the whole question being asked.
-        hadTrial = detail.memberships.any((m) => m.planType == 'trial');
-        // The held-recurring set mirrors the backend's conflict SQL exactly:
-        // `plan_type = 'recurring'` AND `status IN ('active','frozen')`. Any
-        // wider status set would refuse a sale the backend would have taken.
-        heldRecurring = <String>{
+        hadTrial: detail.memberships.any((m) => m.planType == 'trial'),
+        // **The held-recurring set mirrors the backend's conflict guard, which
+        // means THREE client statuses for its two SQL strings.** The guard
+        // (`member_memberships_check_existing.sql`) reads the
+        // `member_memberships_status` view, whose CASE emits only
+        // `cancelled / ended / frozen / active` — there is no `overdue` in the
+        // database at all. `overdue` is a CRM DISPLAY status the backend derives
+        // in Python (`members_status_mapping.is_membership_overdue`: not
+        // cancelled, and a `next_due_date` already passed), and it MASKS the raw
+        // status on the way out. So a member in arrears arrives here as
+        // `overdue` while the guard still sees `active` and still rejects the
+        // sale.
+        //
+        // Blocking `active`, `frozen` AND `overdue` is therefore the exact
+        // mirror, not a wider net: the client enum SPLITS the backend's
+        // `active`, so matching only the two literal SQL strings UNDER-blocks
+        // and lets a member in arrears pick the plan they hold, type a card and
+        // eat the 400. It cannot over-block either — a recurring membership
+        // never gets an `end_date` (`memberships_base` resolves one only for
+        // non-recurring plans, and cancel touches `cancel_date`), so an
+        // `overdue` RECURRING row can only be masking raw `active` or `frozen`,
+        // which are precisely the two the guard conflicts on.
+        heldRecurring: <String>{
           for (final membership in detail.memberships)
             if (membership.planType == 'recurring' &&
                 (membership.status == MembershipStatus.active ||
-                    membership.status == MembershipStatus.frozen))
+                    membership.status == MembershipStatus.frozen ||
+                    membership.status == MembershipStatus.overdue))
               membership.planId,
-        }.toList();
-      } catch (e, st) {
-        log('Kiosk signup: membership history read failed (nothing blocked)',
-            error: e, stackTrace: st);
-        hadTrial = false;
-        heldRecurring = const [];
-      }
-      if (isClosed) return;
-      if (!hadTrial && heldRecurring.isEmpty) continue;
-      final persons = [
-        for (final person in state.persons)
-          if (person.memberId == memberId)
-            _clearBlockedPick(person.copyWith(
-              hadTrial: hadTrial,
-              heldRecurringPlanIds: heldRecurring,
-            ))
-          else
-            person,
-      ];
-      emit(state.copyWith(persons: persons));
+        }.toList(),
+      );
+    } catch (e, st) {
+      log('Kiosk signup: membership history read failed (nothing blocked)',
+          error: e, stackTrace: st);
+      return (
+        memberId: memberId,
+        hadTrial: false,
+        heldRecurring: const <String>[],
+      );
     }
   }
 
@@ -1319,6 +1397,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// **Only for a person the kiosk did not create.** Somebody registered during
   /// this signup has no signature history by construction, so their answer is
   /// "nothing signed" with no request spent at all.
+  ///
+  /// **The roster is read CONCURRENTLY**, and it is fired alongside
+  /// [_loadPlanEligibility] on the two-taps-from-waivers hot path — see
+  /// [_readSatisfiedWaivers] for why neither the sibling read nor another
+  /// member's failure can move this one's answer.
   Future<void> _loadPriorWaiverStatus() async {
     final wanted = <String>{
       for (final person in state.persons)
@@ -1330,28 +1413,52 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     };
     if (wanted.isEmpty) return;
     _waiverStatusChecked.addAll(wanted);
-    for (final memberId in wanted) {
-      List<MemberWaiverStatus> rows;
-      try {
-        rows = await _membershipsRepo.listMemberWaiverStatus(memberId, _gymId);
-      } catch (e, st) {
-        log('Kiosk signup: prior waiver status read failed '
-            '(every waiver on the plan will be asked for)',
-            error: e, stackTrace: st);
-        // No entry written — the member keeps the empty answer, so nothing is
-        // skipped for them. Fail CLOSED.
-        continue;
-      }
-      if (isClosed) return;
-      // `signed && meetsFloor` and nothing else. A row signed BELOW the floor
-      // is exactly the re-sign case, so it stays on the queue; a missing
-      // `meets_floor` parses as false (the model's `defaultValue`), so an
-      // unrecognised payload also stays on the queue.
-      _priorSatisfiedWaiverIds[memberId] = <String>{
+    final answers = await Future.wait(wanted.map(_readSatisfiedWaivers));
+    if (isClosed) return;
+    for (final answer in answers) {
+      final satisfied = answer.satisfied;
+      // **Null is the fail-CLOSED answer and must NOT be written.** No entry
+      // means `_satisfiedWaiverIdsFor` hands back the empty set, so nothing is
+      // skipped for that member. Writing an empty set here instead would behave
+      // the same today and would quietly become "we asked and they owe nothing"
+      // the moment anything distinguishes the two.
+      if (satisfied == null) continue;
+      _priorSatisfiedWaiverIds[answer.memberId] = satisfied;
+    }
+  }
+
+  /// The waivers one member's own signatures already satisfy, or **null when the
+  /// read failed** — the fail-CLOSED signal.
+  ///
+  /// **It never throws, for the same reason [_readPlanHistory] does not:**
+  /// `Future.wait` propagates the first error and cancels nothing, so one
+  /// member's failed read would throw away every sibling answer that had already
+  /// landed. Here that would flip the asymmetry the wrong way round — a whole
+  /// family re-signing waivers the gym already holds because ONE read failed —
+  /// while the plan-side sibling would flip it the other way. Each read owning
+  /// its own failure is what keeps the two postures independent.
+  Future<_KioskWaiverHistory> _readSatisfiedWaivers(String memberId) async {
+    List<MemberWaiverStatus> rows;
+    try {
+      rows = await _membershipsRepo.listMemberWaiverStatus(memberId, _gymId);
+    } catch (e, st) {
+      log('Kiosk signup: prior waiver status read failed '
+          '(every waiver on the plan will be asked for)',
+          error: e, stackTrace: st);
+      // Fail CLOSED: no answer at all, so nothing is skipped for them.
+      return (memberId: memberId, satisfied: null);
+    }
+    // `signed && meetsFloor` and nothing else. A row signed BELOW the floor
+    // is exactly the re-sign case, so it stays on the queue; a missing
+    // `meets_floor` parses as false (the model's `defaultValue`), so an
+    // unrecognised payload also stays on the queue.
+    return (
+      memberId: memberId,
+      satisfied: <String>{
         for (final row in rows)
           if (row.signed && row.meetsFloor) row.waiverId,
-      };
-    }
+      },
+    );
   }
 
   /// The waivers [memberId] has already satisfied, as of the read fired at the
@@ -2201,14 +2308,25 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   /// "Next" — from the receipt to the welcome screen and its app push.
   ///
-  /// Offered only on the all-created branch: a partial's decisions are Retry /
-  /// another card / the desk, and "continue without them" is a decision about
-  /// somebody's membership that belongs at the desk rather than on a lobby iPad.
+  /// **Offered on BOTH branches, partial included** (founder ruling). A partial
+  /// used to offer the retry ladder alone, which left a member who did not want
+  /// to retry at the iPad with no way forward but the 60-second expiry — and the
+  /// people whose memberships DID start never reached the app push they were
+  /// standing there for. The retry ladder is unchanged; Next is an additional
+  /// way on, and the receipt says in as many words that the front desk finishes
+  /// the rest.
+  ///
+  /// **It is deliberately NOT gated on [KioskSignupState.allCreated].** A guard
+  /// here is the exact behaviour the ruling reversed. The money-safety gate
+  /// lives on the retry instead ([KioskSignupState.canRetryStart]), where it
+  /// belongs: advancing to a terminal screen charges nothing, so nothing about
+  /// Next needs the response's shape — only the welcome screen's copy does,
+  /// which is what the flag below carries.
   void nextFromResults() {
     registerActivity();
     if (state.step != KioskSignupStep.results) return;
     _popupTimer?.cancel();
-    _enterWelcome();
+    _enterWelcome(afterPartial: !state.allCreated);
   }
 
   // ── D8 · declined ──
@@ -2369,8 +2487,15 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// Its [_endFlowIfStarted] call stays even though the all-created results
   /// screen has already released: [_flowStarted] is a latch, so the second call
   /// is a no-op, and this is still the ONLY release for the other routes here
-  /// (the 409 idempotent replay and a landed start with nothing to itemise).
-  void _enterWelcome() {
+  /// (the 409 idempotent replay, a landed start with nothing to itemise, and
+  /// Next off a PARTIAL receipt, which deliberately did not release on entry).
+  ///
+  /// [afterPartial] is carried onto the state rather than derived, because this
+  /// method CLEARS [KioskSignupState.startResult] — nothing on a terminal screen
+  /// may keep narrowing a future request — so the branch that routed here is the
+  /// only thing that still knows. It only decides whether the screen states the
+  /// front-desk handoff; every other route in is not a partial.
+  void _enterWelcome({bool afterPartial = false}) {
     _idleTimer?.cancel();
     _countdownTimer?.cancel();
     _popupTimer?.cancel();
@@ -2385,6 +2510,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       planBlockActive: null,
       popupCountdown: 0,
       welcomeCountdown: kKioskSignupWelcomeHold.inSeconds,
+      welcomeAfterPartial: afterPartial,
     ));
     _welcomeTimer?.cancel();
     _welcomeTimer = Timer.periodic(const Duration(seconds: 1), (_) {

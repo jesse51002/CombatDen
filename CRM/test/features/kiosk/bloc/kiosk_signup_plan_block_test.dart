@@ -52,12 +52,15 @@ class _MockManagementResponse extends Mock
 /// the whole family's signup with that same generic message.
 ///
 /// Four properties, and every test is one of them:
-///  * the rule mirrors the backend's conflict SQL **exactly** — `recurring` at
-///    `{active, frozen}`, keyed on the PLAN — so it can neither miss a real
-///    conflict nor invent one;
-///  * it is deliberately NARROWER than the CRM's own `disabledPlanReasons`. At a
-///    desk a false block is visible and staff reason about it; at a kiosk it
-///    silently turns away a paying customer with no override;
+///  * the rule mirrors the backend's conflict guard **exactly** — `recurring` at
+///    the view's `{active, frozen}`, keyed on the PLAN — so it can neither miss a
+///    real conflict nor invent one. Mirroring those two SQL strings takes THREE
+///    client statuses, because the CRM's `overdue` is a Python-derived DISPLAY
+///    status masking a raw `active`/`frozen` row that the guard still rejects;
+///  * the CRM's own `disabledPlanReasons` was aligned to the same guard, so both
+///    clients derive ONE rule from ONE backend source. A divergence either way is
+///    a bug: at a desk a false block is at least visible and overridable, while
+///    at a kiosk it silently turns away a paying customer;
 ///  * the held set lives on the PERSON, so a group cannot leak one member's
 ///    membership onto another's turn;
 ///  * the read **FAILS OPEN**: on a failure the kiosk does not know which plan
@@ -202,17 +205,32 @@ void main() {
       await cubit.close();
     });
 
-    test('OVERDUE does not block — the backend would have taken that sale',
-        () async {
+    test('OVERDUE blocks — the view has no such status, so the guard sees the '
+        'raw ACTIVE row and rejects the sale', () async {
       final cubit = await atPlansAsExisting([
         _membership(unlimited, 'recurring', status: MembershipStatus.overdue),
       ]);
 
-      // The CRM's own `disabledPlanReasons` blocks `overdue`; the SQL does not,
-      // and the kiosk follows the SQL.
-      expect(cubit.state.payer.heldRecurringPlanIds, isEmpty);
-      expect(cubit.state.planBlockReason(planOf(cubit, unlimited)), isNull);
-      expect(kioskHeldPlanNotice(cubit.state), isNull);
+      // **This assertion used to be the inverse, and it encoded a bug.**
+      // `overdue` is not a database status at all: the
+      // `member_memberships_status` view emits only
+      // `cancelled / ended / frozen / active`, and a past-due row falls through
+      // to `active`. The CRM DISPLAY status is derived in Python
+      // (`is_membership_overdue`) and masks that raw `active` on the way out —
+      // so the client enum SPLITS the backend's `active`, and matching only the
+      // SQL's two literal strings under-blocked: the guard rejects this sale, so
+      // a member in arrears was offered the plan they already hold, typed a card
+      // and ate the 400 (in a group, killing the whole family's signup).
+      expect(cubit.state.payer.heldRecurringPlanIds, [unlimited]);
+      expect(
+        cubit.state.planBlockReason(planOf(cubit, unlimited)),
+        KioskPlanBlockReason.alreadyOnPlan,
+      );
+      // And the notice states the membership without ever saying "overdue":
+      // money owed is the desk's conversation, not a lobby iPad's.
+      final notice = kioskHeldPlanNotice(cubit.state)!;
+      expect(notice, contains('Unlimited'));
+      expect(notice.toLowerCase(), isNot(contains('overdue')));
       await cubit.close();
     });
 

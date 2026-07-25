@@ -32,7 +32,11 @@ import 'package:crm/shared/widgets/hairline.dart';
 ///   would be a false statement about it. This is the branch the screen exists
 ///   for. It carries the decline popup's own three actions, in its order, wired
 ///   to its cubit methods, plus the card chip: which card was used is the fact a
-///   member wants before retrying.
+///   member wants before retrying. **It also carries `Next`** (founder ruling):
+///   a partial must have a working way forward and not only a way back, so the
+///   same Next the all-created branch shows sits in the ladder's outline tier,
+///   with the notice above the panel naming the front desk as what finishes the
+///   rest. Nothing about the retry ladder changes.
 ///
 /// An ALL-failed start never reaches here — it stays on `KioskDeclinedScreen`,
 /// where "nothing was charged" is true and where the founder's retry ladder
@@ -85,6 +89,24 @@ class KioskResultsScreen extends StatelessWidget {
                       text: 'Try another card',
                       onPressed: cubit.retryCard,
                     ),
+                    // **A partial has a working way ON, not only a way back**
+                    // (founder ruling). Without it, a member who did not want
+                    // to retry was held here until the 60-second expiry
+                    // abandoned the flow — and the people whose memberships DID
+                    // start never reached the app push they were standing there
+                    // for. It is the SAME `Next` the all-created branch shows
+                    // (one vocabulary, one destination), demoted to the outline
+                    // tier because retrying is still the loudest thing to do,
+                    // and it is additional: the retry ladder is untouched. The
+                    // notice above the panel is what tells the member the front
+                    // desk finishes the rest.
+                    KioskOutlineButton(
+                      text: 'Next',
+                      onPressed: cubit.nextFromResults,
+                    ),
+                    // The desk handoff stays at the bottom on both screens that
+                    // offer it: it is the always-available option, never a
+                    // destination the kiosk picks.
                     KioskOutlineButton(
                       text: 'Get help at the desk',
                       onPressed: cubit.getHelpAtDesk,
@@ -122,12 +144,19 @@ class _Body extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
-        // On a partial, the one thing a member needs before they decide: the
-        // rows that say Started are PAID, and a retry does not touch them.
+        // On a partial, the two things a member needs before they decide: the
+        // rows that say Started are PAID and a retry does not touch them, and
+        // that not retrying is a real option — the front desk finishes what did
+        // not go through. That second sentence is what makes `Next` legible: a
+        // bare "Next" beside "Retry the rest" would leave a member wondering
+        // what happens to the rows that failed, and the answer must not be
+        // guessed at. It names the desk plainly and blames nobody, because a
+        // queue reads this screen over the member's shoulder.
         if (!allCreated)
           const KioskInlineNotice(
             message: 'The ones marked Started are paid for. Trying again only '
-                'charges for the ones that didn\'t go through.',
+                'charges for the ones that didn\'t go through. Or tap Next and '
+                'ask the front desk to finish the rest.',
           ),
         _ResultsPanel(state: state, allCreated: allCreated),
         // Which card was used — the fact a member wants in hand before

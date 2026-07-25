@@ -689,6 +689,41 @@ void main() {
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
+
+    testWidgets('the decline body does not claim the ACCOUNT is untouched',
+        (tester) async {
+      cubit = newCubit();
+      await declineTimes(tester, 1);
+      await pump(tester, const KioskDeclinedScreen());
+
+      // The charge did not happen, so this half stays.
+      expect(
+        find.textContaining('You haven\'t been charged'),
+        findsOneWidget,
+      );
+      // But the fresh card HAS already replaced the payer's default by now (the
+      // start promotes it before charging and a decline reverts nothing), so the
+      // screen has to say so rather than reassure past it.
+      expect(
+        find.textContaining(
+          'The card you entered is now the one saved on your profile',
+        ),
+        findsOneWidget,
+      );
+      // The retired sentence, whose "everything ELSE" invited the reading that
+      // nothing else about their account changed.
+      expect(
+        find.textContaining('everything else you filled in is saved'),
+        findsNothing,
+      );
+      // Retrying is still the loudest thing on the screen.
+      expect(
+        find.widgetWithText(KioskPrimaryButton, 'Retry'),
+        findsOneWidget,
+      );
+      expect(tester.takeException(), isNull);
+      await cubit.close();
+    });
   });
 
   group('E · the per-person results receipt', () {
@@ -782,8 +817,20 @@ void main() {
         expect(find.byType(KioskReturnTimer), findsOneWidget);
         // Which card was used is the fact a member wants before retrying.
         expect(find.byType(KioskCardChip), findsOneWidget);
-        // No "Next" — continuing without them is a desk decision.
-        expect(find.text('Next'), findsNothing);
+        // **`Next` is live on a partial too** (founder ruling — this assertion
+        // used to be `findsNothing`). A partial with only a retry ladder held a
+        // member who did not want to retry until the 60-second expiry, and the
+        // people whose memberships DID start never reached the app push. It is
+        // additional, never a replacement: all three retry actions above are
+        // still here, and the notice names the desk as what finishes the rest.
+        final next = tester.widget<KioskOutlineButton>(
+          find.widgetWithText(KioskOutlineButton, 'Next'),
+        );
+        expect(next.onPressed, isNotNull);
+        expect(
+          find.textContaining('ask the front desk to finish the rest'),
+          findsOneWidget,
+        );
         expect(find.text('Start over'), findsNothing);
         expect(
           tester.takeException(),

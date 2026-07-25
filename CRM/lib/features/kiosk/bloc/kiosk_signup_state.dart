@@ -688,6 +688,23 @@ class KioskSignupState extends Equatable {
   /// Seconds left on the welcome screen's auto-return. 0 off the welcome.
   final int welcomeCountdown;
 
+  /// The welcome screen was reached from a PARTIAL receipt — somebody's
+  /// membership did not start, and the member chose to carry on anyway.
+  ///
+  /// **It exists so the last screen of the signup cannot read as "you're all
+  /// set" when it isn't.** The welcome greets the payer under a green check, and
+  /// on a partial that tick would be the whole screen's only claim about an
+  /// outcome that was mixed. The flag turns on the front-desk line instead; it
+  /// changes nothing else, and the receipt itself carries the per-person detail
+  /// the member read before tapping Next.
+  ///
+  /// It is set by `KioskSignupCubit._enterWelcome` from the branch that routed
+  /// there, not derived from [startResult] — welcome CLEARS that (nothing on a
+  /// terminal may narrow a future request), and the other routes in (the 409
+  /// idempotent replay, a landed start with nothing to itemise) are not partials
+  /// at all.
+  final bool welcomeAfterPartial;
+
   // ── Blocking popups (the decline, the plan block) ──
   /// Which plan-block popup is up over the plan grid, or null when none is.
   ///
@@ -769,6 +786,7 @@ class KioskSignupState extends Equatable {
     this.idempotencyKey,
     this.startResult,
     this.welcomeCountdown = 0,
+    this.welcomeAfterPartial = false,
     this.planBlockActive,
     this.popupCountdown = 0,
     this.stopReason,
@@ -843,6 +861,31 @@ class KioskSignupState extends Equatable {
     final memberId = person.memberId;
     if (!person.training || memberId == null) return false;
     return retryMemberIds?.contains(memberId) ?? true;
+  }
+
+  /// Whether [person]'s membership ALREADY STARTED on an earlier attempt of
+  /// this signup — the review's marker after a partial failure.
+  ///
+  /// **It is the inverse face of [isBeingCharged], and it marks rather than
+  /// filters.** Re-entering the review through "Try another card" after a
+  /// partial shows the whole roster again (the group panel lists everybody on
+  /// purpose — a family review that dropped somebody would read as though they
+  /// had been forgotten), so a person whose membership already exists needs a
+  /// mark saying the next card will not be charged for them. Hiding their row
+  /// instead would answer "did you forget my son?" with silence.
+  ///
+  /// Only a CREATED row qualifies. `unknown` is in [retryMemberIds] — the
+  /// backend confirmed nothing about it — so it stays in the cart and stays
+  /// unmarked; claiming "started" about a row the server would not confirm is
+  /// the guess this predicate refuses to make. A non-training person and one
+  /// with no member id are both false because neither is in any cart:
+  /// [isBeingCharged] answers false for them too, so the landed-response check
+  /// is what separates "not being charged because they already paid" from "not
+  /// being charged at all".
+  bool alreadyStarted(KioskSignupPerson person) {
+    if (startResult == null) return false;
+    if (!person.training || person.memberId == null) return false;
+    return !isBeingCharged(person);
   }
 
   /// Whether every membership in the landed start was created — the results
@@ -1045,14 +1088,21 @@ class KioskSignupState extends Equatable {
   ///   member. Staff can still grant a repeat trial from the CRM; this is a
   ///   kiosk-only rule, not a backend one.
   /// * [KioskPlanBlockReason.alreadyOnPlan] — a RECURRING plan they already
-  ///   hold. This one mirrors the backend's own conflict SQL exactly
-  ///   (`plan_type = 'recurring'` AND `status IN ('active','frozen')`, keyed on
-  ///   `plan_id`), so a member on "Unlimited Monthly" may still buy a
-  ///   DIFFERENT recurring plan. **It is deliberately NARROWER than the CRM's
-  ///   own `disabledPlanReasons`** (which also blocks a held trial plan and an
-  ///   `overdue` status): at a desk a false block is visible and staff reason
-  ///   about it, while at a kiosk it silently turns away a paying customer with
-  ///   no override. Do not "align" this to the CRM's looser set.
+  ///   hold. This one mirrors the backend's own conflict guard
+  ///   (`member_memberships_check_existing.sql`: `plan_type = 'recurring'` AND
+  ///   `status IN ('active','frozen')` off the `member_memberships_status` view,
+  ///   keyed on `plan_id`), so a member on "Unlimited Monthly" may still buy a
+  ///   DIFFERENT recurring plan. **Mirroring it takes THREE client statuses for
+  ///   those two SQL strings** — `active`, `frozen` and `overdue` — because
+  ///   `overdue` is a CRM display status derived in Python that MASKS a raw
+  ///   `active`/`frozen` row (there is no `overdue` in the view at all), so
+  ///   matching only the literal strings would under-block a member in arrears
+  ///   into a 400 at the money step. `KioskSignupCubit._readPlanHistory` carries
+  ///   the full argument. The CRM's own `disabledPlanReasons` was aligned to the
+  ///   same guard, so **both clients now derive one rule from one backend
+  ///   source** — a divergence in either direction is a bug, not a deliberate
+  ///   asymmetry: at a desk a false block is at least visible and overridable,
+  ///   while at a kiosk it silently turns away a paying customer.
   KioskPlanBlockReason? planBlockReasonFor(
     KioskSignupPerson person,
     MembershipPlanResponse plan,
@@ -1218,6 +1268,7 @@ class KioskSignupState extends Equatable {
     Object? idempotencyKey = _keep,
     Object? startResult = _keep,
     int? welcomeCountdown,
+    bool? welcomeAfterPartial,
     Object? planBlockActive = _keep,
     int? popupCountdown,
     Object? stopReason = _keep,
@@ -1292,6 +1343,7 @@ class KioskSignupState extends Equatable {
           ? this.startResult
           : startResult as MemberMembershipsStartResponse?,
       welcomeCountdown: welcomeCountdown ?? this.welcomeCountdown,
+      welcomeAfterPartial: welcomeAfterPartial ?? this.welcomeAfterPartial,
       planBlockActive: identical(planBlockActive, _keep)
           ? this.planBlockActive
           : planBlockActive as KioskPlanBlockReason?,
@@ -1352,6 +1404,7 @@ class KioskSignupState extends Equatable {
         idempotencyKey,
         startResult,
         welcomeCountdown,
+        welcomeAfterPartial,
         planBlockActive,
         popupCountdown,
         stopReason,

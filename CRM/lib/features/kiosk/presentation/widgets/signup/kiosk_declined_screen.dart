@@ -39,6 +39,18 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.d
 /// on the person standing in a lobby. The reassurance is warm and UNCOUNTED —
 /// a tally beside a refusal reads as a countdown to being cut off, which is not
 /// what happens here.
+///
+/// **The reassurance is scoped to what is actually still true.** A decline
+/// leaves the CHARGE untaken, so "you haven't been charged" stands — but the
+/// start attaches the fresh card and promotes it to the payer's Stripe default
+/// (detaching whatever was there) BEFORE it charges, and a decline reverts
+/// neither (founder ruling: accepted, because the member is about to pick a card
+/// anyway). So this screen may not imply their account is untouched. It says the
+/// card fact plainly instead — the same consequence the card step already made
+/// them read — and keeps the form-data reassurance narrowed to the form. The
+/// earlier "everything else you filled in is saved" was the sentence that
+/// collided with it: "everything ELSE" invites the reading that nothing else
+/// changed.
 class KioskDeclinedScreen extends StatelessWidget {
   const KioskDeclinedScreen({super.key});
 
@@ -87,8 +99,9 @@ class KioskDeclinedScreen extends StatelessWidget {
                           textAlign: TextAlign.center,
                         ),
                         Text(
-                          'You haven\'t been charged, and everything else you '
-                          'filled in is saved.',
+                          'You haven\'t been charged, and nothing you filled '
+                          'in is lost. The card you entered is now the one '
+                          'saved on your profile.',
                           style: DesignConstants.kioskBody.copyWith(
                             color: DesignConstants.text2nd,
                           ),

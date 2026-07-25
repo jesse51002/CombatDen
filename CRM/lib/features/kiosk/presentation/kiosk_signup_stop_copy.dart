@@ -69,9 +69,15 @@ String kioskSignupStopReassurance(KioskSignupStopReason? reason) {
       'We won\'t try that payment again in case it already went through. '
           'Please see the coach at the desk — they can check and finish this '
           'off for you.',
+    // The decline screen's twin, and it carries the same correction: the charge
+    // did not happen, but the fresh card HAS already replaced the payer's
+    // default (the start promotes it before charging, and a decline reverts
+    // nothing), so neither surface may imply the account is untouched. This stop
+    // is only ever reached FROM that popup, so the two must say the same thing.
     KioskSignupStopReason.cardDeclined =>
-      'You haven\'t been charged, and everything else you filled in is saved. '
-          'The coach at the desk can take it from here.',
+      'You haven\'t been charged, and nothing you filled in is lost. The card '
+          'you entered is now the one saved on your profile, and the coach at '
+          'the desk can take it from here.',
     KioskSignupStopReason.plansUnavailable ||
     KioskSignupStopReason.previewFailed ||
     KioskSignupStopReason.paymentsUnavailable ||

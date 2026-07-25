@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -12,6 +14,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 import 'package:crm/features/member_details/data/models/members_management_response.dart';
 import 'package:crm/features/member_details/data/models/members_management_update_request.dart';
+import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
@@ -327,6 +330,197 @@ void main() {
     });
   });
 
+  /// The two plans-step reads run CONCURRENTLY — one `Future.wait` per read,
+  /// over the roster, both fired from `continueToPlans` — because the waiver run
+  /// is two taps away and a family of four used to serialise eight round trips
+  /// on that path.
+  ///
+  /// **`Future.wait` propagates the FIRST error and cancels nothing**, so the
+  /// hazard the concurrency introduces is one failure discarding answers that
+  /// already landed. Every one of these tests is one shape of that, and each
+  /// asserts BOTH postures at once, because the two reads' asymmetries are
+  /// deliberate opposites: the plan gates fail OPEN (refusing a paying customer
+  /// is worse than a rare free week) and the waiver read fails CLOSED (a needless
+  /// signature costs twenty seconds, a missing one voids the gym's legal
+  /// protection). A gathered failure that leaked across would flip one of them.
+  group('the two reads are concurrent, and neither can move the other\'s '
+      'posture', () {
+    test('a roster\'s per-member reads are IN FLIGHT together, not one after '
+        'another', () async {
+      // The waiver run is two taps from here (pick a plan, Continue), so a
+      // family of existing members used to serialise one round trip per person
+      // per read on the hot path. Both gathers are held open on one gate so the
+      // PEAK in-flight count is observable: 2 per read means both members' calls
+      // were open at once, 1 means they were awaited in turn.
+      final gate = Completer<void>();
+      var detailInFlight = 0;
+      var detailPeak = 0;
+      var statusInFlight = 0;
+      var statusPeak = 0;
+      when(() => member.getMemberDetail(any())).thenAnswer((_) async {
+        detailInFlight++;
+        detailPeak = detailPeak > detailInFlight ? detailPeak : detailInFlight;
+        await gate.future;
+        detailInFlight--;
+        return _detail();
+      });
+      when(() => memberships.listMemberWaiverStatus(any(), any()))
+          .thenAnswer((_) async {
+        statusInFlight++;
+        statusPeak = statusPeak > statusInFlight ? statusPeak : statusInFlight;
+        await gate.future;
+        statusInFlight--;
+        return const [];
+      });
+
+      final cubit = build();
+      cubit.startAsExistingMember();
+      await cubit.pickPayerRow(_row('mem-payer', 'Marcus Bell'));
+      cubit.confirmPayerMatch();
+      when(() => member.createMember(any())).thenThrow(
+        const DuplicateMemberException([
+          DuplicateMemberMatch(
+            memberId: 'mem-ella',
+            firstName: 'Ella',
+            lastName: 'Bell',
+            email: 'ella.bell@gmail.com',
+          ),
+        ]),
+      );
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.confirmMatch();
+
+      cubit.continueToPlans();
+      await _settle();
+
+      expect(detailPeak, 2);
+      expect(statusPeak, 2);
+      gate.complete();
+      await _settle();
+      await cubit.close();
+    });
+
+    test('a THROWN plan read leaves the waiver skip intact — and still fails '
+        'OPEN itself', () async {
+      when(() => member.getMemberDetail(any())).thenThrow(Exception('down'));
+      when(() => memberships.listMemberWaiverStatus('mem-old', gymId))
+          .thenAnswer((_) async => [
+                _status(waiverA, signed: true, meetsFloor: true),
+                _status(waiverB, signed: false),
+              ]);
+      final cubit = await atWaiversAsExisting();
+
+      // The waiver answer LANDED: A is compliant and is dropped from the queue.
+      // Before the reads were gathered independently, the sibling's throw could
+      // have taken this answer with it and asked for a signature the gym holds.
+      expect(cubit.state.waiverQueue, [waiverB]);
+      // And the plan side kept its own fail-OPEN posture: nothing is known, so
+      // nothing is blocked.
+      expect(cubit.state.persons.first.hadTrial, isFalse);
+      expect(cubit.state.persons.first.heldRecurringPlanIds, isEmpty);
+      await cubit.close();
+    });
+
+    test('a THROWN waiver read leaves the plan history intact — and still fails '
+        'CLOSED itself', () async {
+      // A trial in their history and a DIFFERENT recurring plan held, so both
+      // plan facts are observable without closing the plan this walk picks.
+      when(() => member.getMemberDetail(any())).thenAnswer(
+        (_) async => _detailWith(
+          const [
+            ('plan-trial', 'trial', MembershipStatus.cancelled),
+            ('plan-other', 'recurring', MembershipStatus.active),
+          ],
+        ),
+      );
+      when(() => memberships.listMemberWaiverStatus(any(), any()))
+          .thenThrow(Exception('down'));
+      final cubit = await atWaiversAsExisting();
+
+      // The waiver side kept its fail-CLOSED posture: every waiver is asked for.
+      expect(cubit.state.waiverQueue, [waiverA, waiverB]);
+      // And the plan history LANDED despite the sibling throwing.
+      expect(cubit.state.persons.first.hadTrial, isTrue);
+      expect(cubit.state.persons.first.heldRecurringPlanIds, ['plan-other']);
+      await cubit.close();
+    });
+
+    test('one MEMBER\'s failed reads never discard another member\'s answers',
+        () async {
+      // The payer's two reads both fail; the adopted payee's both land. Under a
+      // naive gather the payer's throw would have thrown away Ella's answers —
+      // re-asking her for a signature the gym already holds AND losing her own
+      // history.
+      when(() => member.getMemberDetail('mem-payer'))
+          .thenThrow(Exception('down'));
+      when(() => member.getMemberDetail('mem-ella')).thenAnswer(
+        (_) async => _detailWith(
+          const [('plan-trial', 'trial', MembershipStatus.cancelled)],
+        ),
+      );
+      when(() => memberships.listMemberWaiverStatus('mem-payer', gymId))
+          .thenThrow(Exception('down'));
+      when(() => memberships.listMemberWaiverStatus('mem-ella', gymId))
+          .thenAnswer((_) async => [
+                _status(waiverA, signed: true, meetsFloor: true),
+                _status(waiverB, signed: true, meetsFloor: true),
+              ]);
+
+      final cubit = build();
+      cubit.startAsExistingMember();
+      await cubit.pickPayerRow(_row('mem-payer', 'Marcus Bell'));
+      cubit.confirmPayerMatch();
+      when(() => member.createMember(any())).thenThrow(
+        const DuplicateMemberException([
+          DuplicateMemberMatch(
+            memberId: 'mem-ella',
+            firstName: 'Ella',
+            lastName: 'Bell',
+            email: 'ella.bell@gmail.com',
+          ),
+        ]),
+      );
+      await cubit.addPerson(
+        firstName: 'Ella',
+        lastName: 'Bell',
+        email: 'ella.bell@gmail.com',
+      );
+      cubit.confirmMatch();
+
+      cubit.continueToPlans();
+      await _settle();
+      // Ella's trial history landed even though the payer's read threw — the
+      // per-member half of the same guarantee.
+      expect(cubit.state.persons[1].hadTrial, isTrue);
+      // The payer's own failed read still fails OPEN rather than inheriting
+      // hers.
+      expect(cubit.state.persons.first.hadTrial, isFalse);
+
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      cubit.selectPlan(planId);
+      cubit.continueFromPlans();
+      await _settle();
+
+      // Ella owes nothing but the payer-authorization link.
+      expect(cubit.state.payerAuthPending, isTrue);
+      await cubit.signPayerAuth(signerName: 'Marcus Bell');
+      await _settle();
+
+      // Her liability waivers are skipped outright — her answer survived the
+      // payer's failure.
+      expect(cubit.state.activePersonIndex, 0);
+      // And the payer, whose read threw, is asked for BOTH: fail closed, and
+      // never covered by hers.
+      expect(cubit.state.waiverQueue, [waiverA, waiverB]);
+      await cubit.close();
+    });
+  });
+
   group('a member created in this signup is never asked for the read',
       () {
     test('no history exists by construction, so no request is spent', () async {
@@ -507,6 +701,44 @@ AuthorizedPayerWaiver _payerAuthWaiver() => const AuthorizedPayerWaiver(
       versionId: 'version-payer-auth',
       name: 'Authorized payer agreement',
       body: 'I am authorised to pay.',
+    );
+
+/// A member whose history carries [rows] — one `(planId, planType, status)` per
+/// membership. Only the three fields the two plan gates actually read carry any
+/// meaning here; everything else is filler.
+MemberDetailResponse _detailWith(
+  List<(String, String, MembershipStatus)> rows,
+) =>
+    MemberDetailResponse(
+      memberId: 'mem-old',
+      gymId: 'gym-1',
+      firstName: 'Marcus',
+      lastName: 'Bell',
+      membershipOverview: 'History',
+      totalMonthlyRecurringPrice: 0,
+      totalMembershipCount: rows.length,
+      personalInfo: const PersonalInfo(),
+      memberships: [
+        for (final (planId, planType, status) in rows)
+          MembershipInfo(
+            planId: planId,
+            planName: planId,
+            planType: planType,
+            status: status,
+            itemId: 'item-$planId',
+            paidByMemberId: 'mem-old',
+            baseCost: 0,
+            durationAmount: 1,
+            durationUnit: 'month',
+            totalPrice: 0,
+            startDate: DateTime.utc(2025),
+          ),
+      ],
+      retention: const Retention(
+        classStreakWeeks: 0,
+        pointsBalance: 0,
+        videosWatched: 0,
+      ),
     );
 
 MemberDetailResponse _detail() => MemberDetailResponse(

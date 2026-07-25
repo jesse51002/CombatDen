@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_buy_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
@@ -14,6 +15,15 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// their name into a legal document two screens ago should see it acknowledged
 /// before they hand over a card — `Signed today by <name>` is the receipt for
 /// the thing that has no receipt.
+///
+/// **The address here is MASKED, like every other identity line in this lane**
+/// (the roster row, the payer picker, the match card). This is an
+/// identification line — it exists so the member can tell "that's my account"
+/// — and a lobby iPad has a queue reading over their shoulder, so it says
+/// enough to recognise and never enough to copy. The one address a member
+/// genuinely has to CHECK is the receipt one, and the money panel beside this
+/// states that in full ("Your receipt goes to …"), as does the results receipt;
+/// those two are deliberately unmasked and this one deliberately is not.
 class KioskReviewSidePanel extends StatelessWidget {
   final KioskSignupState state;
 
@@ -40,7 +50,9 @@ class KioskReviewSidePanel extends StatelessWidget {
           Text('YOU', style: DesignConstants.kioskEyebrow),
           _WhoRow(
             name: '${person.firstName} ${person.lastName}'.trim(),
-            email: person.email,
+            // Null when there is nothing to mask, which drops the line rather
+            // than printing an empty one.
+            email: kioskMaskedEmail(person.email),
           ),
           Text('YOUR MEMBERSHIP', style: DesignConstants.kioskEyebrow),
           if (plan != null)
@@ -65,12 +77,15 @@ class KioskReviewSidePanel extends StatelessWidget {
 
 class _WhoRow extends StatelessWidget {
   final String name;
-  final String email;
+
+  /// Their address, already MASKED by the caller. Null drops the line.
+  final String? email;
 
   const _WhoRow({required this.name, required this.email});
 
   @override
   Widget build(BuildContext context) {
+    final masked = email;
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -87,14 +102,15 @@ class _WhoRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              Text(
-                email,
-                style: DesignConstants.kioskCaption.copyWith(
-                  color: DesignConstants.text2nd,
+              if (masked != null)
+                Text(
+                  masked,
+                  style: DesignConstants.kioskCaption.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
             ],
           ),
         ),

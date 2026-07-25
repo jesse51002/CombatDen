@@ -16,6 +16,7 @@ import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_ran
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The signup's terminal — they're a member, and the next thing they need is
@@ -32,6 +33,18 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// downloads *their gym's* app, and "CombatDen" means nothing to the person
 /// standing at the iPad.
 ///
+/// **Reached from a PARTIAL receipt it says so, right under the greeting.** The
+/// greeting is warm and unconditional by design — a green check and "Welcome to
+/// {gym}, {name}!" — and on a partial that tick would be the screen's only
+/// claim about an outcome that was mixed, which reads as *you're all set*. The
+/// welcome itself stays true (they are a member of this gym, and the receipt
+/// they just read carried the per-person detail), so the fix is the lane's own
+/// inline notice naming the front desk, not a second celebration idiom and not
+/// a restyled greeting. It renders only on
+/// [KioskSignupState.welcomeAfterPartial]; every other route here — the
+/// all-created receipt, the 409 idempotent replay, a start with nothing to
+/// itemise — has nothing outstanding to state.
+///
 /// It does not scroll. The greeting and the foot are laid out first and the
 /// two cards take a bounded share of what is left, so a short fold scales the
 /// cards down (each carries its own `ShrinkToFit`) instead of hiding content a
@@ -44,6 +57,7 @@ class KioskWelcomeScreen extends StatelessWidget {
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.welcomeCountdown != cur.welcomeCountdown ||
+          prev.welcomeAfterPartial != cur.welcomeAfterPartial ||
           prev.persons != cur.persons,
       builder: (context, state) {
         final payer = state.payer;
@@ -59,6 +73,15 @@ class KioskWelcomeScreen extends StatelessWidget {
                 spacing: DesignConstants.spacingLarge,
                 children: [
                   _Greeting(firstName: kioskFirstName(payer.firstName)),
+                  // The one thing the greeting above cannot say on a partial:
+                  // somebody's membership is still outstanding, and the desk is
+                  // where it gets finished. Plain, blameless, and short enough
+                  // to read at 2m over a queue's shoulder.
+                  if (state.welcomeAfterPartial)
+                    const KioskInlineNotice(
+                      message: 'Some memberships didn\'t go through — ask the '
+                          'front desk to finish them.',
+                    ),
                   Expanded(child: _GetApp(memberEmail: payer.email)),
                   _Foot(secondsLeft: state.welcomeCountdown),
                 ],

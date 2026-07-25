@@ -724,6 +724,59 @@ void main() {
       ).called(1);
       await cubit.close();
     });
+
+    test('a PARTIAL also offers NEXT — it carries on to the welcome, flags it, '
+        'and releases the flow exactly once', () async {
+      final cubit = await atRoster();
+      await addElla(cubit);
+      await walkGroupToReview(cubit);
+
+      when(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).thenAnswer((_) async => _startResponse(failedMemberId: 'mem-2'));
+      await cubit.pay();
+      expect(cubit.state.step, KioskSignupStep.results);
+      expect(cubit.state.allCreated, isFalse);
+      // The retry ladder is UNTOUCHED — Next is additional, never a
+      // replacement (founder ruling).
+      expect(cubit.state.canRetryStart, isTrue);
+      // Nothing released yet: Retry is live on that screen and a live charge
+      // must never run with no flow held.
+      verifyNever(() => session.endFlow());
+      // Consume the one charge the receipt is the outcome of, so the check
+      // after Next is about what NEXT sent.
+      verify(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      ).called(1);
+
+      cubit.nextFromResults();
+
+      // **Not gated on `allCreated`.** A partial with only a way back held a
+      // member who did not want to retry until the 60-second expiry, and the
+      // people whose memberships DID start never reached the app push.
+      expect(cubit.state.step, KioskSignupStep.welcome);
+      // Nothing is re-sent by advancing: Next charges nothing at all.
+      verifyNever(
+        () => member.startMemberships(
+          any(),
+          receiveTimeout: any(named: 'receiveTimeout'),
+        ),
+      );
+      // The welcome screen's front-desk line hangs off this flag: its greeting
+      // is unconditional, so on a partial the screen would otherwise read as
+      // "you're all set".
+      expect(cubit.state.welcomeAfterPartial, isTrue);
+      // The receipt held the count; Next is what releases it, exactly once.
+      verify(() => session.endFlow()).called(1);
+      await cubit.close();
+      verifyNever(() => session.endFlow());
+    });
   });
 
   group('the roster', () {

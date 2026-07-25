@@ -283,6 +283,10 @@ void main() {
       // rather than a second decrement.
       cubit.nextFromResults();
       expect(cubit.state.step, KioskSignupStep.welcome);
+      // Nothing outstanding, so the welcome says nothing about the desk — a
+      // warning on a clean signup is the mirror image of the lie the flag
+      // exists to prevent.
+      expect(cubit.state.welcomeAfterPartial, isFalse);
       verifyNever(() => session.endFlow());
       await cubit.close();
       // Still exactly once after teardown — the latch holds.

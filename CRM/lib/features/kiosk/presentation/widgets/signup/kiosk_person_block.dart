@@ -20,7 +20,18 @@ class KioskPersonBlock extends StatelessWidget {
   /// The plan they picked, resolved by the caller from the warmed catalogue.
   final MembershipPlanLike? plan;
 
-  const KioskPersonBlock({super.key, required this.person, this.plan});
+  /// Their membership already STARTED on an earlier attempt of this signup, so
+  /// the card about to be entered is not charged for them
+  /// ([KioskSignupState.alreadyStarted]). It adds a mark; it never removes the
+  /// row — see `kiosk_review_group_panel.dart`.
+  final bool started;
+
+  const KioskPersonBlock({
+    super.key,
+    required this.person,
+    this.plan,
+    this.started = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -30,7 +41,7 @@ class KioskPersonBlock extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        _NameLine(person: person),
+        _NameLine(person: person, started: started),
         if (chosen != null)
           KioskBuyRow(
             name: chosen.name,
@@ -80,10 +91,25 @@ class MembershipPlanLike {
   }
 }
 
+/// The name, then the eyebrow labels that qualify it.
+///
+/// **The role label and the STARTED mark are both kept, not one instead of the
+/// other.** They answer different questions — "whose card is this" and "is this
+/// one already paid for" — and the payer can easily be the person whose
+/// membership already started, so collapsing them would drop the fact that
+/// explains the whole screen (one card covers everybody here) exactly when the
+/// screen is at its most confusing. It reuses the eyebrow label this row
+/// already marks status with rather than introducing a chip the kiosk does not
+/// have; green because it is the receipt colour every other "this one landed"
+/// mark on the lane wears (the buy row's signed tick, the result row's created
+/// square).
 class _NameLine extends StatelessWidget {
   final KioskSignupPerson person;
 
-  const _NameLine({required this.person});
+  /// Their membership already started — see `KioskPersonBlock.started`.
+  final bool started;
+
+  const _NameLine({required this.person, this.started = false});
 
   @override
   Widget build(BuildContext context) {
@@ -118,6 +144,13 @@ class _NameLine extends StatelessWidget {
             'NEW',
             style: DesignConstants.kioskEyebrow.copyWith(
               color: DesignConstants.text2nd,
+            ),
+          ),
+        if (started)
+          Text(
+            'STARTED',
+            style: DesignConstants.kioskEyebrow.copyWith(
+              color: DesignConstants.goodGreen,
             ),
           ),
       ],
