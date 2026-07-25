@@ -15,13 +15,13 @@ more nullable binds — ``:member_embedding`` (used both ``CAST(... AS text)`` a
 It executes the real query against the live DB across every nullable-param combo
 (with NO member_id, so no ``members.video_profile_*`` read); it fails loudly
 (prepare error) if the casts are ever dropped. It does NOT assert on row content
-— the seeded gym may have no enriched feed rows — only that the query prepares
-and executes and returns a ``(list, int)``.
+— parameter typing is a property of the query, not of the table data, so the
+guard stays honest whatever the seeded gym's feed happens to hold — only that
+the query prepares and executes and returns a ``(list, int)``.
 
-The unified feed INNER JOINs ``video_rag``, so this test needs the video-worker
-RAG migration's ``video_rag`` + ``member_video_recs`` tables applied on the
-shared local DB; until then it fails at the query (relation missing) — the
-expected "pending migration apply" state, not a code fault.
+The unified feed INNER JOINs ``video_rag``, so this test reads the video-worker
+RAG schema's ``video_rag`` + ``member_video_recs`` tables, which the shared
+local DB carries — a failure here is a code fault, never an environment one.
 
 Live-DB test (uses the session-scoped ``db_pool`` + seeded ``gym_id``
 fixtures), so it runs in the integration pass, not the hermetic unit pass.
