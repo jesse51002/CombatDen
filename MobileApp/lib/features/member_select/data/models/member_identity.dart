@@ -16,6 +16,7 @@ class MemberIdentity {
   final String gymId;
   final String gymName;
   final String? gymLogoUrl;
+  final String? gymAddress;
   final String firstName;
   final String lastName;
   final String? photoUrl;
@@ -27,6 +28,7 @@ class MemberIdentity {
     required this.firstName,
     required this.lastName,
     this.gymLogoUrl,
+    this.gymAddress,
     this.photoUrl,
   });
 

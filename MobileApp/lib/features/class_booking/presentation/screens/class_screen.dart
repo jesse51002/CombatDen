@@ -200,7 +200,10 @@ class _Body extends StatelessWidget {
             ),
           ],
           const SectionDivider(),
-          ClassLocationSection(gymName: selectedMember.gymName ?? ''),
+          ClassLocationSection(
+            gymName: selectedMember.gymName ?? '',
+            address: selectedMember.gymAddress,
+          ),
         ],
       ),
     );

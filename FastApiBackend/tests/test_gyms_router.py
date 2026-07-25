@@ -65,8 +65,10 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     rows = [
         {
             "gym_id": gym_a,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "employee_type": "owner",
@@ -74,8 +76,10 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
         },
         {
             "gym_id": gym_b,
+            "created_at": datetime.now(UTC),
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
+            "address": "88 Mat St, Brooklyn, NY 11211",
             "timezone": "America/New_York",
             "sub_rank_type": "div",
             "employee_type": "admin",
@@ -96,6 +100,9 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     # The caller's saved theme rides along so the CRM can hydrate at login.
     assert body[0]["theme_preference"] == "dark"
     assert body[1]["theme_preference"] == "system"
+    # The street address rides along so the CRM can edit it from Settings.
+    assert body[0]["address"] is None
+    assert body[1]["address"] == "88 Mat St, Brooklyn, NY 11211"
     # GymResponse fields must not leak Stripe state.
     assert "stripe_account_id" not in body[0]
 
@@ -186,8 +193,10 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "logo_url": logo_url,
@@ -217,8 +226,10 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "logo_url": None,
@@ -240,6 +251,75 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     assert bound_params["logo_url"] is None
 
 
+def test_update_gym_sets_address(client, db_pool_mock, auth_headers):
+    """PUT /api/v1/gyms/{gym_id} with address persists and echoes it back.
+
+    The owner types a free-text street address in the CRM; the member app
+    renders it plus an "Open in Maps" link.
+    """
+    gym_id = uuid4()
+    address = "1200 Combat Ave, Suite 4, Austin, TX 78701"
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "address": address,
+            "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"address": address}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["address"] == address
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["address"] == address
+
+
+def test_update_gym_clears_address_with_explicit_null(
+    client, db_pool_mock, auth_headers
+):
+    """An explicit null for address clears it back to NULL — the column is
+    nullable, so clearing it is a legal edit, not a 422 like gym_name."""
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "address": None,
+            "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"address": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["address"] is None
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert "address" in bound_params
+    assert bound_params["address"] is None
+
+
 def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     """PUT /api/v1/gyms/{gym_id} with sub_rank_type persists, echoes it, AND
     fires the member sub-index reconcile (the gyms -> ranks edge)."""
@@ -249,8 +329,10 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     db_pool_mock.execute_with_retry = AsyncMock(
         return_value={
             "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "div",
             "logo_url": None,

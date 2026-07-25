@@ -180,6 +180,7 @@ void main() {
           () => repository.updateGymProfile(
             gymId: 'gym-1',
             gymName: 'New Name',
+            address: '1200 W 6th St, Austin, TX 78703',
             logoUrl: 'https://cdn.combatden.net/logo.png',
           ),
         ).thenAnswer((_) async {});
@@ -188,6 +189,7 @@ void main() {
       act: (bloc) => bloc.add(
         const GymProfileSaveRequested(
           gymName: 'New Name',
+          address: '1200 W 6th St, Austin, TX 78703',
           logoUrl: 'https://cdn.combatden.net/logo.png',
         ),
       ),
@@ -198,11 +200,13 @@ void main() {
       verify: (_) {
         // selectedGym only updates AFTER the backend commit.
         expect(selectedGym.gymName, 'New Name');
+        expect(selectedGym.address, '1200 W 6th St, Austin, TX 78703');
         expect(selectedGym.logoUrl, 'https://cdn.combatden.net/logo.png');
         verify(
           () => repository.updateGymProfile(
             gymId: 'gym-1',
             gymName: 'New Name',
+            address: '1200 W 6th St, Austin, TX 78703',
             logoUrl: 'https://cdn.combatden.net/logo.png',
           ),
         ).called(1);
@@ -217,13 +221,18 @@ void main() {
           () => repository.updateGymProfile(
             gymId: 'gym-1',
             gymName: 'New Name',
+            address: null,
             logoUrl: null,
           ),
         ).thenThrow(Exception('save failed'));
       },
       build: () => SettingsBloc(repository: repository),
       act: (bloc) => bloc.add(
-        const GymProfileSaveRequested(gymName: 'New Name', logoUrl: null),
+        const GymProfileSaveRequested(
+          gymName: 'New Name',
+          address: null,
+          logoUrl: null,
+        ),
       ),
       expect: () => [
         const SettingsState(savingGymProfile: true),
@@ -240,11 +249,15 @@ void main() {
     );
 
     blocTest<SettingsBloc, SettingsState>(
-      'ignores a no-op gym profile save (unchanged name + logo) without '
-      'calling the backend',
+      'ignores a no-op gym profile save (unchanged name + address + logo) '
+      'without calling the backend',
       build: () => SettingsBloc(repository: repository),
       act: (bloc) => bloc.add(
-        const GymProfileSaveRequested(gymName: 'Test Gym', logoUrl: null),
+        const GymProfileSaveRequested(
+          gymName: 'Test Gym',
+          address: null,
+          logoUrl: null,
+        ),
       ),
       expect: () => const <SettingsState>[],
       verify: (_) {
@@ -252,9 +265,56 @@ void main() {
           () => repository.updateGymProfile(
             gymId: any(named: 'gymId'),
             gymName: any(named: 'gymName'),
+            address: any(named: 'address'),
             logoUrl: any(named: 'logoUrl'),
           ),
         );
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
+      'clears the address (empty -> null) when only the address changed',
+      setUp: () {
+        // The gym starts WITH an address; the save clears it.
+        selectedGym.setActiveGym(
+          gymId: 'gym-1',
+          displayName: 'Test Gym',
+          role: EmployeeRole.owner,
+          timezone: 'America/Chicago',
+          address: '1200 W 6th St, Austin, TX 78703',
+          logoUrl: null,
+        );
+        when(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'Test Gym',
+            address: null,
+            logoUrl: null,
+          ),
+        ).thenAnswer((_) async {});
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) => bloc.add(
+        const GymProfileSaveRequested(
+          gymName: 'Test Gym',
+          address: null,
+          logoUrl: null,
+        ),
+      ),
+      expect: () => const [
+        SettingsState(savingGymProfile: true),
+        SettingsState(savingGymProfile: false, gymProfileSavedCount: 1),
+      ],
+      verify: (_) {
+        expect(selectedGym.address, isNull);
+        verify(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'Test Gym',
+            address: null,
+            logoUrl: null,
+          ),
+        ).called(1);
       },
     );
   });

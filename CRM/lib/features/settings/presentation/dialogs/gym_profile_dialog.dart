@@ -10,12 +10,12 @@ import 'package:crm/features/settings/presentation/sections/gym_profile_section.
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// Width cap for the dialog — the editor is a single stacked column
-/// (name field above the logo picker), so it reads best narrow.
+/// (name + address fields above the logo picker), so it reads best narrow.
 const double _kDialogMaxWidth = 560;
 
 /// The shared Gym profile editor ([GymProfileSection]) hosted in a dialog —
 /// opened from the Theme tab's "Edit gym name / logo" button under the phone
-/// preview. Owns its own [SettingsBloc] (the Theme tab has none) and, like
+/// preview (the dialog also edits the gym's address). Owns its own [SettingsBloc] (the Theme tab has none) and, like
 /// the Settings screen, surfaces save FAILURES via a SnackBar; the section
 /// itself surfaces the SUCCESS SnackBar and the dialog closes on it.
 ///

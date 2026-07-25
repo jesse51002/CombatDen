@@ -41,6 +41,7 @@ class SelectedGym extends ChangeNotifier {
   EmployeeRole? _role;
   String? _timezone;
   String? _gymName;
+  String? _address;
   String? _logoUrl;
   DateTime? _createdAt;
 
@@ -74,6 +75,11 @@ class SelectedGym extends ChangeNotifier {
   /// instead (see the class doc). Updated in place by [updateGymName] when
   /// the Gym profile save commits.
   String? get gymName => _gymName;
+
+  /// The active gym's street address (`gyms.address`); null means the owner
+  /// hasn't set one. Seeded by [setActiveGym], updated by [updateAddress] when
+  /// the Gym profile save commits. Free text — the backend stores it as typed.
+  String? get address => _address;
 
   /// The active gym's uploaded brand logo URL (a CDN URL); null means the gym
   /// has no logo yet. Seeded by [setActiveGym], updated by [updateLogoUrl]
@@ -128,6 +134,7 @@ class SelectedGym extends ChangeNotifier {
     required EmployeeRole role,
     required String timezone,
     required String? logoUrl,
+    String? address,
     String? savedThemeDesignId,
     DateTime? createdAt,
   }) {
@@ -135,6 +142,7 @@ class SelectedGym extends ChangeNotifier {
     _gymName = displayName;
     _role = role;
     _timezone = timezone;
+    _address = address;
     _logoUrl = logoUrl;
     _savedThemeDesignId = savedThemeDesignId;
     _createdAt = createdAt;
@@ -160,6 +168,14 @@ class SelectedGym extends ChangeNotifier {
   /// never the theme selection.
   void updateGymName(String gymName) {
     _gymName = gymName;
+    notifyListeners();
+  }
+
+  /// Update the active gym's street address after the Gym profile save commits
+  /// (NOT optimistic — only called on success). A null [address] clears it back
+  /// to "no address set".
+  void updateAddress(String? address) {
+    _address = address;
     notifyListeners();
   }
 
@@ -206,6 +222,7 @@ class SelectedGym extends ChangeNotifier {
     _role = null;
     _timezone = null;
     _gymName = null;
+    _address = null;
     _logoUrl = null;
     _createdAt = null;
     _savedThemeDesignId = null;

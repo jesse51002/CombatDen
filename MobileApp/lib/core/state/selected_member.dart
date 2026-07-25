@@ -30,6 +30,7 @@ class SelectedMember extends ChangeNotifier {
   String? _memberId;
   String? _gymId;
   String? _gymName;
+  String? _gymAddress;
   String? _gymLogoUrl;
   String? _firstName;
   String? _lastName;
@@ -42,6 +43,9 @@ class SelectedMember extends ChangeNotifier {
   String? get gymId => _gymId;
 
   String? get gymName => _gymName;
+
+  /// The gym's street address, when the gym has one set.
+  String? get gymAddress => _gymAddress;
   String? get gymLogoUrl => _gymLogoUrl;
   String? get firstName => _firstName;
   String? get lastName => _lastName;
@@ -62,6 +66,7 @@ class SelectedMember extends ChangeNotifier {
     required String gymName,
     required String firstName,
     required String lastName,
+    String? gymAddress,
     String? gymLogoUrl,
     String? photoUrl,
   }) async {
@@ -70,6 +75,7 @@ class SelectedMember extends ChangeNotifier {
     _gymName = gymName;
     _firstName = firstName;
     _lastName = lastName;
+    _gymAddress = gymAddress;
     _gymLogoUrl = gymLogoUrl;
     _photoUrl = photoUrl;
     notifyListeners();
@@ -99,6 +105,7 @@ class SelectedMember extends ChangeNotifier {
       _memberId = memberId;
       _gymId = gymId;
       _gymName = map['gym_name'] as String?;
+      _gymAddress = map['gym_address'] as String?;
       _gymLogoUrl = map['gym_logo_url'] as String?;
       _firstName = map['first_name'] as String?;
       _lastName = map['last_name'] as String?;
@@ -118,6 +125,7 @@ class SelectedMember extends ChangeNotifier {
     _memberId = null;
     _gymId = null;
     _gymName = null;
+    _gymAddress = null;
     _gymLogoUrl = null;
     _firstName = null;
     _lastName = null;
@@ -137,6 +145,7 @@ class SelectedMember extends ChangeNotifier {
         'member_id': _memberId,
         'gym_id': _gymId,
         'gym_name': _gymName,
+        'gym_address': _gymAddress,
         'gym_logo_url': _gymLogoUrl,
         'first_name': _firstName,
         'last_name': _lastName,

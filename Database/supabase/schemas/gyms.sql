@@ -21,6 +21,12 @@ CREATE TABLE gyms (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     gym_name VARCHAR NOT NULL CHECK (gym_name <> ''),
     gym_description VARCHAR,
+    -- The gym's street address, free text exactly as the owner typed it
+    -- (never parsed into components or geocoded). NULL = the gym hasn't set
+    -- one. Surfaced to members for directions — the app renders it as text
+    -- plus an "Open in Maps" link. Client-editable, so deliberately absent
+    -- from the REVOKE UPDATE list in access_rules/gyms.sql.
+    address VARCHAR,
     -- The gym's uploaded logo (CDN URL). NULL = no logo uploaded yet;
     -- clients fall back to a default mark client-side.
     logo_url TEXT,

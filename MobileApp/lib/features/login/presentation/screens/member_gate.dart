@@ -115,6 +115,7 @@ class _MemberGateState extends State<MemberGate> {
       gymName: m.gymName,
       firstName: m.firstName,
       lastName: m.lastName,
+      gymAddress: m.gymAddress,
       gymLogoUrl: m.gymLogoUrl,
       photoUrl: m.photoUrl,
     );

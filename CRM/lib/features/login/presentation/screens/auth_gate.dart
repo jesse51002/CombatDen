@@ -147,7 +147,8 @@ class _AuthenticatedGateState
   /// so the Theme tab can boot on it; the theme itself isn't applied here
   /// (the theme runtime isn't initialized yet — the Theme tab does it).
   /// The gym's uploaded [GymWithRole.logoUrl] (nullable) seeds the nav
-  /// chrome and the Gym profile editor.
+  /// chrome and the Gym profile editor, and its [GymWithRole.address]
+  /// (nullable) seeds the same editor's address field.
   void _activate(GymWithRole gym) {
     // Hydrate the saved CRM appearance for this gym before the workspace paints
     // (the app root rebuilds MaterialApp off [themeController]).
@@ -157,6 +158,7 @@ class _AuthenticatedGateState
       displayName: gym.gymName,
       role: gym.role,
       timezone: gym.timezone,
+      address: gym.address,
       logoUrl: gym.logoUrl,
       savedThemeDesignId: gym.themeDesignId,
       createdAt: gym.createdAt,

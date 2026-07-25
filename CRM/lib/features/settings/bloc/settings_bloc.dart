@@ -9,7 +9,7 @@ import 'package:crm/features/settings/bloc/settings_state.dart';
 import 'package:crm/features/settings/data/repositories/settings_repository.dart';
 
 /// Saves the chosen CRM theme to the caller's `gym_employees` row, and the
-/// gym's timezone and profile (name + logo) to the gym row.
+/// gym's timezone and profile (name + address + logo) to the gym row.
 ///
 /// The theme is applied **optimistically** to [themeController] (so the app
 /// re-skins the instant a pill is tapped) and reverted if the backend save
@@ -99,6 +99,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     if (gymId == null) return;
     // No-op guard: skip the round trip when nothing actually changed.
     if (event.gymName == selectedGym.gymName &&
+        event.address == selectedGym.address &&
         event.logoUrl == selectedGym.logoUrl) {
       return;
     }
@@ -110,9 +111,11 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       await _repository.updateGymProfile(
         gymId: gymId,
         gymName: event.gymName,
+        address: event.address,
         logoUrl: event.logoUrl,
       );
       selectedGym.updateGymName(event.gymName);
+      selectedGym.updateAddress(event.address);
       selectedGym.updateLogoUrl(event.logoUrl);
       emit(
         state.copyWith(

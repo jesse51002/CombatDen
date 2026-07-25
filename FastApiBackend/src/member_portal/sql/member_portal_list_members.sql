@@ -23,7 +23,8 @@ SELECT m.member_id,
        m.last_name,
        m.photo_url,
        g.gym_name,
-       g.logo_url AS gym_logo_url
+       g.logo_url AS gym_logo_url,
+       g.address AS gym_address
 FROM members m
 JOIN gyms g ON g.gym_id = m.gym_id
 WHERE COALESCE(lower(m.email), '') = :email

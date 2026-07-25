@@ -619,6 +619,14 @@ Scoped / significant dependencies:
 - `mobile_scanner` — the QR check-in camera scanner (`features/qr_checkin/`). Only there.
 - `shared_preferences` — persists the `SelectedMember` identity + the celebration watermark.
 - `google_fonts` — Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
+- `url_launcher` — hands a URI to the OS. Used **only** by the class-detail
+  Location section's "Open in Maps" deep link
+  (`features/class_booking/presentation/widgets/class_location_helpers.dart`:
+  `geo:0,0?q=<encoded>` on Android, `https://maps.apple.com/?q=<encoded>` on
+  iOS). Android 11+ package visibility means the `geo:` intent silently fails
+  unless `android/app/src/main/AndroidManifest.xml`'s `<queries>` block
+  declares a `VIEW` intent for the `geo` (and `https`) schemes — that block is
+  load-bearing, don't drop it.
 - `material_symbols_icons` — `Symbols.*_sharp` icons.
 - `lottie` — backs **only** the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself (the engine no longer renders Lottie).
 - `path_provider` — used **only** by the dev-only capture harness (`tools/capture/`) to write exported frames. Not part of any shipping screen.

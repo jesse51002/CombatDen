@@ -225,6 +225,7 @@ def test_list_my_members_uses_verified_account_gate(
                     member_id=uuid4(),
                     gym_id=UUID(fake_gym_id),
                     gym_name="Test Gym",
+                    gym_address="1200 Combat Ave, Austin, TX 78701",
                     first_name="Ada",
                     last_name="Lovelace",
                 )
@@ -235,7 +236,11 @@ def test_list_my_members_uses_verified_account_gate(
     resp = client.get("/api/v1/member/members", headers=auth_headers)
 
     assert resp.status_code == 200, resp.text
-    assert len(resp.json()["members"]) == 1
+    members = resp.json()["members"]
+    assert len(members) == 1
+    # The gym's address rides the identity read so the app can show it +
+    # an "Open in Maps" link without a second call.
+    assert members[0]["gym_address"] == "1200 Combat Ave, Austin, TX 78701"
     auth_mock.verify_verified_account.assert_awaited()
     # The email + caller_id (the JWT sub) both come from the gate, never from
     # the client — the identity query pins the caller's own confirmed account.

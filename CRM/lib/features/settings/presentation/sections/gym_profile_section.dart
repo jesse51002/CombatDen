@@ -15,12 +15,17 @@ import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 /// Max length the backend caps the gym name at.
 const int _kNameMaxLength = 255;
 
-/// Cap the name field so a single control doesn't stretch the whole page
-/// (matches the timezone selector's cap).
-const double _kNameFieldMaxWidth = 480;
+/// Max length for the free-text street address.
+const int _kAddressMaxLength = 255;
 
-/// The shared **Gym profile** editor — the gym's real name + its uploaded
-/// brand logo. Saved through [SettingsBloc] via `PUT /api/v1/gyms/{gymId}`
+/// Cap the text fields so a single control doesn't stretch the whole page
+/// (matches the timezone selector's cap).
+const double _kFieldMaxWidth = 480;
+
+/// The shared **Gym profile** editor — the gym's real name, its street address
+/// and its uploaded brand logo. The address is optional: an empty field saves
+/// as null (`gyms.address` is nullable), which is how an owner removes one.
+/// Saved through [SettingsBloc] via `PUT /api/v1/gyms/{gymId}`
 /// (NOT optimistic): the field values come from [selectedGym] until the
 /// backend commits, then [selectedGym] updates and a success SnackBar fires
 /// off the state's monotonic `gymProfileSavedCount`.
@@ -51,6 +56,7 @@ class GymProfileSection extends StatefulWidget {
 class _GymProfileSectionState extends State<GymProfileSection> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _addressCtrl;
 
   // The logo URL the section will persist. Seeded from the active gym; the
   // upload widget uploads on pick and hands back the CDN URL via
@@ -61,20 +67,28 @@ class _GymProfileSectionState extends State<GymProfileSection> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: selectedGym.gymName ?? '');
+    // A null address (never set / cleared) seeds an empty field, which the
+    // hint then explains — never the string "null".
+    _addressCtrl = TextEditingController(text: selectedGym.address ?? '');
     _logoUrl = selectedGym.logoUrl;
   }
 
   @override
   void dispose() {
     _nameCtrl.dispose();
+    _addressCtrl.dispose();
     super.dispose();
   }
 
   void _save() {
     if (!_formKey.currentState!.validate()) return;
+    // Optional field: an emptied box saves as an explicit null, which the
+    // backend accepts as a genuine "clear the address".
+    final address = _addressCtrl.text.trim();
     context.read<SettingsBloc>().add(
           GymProfileSaveRequested(
             gymName: _nameCtrl.text.trim(),
+            address: address.isEmpty ? null : address,
             logoUrl: _logoUrl,
           ),
         );
@@ -102,8 +116,8 @@ class _GymProfileSectionState extends State<GymProfileSection> {
             if (widget.showHeader) ...[
               Text('Gym profile', style: DesignConstants.h1),
               Text(
-                'Your gym\'s name and logo. The logo shows in the CRM nav '
-                'and on your members\' app.',
+                'Your gym\'s name, address and logo. The logo shows in the '
+                'CRM nav and on your members\' app.',
                 style:
                     DesignConstants.p.copyWith(color: DesignConstants.text2nd),
               ),
@@ -115,7 +129,7 @@ class _GymProfileSectionState extends State<GymProfileSection> {
             // field across the page.
             ConstrainedBox(
               constraints: const BoxConstraints(
-                maxWidth: _kNameFieldMaxWidth,
+                maxWidth: _kFieldMaxWidth,
               ),
               child: CustomTextField(
                 controller: _nameCtrl,
@@ -127,6 +141,37 @@ class _GymProfileSectionState extends State<GymProfileSection> {
                 validator: (v) => (v == null || v.trim().isEmpty)
                     ? 'Gym name is required.'
                     : null,
+              ),
+            ),
+            // Optional, so no validator — an empty box is a valid save that
+            // clears the address. Two lines: a full street address usually
+            // wraps (street + city/state/zip) but is never a paragraph.
+            ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: _kFieldMaxWidth,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: DesignConstants.spacingSmall,
+                children: [
+                  CustomTextField(
+                    controller: _addressCtrl,
+                    label: 'Address',
+                    hintText: 'e.g. 1200 W 6th St, Austin, TX 78703',
+                    keyboardType: TextInputType.streetAddress,
+                    maxLines: 2,
+                    minLines: 1,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(_kAddressMaxLength),
+                    ],
+                  ),
+                  Text(
+                    'Optional. Leave blank to remove it.',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+                ],
               ),
             ),
             ImageUploadPickerField(

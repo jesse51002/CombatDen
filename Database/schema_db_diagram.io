@@ -28,6 +28,7 @@ Table gyms {
   created_at timestamptz [not null, default: `now()`]
   gym_name varchar [not null]
   gym_description varchar
+  address varchar [note: 'nullable; free-text street address as the owner typed it; NULL = not set; shown to members for directions']
   logo_url text [note: 'nullable; uploaded gym logo CDN URL; NULL = none uploaded']
   timezone text [not null, default: 'America/Chicago']
   is_rank_enabled boolean [not null, default: true]

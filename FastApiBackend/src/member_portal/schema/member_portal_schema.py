@@ -43,6 +43,8 @@ class MemberPortalIdentity(BaseModel):
             gym-scoped route so ``verify_member_self`` can scope the match.
         gym_name: The gym's display name (a family may span gyms).
         gym_logo_url: The gym's logo, when set.
+        gym_address: The gym's street address, when set — free text the app
+            shows for directions.
         first_name: The member's first name.
         last_name: The member's last name.
         photo_url: The member's photo, when set.
@@ -52,6 +54,7 @@ class MemberPortalIdentity(BaseModel):
     gym_id: UUID
     gym_name: str
     gym_logo_url: str | None = None
+    gym_address: str | None = None
     first_name: str
     last_name: str
     photo_url: str | None = None

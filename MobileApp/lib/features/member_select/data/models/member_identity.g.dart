@@ -14,6 +14,7 @@ MemberIdentity _$MemberIdentityFromJson(Map<String, dynamic> json) =>
       firstName: json['first_name'] as String,
       lastName: json['last_name'] as String,
       gymLogoUrl: json['gym_logo_url'] as String?,
+      gymAddress: json['gym_address'] as String?,
       photoUrl: json['photo_url'] as String?,
     );
 
@@ -23,6 +24,7 @@ Map<String, dynamic> _$MemberIdentityToJson(MemberIdentity instance) =>
       'gym_id': instance.gymId,
       'gym_name': instance.gymName,
       'gym_logo_url': instance.gymLogoUrl,
+      'gym_address': instance.gymAddress,
       'first_name': instance.firstName,
       'last_name': instance.lastName,
       'photo_url': instance.photoUrl,
