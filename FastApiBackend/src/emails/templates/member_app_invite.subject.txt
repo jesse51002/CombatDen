@@ -1,0 +1,1 @@
+Get the {{ gym_name }} app

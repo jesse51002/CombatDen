@@ -1,0 +1,9 @@
+Hi {{ first_name }},
+
+You've been added to {{ gym_name }}. Set up your login at
+app.combatden.net using this email address.
+
+Use the same address you're reading this at — that address is how the app
+recognizes you.
+
+Sent by {{ gym_name }} via CombatDen.

@@ -1,0 +1,17 @@
+{# TRANSACTIONAL: this carries the link that grants CRM access, so it has NO
+   unsubscribe line. Opting out of a pitch must never cost someone the link
+   that gets them into the product. Keep it purely functional. #}
+{% extends "_layout.html" %}
+{% block body %}
+<p style="margin:0 0 16px;">Hi {{ first_name }},</p>
+<p style="margin:0 0 16px;">
+  You've been added to {{ gym_name }}. Set up your login at
+  <a href="https://app.combatden.net"
+     style="color:#2563eb;text-decoration:underline;">app.combatden.net</a>
+  using this email address.
+</p>
+<p style="margin:0;">
+  Use the same address you're reading this at — that address is how the app
+  recognizes you.
+</p>
+{% endblock %}
