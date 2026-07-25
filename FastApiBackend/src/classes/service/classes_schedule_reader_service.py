@@ -20,20 +20,34 @@ entangle them:
   emits only occurrences that have already ENDED (``occurred_at`` + duration
   at/before now): its past is a permanent record, but a dead class produces
   no in-session or future occurrences. ``include_inactive`` does not affect
-  this.
-* **``is_active = false`` (PAUSED) — excluded ENTIRELY unless asked for.**
-  With ``include_inactive=False`` (THE DEFAULT) a paused class contributes
-  no occurrences at all — not past, not future. Passing
+  this. Note ``classes_soft_delete.sql`` clears ``is_active`` in the SAME
+  statement that sets ``is_deleted``, so a deleted class is ALWAYS also
+  ``is_active = false`` on disk — the paused rule below must therefore test
+  BOTH flags, never ``is_active`` alone, or the deleted past disappears with
+  it.
+* **``is_active = false`` (PAUSED, i.e. not deleted) — excluded ENTIRELY
+  unless asked for.** With ``include_inactive=False`` (THE DEFAULT) a paused
+  class contributes no occurrences at all — not past, not future. Passing
   ``include_inactive=True`` opts in and its occurrences expand normally.
 
-The default is deliberately fail-CLOSED: check-in (``CheckinClassResolver``)
-and sign-up (``SignupService``) both REJECT a paused class with
-``400 {"code": "class_inactive"}``, so no occurrence view may hand out an
-occurrence either would refuse — and a caller cannot forget to filter,
-because the safe answer is what it gets by default. Only the CRM's class
-MANAGEMENT surface (its classes page) opts in, which is where a paused class
-is seen and un-paused; every row carries ``is_active`` so that ONE mixed
-response can mark the paused cards apart.
+The paused default is deliberately fail-CLOSED: check-in
+(``CheckinClassResolver``) and sign-up (``SignupService``) both REJECT a
+paused class with ``400 {"code": "class_inactive"}``, so no occurrence view
+may hand out a still-live occurrence either would refuse — and a caller
+cannot forget to filter, because the safe answer is what it gets by default.
+Only the CRM's class MANAGEMENT surface (its classes page) opts in, which is
+where a paused class is seen and un-paused; every row carries ``is_active``
+so that ONE mixed response can mark the paused cards apart.
+
+A soft-deleted class's rows are the deliberate exception to that argument,
+not a hole in it: they are already-ENDED occurrences, so there is no
+check-in or sign-up left for any client to offer on them. They are the
+historical record — with their attendance / sign-up counts — and they are
+also the only way staff REACH a past occurrence of a since-deleted class to
+correct one member's attendance, which ``DELETE /api/v1/checkin`` does
+without going through the resolver (``CheckinRemover`` addresses the
+occurrence by its identity key and never resolves it, so a deleted class
+does not block the correction).
 """
 
 import asyncio
@@ -185,16 +199,25 @@ class ClassesScheduleReaderService:
     ) -> list[dict]:
         """The class rows this read may expand.
 
-        A PAUSED class (``is_active = false``) is dropped entirely unless
-        ``include_inactive`` — check-in and sign-up both reject one, so no
-        occurrence view may offer it, and the default keeps every caller
-        safe without having to filter. Soft-DELETED classes stay in: their
-        past-only rule is applied per-occurrence, independently of this
-        flag.
+        A PAUSED class (``is_active = false`` while NOT deleted) is dropped
+        entirely unless ``include_inactive`` — check-in and sign-up both
+        reject one, so no occurrence view may offer it, and the default keeps
+        every caller safe without having to filter.
+
+        Soft-DELETED classes stay in either way, and that is why the test is
+        ``is_active OR is_deleted`` rather than ``is_active`` alone:
+        ``classes_soft_delete.sql`` sets ``is_deleted = TRUE`` **and**
+        ``is_active = FALSE`` in one statement, so an ``is_active``-only test
+        would swallow every deleted class — taking its already-run
+        occurrences, their attendance / sign-up counts, and staff's only
+        route to correcting one of those check-ins off the board. Their
+        past-only rule is applied per-occurrence, independently of this flag.
         """
         if include_inactive:
             return classes
-        return [row for row in classes if row["is_active"]]
+        return [
+            row for row in classes if row["is_active"] or row["is_deleted"]
+        ]
 
     @staticmethod
     def _validate_window(start_date: date, end_date: date) -> None:

@@ -371,6 +371,30 @@ class AttendeeListResponse(BaseModel):
     attendees: list[Attendee]
 
 
+class StreakResult(BaseModel):
+    """A member's attendance streak metrics for one gym, computed together.
+
+    ``StreakService.get_streak_details``' return — an INTERNAL type (like
+    ``GateEvaluation`` / ``ResolvedClass``), never itself serialized: the
+    routes map it onto ``StreakResponse`` / ``CheckinResponse``.
+
+    Both fields derive from the SAME single session and the SAME gym-local
+    current-week Monday anchor, so the per-day strip and the week count can
+    never disagree about which week is "current".
+
+    Attributes:
+        weeks: Consecutive weeks (gym-local) with at least one class
+            attendance -- what ``GET /api/v1/streak`` has always returned.
+        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday
+            (Monday-first), each ``True`` when the member attended a class on
+            that weekday of the CURRENT gym-local week. All ``False`` when the
+            member has not attended this week.
+    """
+
+    weeks: int
+    current_week_days: list[bool]
+
+
 class StreakResponse(BaseModel):
     """Response for GET /api/v1/streak.
 

@@ -12,11 +12,16 @@ date-only key would conflate two same-day occurrences. These tests cover:
   its post-mint days from the NEW version, in the same window;
 * a soft-deleted class renders only occurrences that have already ENDED (no
   in-session/future rows) — and stays past-only even under
-  ``include_inactive``, because the two flags are independent;
-* a PAUSED class (``is_active = false``) contributes NOTHING by default
-  (fail-closed) and expands its FULL window — past and future — only when
-  ``include_inactive=True`` is passed; an active class renders identically
-  either way;
+  ``include_inactive``, because the two flags are independent. Every deleted
+  class here is built the way the DB holds one: ``is_active=False`` AND
+  ``is_deleted=True``, the single pairing ``classes_soft_delete.sql`` writes;
+* a DEFAULT read of a gym holding one paused and one deleted class keeps the
+  deleted class's past (counts and all) and emits nothing for the paused one
+  — the discrimination an ``is_active``-only visibility test cannot make;
+* a PAUSED class (``is_active = false``, not deleted) contributes NOTHING by
+  default (fail-closed) and expands its FULL window — past and future — only
+  when ``include_inactive=True`` is passed; an active class renders
+  identically either way;
 * attendance / sign-up counts are keyed by the occurrence's IDENTITY
   ``(class_id, original_date, original_time)`` — a rescheduled occurrence's
   counts follow its ORIGINAL slot, not its displayed ``class_date``;
@@ -267,7 +272,15 @@ def _daily_service(
     is_active: bool = True,
     is_deleted: bool = False,
 ) -> reader_module.ClassesScheduleReaderService:
-    """One 09:00-10:00 daily class, expandable over 2026-06-01..05."""
+    """One 09:00-10:00 daily class, expandable over 2026-06-01..05.
+
+    ``is_active`` / ``is_deleted`` are passed through EXACTLY as the DB holds
+    them — a soft-deleted class must be built ``is_active=False,
+    is_deleted=True`` because ``classes_soft_delete.sql`` writes both in one
+    statement. Never build ``is_deleted=True`` with ``is_active=True``: that
+    combination does not exist in production, and asserting against it hides
+    an ``is_active``-only filter that drops the deleted past entirely.
+    """
     return _service(
         classes=[
             _class_row(
@@ -291,7 +304,12 @@ def _daily_service(
 async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     """A soft-deleted class's already-ENDED occurrences render; in-session /
     future occurrences do not (the delete wipe already cleared their
-    sign-ups/check-ins, so there is nothing to show)."""
+    sign-ups/check-ins, so there is nothing to show).
+
+    Built at the REAL production flag combination — ``classes_soft_delete.sql``
+    sets ``is_deleted = TRUE`` AND ``is_active = FALSE`` — because that pairing
+    is exactly what an ``is_active``-only visibility filter would drop, taking
+    the whole deleted past (and its counts) off the board with it."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
     # 09:00-10:00 daily; "now" is day3 10:00 -> day3 has JUST ended.
@@ -299,7 +317,7 @@ async def test_deleted_class_renders_past_only(monkeypatch) -> None:
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
     service = _daily_service(
-        class_id=class_id, gym_id=gym_id, is_deleted=True
+        class_id=class_id, gym_id=gym_id, is_active=False, is_deleted=True
     )
 
     resp = await service.list_effective_instances(gym_id, day1, day5)
@@ -317,14 +335,18 @@ async def test_deleted_class_stays_past_only_with_include_inactive(
     independent. Asking for inactive classes must NOT resurrect a
     soft-deleted class's future occurrences: a deleted class's future slots
     had their sign-ups and check-ins wiped, so offering them would hand out
-    occurrences with no rows behind them."""
+    occurrences with no rows behind them.
+
+    The mirror of ``test_deleted_class_renders_past_only``: the deleted past
+    is identical with and without ``include_inactive``, so the flag is proven
+    to govern only the paused rule."""
     class_id, gym_id = uuid4(), uuid4()
     day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
     now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
     monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
 
     service = _daily_service(
-        class_id=class_id, gym_id=gym_id, is_deleted=True
+        class_id=class_id, gym_id=gym_id, is_active=False, is_deleted=True
     )
 
     resp = await service.list_effective_instances(
@@ -335,6 +357,89 @@ async def test_deleted_class_stays_past_only_with_include_inactive(
     assert rendered == {day1, day2, day3}
     assert day4 not in rendered
     assert day5 not in rendered
+
+
+async def test_default_read_keeps_deleted_past_and_drops_paused(
+    monkeypatch,
+) -> None:
+    """The discrimination the DEFAULT read has to make, on real DB rows.
+
+    Both classes are ``is_active = false`` on disk — the paused one because a
+    gym paused it, the deleted one because ``classes_soft_delete.sql`` clears
+    the flag alongside ``is_deleted``. A visibility test on ``is_active``
+    alone cannot tell them apart, and drops the deleted class's already-run
+    occurrences (with their attendance / sign-up counts) off the staff
+    schedule board — the record staff correct a check-in from. The default
+    read must keep the deleted class's PAST and still emit nothing at all for
+    the paused one."""
+    deleted_id, paused_id, gym_id = uuid4(), uuid4(), uuid4()
+    day1, day2, day3, day4, day5 = (date(2026, 6, i) for i in range(1, 6))
+    now = datetime(2026, 6, 3, 10, 0, tzinfo=UTC)
+    monkeypatch.setattr(reader_module, "datetime", _fixed_datetime(now))
+
+    service = _service(
+        classes=[
+            _class_row(
+                class_id=deleted_id,
+                gym_id=gym_id,
+                class_name="Retired Boxing",
+                is_active=False,
+                is_deleted=True,
+            ),
+            _class_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                class_name="Competition Team",
+                is_active=False,
+            ),
+        ],
+        versions=[
+            _daily_version_row(
+                class_id=deleted_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(9, 0),
+            ),
+            _daily_version_row(
+                class_id=paused_id,
+                gym_id=gym_id,
+                effective_from=datetime(2020, 1, 1, tzinfo=UTC),
+                class_time=time(18, 0),
+            ),
+        ],
+        attendance=[
+            {
+                "class_id": deleted_id,
+                "original_date": day2,
+                "original_time": time(9, 0),
+                "attendance_count": 4,
+            },
+        ],
+        signups=[
+            {
+                "class_id": deleted_id,
+                "original_date": day2,
+                "original_time": time(9, 0),
+                "signup_count": 5,
+            },
+        ],
+    )
+
+    resp = await service.list_effective_instances(gym_id, day1, day5)
+
+    by_class: dict[UUID, set[date]] = {}
+    for row in resp.items:
+        by_class.setdefault(row.class_id, set()).add(row.original_date)
+    assert by_class == {deleted_id: {day1, day2, day3}}
+    assert paused_id not in by_class
+    assert day4 not in by_class[deleted_id]
+    assert day5 not in by_class[deleted_id]
+    # The counts are the reason the past has to stay reachable at all.
+    counted = next(
+        row for row in resp.items if row.original_date == day2
+    )
+    assert counted.attendance_count == 4
+    assert counted.signup_count == 5
 
 
 async def test_paused_class_excluded_by_default(monkeypatch) -> None:

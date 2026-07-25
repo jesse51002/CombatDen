@@ -245,6 +245,16 @@ switch, mirroring the identical param on `GET /api/v1/classes`
 `ClassesScheduleReaderService._visible_classes` **before expansion**, so a
 class nobody asked for costs no expansion work.
 
+**The two rules are independent, but the two COLUMNS are not — and that is a
+trap.** `classes_soft_delete.sql` writes `is_deleted = TRUE` **and**
+`is_active = FALSE` in one statement, so a soft-deleted class is ALWAYS also
+`is_active = false` on disk; there is no such row as deleted-and-active. Any
+"is this class visible" test must therefore read **both** columns
+(`_visible_classes` keeps a row when `is_active OR is_deleted`). An
+`is_active`-only test silently applies the PAUSED rule to deleted classes and
+takes their whole past — occurrences, attendance / sign-up counts, and staff's
+only route to correcting one of those check-ins — off the board.
+
 The default is the point. **Check-in and sign-up REJECT a paused
 occurrence** — `CheckinClassResolver.resolve` raises
 `CheckinClassInactiveError("Class is not active")`

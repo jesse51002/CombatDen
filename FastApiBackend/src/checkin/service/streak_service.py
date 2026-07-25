@@ -1,7 +1,6 @@
 """Service for computing weekly class attendance streaks."""
 
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import date, timedelta
 from uuid import UUID
 
@@ -9,30 +8,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
+from src.checkin.schema.checkin_schema import StreakResult
 from src.shared.database import DirectDatabasePool
 from src.shared.gym_timezone import get_gym_timezone, gym_today
 from src.shared.sql_loader import load_sql
-
-
-@dataclass
-class StreakResult:
-    """A member's attendance streak metrics for one gym, computed together.
-
-    Both fields derive from the SAME single session and the SAME gym-local
-    current-week Monday anchor, so the per-day strip and the week count can
-    never disagree about which week is "current".
-
-    Attributes:
-        weeks: Consecutive weeks (gym-local) with at least one class
-            attendance -- what ``GET /api/v1/streak`` has always returned.
-        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday
-            (Monday-first), each ``True`` when the member attended a class on
-            that weekday of the CURRENT gym-local week. All ``False`` when the
-            member has not attended this week.
-    """
-
-    weeks: int
-    current_week_days: list[bool]
 
 
 class StreakService:

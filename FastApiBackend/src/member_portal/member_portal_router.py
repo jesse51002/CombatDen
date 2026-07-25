@@ -208,9 +208,12 @@ async def get_my_profile(
     summary="The member's own class attendance streak",
     description=(
         "Weeks of consecutive class attendance, bucketed in the gym's "
-        "timezone. The same number the profile carries as "
-        "``retention.class_streak_weeks`` — this cheap route exists so a home "
-        "widget needn't pull the whole profile."
+        "timezone, plus the CURRENT week's per-day attendance strip "
+        "(``current_week_days``, Monday-first). The week count is the same "
+        "number the profile carries as ``retention.class_streak_weeks`` — "
+        "this cheap route exists so a home widget needn't pull the whole "
+        "profile. Identical payload to the staff ``GET /api/v1/streak``: the "
+        "member sees the same filled strip the front desk does."
     ),
     responses={
         200: {"description": "Streak retrieved"},
@@ -229,12 +232,19 @@ async def get_my_streak(
         Provide[DependencyInjector.streak_service]
     ),
 ) -> StreakResponse:
-    """Weeks of consecutive class attendance."""
+    """Weeks of consecutive class attendance + this week's per-day strip."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
 
     try:
-        weeks = await streak_service.get_streak(member_id, gym_id)
+        # ``get_streak_details``, not ``get_streak``: the response carries
+        # ``current_week_days``, whose default is seven Falses — and an
+        # all-False strip MEANS "has not attended this week". The one-query
+        # path would leave that default in place, so a member who trained
+        # Mon/Wed/Fri would read their own week as blank while the staff
+        # ``GET /api/v1/streak`` (same schema, same service call) showed it
+        # filled. The strip has to be computed to be reported.
+        streak = await streak_service.get_streak_details(member_id, gym_id)
     except Exception:
         logger.error(
             "Member-portal streak query failed: member_id=%s",
@@ -246,7 +256,11 @@ async def get_my_streak(
             detail="Failed to retrieve your streak",
         ) from None
 
-    return StreakResponse(member_id=member_id, class_streak_weeks=weeks)
+    return StreakResponse(
+        member_id=member_id,
+        class_streak_weeks=streak.weeks,
+        current_week_days=streak.current_week_days,
+    )
 
 
 @member_portal_router.get(

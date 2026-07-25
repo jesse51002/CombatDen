@@ -11,6 +11,9 @@ touched. What these assert:
   always ``auto_approve=False``, the feed is always ``rejected=False``, the
   reward catalog is always ``include_inactive=False``) and are not
   client-selectable;
+* a member reads the SAME payload the staff surface does where the two share a
+  schema — the streak route reports the computed ``current_week_days`` strip,
+  not the all-False default (which means "hasn't attended this week");
 * the router's status-code mapping (service errors → HTTP codes).
 """
 
@@ -35,6 +38,7 @@ from src.checkin.checkin_exceptions import (
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
 )
+from src.checkin.schema.checkin_schema import StreakResult
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
@@ -293,10 +297,20 @@ def test_get_profile_maps_missing_member_to_404(
     assert resp.status_code == 404
 
 
-def test_get_streak_gates_and_returns_weeks(
+def test_get_streak_gates_and_returns_weeks_and_week_strip(
     client, auth_headers, auth_mock, streak_service_mock, fake_gym_id, fake_member_id
 ):
-    streak_service_mock.get_streak = AsyncMock(return_value=4)
+    """The member's own strip must be FILLED, not the schema default.
+
+    ``StreakResponse.current_week_days`` defaults to seven Falses, and
+    all-False MEANS "has not attended this week" — so the route has to run the
+    details path (``get_streak_details``) and report the computed strip.
+    Reading only the week count would leave a Mon/Wed/Fri member looking at a
+    blank week in their own app while the staff route showed it filled."""
+    week_days = [True, False, True, False, True, False, False]
+    streak_service_mock.get_streak_details = AsyncMock(
+        return_value=StreakResult(weeks=4, current_week_days=list(week_days))
+    )
 
     resp = client.get(
         f"{_base(fake_gym_id, fake_member_id)}/streak", headers=auth_headers
@@ -304,6 +318,10 @@ def test_get_streak_gates_and_returns_weeks(
 
     assert resp.status_code == 200, resp.text
     assert resp.json()["class_streak_weeks"] == 4
+    assert resp.json()["current_week_days"] == week_days
+    streak_service_mock.get_streak_details.assert_awaited_once_with(
+        UUID(fake_member_id), UUID(fake_gym_id)
+    )
     auth_mock.verify_member_self.assert_awaited_once_with(
         UUID(fake_member_id),
         auth_mock.get_current_user.return_value,

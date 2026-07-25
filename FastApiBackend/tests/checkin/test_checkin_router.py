@@ -30,12 +30,12 @@ from src.checkin.schema.checkin_schema import (
     CheckinMembershipBreakdown,
     CheckinResponse,
     CheckinWarning,
+    StreakResult,
 )
 from src.checkin.schema.signup_schema import (
     SignupRemoveResponse,
     SignupResponse,
 )
-from src.checkin.service.streak_service import StreakResult
 from src.main import app
 
 _STUB_STREAK_WEEKS = 3
@@ -43,10 +43,15 @@ _STUB_STREAK_WEEKS = 3
 _STUB_WEEK_DAYS = [True, False, True, False, True, False, False]
 
 
-def _override_checkin(response: CheckinResponse) -> None:
+def _override_checkin(
+    response: CheckinResponse, *, streak_error: Exception | None = None
+) -> None:
     """Double the resolver + member gate + streak service so the single-checkin
     handler returns ``response`` (enriched with a stub streak) without touching
     the DB. Caller resets via ``_reset_checkin``.
+
+    ``streak_error`` makes the streak read RAISE instead — the check-in is
+    already committed by then, so the handler must still answer 200.
     """
     resolver = MagicMock()
     resolver.resolve = AsyncMock(return_value=MagicMock())
@@ -54,10 +59,11 @@ def _override_checkin(response: CheckinResponse) -> None:
     gate.checkin_member = AsyncMock(return_value=response)
     streak = MagicMock()
     streak.get_streak_details = AsyncMock(
+        side_effect=streak_error,
         return_value=StreakResult(
             weeks=_STUB_STREAK_WEEKS,
             current_week_days=list(_STUB_WEEK_DAYS),
-        )
+        ),
     )
     app.container.checkin_class_resolver.override(resolver)
     app.container.checkin_member_gate.override(gate)
@@ -138,8 +144,10 @@ def test_checkin_idempotent_repeat_also_folds_in_the_streak(
     """An already-checked-in repeat is a real attendance too: the gate's
     repeat builder leaves ``class_streak_weeks`` at 0, and it is the ROUTER
     that folds the streak into the response — for repeats exactly like fresh
-    check-ins (the fold condition is ``log_id is not None OR
-    already_checked_in``)."""
+    check-ins. The fold condition is ``log_id is not None``, which covers a
+    repeat because the repeat echoes the EXISTING attendance row's id; only a
+    rejection / needs-confirmation (nothing written, ``log_id`` null) is left
+    at the defaults."""
     class_id = str(uuid4())
     response = CheckinResponse(
         log_id=str(uuid4()),
@@ -171,6 +179,53 @@ def test_checkin_idempotent_repeat_also_folds_in_the_streak(
     body = resp.json()
     assert body["already_checked_in"] is True
     assert body["class_streak_weeks"] == _STUB_STREAK_WEEKS
+
+
+def test_streak_failure_cannot_fail_a_recorded_checkin(
+    client, auth_headers, fake_member_id, fake_gym_id
+):
+    """A DECORATIVE read must never undo a COMMITTED write.
+
+    The streak fold runs after the gate has written the attendance row and
+    awarded the points. If its failure reached the handler's
+    ``except Exception -> 500 "Failed to record check-in"`` arm, the kiosk
+    would tell the member they were not checked in while the row exists —
+    and their re-scan would answer ``already_checked_in``. So the check-in
+    still reports success and the strip stays at its schema defaults."""
+    log_id = str(uuid4())
+    class_id = str(uuid4())
+    response = CheckinResponse(
+        log_id=log_id,
+        member_id=fake_member_id,
+        class_id=class_id,
+        already_checked_in=False,
+        chosen_plan_id=None,
+        chosen_item_id=None,
+        points_awarded=50,
+        memberships=[],
+    )
+    _override_checkin(response, streak_error=RuntimeError("streak query died"))
+    try:
+        resp = client.post(
+            "/api/v1/checkin",
+            json={
+                "member_id": fake_member_id,
+                "gym_id": fake_gym_id,
+                "class_id": class_id,
+                "occurrence_date": "2026-06-01",
+                "occurrence_time": "17:00:00",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        _reset_checkin()
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["log_id"] == log_id
+    assert body["points_awarded"] == 50
+    assert body["class_streak_weeks"] == 0
+    assert body["current_week_days"] == [False] * 7
 
 
 def test_checkin_rejected_when_no_plan_covers(

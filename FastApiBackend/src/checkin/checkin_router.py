@@ -160,12 +160,33 @@ async def checkin(
         )
         # Fold in the member's streak + current-week strip (after this
         # check-in) so the caller needn't make a second GET /streak call.
+        #
+        # DECORATIVE, and it runs AFTER the gate has already COMMITTED the
+        # attendance row + the points -- so it gets its OWN try/except. Inside
+        # the outer try a failure here would land on the `except Exception ->
+        # 500 "Failed to record check-in"` arm and tell the member they were
+        # NOT checked in while the row exists: their re-scan would come back
+        # `already_checked_in` and the kiosk would look broken. A read that
+        # only decorates a committed write must never be able to fail it, so
+        # the failure is logged and the schema defaults stand (0 weeks, an
+        # all-False strip).
         if result.log_id is not None:
-            streak = await streak_service.get_streak_details(
-                request.member_id, request.gym_id
-            )
-            result.class_streak_weeks = streak.weeks
-            result.current_week_days = streak.current_week_days
+            try:
+                streak = await streak_service.get_streak_details(
+                    request.member_id, request.gym_id
+                )
+                result.class_streak_weeks = streak.weeks
+                result.current_week_days = streak.current_week_days
+            except Exception:
+                logger.error(
+                    "Streak enrichment failed after a RECORDED check-in "
+                    "(reported as success, strip left at its defaults): "
+                    "member_id=%s, gym_id=%s, log_id=%s",
+                    request.member_id,
+                    request.gym_id,
+                    result.log_id,
+                    exc_info=True,
+                )
         return result
     except CheckinError:
         # Re-raised untouched: the global handler reads the status + the
