@@ -574,9 +574,15 @@ class KioskSignupState extends Equatable {
 
   // ── Waivers (D4 / E3) ──
   /// The waivers this step has to walk, in order — the selected plan's
-  /// `waiverIds` (or, after a server waiver gate, exactly the ids it named).
-  /// It is the numbering behind "waiver 1 of N", so it keeps entries that are
-  /// already signed rather than shrinking as they are.
+  /// `waiverIds` plus anything a server waiver gate named, MINUS the ones the
+  /// gym already holds a compliant signature for (see
+  /// `KioskSignupCubit._enterLiability`).
+  ///
+  /// It is the numbering behind "waiver 1 of N", and it counts what this person
+  /// will actually be asked to sign: a waiver skipped on a prior compliant
+  /// signature is not in it at all, while one signed DURING this signup stays in
+  /// it — the index moves past that one instead, so the count cannot shrink
+  /// under the member's hands mid-run.
   final List<String> waiverQueue;
 
   /// Which entry of [waiverQueue] is on screen.

@@ -28,7 +28,9 @@ description: >-
   data rule, and the built SOLO + GROUP self-serve **signup** lane (its own
   cubit, the new-here/already-a-member front door and the identify search, the
   double-charge defences, the three entry points into a seated payer, the
-  group-only "No membership" skip on the plan step, the THREE-way start-response
+  group-only "Skip" control on the plan step, the fail-CLOSED waiver skip that
+  never re-asks for a signature already at the re-sign floor, the
+  THREE-way start-response
   split into the per-person RESULTS receipt (all-created and PARTIAL) vs the
   all-failed decline popup, the
   uncapped, no-wait decline model with same-card + new-card
@@ -44,8 +46,9 @@ description: >-
   "autofill on the kiosk", "skip_reason", "kiosk type ramp", "rotating QR",
   "kiosk signup", "duplicate payer", "already had a trial", "one trial per
   member", "already on that membership", "plan block", "kiosk results screen",
-  "partial signup", "no membership skip", "find my name", "someone else is
-  paying", "decline retry", "retry same card", or "Incomplete tab".
+  "partial signup", "skip this person", "find my name", "someone else is
+  paying", "decline retry", "retry same card", "already signed that waiver",
+  "meets_floor", "re-sign floor", or "Incomplete tab".
 ---
 
 # Kiosk Mode — a member surface inside the admin app
@@ -530,6 +533,9 @@ new column: this is a self-serve product rule, so it lives entirely in
   on offer: a second trial slipping through costs one free week the desk can
   undo, while turning a legitimate first-timer away sends a paying customer out
   of the door.
+  **The waiver-status read in §11.4a is the deliberate INVERSE** — it fails
+  CLOSED, because a needless signature costs twenty seconds while a missing one
+  voids the gym's legal protection.
 - **A blocked trial can never be SELECTED, and always EXPLAINS** — see "Two
   plan-block reasons" above for the shared mechanics. Both halves matter: an
   unselectable card keeps a blocked plan off the review (where it would fail at
@@ -670,11 +676,11 @@ plan, their plan's waivers and a line in `memberships[]`. An unticked person is
 still created and still on the roster — a parent paying for their kids is
 exactly this, and so is a member who registers today and buys later.
 
-#### The plan step's "No membership" — changing your mind mid-way
+#### The plan step's "Skip" — changing your mind mid-way
 
 **Somebody halfway through a family signup may decide they don't want a
 membership after all** (founder ruling), so the plan step carries a
-**`No membership`** control in `KioskFlowFoot`'s right-hand Skip gutter —
+**`Skip`** control in `KioskFlowFoot`'s right-hand Skip gutter —
 the same gutter the optional-details step's Skip uses, a full stage away from the
 escape and from the primary.
 
@@ -693,9 +699,10 @@ escape and from the primary.
   why ("Tick whoever's getting a membership…"), so the backend's empty-cart 400
   stays unreachable by construction.
 
-The label answers the SCREEN ("Pick Ella's membership") rather than the
-navigation, and it deliberately avoids `KioskFlowFoot`'s default `Skip for now`,
-which would promise a later that does not exist here.
+The label is the bare verb `Skip`: the pinned identity band already says who
+is being skipped ("PICKING FOR · Ella"), so repeating it in the gutter would say
+the same thing twice. It deliberately overrides `KioskFlowFoot`'s default
+`Skip for now`, which would promise a later that does not exist here.
 
 #### Removing somebody asks first — the payer included
 
@@ -1610,7 +1617,7 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   `KioskSignupStopReason.trialAlreadyUsed` / `alreadyOnPlan` as the two desk
   handoffs. See §3.
 
-- **The plan step's "No membership" skip** — group-only, reusing `training`, and
+- **The plan step's "Skip" control** — group-only, reusing `training`, and
   skipping everybody returns to the roster. See §3.
 
 - **Phase E — the GROUP (family) signup.** The roster loop is built on the same
@@ -1895,7 +1902,9 @@ finally releases a declined screen nobody is standing at, through the ordinary
 - **Signed stays signed.** Signatures append to `KioskSignupState.signedWaivers`
   and are keyed on the MEMBER (`signedWaiverIdsFor(memberId)`); walking Back
   skips what that person already signed and nothing un-signs it. Back out of
-  the card lands on the PLAN, not the waiver behind it, for exactly that reason.
+  the card lands on the PLAN, not the waiver behind it, for exactly that reason. A
+  waiver signed BEFORE this signup is skipped too, by a different mechanism —
+  see §11.4a.
 - **Every new waiver body CLEARS the signature inputs — a legal invariant.** The
   signer-name field and the consent tick are wiped the moment a new waiver body
   loads (`KioskWaiverStep` / `KioskPayerWaiverStep`'s `BlocConsumer.listener`, on
@@ -1907,6 +1916,72 @@ finally releases a declined screen nobody is standing at, through the ordinary
   clears **every time, no exceptions** — the earlier "the typed name persists for
   the same person" behaviour is overruled (founder ruling). Guarded by
   `test/features/kiosk/presentation/kiosk_signup_waiver_clear_test.dart`.
+
+### 11.4a The waiver run asks only for what is actually OWED
+
+**A member is never asked to re-sign a waiver the gym already holds a compliant
+signature for.** An existing member self-serving here has history, and asking
+them to sign again what they signed last year is the bug this rule exists to
+prevent.
+
+- **The signal is the SERVER's verdict, `meets_floor`.**
+  `MembershipsRepository.listMemberWaiverStatus` reads
+  `GET /api/v1/waivers/signatures/by-member/{member_id}?gym_id=` into
+  `MemberWaiverStatus`, whose `meetsFloor` says that member's latest signature
+  sits at a version at or above the waiver's re-sign FLOOR
+  (`MAX(version_number) FILTER (WHERE requires_resign)`, defaulting to 1). That
+  is the SAME compliance rule the 422 purchase gate and the check-in gate
+  apply. **The kiosk never re-derives the floor** — one rule, one owner. There
+  is no kiosk-specific endpoint and no backend change behind this.
+- **The skip predicate is exactly `signed && meetsFloor`, per (member, waiver).**
+  Nothing else skips anything.
+- **It is read at the PLANS step** — `_loadPriorWaiverStatus`, fired beside
+  `_loadPlanEligibility` from `continueToPlans` — because the waiver run is two
+  taps away (pick a plan, Continue), so the answer is in hand before the first
+  waiver is drawn and the step never briefly shows one it is about to skip.
+- **Only for a person the kiosk did not create**: `wasExisting` + a known
+  `memberId`, exactly like the eligibility read. Somebody registered during this
+  signup has no signature history by construction, so no request is spent.
+  Answers are cached per member id for the flow (`_waiverStatusChecked` /
+  `_priorSatisfiedWaiverIds`) and a FAILED read counts as asked.
+- **The cache is a private cubit field keyed by member id, never state** (the
+  shape `_planChecked` and `_sentAttempts` use). It has no render path, so a
+  cross-person leak is unrepresentable; and because it never emits, an answer
+  landing late can never re-shape a queue the member is already looking at.
+- **It FAILS CLOSED — the exact inverse of the two plan-block reads, and that
+  inversion is the whole design.** `_loadPlanEligibility` fails OPEN because
+  refusing a paying customer is worse than a rare second trial. Waivers invert
+  the cost: a needless signature costs the member twenty seconds, a MISSING one
+  voids the gym's legal protection. So every shade of "we don't know" collapses
+  to **ask**:
+  - a read that threw → no cache entry → nothing skipped for that person;
+  - a waiver **ABSENT** from the response → asked. This is real, not
+    theoretical: the query's result set is `required ∪ ever-signed`, where
+    `required` comes from the member's **CURRENT** memberships' plans — so a
+    waiver belonging to the plan they are about to BUY, and never signed, is not
+    in the response at all. Absence must never read as "no need to sign";
+  - `signed` with `meetsFloor` false → asked (that IS the re-sign case);
+  - a missing `meets_floor` → parses as false (`@JsonKey(defaultValue: false)`)
+    → asked.
+- **The 422 purchase gate stays the authoritative backstop, and it OUTRANKS the
+  skip.** Anything `state.waiverGate` names for a person is folded into their
+  queue and can never be dropped by a prior-signature read — if the server says
+  unsigned, the server wins. That backstop is what makes a client-side skip safe
+  at all.
+- **The queue's LENGTH is honest.** A skipped waiver is dropped from
+  `waiverQueue` rather than stepped over, so the subtitle's "waiver 2 of 3"
+  counts the signatures the member is about to give — telling somebody
+  "waiver 1 of 3" and then showing them one is worse than a correct "1 of 1". A
+  waiver signed DURING this signup stays in the queue and the index moves past
+  it instead (`_firstUnsigned` over `signedWaiverIdsFor`), so the count cannot
+  shrink under their hands mid-run. `_enterLiability` builds that one filtered
+  list, so the index maths, `_advanceWaiver`, Back-then-forward and the
+  per-person group walk agree by construction.
+- **The payer-auth link is untouched.** It is a different waiver type
+  (`payer_auth`), signed as part of `PUT /members/{payee}/link` and gated on
+  `KioskSignupPerson.linked` — no part of it routes through this skip.
+
+Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
 
 ### 11.5 The GROUP's own money rules
 
@@ -2077,7 +2152,10 @@ Rules the screen holds:
   `planBlockReasonFor` / `heldPlanNames`; `selectPlan`'s
   explain-don't-select branch; `_clearBlockedPick`; `_openPlanBlock` /
   `dismissPlanBlock` / `planBlockHelp`), the plan step's group-only skip
-  (`skipPlanForPerson` / `_advancePlanPerson`), the money path
+  (`skipPlanForPerson` / `_advancePlanPerson`), the waiver run's
+  already-signed skip (`_loadPriorWaiverStatus` → `_priorSatisfiedWaiverIds` /
+  `_satisfiedWaiverIdsFor`, folded into `_enterLiability`'s queue — §11.4a), the
+  money path
   (`_buildStartRequest` / `pay`'s three-way split / `_enterResults` /
   `_mergeStartResults` / `nextFromResults` / `_onDeclined` /
   `retrySameCard` (same card, new key) / `retryCard`
@@ -2198,7 +2276,7 @@ due-today / two-charges arithmetic),
 offer, adopt-vs-recreate, link-before-start both ways, the per-training-person
 cart, the 207 partial — which lands on `results`, NOT the decline popup, and
 holds the flow count — and its failed-items-only retry, roster removal, the
-empty-cart guard, the plan step's group-only "No membership" skip including
+empty-cart guard, the plan step's group-only "Skip" control including
 skip-everybody → People, the search
 debounce + sequence guard, and the per-member signature keying),
 `bloc/kiosk_signup_payer_test.dart` (the §3 seat rules: the entry fork, the
@@ -2210,6 +2288,13 @@ and the existing-member skip / new-member edit round trip),
 closes every trial, a cancelled trial still counts, a member created here is
 never asked, the read FAILS OPEN, a blocked card explains without selecting,
 and the popup's countdown returns home releasing the flow exactly once),
+`bloc/kiosk_signup_waiver_skip_test.dart` (the §11.4a waiver skip: a
+`meets_floor` signature is not asked for again and the QUEUE COUNT follows, an
+all-compliant person is skipped entirely, Back-then-forward re-derives the same
+queue off ONE read, and the four fail-CLOSED shades — signed below the floor, a
+waiver ABSENT from the response, an empty response, a THROWN read — plus the 422
+gate item that is never skipped, the member created here who is never asked, and
+the group walk where one person's compliance never covers the other's),
 `bloc/kiosk_signup_plan_block_test.dart` (the §3 already-on-plan rule: the
 `recurring` + `{active, frozen}` scope mirrored exactly — a DIFFERENT recurring
 plan stays selectable (the over-block guard), `frozen` blocks without ever

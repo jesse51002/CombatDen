@@ -107,14 +107,16 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
             foot: KioskFlowFoot(
               onPrimary: picked == null ? null : cubit.continueFromPlans,
               onBack: cubit.back,
-              // **"No membership" is GROUP-only** (founder ruling): somebody on
-              // a family signup may change their mind halfway through, but
+              // **The "Skip" gutter is GROUP-only** (founder ruling): somebody
+              // on a family signup may change their mind halfway through, but
               // skipping the sole person of a solo signup would empty the cart,
               // and at least one person must get a membership. Skipping
               // everybody returns to the roster, where a person can be ticked
-              // back on — see `KioskSignupCubit.skipPlanForPerson`.
+              // back on — see `KioskSignupCubit.skipPlanForPerson`. The
+              // identity band above already names WHO is being skipped, so the
+              // label itself stays the bare verb.
               onSkip: state.isGroup ? cubit.skipPlanForPerson : null,
-              skipLabel: 'No membership',
+              skipLabel: 'Skip',
             ),
             child: state.plansLoading && state.plans.isEmpty
                 ? const _Loading()

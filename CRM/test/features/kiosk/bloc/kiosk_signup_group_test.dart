@@ -667,7 +667,7 @@ void main() {
     });
   });
 
-  group('"No membership" on the plan step (the founder\'s skip)', () {
+  group('"Skip" on the plan step (the founder\'s skip)', () {
     test('it is GROUP-only — a solo signup cannot empty its own cart',
         () async {
       final cubit = await atRoster();

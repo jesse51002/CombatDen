@@ -25,6 +25,7 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 /// How long a terminal front-desk stop stays up before it returns home on its
@@ -143,6 +144,25 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   /// both gates fail open, and hammering a flaky endpoint on every roster
   /// change would buy nothing.
   final Set<String> _planChecked = <String>{};
+
+  /// Members whose PRIOR waiver signatures have already been read, so the
+  /// waiver run never asks twice for the same person. A read that FAILED counts
+  /// as asked: its failure mode is a member re-signing something they already
+  /// signed (see [_loadPriorWaiverStatus] — the read fails CLOSED), and
+  /// hammering a flaky endpoint on every roster change would buy nothing.
+  final Set<String> _waiverStatusChecked = <String>{};
+
+  /// Per member, the waivers the gym ALREADY holds a compliant signature for —
+  /// signed at a version at or above that waiver's re-sign floor.
+  ///
+  /// **A private cache keyed by member id, deliberately not state** (the shape
+  /// [_planChecked] and [_sentAttempts] use). It has no render path at all, so
+  /// the cross-person leak that [KioskSignupPerson.heldRecurringPlanIds] avoids
+  /// by living on the person is unrepresentable here; and because it never
+  /// emits, a read landing late can never re-shape a waiver queue the member is
+  /// already looking at.
+  final Map<String, Set<String>> _priorSatisfiedWaiverIds =
+      <String, Set<String>>{};
 
   /// Which name-search response is still wanted. Every fetch takes the next
   /// number and a landing response that no longer holds it is DISCARDED, so a
@@ -1157,6 +1177,12 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     // Which plans are closed to whom, read once per person before a card is
     // tapped, so a blocked card wears its mark on the first frame it can.
     unawaited(_loadPlanEligibility());
+    // And which waivers each of them has already signed compliantly. It is
+    // fired HERE, alongside the eligibility read, because the waiver run is two
+    // taps away (pick a plan, Continue) — so the answer is in hand before the
+    // first waiver is drawn and the step never briefly shows one it is about to
+    // skip. Nothing re-shapes a queue already on screen.
+    unawaited(_loadPriorWaiverStatus());
     if (state.plansLoading) return;
     if (state.plansFailed) {
       unawaited(_warmPlans());
@@ -1242,6 +1268,79 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     }
   }
 
+  /// Read which waivers each EXISTING person on the roster has already signed
+  /// compliantly, so the waiver run never asks a member to re-sign something
+  /// the gym already holds a valid signature for.
+  ///
+  /// `meets_floor` on each row is the SERVER's compliance verdict — that
+  /// member's latest signature sits at a version at or above the waiver's
+  /// re-sign floor — and it is the SAME rule the 422 purchase gate and the
+  /// check-in gate apply. **The floor is never re-derived here**; one rule, one
+  /// owner.
+  ///
+  /// **This read FAILS CLOSED, which is the exact opposite of
+  /// [_loadPlanEligibility], and that inversion is the point.** The two plan
+  /// gates fail OPEN because refusing a paying customer is worse than a rare
+  /// free week. Waivers invert the cost: a needless signature costs the member
+  /// twenty seconds, while a MISSING one voids the gym's legal protection. So a
+  /// throw writes NO entry and every waiver on the plan is asked for — see
+  /// [_satisfiedWaiverIdsFor], which is where every shade of "we don't know"
+  /// collapses to "ask".
+  ///
+  /// **Only for a person the kiosk did not create.** Somebody registered during
+  /// this signup has no signature history by construction, so their answer is
+  /// "nothing signed" with no request spent at all.
+  Future<void> _loadPriorWaiverStatus() async {
+    final wanted = <String>{
+      for (final person in state.persons)
+        if (person.training &&
+            person.wasExisting &&
+            person.memberId != null &&
+            !_waiverStatusChecked.contains(person.memberId))
+          person.memberId!,
+    };
+    if (wanted.isEmpty) return;
+    _waiverStatusChecked.addAll(wanted);
+    for (final memberId in wanted) {
+      List<MemberWaiverStatus> rows;
+      try {
+        rows = await _membershipsRepo.listMemberWaiverStatus(memberId, _gymId);
+      } catch (e, st) {
+        log('Kiosk signup: prior waiver status read failed '
+            '(every waiver on the plan will be asked for)',
+            error: e, stackTrace: st);
+        // No entry written — the member keeps the empty answer, so nothing is
+        // skipped for them. Fail CLOSED.
+        continue;
+      }
+      if (isClosed) return;
+      // `signed && meetsFloor` and nothing else. A row signed BELOW the floor
+      // is exactly the re-sign case, so it stays on the queue; a missing
+      // `meets_floor` parses as false (the model's `defaultValue`), so an
+      // unrecognised payload also stays on the queue.
+      _priorSatisfiedWaiverIds[memberId] = <String>{
+        for (final row in rows)
+          if (row.signed && row.meetsFloor) row.waiverId,
+      };
+    }
+  }
+
+  /// The waivers [memberId] has already satisfied, as of the read fired at the
+  /// plans step.
+  ///
+  /// **Absence means ASK, at every level — never "no need to sign".** A member
+  /// with no entry (never read, or the read threw) answers with the empty set; a
+  /// waiver missing from their rows is not in the set; a signature below the
+  /// floor is not in the set. The last case is not theoretical: the endpoint's
+  /// result set is `required ∪ ever-signed`, where `required` comes from the
+  /// member's CURRENT memberships' plans — so a waiver belonging to the plan
+  /// they are about to BUY, and never signed, is absent from the response
+  /// entirely. Only a positive `signed && meets_floor` from the server ever
+  /// takes a signature off the queue.
+  Set<String> _satisfiedWaiverIdsFor(String? memberId) => memberId == null
+      ? const <String>{}
+      : (_priorSatisfiedWaiverIds[memberId] ?? const <String>{});
+
   /// Drop [person]'s pick when the answer that just landed closed it.
   ///
   /// A blocked plan that survives reaches the review and fails at pay, which is
@@ -1318,7 +1417,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _advancePlanPerson();
   }
 
-  /// "No membership" — this person is NOT getting one after all (founder
+  /// "Skip" — this person is NOT getting a membership after all (founder
   /// ruling: somebody may change their mind halfway through a family signup).
   ///
   /// **Group only.** Skipping the sole person of a solo signup would empty the
@@ -1410,27 +1509,49 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   void _advanceWaiverPerson() => _openWaiverPerson(state.waiverPersonIndex + 1);
 
-  /// Open one person's liability queue at the first entry THEY have not
-  /// signed, skipping the person entirely when there is nothing left.
+  /// Open one person's liability queue at the first entry THEY still owe,
+  /// skipping the person entirely when there is nothing left.
   ///
-  /// The queue keeps its full length so the subtitle can honestly say "waiver
-  /// 2 of 3"; what changes is where the index starts. **Signed stays signed**:
-  /// walking Back and forward again never re-asks, and nothing un-signs.
+  /// **The queue holds only what this person will actually be asked to sign.**
+  /// A waiver the gym already holds a compliant signature for is DROPPED from
+  /// it rather than merely stepped over, so the subtitle's "waiver 2 of 3"
+  /// counts the signatures the member is about to give — telling somebody
+  /// "waiver 1 of 3" and then showing them one is worse than an honest
+  /// "1 of 1". Everything that reads the queue (the index maths,
+  /// [_advanceWaiver], the per-person walk, Back-then-forward) therefore agrees
+  /// by construction, because there is only ever the one filtered list.
+  ///
+  /// Two kinds of entry are never dropped:
+  ///  * anything the SERVER named at a 422 purchase gate — it is authoritative,
+  ///    and it is the backstop that makes a client-side skip safe at all, so a
+  ///    gate item outranks any prior-signature read;
+  ///  * anything [_satisfiedWaiverIdsFor] did not positively clear — that read
+  ///    fails CLOSED.
+  ///
+  /// **Signed stays signed**: walking Back and forward again never re-asks, and
+  /// nothing un-signs.
   void _enterLiability(int personIndex) {
     final person = state.persons[personIndex];
     final planIds = state.planById(person.selectedPlanId)?.waiverIds ??
         const <String>[];
+    // Anything the SERVER named for this person: it is authoritative, and a
+    // plan whose waiver list has drifted from the gate would otherwise loop the
+    // member through a run that never satisfies it. It is also the ONE thing
+    // the prior-signature skip may not remove — if the gate says unsigned, the
+    // gate wins.
+    final gated = <String>{
+      for (final item in state.waiverGate)
+        if (item.memberId == person.memberId) item.waiverId,
+    };
+    final satisfied = _satisfiedWaiverIdsFor(person.memberId);
     final queue = <String>[
       for (final id in planIds)
-        if (id.trim().isNotEmpty) id,
+        if (id.trim().isNotEmpty &&
+            (gated.contains(id) || !satisfied.contains(id)))
+          id,
     ];
-    // Anything the SERVER named for this person is folded in: it is
-    // authoritative, and a plan whose waiver list has drifted from the gate
-    // would otherwise loop the member through a run that never satisfies it.
-    for (final item in state.waiverGate) {
-      if (item.memberId == person.memberId && !queue.contains(item.waiverId)) {
-        queue.add(item.waiverId);
-      }
+    for (final id in gated) {
+      if (!queue.contains(id)) queue.add(id);
     }
     final next = _firstUnsigned(person.memberId, queue);
     if (next == null) {
