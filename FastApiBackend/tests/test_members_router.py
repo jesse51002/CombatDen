@@ -7,6 +7,7 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.main import app
+from src.members.members_exceptions import MemberNotFoundError
 from src.members.schema.members_billing_schema import (
     BillingPersonalInfo,
     BillingRetention,
@@ -687,10 +688,17 @@ def test_payment_method_status_false(client, auth_headers, fake_member_id):
 def test_payment_method_status_404_when_member_missing(
     client, auth_headers, fake_member_id
 ):
-    """An unknown member is a 404, not a false."""
+    """An unknown member is a 404, not a false.
+
+    The 404 comes from the exception TYPE, not from the words in its message:
+    this test used to hand-feed a bare ``ValueError`` whose text contained
+    "not found", which is precisely why it could not catch a reworded message
+    silently turning this endpoint's 404 into a 400. The full type -> status
+    contract lives in ``tests/members/test_members_error_mapping.py``.
+    """
     mgmt = MagicMock()
     mgmt.has_payment_method = AsyncMock(
-        side_effect=ValueError(f"Member {fake_member_id} not found"),
+        side_effect=MemberNotFoundError(f"Member {fake_member_id} not found"),
     )
 
     response = _payment_method_status_response(

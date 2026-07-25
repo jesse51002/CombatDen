@@ -35,7 +35,12 @@ from api_creation.stripe_direct import (
     create_recurring_subscription,
     create_test_clock,
 )
-from constants import OVERDUE_MEMBERS_PER_GYM, STRIPE_TEST_ACCOUNT_ID
+from constants import (
+    MEMBER_MAX_AGE_YEARS,
+    MEMBER_MIN_AGE_YEARS,
+    OVERDUE_MEMBERS_PER_GYM,
+    STRIPE_TEST_ACCOUNT_ID,
+)
 from faker import Faker
 from supabase import Client
 
@@ -44,6 +49,20 @@ fake = Faker()
 
 def _random_phone() -> str:
     return f"+1{fake.random_int(min=2000000000, max=9999999999)}"
+
+
+def _random_birth_date() -> str:
+    """An ISO adult birth date, drawn from the same band as every other member.
+
+    Stringified because this row is INSERTed through PostgREST (which takes
+    JSON), unlike the normal path's backend POST. Overdue members land on the
+    CRM's Overdue tab, so leaving their date of birth blank would show the gap
+    on exactly the surface the tab exists to demo.
+    """
+    return fake.date_of_birth(
+        minimum_age=MEMBER_MIN_AGE_YEARS,
+        maximum_age=MEMBER_MAX_AGE_YEARS,
+    ).isoformat()
 
 
 def create_overdue(
@@ -104,6 +123,7 @@ def create_overdue(
                     "email": email,
                     "phone": _random_phone(),
                     "address": fake.address().replace("\n", ", "),
+                    "date_of_birth": _random_birth_date(),
                     "emergency_contact_name": fake.name(),
                     "emergency_contact_phone": _random_phone(),
                     "emergency_contact_email": fake.email(),

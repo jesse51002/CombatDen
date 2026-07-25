@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.members.members_exceptions import MembersError
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
     MemberBillingDetailResponse,
@@ -131,6 +132,14 @@ async def create_member(
         # The duplicate gate raises HTTPException(409) directly — re-raise it
         # as-is instead of letting the generic handler mask it as a 500.
         raise
+    except MembersError as exc:
+        # The TYPE carries the status (here: the gym's missing Connect
+        # account, a 400). Explicit so a future 404-shaped rejection on this
+        # path can't be silently flattened to 400 by the arm below.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -178,16 +187,20 @@ async def update_member(
 
     try:
         return await management_service.update_member(member_id, request.data)
+    except MembersError as exc:
+        # Status BY TYPE: MemberNotFoundError -> 404, MemberNoUpdateFieldsError
+        # -> 400. The message is free prose and never decides the status.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # A foreign bad-input ValueError — the shared, domain-agnostic
+        # ``validate_mutable_columns`` guard raises one for an immutable
+        # column. Kept because this handler's service really does raise it.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -487,16 +500,17 @@ async def update_member_card(
 
     try:
         return await management_service.update_card(member_id, request)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status BY TYPE: MemberNotFoundError -> 404; the missing-Connect-
+        # account and missing-Stripe-customer types -> 400. No generic
+        # ``except ValueError`` arm below: ``update_card`` raises no untyped
+        # bad-input ValueError, so a blanket arm could only ever fire on an
+        # internal failure — and pydantic's ValidationError IS a ValueError,
+        # so it would answer a broken response model with a 4xx carrying a
+        # raw validation dump instead of a logged 500.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except PaymentsStripeError as exc:
         logger.error(
@@ -553,16 +567,14 @@ async def unlink_member_payment(
 
     try:
         return await management_service.unlink_payment(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status BY TYPE: the only rejection this path raises is
+        # MemberNotFoundError -> 404. No generic ``except ValueError`` arm —
+        # ``unlink_payment`` raises no untyped bad-input ValueError, so one
+        # could only ever fire on an internal failure (see update_card).
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -626,16 +638,15 @@ async def get_member_payment_method_status(
         return MemberPaymentMethodStatusResponse(
             has_payment_method=has_payment_method,
         )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status BY TYPE: MemberNotFoundError -> 404 (the documented "Member
+        # not found"), MemberGymStripeAccountMissingError -> 400 (the
+        # documented "gym has no Stripe account configured"). Both statuses
+        # used to hang off whether the message happened to contain the words
+        # "not found", so rewording either one silently swapped them.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except PaymentsStripeError as exc:
         # A Stripe failure must surface as an ERROR, never as a false. 500
@@ -716,6 +727,17 @@ async def link_member_account(
             operator_employee_id=operator_employee_id,
         )
     except ValueError as exc:
+        # KNOWN GAP — still dispatching on the message's prose, which this
+        # router's own member-management handlers no longer do. The
+        # ValueErrors reached here are raised by OTHER domains:
+        # ``src/memberships/service/memberships_linked.py`` (the payer /
+        # already-authorized / consent rejections) and
+        # ``src/waivers/service/waivers_signatures.py`` (the version-lock
+        # mismatch, matched on "reload"). Converting this arm to dispatch by
+        # type requires typed hierarchies in THOSE domains — a members-side
+        # exception can't classify an error members never raises. Until they
+        # exist, rewording either domain's message moves this status code.
+        # Same gap on ``/link/check`` and ``/link/remove`` below.
         error_msg = str(exc)
         if "reload" in error_msg.lower():
             raise HTTPException(
@@ -780,6 +802,9 @@ async def check_link_member_account(
             request.payer_member_id,
         )
     except ValueError as exc:
+        # KNOWN GAP — prose dispatch, same reason as PUT /{id}/link above:
+        # the ValueError comes from ``src/memberships/``, so classifying it by
+        # type needs a typed hierarchy in that domain.
         error_msg = str(exc)
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -937,6 +962,9 @@ async def remove_authorization(
             },
         )
     except ValueError as exc:
+        # KNOWN GAP — prose dispatch, same reason as PUT /{id}/link above:
+        # the ValueError comes from ``src/memberships/``, so classifying it by
+        # type needs a typed hierarchy in that domain.
         error_msg = str(exc)
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -1062,16 +1090,14 @@ async def list_member_invoices(
             limit=limit,
             starting_after=starting_after,
         )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status BY TYPE: MemberNotFoundError -> 404; the missing-Stripe-
+        # customer and missing-Connect-account types -> 400 (the documented
+        # "Member has no Stripe customer"). No generic ``except ValueError``
+        # arm — ``list_invoices`` raises no untyped bad-input ValueError.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -1118,16 +1144,15 @@ async def get_member_upcoming_invoice(
 
     try:
         return await management_service.get_upcoming_invoice(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status BY TYPE: MemberNotFoundError -> 404,
+        # MemberGymStripeAccountMissingError -> 400. No generic
+        # ``except ValueError`` arm — ``get_upcoming_invoice`` raises no
+        # untyped bad-input ValueError (a member with no subscription is a
+        # ``None`` return, not an error).
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

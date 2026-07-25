@@ -9,6 +9,11 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.members import SQL_DIR
+from src.members.members_exceptions import (
+    MemberGymStripeAccountMissingError,
+    MemberNotFoundError,
+    MemberStripeCustomerMissingError,
+)
 from src.members.service.management.members_management_base import (
     MembersManagementBase,
 )
@@ -72,16 +77,23 @@ class MembersManagementInvoices(MembersManagementBase):
             overdue. One-off invoices and the live sub's invoices stay.
 
         Raises:
-            ValueError: If the member has no Stripe customer
-                or the gym has no Stripe account.
+            MemberNotFoundError: If the member does not exist (-> 404).
+            MemberStripeCustomerMissingError: If the member has no Stripe
+                customer (-> 400).
+            MemberGymStripeAccountMissingError: If the gym has no Stripe
+                account (-> 400).
         """
         info = await self._get_stripe_info(member_id)
 
         if not info["stripe_customer_id"]:
-            raise ValueError(f"Member {member_id} has no Stripe customer")
+            raise MemberStripeCustomerMissingError(
+                f"Member {member_id} has no Stripe customer"
+            )
 
         if not info["stripe_account_id"]:
-            raise ValueError(f"Gym {info['gym_id']} has no Stripe account configured")
+            raise MemberGymStripeAccountMissingError(
+                f"Gym {info['gym_id']} has no Stripe account configured"
+            )
 
         invoices = await self._payments.list_invoices(
             stripe_customer_id=info["stripe_customer_id"],
@@ -130,8 +142,9 @@ class MembersManagementInvoices(MembersManagementBase):
             The upcoming invoice preview, or ``None`` when there is none.
 
         Raises:
-            ValueError: If the member does not exist or the gym has no
-                Stripe account configured.
+            MemberNotFoundError: If the member does not exist (-> 404).
+            MemberGymStripeAccountMissingError: If the gym has no Stripe
+                account configured (-> 400).
         """
         sql = load_sql(_MANAGEMENT_SQL / "members_management_get_upcoming_info.sql")
         async with self._db_pool.session() as session:
@@ -142,9 +155,9 @@ class MembersManagementInvoices(MembersManagementBase):
             row = result.mappings().fetchone()
 
         if not row:
-            raise ValueError(f"Member {member_id} not found")
+            raise MemberNotFoundError(f"Member {member_id} not found")
         if not row["stripe_account_id"]:
-            raise ValueError(
+            raise MemberGymStripeAccountMissingError(
                 f"Gym {row['gym_id']} has no Stripe account configured"
             )
         if not row["stripe_sub_id_month"]:

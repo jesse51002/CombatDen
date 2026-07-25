@@ -5,6 +5,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import text
 
+from src.members.members_exceptions import (
+    MemberStripeCustomerMissingError,
+)
 from src.members.schema.members_schema import MemberCreateRequest
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
@@ -83,7 +86,13 @@ async def test_list_invoices_no_stripe_customer_raises(
     db_pool,
     gym_id,
 ):
-    """A member without a Stripe customer should raise an error."""
+    """A member without a Stripe customer should raise an error.
+
+    Asserted on the TYPE: the route reads its 400 off
+    ``MemberStripeCustomerMissingError.status_code``, and a bare
+    ``pytest.raises(ValueError)`` would also pass for the 404-shaped
+    ``MemberNotFoundError`` — so it could not tell the two statuses apart.
+    """
     # Insert a member directly without going through the service
     # (so stripe_customer_id stays NULL — not visible via filtered view)
     from sqlalchemy import text
@@ -107,7 +116,7 @@ async def test_list_invoices_no_stripe_customer_raises(
     member_id = UUID(str(row["member_id"]))
 
     try:
-        with pytest.raises(ValueError):
+        with pytest.raises(MemberStripeCustomerMissingError):
             await management_service.list_invoices(member_id)
     finally:
         await delete_member_data(db_pool, member_id)

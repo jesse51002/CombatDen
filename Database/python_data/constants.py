@@ -19,6 +19,15 @@ MEMBERS_PER_GYM = 100
 # Members (per gym) that get a real Supabase auth login (the rest are
 # staff-managed CRM rows with no auth account).
 AUTH_MEMBERS_PER_GYM = 5
+# Age band every seeded member's date_of_birth is drawn from. The column is
+# nullable (the kiosk signup captures it as an optional detail), but a seeded
+# roster with it blank leaves "Date of birth" empty on every CRM member page —
+# a surface that gets demoed — so the seed always fills it. Bounded to adults
+# and spread wide enough that a combat-sports roster looks like one rather
+# than a single cohort. Not a validation rule: the backend imposes no bounds
+# on date_of_birth, these only shape the generated data.
+MEMBER_MIN_AGE_YEARS = 18
+MEMBER_MAX_AGE_YEARS = 65
 # Linked-account families (mirrors the original CRM seed). ~LINKED_FAMILY_FRACTION
 # of each gym's members are partitioned into families: a paying parent (root)
 # plus 1-MAX_LINKED_CHILDREN_PER_PARENT children linked under it. Every child

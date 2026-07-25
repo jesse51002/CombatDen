@@ -4,7 +4,8 @@ Each member is a unified identity + billing/contact row (the merged `members`
 table). The seed creates the identity shell via the backend, then sets billing
 columns. This generator assigns every member:
 
-  - demographics (name, email, phone, address, emergency contacts, points)
+  - demographics (name, email, phone, address, date of birth, emergency
+    contacts, points)
   - a current_rank_id picked from the gym's cloned ladder
   - a billing lifecycle: a current membership and/or closed history, derived
     so the CRM status views populate with a realistic spread (active, trial,
@@ -34,6 +35,8 @@ from constants import (
     DISCOUNTS_PER_MEMBERSHIP_MAX,
     LINKED_FAMILY_FRACTION,
     MAX_LINKED_CHILDREN_PER_PARENT,
+    MEMBER_MAX_AGE_YEARS,
+    MEMBER_MIN_AGE_YEARS,
     MEMBERS_PER_GYM,
     UNIT_DAYS,
 )
@@ -98,6 +101,10 @@ class MemberPlan:
     email: str
     phone: str
     address: str
+    # Always populated (see MEMBER_MIN/MAX_AGE_YEARS): the column is nullable,
+    # but a blank date of birth on every seeded CRM member page reads as a
+    # broken field rather than an omitted optional one.
+    date_of_birth: date
     emergency_contact_name: str
     emergency_contact_phone: str
     emergency_contact_email: str
@@ -146,6 +153,20 @@ def _random_phone() -> str:
     return f"+1{random.randint(2000000000, 9999999999)}"
 
 
+def _random_birth_date() -> date:
+    """A plausible adult birth date inside the configured age band.
+
+    Faker walks the band uniformly, so the roster spreads across ages instead
+    of clustering — and it draws from the same PRNG `Faker.seed(SEED)` fixes,
+    so a re-run reproduces the same dates and the idempotency layer's
+    email-keyed lookups still match.
+    """
+    return fake.date_of_birth(
+        minimum_age=MEMBER_MIN_AGE_YEARS,
+        maximum_age=MEMBER_MAX_AGE_YEARS,
+    )
+
+
 def _demographics(
     handle: str,
     current_rank_id: uuid.UUID | None,
@@ -158,6 +179,7 @@ def _demographics(
         email=fake.unique.email(),
         phone=_random_phone(),
         address=fake.address().replace("\n", ", "),
+        date_of_birth=_random_birth_date(),
         emergency_contact_name=fake.name(),
         emergency_contact_phone=_random_phone(),
         emergency_contact_email=fake.email(),

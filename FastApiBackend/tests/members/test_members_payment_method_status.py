@@ -15,6 +15,7 @@ from uuid import UUID
 import pytest
 from sqlalchemy import text
 
+from src.members.members_exceptions import MemberNotFoundError
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
@@ -194,8 +195,13 @@ async def test_has_payment_method_raises_when_stripe_fails(
 async def test_has_payment_method_raises_for_unknown_member(
     management_service,
 ):
-    """An unknown member is an error (→ 404 at the route), not a False."""
-    with pytest.raises(ValueError, match="not found"):
+    """An unknown member is an error (→ 404 at the route), not a False.
+
+    Asserted on the TYPE, not on the message: the route reads the 404 off
+    ``MemberNotFoundError.status_code``, so matching prose here would lock the
+    wrong half of the contract (see tests/members/test_members_error_mapping).
+    """
+    with pytest.raises(MemberNotFoundError):
         await management_service.has_payment_method(
             UUID("00000000-0000-0000-0000-000000000000"),
         )

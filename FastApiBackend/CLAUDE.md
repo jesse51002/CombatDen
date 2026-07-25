@@ -361,12 +361,36 @@ src/
   unmapped domain error lands as a 400 (bad input), not a 500 — the router's
   existing `except ValueError` → 400 arm catches it, so a typed hierarchy is
   additive, never a breaking sweep. Models: `src/checkin/checkin_exceptions.py`,
-  `src/employees/employees_exceptions.py`. This is **deliberately not
-  universal**: the money / external-system domains (`payments`, `memberships`,
-  `tasks`, `stripe_webhooks`) base on `Exception` on purpose, because their
-  unmapped failures must map to 500 / retryable — never a 400 (see the Money &
-  external-system rules). Do NOT "fix" one of those to subclass `ValueError`; it
-  would silently turn a billing 500 into a 400.
+  `src/employees/employees_exceptions.py`, `src/members/members_exceptions.py`.
+  This is **deliberately not universal**: the money / external-system domains
+  (`payments`, `memberships`, `tasks`, `stripe_webhooks`) base on `Exception` on
+  purpose, because their unmapped failures must map to 500 / retryable — never a
+  400 (see the Money & external-system rules). Do NOT "fix" one of those to
+  subclass `ValueError`; it would silently turn a billing 500 into a 400.
+- **`members` is the partial case, and the partiality is deliberate.**
+  `MembersError` + its four subclasses (`MemberNotFoundError` → 404; the
+  gym-has-no-Connect-account, member-has-no-Stripe-customer and
+  no-update-fields types → 400) cover the seven handlers backed by
+  `MembersManagementService`: the SIX that used substring dispatch (update
+  member, card update, unlink payment, payment-method-status, invoices,
+  upcoming-invoice) plus `POST /members/`, whose 400 was already right and now
+  comes off the type rather than by coincidence. Two things are knowingly
+  unfinished, documented in the code, and should be picked up rather than
+  rediscovered:
+  - The `code` values are declared on the types and locked by
+    `tests/members/test_members_error_mapping.py`, but are **not on the wire** —
+    that needs the one global `app.add_exception_handler` formatter in
+    `src/main.py`. Until it is registered, a members rejection serializes as a
+    plain-string `detail` only, and the router arms map `exc.status_code`
+    themselves. Registering it collapses all seven arms to a bare `raise` and
+    flips one tripwire test.
+  - The three linked-account handlers (`PUT /members/{id}/link`,
+    `/link/check`, `/link/remove`) **still dispatch on the message's prose**,
+    because their `ValueError`s are raised by `src/memberships/` and
+    `src/waivers/` — a members-side type cannot classify an error members never
+    raises. Fixing them means typed hierarchies in those two domains; note
+    `memberships` is a money domain, so per the rule above its base must stay
+    on `Exception` and each router arm maps its types explicitly.
 - **Keep the generic `except Exception` → 500 arm** (with
   `logger.error(..., exc_info=True)`) below the typed arms. Add a generic
   `except ValueError` → 400 arm between them **only on a handler whose service
@@ -380,8 +404,11 @@ src/
   exception can't silently inherit a default: every concrete subclass in the
   module must appear in the table, and must declare `status_code` + `code` in
   its **own** `vars()` (the base keeps safe fallbacks so a forgotten subclass
-  can't 500 a live request — the test is what fails loudly instead). Model:
-  `tests/checkin/test_checkin_error_mapping.py`.
+  can't 500 a live request — the test is what fails loudly instead). Models:
+  `tests/checkin/test_checkin_error_mapping.py`,
+  `tests/members/test_members_error_mapping.py` (the latter parametrizes the
+  same table across all six of its endpoints, and asserts the `code` at the
+  TYPE level because it is not on the wire yet).
 - Include meaningful error messages; customize validation error responses.
 - **Status codes are a contract — don't "improve" one during a refactor.**
   `checkin`'s "not an occurrence of this class" is a **400, not a 404**, because
@@ -397,7 +424,13 @@ src/
   ever fire on an internal failure. `GET /checkin/attendees` (a pure read) and
   `DELETE /checkin` (whose remover raises only `CheckinClassNotFoundError`)
   both carried one mapping *any* `ValueError` to 404; both now catch only the
-  typed error, so a serialization failure is a logged 500.
+  typed error, so a serialization failure is a logged 500. Same in `members`:
+  five of the six converted handlers (card update, unlink payment,
+  payment-method-status, invoices, upcoming-invoice) now catch only
+  `MembersError`, since their services raise nothing but typed errors;
+  `PUT /members/{id}` KEEPS its generic arm because the shared, domain-agnostic
+  `validate_mutable_columns` guard really does raise a plain `ValueError` for an
+  immutable column.
 
 **Logging and Exception Strategy**
 - **API/Router layer**: Use `logger.error()` with `exc_info=True` to log full stack traces

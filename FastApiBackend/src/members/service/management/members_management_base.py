@@ -9,6 +9,10 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.members import SQL_DIR
+from src.members.members_exceptions import (
+    MemberGymStripeAccountMissingError,
+    MemberNotFoundError,
+)
 from src.members.schema.members_billing_schema import (
     MembersBillingProfileResponse,
 )
@@ -55,7 +59,7 @@ class MembersManagementBase:
             Row dict with stripe_customer_id, stripe_account_id, etc.
 
         Raises:
-            ValueError: If the member does not exist.
+            MemberNotFoundError: If the member does not exist (-> 404).
         """
         sql = load_sql(_MANAGEMENT_SQL / "members_management_get_stripe_info.sql")
 
@@ -67,7 +71,7 @@ class MembersManagementBase:
             row = result.mappings().fetchone()
 
         if not row:
-            raise ValueError(f"Member {member_id} not found")
+            raise MemberNotFoundError(f"Member {member_id} not found")
         return dict(row)
 
     async def _get_gym_stripe_account_id(
@@ -83,7 +87,8 @@ class MembersManagementBase:
             The gym's stripe_account_id.
 
         Raises:
-            ValueError: If the gym has no Stripe account configured.
+            MemberGymStripeAccountMissingError: If the gym has no Stripe
+                account configured (-> 400; the gym cannot transact).
         """
         sql = load_sql(
             _MANAGEMENT_SQL / "members_management_get_gym_stripe.sql",
@@ -96,7 +101,9 @@ class MembersManagementBase:
             row = result.mappings().fetchone()
 
         if not row or not row["stripe_account_id"]:
-            raise ValueError(f"Gym {gym_id} has no Stripe account configured")
+            raise MemberGymStripeAccountMissingError(
+                f"Gym {gym_id} has no Stripe account configured"
+            )
         return row["stripe_account_id"]
 
     async def _get_member(
@@ -112,7 +119,7 @@ class MembersManagementBase:
             MembersBillingProfileResponse with current data.
 
         Raises:
-            ValueError: If the member does not exist.
+            MemberNotFoundError: If the member does not exist (-> 404).
         """
         sql = load_sql(_MANAGEMENT_SQL / "members_management_get_member.sql")
         async with self._db_pool.session() as session:
@@ -123,5 +130,5 @@ class MembersManagementBase:
             row = result.mappings().fetchone()
 
         if not row:
-            raise ValueError(f"Member {member_id} not found")
+            raise MemberNotFoundError(f"Member {member_id} not found")
         return MembersBillingProfileResponse(**row)

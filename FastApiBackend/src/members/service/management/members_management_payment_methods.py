@@ -5,6 +5,9 @@ from __future__ import annotations
 import logging
 from uuid import UUID
 
+from src.members.members_exceptions import (
+    MemberGymStripeAccountMissingError,
+)
 from src.members.service.management.members_management_base import (
     MembersManagementBase,
 )
@@ -43,10 +46,11 @@ class MembersManagementPaymentMethods(MembersManagementBase):
             payment method attached.
 
         Raises:
-            ValueError: The member does not exist, or the member has a
-                Stripe customer while their gym has no Stripe account
-                configured (an inconsistency the caller must not read as
-                "no payment method").
+            MemberNotFoundError: The member does not exist (-> 404).
+            MemberGymStripeAccountMissingError: The member has a Stripe
+                customer while their gym has no Stripe account configured
+                (-> 400) — an inconsistency the caller must not read as
+                "no payment method".
             PaymentsStripeError / stripe.StripeError: Any Stripe failure
                 propagates — an error is NOT ``False``.
         """
@@ -61,7 +65,7 @@ class MembersManagementPaymentMethods(MembersManagementBase):
             # The member has a customer but the gym's Connect account is
             # gone: the question is unanswerable, so fail loudly rather
             # than report the safe-looking (and possibly wrong) False.
-            raise ValueError(
+            raise MemberGymStripeAccountMissingError(
                 f"Gym {info['gym_id']} has no Stripe account configured"
             )
 
