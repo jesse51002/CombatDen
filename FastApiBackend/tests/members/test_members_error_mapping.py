@@ -1,4 +1,4 @@
-"""The members domain's exception TYPE -> (HTTP status, ``code``) contract.
+"""The members domain's exception TYPE -> HTTP status contract.
 
 This is the regression the router could not previously catch. Six
 member-management handlers picked their status with
@@ -21,19 +21,21 @@ chosen to prove the message is irrelevant:
 
 So these tests still pass when somebody rewords a message, and fail the moment
 somebody remaps a type. ``test_every_members_error_type_is_mapped`` closes the
-loop: a new ``MembersError`` subclass that nobody assigned a status/code to
-fails here rather than silently inheriting the base's fallback.
+loop: a new ``MembersError`` subclass that nobody assigned a status to fails
+here rather than silently inheriting the base's fallback.
 
-**The wire shape today is a plain-string ``detail`` and nothing else.** The
-``code`` column of the table below is locked at the TYPE level (the reflection
-tests), not on the wire: emitting a sibling ``code`` needs the one global
-``app.add_exception_handler`` formatter in ``src/main.py``, which is a pending
-decision. ``test_the_wire_shape_is_status_plus_detail_only`` is the tripwire —
-when that handler is registered, it is the test that must change (to assert
-the sibling ``code`` is present), and every router arm collapses to a bare
-``raise``. Nothing else about this file changes.
+**The wire shape is a plain-string ``detail`` and nothing else, by
+decision.** ``members`` declares no machine-readable ``code``: a sibling
+``code`` is opt-in per domain and earns its keep only where a client branches
+on a specific rejection (``checkin``, whose kiosk picks copy from it). No CRM
+caller branches past the STATUS here, so a code would be declared, test-locked
+and invisible — it cannot even reach the wire without the one global
+``app.add_exception_handler`` formatter in ``src/main.py``.
+``test_the_wire_shape_is_status_plus_detail_only`` pins that shape: if a code
+ever IS needed, the enum and the formatter land together and that test is
+where the change becomes visible.
 
-**Two blanket-``except ValueError`` traps are locked here too.** pydantic's
+**Three blanket-``except ValueError`` traps are locked here too.** pydantic's
 ``ValidationError`` subclasses ``ValueError``, so a blanket arm on a handler
 whose service raises no bad-input ``ValueError`` can only ever fire on an
 internal failure — answering a broken response model with a 4xx carrying a raw
@@ -41,6 +43,14 @@ validation dump instead of a logged 500. The handlers whose services raise
 only typed errors now have no such arm; ``PUT /members/{id}`` keeps one
 because the shared ``validate_mutable_columns`` guard really does raise a
 plain ``ValueError`` for an immutable column. Both directions are asserted.
+
+The two member-DETAIL reads (``GET /members/{id}`` and
+``GET /members/{id}/billing``) are the worst case of that trap and get their
+own section at the bottom: they served the largest response model in the CRM
+behind a blanket ``except ValueError -> 404 "Member not found"``, so ANY field
+of that payload going out of shape reported a member who plainly exists as
+missing, and the 500 that should have paged someone was indistinguishable from
+a mistyped id.
 """
 
 from unittest.mock import AsyncMock, MagicMock
@@ -54,7 +64,6 @@ from src.members.members_exceptions import (
     MemberNotFoundError,
     MemberNoUpdateFieldsError,
     MembersError,
-    MembersErrorCode,
     MemberStripeCustomerMissingError,
 )
 from src.members.schema.members_billing_schema import (
@@ -66,26 +75,14 @@ from src.members.schema.members_billing_schema import (
 _MSG_WITHOUT_THE_MAGIC_WORDS = "no such member at this gym"
 _MSG_WITH_THE_MAGIC_WORDS = "the thing was not found, and yet this is a 400"
 
-# The whole public contract, in one table. Read it as: this type, that status,
-# that stable code. Renaming a code is a BREAKING change for any client that
-# switches on it — add a new one instead.
-_TYPE_TO_CONTRACT: tuple[tuple[type[MembersError], int, MembersErrorCode], ...] = (
-    (MemberNotFoundError, 404, MembersErrorCode.member_not_found),
-    (
-        MemberGymStripeAccountMissingError,
-        400,
-        MembersErrorCode.gym_stripe_account_missing,
-    ),
-    (
-        MemberStripeCustomerMissingError,
-        400,
-        MembersErrorCode.member_stripe_customer_missing,
-    ),
-    (MemberNoUpdateFieldsError, 400, MembersErrorCode.no_update_fields),
-)
-
-_TYPE_TO_STATUS: tuple[tuple[type[MembersError], int], ...] = tuple(
-    (exc_type, expected) for exc_type, expected, _ in _TYPE_TO_CONTRACT
+# The whole public contract, in one table: this type, that status. There is no
+# machine-readable ``code`` column — see the module docstring for why members
+# deliberately has none.
+_TYPE_TO_STATUS: tuple[tuple[type[MembersError], int], ...] = (
+    (MemberNotFoundError, 404),
+    (MemberGymStripeAccountMissingError, 400),
+    (MemberStripeCustomerMissingError, 400),
+    (MemberNoUpdateFieldsError, 400),
 )
 
 _400_TYPES = tuple(t for t, s in _TYPE_TO_STATUS if s == 400)
@@ -222,41 +219,52 @@ def _concrete_error_types() -> set[type[MembersError]]:
 
 def test_every_members_error_type_is_mapped() -> None:
     """Every concrete ``MembersError`` in the module carries an explicit
-    status AND code in the table above. Adding a new one without deciding
-    them fails HERE, instead of silently defaulting in production."""
+    status in the table above. Adding a new one without deciding it fails
+    HERE, instead of silently defaulting in production."""
     assert _concrete_error_types() == {
-        exc_type for exc_type, _, _ in _TYPE_TO_CONTRACT
+        exc_type for exc_type, _ in _TYPE_TO_STATUS
     }
 
 
-def test_every_type_declares_its_own_status_and_code() -> None:
-    """A new subclass must DECLARE both attributes, never inherit them.
+def test_every_type_declares_its_own_status_code() -> None:
+    """A new subclass must DECLARE ``status_code``, never inherit it.
 
-    The base carries safe fallbacks so a not-yet-classified subclass can't
-    500 a live request — this test is what makes forgetting them loud. It
+    The base carries a safe fallback so a not-yet-classified subclass can't
+    500 a live request — this test is what makes forgetting it loud. It
     reads each class's OWN ``vars()``, so an inherited value fails.
     """
     for exc_type in _concrete_error_types():
         own = vars(exc_type)
         assert "status_code" in own, f"{exc_type.__name__} inherits status_code"
-        assert "code" in own, f"{exc_type.__name__} inherits code"
-        assert own["code"] is not MembersErrorCode.members_error, (
-            f"{exc_type.__name__} reuses the base fallback code"
+
+
+def test_no_type_declares_a_machine_readable_code() -> None:
+    """``members`` deliberately has no ``code`` machinery.
+
+    A sibling ``code`` is opt-in per domain and only earns its keep where a
+    client branches on a specific rejection. Nothing does here, and a code
+    cannot even reach the wire without the global formatter in
+    ``src/main.py`` — so declaring one would test-lock four strings into the
+    public contract while staying invisible to every caller. That
+    half-wired state is what this asserts against: if a code is ever needed,
+    the enum and the formatter land together, and this test plus
+    ``test_the_wire_shape_is_status_plus_detail_only`` are where the
+    decision has to be made explicitly.
+    """
+    assert not hasattr(members_exceptions, "MembersErrorCode")
+    for exc_type in _concrete_error_types() | {MembersError}:
+        assert not hasattr(exc_type, "code"), (
+            f"{exc_type.__name__} declares a `code` that cannot reach the "
+            "wire — register the global handler in src/main.py in the same "
+            "change, or drop it"
         )
 
 
 def test_type_attributes_match_the_contract_table() -> None:
     """The type itself is the single source of truth the routers read, so the
     class attributes and the table must agree exactly."""
-    for exc_type, expected_status, expected_code in _TYPE_TO_CONTRACT:
+    for exc_type, expected_status in _TYPE_TO_STATUS:
         assert exc_type.status_code == expected_status, exc_type.__name__
-        assert exc_type.code is expected_code, exc_type.__name__
-
-
-def test_codes_are_unique() -> None:
-    """Two types sharing a code would make the discriminator ambiguous."""
-    codes = [code for _, _, code in _TYPE_TO_CONTRACT]
-    assert len(set(codes)) == len(codes)
 
 
 def test_pydantic_validation_error_is_a_value_error() -> None:
@@ -274,9 +282,7 @@ def test_pydantic_validation_error_is_a_value_error() -> None:
 
 
 @pytest.mark.parametrize(("label", "method_name", "call"), _ENDPOINTS)
-@pytest.mark.parametrize(
-    ("exc_type", "expected", "expected_code"), _TYPE_TO_CONTRACT
-)
+@pytest.mark.parametrize(("exc_type", "expected"), _TYPE_TO_STATUS)
 def test_endpoint_maps_error_type_to_status(
     client,
     auth_headers,
@@ -286,19 +292,11 @@ def test_endpoint_maps_error_type_to_status(
     call,
     exc_type,
     expected,
-    expected_code,
 ) -> None:
     """Every converted handler maps the service's exception TYPE to its
     status — with a message that would have pushed the OPPOSITE way under the
     old substring dispatch.
-
-    ``expected_code`` rides along from the same table so the parametrization
-    can't drift from the contract; the code is asserted at the type level
-    (``test_type_attributes_match_the_contract_table``) because it is not on
-    the wire yet — see the module docstring.
     """
-    assert exc_type.code is expected_code
-
     resp = _call_with_service_error(
         client,
         auth_headers,
@@ -318,19 +316,19 @@ def test_endpoint_maps_error_type_to_status(
 def test_the_wire_shape_is_status_plus_detail_only(
     client, auth_headers, fake_member_id
 ) -> None:
-    """TRIPWIRE for the pending global handler.
+    """The whole wire shape: a status and a plain-string ``detail``.
 
-    A typed rejection serializes today as a plain-string ``detail`` and no
-    sibling ``code``: putting the code on the wire needs the one global
-    ``app.add_exception_handler`` formatter in ``src/main.py`` (the CRM reads
-    ``data['detail']`` only when it is a String, so the code can never be
-    nested inside it, and no router-local shape can add a sibling key without
-    duplicating the formatter at six call sites).
+    Asserted as an EQUALITY on the body, not a subset, so nothing can quietly
+    grow a second key. ``members`` has no machine-readable ``code`` by
+    decision (see the module docstring): a sibling key would need the one
+    global ``app.add_exception_handler`` formatter in ``src/main.py``, because
+    the CRM reads ``data['detail']`` only when it is a String — so the code
+    could never be nested inside ``detail``, and no router-local shape can add
+    a sibling without duplicating the formatter at every call site.
 
-    When that handler is registered, THIS is the test to change: assert
-    ``body["code"] == MembersErrorCode.member_not_found.value`` instead. It
-    failing is the signal the wire shape moved — which is exactly what a
-    client switching on ``code`` needs to know.
+    If a client ever does need to branch on a code, THIS is the test that has
+    to change, in the same commit as the enum and the formatter. It failing is
+    the signal the wire shape moved.
     """
     resp = _call_with_service_error(
         client,
@@ -455,3 +453,102 @@ def test_prose_no_longer_decides_the_status(
     assert _status(MemberNotFoundError("Unknown member 123")) == 404
     for exc_type in _400_TYPES:
         assert _status(exc_type("Member not found — but still a 400")) == 400
+
+
+# ── the member-DETAIL reads: the worst blanket-ValueError trap ──────────
+#
+# GET /members/{id} and GET /members/{id}/billing both serve
+# MembersBillingDetailService.get_member_billing_detail — the largest response
+# model in the CRM (memberships grouped by plan, authorized payers, who-pays-
+# for-whom, payment history, rewards, pending redemptions, rank, card). Both
+# used to answer ANY ValueError with 404 "Member not found". pydantic's
+# ValidationError IS a ValueError, so one bad field anywhere in that payload
+# reported a member who plainly exists as missing: the CRM showed "not found",
+# the caller re-checked the id, and the 500 that should have paged someone was
+# never visible. They now catch only MembersError.
+
+_DETAIL_ENDPOINTS = (
+    ("GET /members/{id}", lambda c, h, m: c.get(f"/api/v1/members/{m}", headers=h)),
+    (
+        "GET /members/{id}/billing",
+        lambda c, h, m: c.get(f"/api/v1/members/{m}/billing", headers=h),
+    ),
+)
+
+
+def _call_detail_with_service_error(client, headers, member_id, call, exc):
+    """Issue ``call`` with the billing-detail service raising ``exc``."""
+    detail_service = MagicMock()
+    detail_service.get_member_billing_detail = AsyncMock(side_effect=exc)
+    container = client.app.container
+    container.members_billing_detail_service.override(detail_service)
+    try:
+        return call(client, headers, member_id)
+    finally:
+        container.members_billing_detail_service.reset_override()
+
+
+@pytest.mark.parametrize(("label", "call"), _DETAIL_ENDPOINTS)
+def test_detail_read_maps_member_not_found_to_404(
+    client, auth_headers, fake_member_id, label, call
+) -> None:
+    """A genuinely missing member is still a 404 — now off the TYPE.
+
+    The message deliberately lacks "not found", so this would have been a 400
+    under a substring dispatch and is a 404 purely because
+    ``MemberNotFoundError`` says so.
+    """
+    resp = _call_detail_with_service_error(
+        client,
+        auth_headers,
+        fake_member_id,
+        call,
+        MemberNotFoundError(_MSG_WITHOUT_THE_MAGIC_WORDS),
+    )
+
+    assert resp.status_code == 404, f"{label}: {resp.text}"
+    assert resp.json()["detail"] == _MSG_WITHOUT_THE_MAGIC_WORDS, label
+
+
+@pytest.mark.parametrize(("label", "call"), _DETAIL_ENDPOINTS)
+def test_detail_read_turns_a_validation_error_into_a_500(
+    client, auth_headers, fake_member_id, label, call
+) -> None:
+    """A broken detail payload is a logged 500, NOT "Member not found".
+
+    This is the regression the narrowing exists for. Before it, a
+    ``ValidationError`` on this read — the single most complex response model
+    in the API — was reported to staff as a missing member.
+    """
+    resp = _call_detail_with_service_error(
+        client,
+        auth_headers,
+        fake_member_id,
+        call,
+        _a_real_validation_error(),
+    )
+
+    assert resp.status_code == 500, f"{label}: {resp.text}"
+    assert isinstance(resp.json()["detail"], str), label
+    assert "not found" not in resp.json()["detail"].lower(), label
+
+
+@pytest.mark.parametrize(("label", "call"), _DETAIL_ENDPOINTS)
+def test_detail_read_foreign_value_error_is_a_500(
+    client, auth_headers, fake_member_id, label, call
+) -> None:
+    """Any other stray ``ValueError`` deep in the read is also a 500.
+
+    Nothing on this path raises an untyped bad-input ``ValueError`` — the read
+    takes a single path parameter FastAPI has already parsed as a UUID — so one
+    arriving here is a bug on our side, not a bad request.
+    """
+    resp = _call_detail_with_service_error(
+        client,
+        auth_headers,
+        fake_member_id,
+        call,
+        ValueError("something odd happened deep in the grouper"),
+    )
+
+    assert resp.status_code == 500, f"{label}: {resp.text}"

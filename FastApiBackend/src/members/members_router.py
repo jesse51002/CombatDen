@@ -47,6 +47,16 @@ from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
 from src.memberships.memberships_exceptions import PartialCancelError
+
+# The busy-payer 409's description text, imported rather than restated: this
+# router's three locking handlers answer the SAME condition as the memberships
+# router's, and that constant exists precisely so the route docs cannot drift.
+# The import crosses routers (cycle-free — memberships_router imports nothing
+# from src.members) because the whole link flow IS a memberships service; the
+# constant's natural long-term home is beside LockBusyError in
+# src/shared/paying_member_lock.py, which would mean editing the memberships
+# router in the same change.
+from src.memberships.memberships_router import BUSY_PAYER_409
 from src.memberships.memberships_schema import (
     MemberMembershipsCancelResponse,
     MembersBillingLinkCheckRequest,
@@ -65,6 +75,7 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import OWNER_ADMIN, STAFF, Auth, security
+from src.shared.paying_member_lock import LockBusyError
 from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     AuthorizedPayerWaiverResponse,
@@ -72,6 +83,7 @@ from src.waivers.schema.waivers_schema import (
 from src.waivers.service.waivers_service import (
     WaiversService,
 )
+from src.waivers.waivers_exceptions import WaiversError
 
 logger = logging.getLogger(__name__)
 
@@ -270,8 +282,9 @@ async def list_members(
         "Returns unfiltered member counts per status (active / trial / "
         "frozen / overdue / dormant / incomplete) for the CRM members list "
         "subtitle. Counts are membership-derived from "
-        "member_memberships_status; incomplete counts members with no "
-        "membership who also pay for nobody."
+        "member_memberships_status; incomplete counts valid member rows (a "
+        "Stripe customer on file) with no membership of their own that also "
+        "pay for nobody and hold no billed-but-unconfirmed membership."
     ),
     responses={
         200: {"description": "Counts retrieved"},
@@ -341,10 +354,19 @@ async def get_member_detail(
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
-    except ValueError:
+    except MembersError as exc:
+        # Status BY TYPE: the only rejection this read raises is
+        # MemberNotFoundError -> 404. Narrowed from a blanket
+        # ``except ValueError`` -> 404 "Member not found", which was actively
+        # dangerous HERE: this is the largest response model in the CRM
+        # (memberships, payers, payment history, rewards, rank, card), and
+        # pydantic's ValidationError IS a ValueError — so any field of it
+        # going out of shape answered "Member not found" for a member who
+        # plainly exists. The 500 that should have paged someone was
+        # indistinguishable from a mistyped id.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -393,10 +415,14 @@ async def get_member_billing_detail(
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
-    except ValueError:
+    except MembersError as exc:
+        # Status BY TYPE, same read and same reasoning as GET /{member_id}
+        # above: MemberNotFoundError -> 404, and a pydantic ValidationError on
+        # this large payload is now a logged 500 instead of a 404 that blames
+        # the caller's id.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -539,8 +565,15 @@ async def update_member_card(
     response_model=MembersBillingProfileResponse,
     summary="Unlink member payment",
     description=(
-        "Removes a member's payment card from the CRM and immediately cancels "
-        "all active recurring memberships. The Stripe customer link is preserved."
+        "Clears the member's stored card fields (stripe_payment_method_id, "
+        "card brand / last four / expiry) and, in Stripe, unsets the "
+        "customer's default payment method and detaches it — so nothing can "
+        "be charged to that card again. The Stripe customer link itself is "
+        "preserved. Memberships are NOT touched: an active recurring "
+        "membership stays active and keeps its next due date, so its next "
+        "cycle attempts collection with no card on file and Stripe's dunning "
+        "reports the failure. Cancelling is a separate, explicit decision the "
+        "cancel endpoints own."
     ),
     responses={
         200: {"description": "Payment unlinked successfully"},
@@ -559,7 +592,7 @@ async def unlink_member_payment(
         Provide[DependencyInjector.members_management_service]
     ),
 ) -> MembersBillingProfileResponse:
-    """Unlink a member's payment card and cancel recurring memberships."""
+    """Unlink a member's payment card. Memberships are left untouched."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
         member_id, user_payload, staff_roles=STAFF
@@ -691,8 +724,16 @@ async def get_member_payment_method_status(
         400: {"description": "Payer invalid / wrong gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-        409: {"description": "Waiver was updated — reload and re-sign"},
+        404: {
+            "description": (
+                "Member not found, or the gym has no payer-auth waiver to sign"
+            )
+        },
+        409: {
+            "description": (
+                f"Waiver was updated — reload and re-sign, or {BUSY_PAYER_409}"
+            )
+        },
     },
 )
 @inject
@@ -726,24 +767,54 @@ async def link_member_account(
             user_agent=capture_user_agent(http_request),
             operator_employee_id=operator_employee_id,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        # ``link_account`` takes the two-account lock INSIDE the service, so the
+        # error is raised within this try — and LockBusyError subclasses
+        # Exception directly, so without this arm the `except Exception` below
+        # buried a perfectly retryable conflict (front desk linking an account
+        # while a bulk reprice holds either payer's lock) as a 500 "failed".
+        raise
+    except WaiversError as exc:
+        # Status BY TYPE for the WAIVER half of this handler. link_account
+        # resolves the gym's payer-auth waiver and signs it through the shared
+        # ``sign_waiver``, so its rejections are waivers-domain ones:
+        # WaiverVersionStaleError -> 409 (the documented "reload and re-sign"),
+        # WaiverPayerAuthMissingError / WaiverNotFoundError /
+        # WaiverVersionNotFoundError / WaiverSignerNotInGymError -> 404.
+        #
+        # This arm must sit ABOVE the ValueError arm below: WaiversError
+        # subclasses ValueError, so the prose arm would otherwise swallow it.
+        #
+        # Two prose couplings die here. The 409 used to hang off the word
+        # "reload" appearing in the message — nothing about that word says
+        # "conflict". And a gym with no payer-auth waiver was a 400 here but a
+        # 404 on GET /authorized-payer-waiver, from ONE raise, because its
+        # message happens not to contain "not found"; it is 404 on both now
+        # (see waivers_exceptions).
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         # KNOWN GAP — still dispatching on the message's prose, which this
-        # router's own member-management handlers no longer do. The
-        # ValueErrors reached here are raised by OTHER domains:
-        # ``src/memberships/service/memberships_linked.py`` (the payer /
-        # already-authorized / consent rejections) and
-        # ``src/waivers/service/waivers_signatures.py`` (the version-lock
-        # mismatch, matched on "reload"). Converting this arm to dispatch by
-        # type requires typed hierarchies in THOSE domains — a members-side
-        # exception can't classify an error members never raises. Until they
-        # exist, rewording either domain's message moves this status code.
-        # Same gap on ``/link/check`` and ``/link/remove`` below.
+        # router's own member-management handlers and the waiver arm above no
+        # longer do. The ValueErrors that still reach here are raised by
+        # ``src/memberships/service/memberships_linked.py`` (the self-payer,
+        # consent, blocked-pair and already-authorized rejections). Converting
+        # this arm to dispatch by type requires a typed hierarchy in THAT
+        # domain — a members-side exception can't classify an error members
+        # never raises — and ``memberships`` is a money domain, so per
+        # CLAUDE.md its base must stay on ``Exception`` and each router arm
+        # maps its types explicitly. Until it exists, rewording a memberships
+        # message moves this status code. Same gap on ``/link/check`` and
+        # ``/link/remove`` below.
+        #
+        # Note there is no ``"reload"`` branch any more: that 409 was
+        # exclusively the waivers version-lock, which the typed arm above now
+        # owns. Nothing in ``memberships_linked`` raises a conflict.
         error_msg = str(exc)
-        if "reload" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=error_msg,
-            ) from None
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -842,6 +913,7 @@ async def check_link_member_account(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
         404: {"description": "Member not found"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -865,6 +937,13 @@ async def preview_remove_authorization(
             member_id,
             request.payer_member_id,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`. Even
+        # this read takes the payer lock (the facade wraps the preview so the
+        # figures it quotes cannot be computed mid-converge), so it can answer
+        # busy — and a 500 here would report contention as an outage.
+        raise
     except Exception:
         logger.error(
             "Failed to preview remove authorization: member_id=%s",
@@ -904,6 +983,7 @@ async def preview_remove_authorization(
                 "authorization row is left intact. A 2xx, never auto-retried."
             )
         },
+        409: {"description": BUSY_PAYER_409.capitalize()},
         500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
@@ -935,6 +1015,14 @@ async def remove_authorization(
                 for item_id, cancel_date in cancel_dates.items()
             },
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        # ``remove_authorization`` takes the two-account lock itself, and it is
+        # the most damaging place to bury the error: a 500 on a cascading cancel
+        # reads as "money may have half-moved" when in fact NOTHING ran — the
+        # lock was never acquired, so the op is safe to retry.
+        raise
     except PartialCancelError as exc:
         # The cascading cancel partially applied (one payer converged, a later
         # one failed). Mirror the cancel router: this is a real, parseable
@@ -1037,9 +1125,17 @@ async def get_authorized_payer_waiver(
         return await waivers_service.get_payer_auth_waiver_with_body_for_member(
             member_id,
         )
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status BY TYPE: every rejection this read can raise is a 404 (no
+        # payer-auth waiver for the gym, its row gone, or no readable current
+        # version), so the status is unchanged — but it is now read off the
+        # type instead of being hard-coded for any ``ValueError``. That
+        # blanket arm was the third instance of the pydantic trap: a
+        # ``ValidationError`` building AuthorizedPayerWaiverResponse IS a
+        # ``ValueError``, so a body that failed to serialize came back as
+        # "waiver not found" and the 500 never surfaced.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:

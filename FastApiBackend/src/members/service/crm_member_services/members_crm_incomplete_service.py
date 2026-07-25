@@ -26,9 +26,13 @@ INCOMPLETE_SQL = load_member_incomplete_sql("p.member_id", "p.gym_id")
 class CrmIncompleteViewService(CrmBaseViewService):
     """Fetches and formats rows for the Incomplete view.
 
-    Lists signups that stalled: a member row holding no membership of
-    their own who is also not the payer on anyone else's. Newest first —
-    the freshest unfinished signup is the one staff can still convert.
+    Lists signups that stalled: a VALID member row (one with a
+    ``stripe_customer_id``) holding no membership of their own, who is
+    also not the payer on anyone else's, and who holds no
+    billed-but-unconfirmed non-recurring row. Newest first — the freshest
+    unfinished signup is the one staff can still convert.
+    ``sql/crm_views/_member_incomplete.sql`` owns the rule and the
+    reasoning behind each exclusion.
     """
 
     async def fetch(

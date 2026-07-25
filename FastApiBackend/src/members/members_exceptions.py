@@ -13,28 +13,28 @@ sibling ``"Gym … has no Stripe account configured"`` landed on 400 only by
 the accident of not containing them.
 
 **The type is the single source of truth.** Each concrete class declares its
-own ``status_code`` and ``code`` as class attributes; the router reads the
-status off the raised instance rather than re-deciding it, so a new subclass
-is wired to HTTP the moment it declares its two attributes.
+own ``status_code`` as a class attribute; the router reads the status off the
+raised instance rather than re-deciding it, so a new subclass is wired to HTTP
+the moment it declares that attribute.
 ``tests/members/test_members_error_mapping.py`` holds the whole
-type -> (status, code) table and drives it through the live app with
-deliberately message-hostile strings.
+type -> status table and drives it through the live app with deliberately
+message-hostile strings.
 
-``code`` is the stable machine-readable discriminator a client switches on,
-and it is declared here so its values are locked before they ship. **It is
-not on the wire yet:** serializing a sibling ``code`` beside ``detail``
-requires the one global ``app.add_exception_handler`` formatter in
-``src/main.py`` (the ``_handle_checkin_error`` template) — the CRM reads
-``data['detail']`` only when it is a plain String, so the code can never be
-nested inside ``detail``, and no router-local shape can add a sibling key
-without duplicating the formatter at every call site. Registering that
-handler is a pending decision; until it lands, clients branch on the status
-and read ``detail``. When it lands, every router arm below collapses to a
-bare ``raise`` and nothing else changes.
+**There is no machine-readable ``code`` here, deliberately.** A sibling
+``code`` beside ``detail`` is opt-in per domain (the root convention), and it
+earns its keep only where a client must branch on a specific rejection —
+``checkin``, whose kiosk switches on the code to pick its blocked-screen copy.
+No CRM caller branches past the STATUS on a members rejection: every one of
+them either shows ``detail`` as prose or reacts to 404-vs-400. A ``code`` here
+would therefore be declared, test-locked and invisible — it cannot reach the
+wire without the one global ``app.add_exception_handler`` formatter in
+``src/main.py``, and adding that formatter for values nobody reads buys
+nothing while making four strings part of the public contract forever. If a
+client ever does need to branch, add the enum AND the formatter in the same
+change; a half-wired code is the state this comment exists to prevent.
 
-**Codes are part of the public contract.** Renaming one is a breaking change
-for every client that switches on it — add a new code rather than
-repurposing an existing one.
+A members rejection therefore serializes as a plain-string ``detail`` and
+nothing else, and each router arm maps ``exc.status_code`` itself.
 
 All of them subclass ``ValueError`` so every pre-existing
 ``except ValueError`` — this router's own generic bad-input arm, the create
@@ -43,12 +43,12 @@ exactly as before (a 400 bad-request) rather than falling through to a 500.
 That is what makes the typed hierarchy **additive** instead of a breaking
 sweep: no caller has to know about it to keep behaving correctly.
 
-Status + code table (owned here, applied by the router arms):
+Status table (owned here, applied by the router arms):
 
-* ``MemberNotFoundError``                  -> 404 ``member_not_found``
-* ``MemberGymStripeAccountMissingError``    -> 400 ``gym_stripe_account_missing``
-* ``MemberStripeCustomerMissingError``      -> 400 ``member_stripe_customer_missing``
-* ``MemberNoUpdateFieldsError``             -> 400 ``no_update_fields``
+* ``MemberNotFoundError``                   -> 404
+* ``MemberGymStripeAccountMissingError``    -> 400
+* ``MemberStripeCustomerMissingError``      -> 400
+* ``MemberNoUpdateFieldsError``             -> 400
 
 The three 400s are bad-request on purpose, not 404s: the *member* exists in
 every one of them: it is the billing configuration that is unusable (no
@@ -56,26 +56,7 @@ Connect account on the gym, no Stripe customer on the member) or the request
 that is empty. Only a missing member row is a missing resource.
 """
 
-from enum import StrEnum
 from http import HTTPStatus
-
-
-class MembersErrorCode(StrEnum):
-    """Stable machine-readable discriminators for member rejections.
-
-    **Public API contract.** A value is never renamed or repurposed once a
-    client switches on it — add a new member instead.
-
-    ``members_error`` is the base class's fallback only; no concrete
-    exception uses it (``tests/members/test_members_error_mapping.py``
-    enforces that every concrete subclass declares its own).
-    """
-
-    members_error = "members_error"
-    member_not_found = "member_not_found"
-    gym_stripe_account_missing = "gym_stripe_account_missing"
-    member_stripe_customer_missing = "member_stripe_customer_missing"
-    no_update_fields = "no_update_fields"
 
 
 class MembersError(ValueError):
@@ -88,57 +69,48 @@ class MembersError(ValueError):
             override it; the base default is a 400 bad-request so a
             not-yet-classified subclass can never 500 a live request (the
             reflection test is what fails loudly instead).
-        code: The stable machine-readable discriminator. Every concrete
-            subclass declares its own.
     """
 
     status_code: int = HTTPStatus.BAD_REQUEST
-    code: MembersErrorCode = MembersErrorCode.members_error
 
 
 class MemberNotFoundError(MembersError):
     """No member row for this id.
 
-    404 / ``member_not_found``. This is the ONLY members condition that
-    404s — every other one below is a real member whose billing setup or
-    request is unusable.
+    404. This is the ONLY members condition that 404s — every other one
+    below is a real member whose billing setup or request is unusable.
     """
 
     status_code: int = HTTPStatus.NOT_FOUND
-    code: MembersErrorCode = MembersErrorCode.member_not_found
 
 
 class MemberGymStripeAccountMissingError(MembersError):
     """The member's gym has no Stripe Connect account configured.
 
-    400 / ``gym_stripe_account_missing``. The member exists; the gym cannot
-    transact, so nothing about this member's card or invoices is readable or
-    writable. Never answered as a benign empty/false — a caller gating on a
-    payment method must not read "unknown" as "nothing on file".
+    400. The member exists; the gym cannot transact, so nothing about this
+    member's card or invoices is readable or writable. Never answered as a
+    benign empty/false — a caller gating on a payment method must not read
+    "unknown" as "nothing on file".
     """
 
     status_code: int = HTTPStatus.BAD_REQUEST
-    code: MembersErrorCode = MembersErrorCode.gym_stripe_account_missing
 
 
 class MemberStripeCustomerMissingError(MembersError):
     """The member row exists but carries no ``stripe_customer_id``.
 
-    400 / ``member_stripe_customer_missing``. Every member is provisioned a
-    Stripe customer at creation, so this is a broken invariant rather than a
-    normal state — the operations that need one fail loudly instead of
-    silently provisioning a second customer.
+    400. Every member is provisioned a Stripe customer at creation, so this
+    is a broken invariant rather than a normal state — the operations that
+    need one fail loudly instead of silently provisioning a second customer.
     """
 
     status_code: int = HTTPStatus.BAD_REQUEST
-    code: MembersErrorCode = MembersErrorCode.member_stripe_customer_missing
 
 
 class MemberNoUpdateFieldsError(MembersError):
     """An update request carried no fields to write.
 
-    400 / ``no_update_fields``.
+    400.
     """
 
     status_code: int = HTTPStatus.BAD_REQUEST
-    code: MembersErrorCode = MembersErrorCode.no_update_fields

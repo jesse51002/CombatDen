@@ -5,10 +5,54 @@ members_crm_members_list_schema and members_billing_schema.
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+# Floor for a plausible date of birth. Nobody training at a gym was born
+# before 1900: the oldest verified human ever lived to 122, so 1900 leaves
+# ~126 years of headroom and can never reject a real member — while it does
+# reject the realistic typo class, a mistyped or truncated year (``0202-06-01``,
+# ``0000-01-01``, a stray ``1066``), which is what the kiosk's free-form date
+# entry actually produces. Chosen as a fixed calendar floor rather than a
+# maximum age so it needs no per-gym policy and never becomes wrong as time
+# passes.
+EARLIEST_DATE_OF_BIRTH: Final[date] = date(1900, 1, 1)
+
+
+def _validate_date_of_birth(value: date | None) -> date | None:
+    """Reject an implausible date of birth (-> 422).
+
+    Two bounds, both of which the kiosk signup could otherwise post straight
+    through to a 201:
+
+    * **No future date.** A date of birth that has not happened yet is never
+      valid data; ``2035-06-01`` is a slipped year, not a member.
+    * **Not before 1900** (:data:`EARLIEST_DATE_OF_BIRTH`) — see its comment.
+
+    Shared by every schema that accepts a DOB so the create and the update
+    paths cannot drift: one rule text, two validators. The DB carries the
+    matching CHECK (``date_of_birth_plausible`` in
+    ``Database/supabase/schemas/members.sql``) so a writer that never passes
+    through this model — the seed, a future importer, a hand-run UPDATE —
+    cannot store what the API refuses.
+    """
+    if value is None:
+        return value
+    today = date.today()
+    if value > today:
+        raise ValueError(
+            f"date_of_birth cannot be in the future (got {value.isoformat()}, "
+            f"today is {today.isoformat()})",
+        )
+    if value < EARLIEST_DATE_OF_BIRTH:
+        raise ValueError(
+            f"date_of_birth cannot be before "
+            f"{EARLIEST_DATE_OF_BIRTH.isoformat()} "
+            f"(got {value.isoformat()})",
+        )
+    return value
 
 
 class MemberCreateRequest(BaseModel):
@@ -52,6 +96,12 @@ class MemberCreateRequest(BaseModel):
         """
         return v.lower() if v is not None else v
 
+    @field_validator("date_of_birth")
+    @classmethod
+    def _plausible_date_of_birth(cls, v: date | None) -> date | None:
+        """Reject a future or pre-1900 date of birth (see the module helper)."""
+        return _validate_date_of_birth(v)
+
 
 class MemberUpdateData(BaseModel):
     """Mutable fields on a member row.
@@ -84,6 +134,17 @@ class MemberUpdateData(BaseModel):
         the stored value must be lowercase.
         """
         return v.lower() if v is not None else v
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def _plausible_date_of_birth(cls, v: date | None) -> date | None:
+        """Reject a future or pre-1900 date of birth (see the module helper).
+
+        The update path needs the same guard as create, not just create: staff
+        correcting a DOB on the member page post to THIS model, and it is the
+        only other way a value reaches the column through the API.
+        """
+        return _validate_date_of_birth(v)
 
 
 class MemberUpdateRequest(BaseModel):

@@ -14,6 +14,7 @@ import src.shared.db_schema_path  # noqa: F401
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.members import SQL_DIR
+from src.members.members_exceptions import MemberNotFoundError
 from src.members.schema.members_billing_schema import (
     BillingCardOnFile,
     BillingPaysForMember,
@@ -85,12 +86,17 @@ class MembersBillingDetailService:
             and supplementary billing data.
 
         Raises:
-            ValueError: If no billing profile found for the member.
+            MemberNotFoundError: If the member has no row to read (-> 404).
+                TYPED, not a bare ``ValueError``: the two routes serving this
+                read used to catch any ``ValueError`` and answer 404 "Member
+                not found", so a pydantic ``ValidationError`` anywhere in this
+                large payload — which IS a ``ValueError`` — masqueraded as a
+                missing member instead of surfacing as a 500.
         """
         rows = await self._fetch_family_rows(member_id)
 
         if not rows:
-            raise ValueError(f"No billing profile found for member_id={member_id}")
+            raise MemberNotFoundError(f"Member {member_id} not found")
 
         target_row = self._find_target_profile(rows, member_id)
         gym_id = target_row["gym_id"]
@@ -241,12 +247,16 @@ class MembersBillingDetailService:
             The first row matching the queried user.
 
         Raises:
-            ValueError: If no matching row is found.
+            MemberNotFoundError: If no matching row is found (-> 404). The
+                query is keyed on this member, so a result set that contains
+                none of their rows means the member row itself is gone.
         """
         for row in rows:
             if row["member_id"] == member_id:
                 return row
-        raise ValueError(f"No profile found for member_id={member_id}")
+        raise MemberNotFoundError(
+            f"Member {member_id} not found in its own detail read",
+        )
 
     def _scan_membership_flags(
         self,

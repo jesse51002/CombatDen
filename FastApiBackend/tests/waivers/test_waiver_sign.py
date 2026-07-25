@@ -25,6 +25,11 @@ from src.waivers.schema.waivers_schema import (
     WaiverSignRequest,
 )
 from src.waivers.service.waivers_service import WaiversService
+from src.waivers.waivers_exceptions import (
+    WaiverNotFoundError,
+    WaiverSignerNotInGymError,
+    WaiverVersionStaleError,
+)
 
 
 async def _delete_waiver_rows(db_pool, waiver_id) -> None:
@@ -139,7 +144,12 @@ async def test_sign_renders_placeholders(db_pool, gym_id, created):
 
 
 async def test_sign_stale_version_rejected(db_pool, gym_id, created):
-    """Echoing a version that is not the current one is rejected (→ 409)."""
+    """Echoing a version that is not the current one is rejected (→ 409).
+
+    Asserts the TYPE, not ``match="reload"``: matching the prose is what made
+    the 409 depend on a word nobody would recognise as load-bearing. The
+    type -> status half is locked in ``test_waivers_error_mapping.py``.
+    """
     svc = WaiversService(db_pool)
     member = await created.member(gym_id)
     operator_id = await _an_employee_id(db_pool, gym_id)
@@ -147,7 +157,7 @@ async def test_sign_stale_version_rejected(db_pool, gym_id, created):
         WaiverCreateRequest(gym_id=gym_id, name="Stale", body="# body"),
     )
     try:
-        with pytest.raises(ValueError, match="reload"):
+        with pytest.raises(WaiverVersionStaleError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=member.member_id,
@@ -174,7 +184,7 @@ async def test_sign_archived_waiver_not_found(db_pool, gym_id, created):
     try:
         v1 = waiver.current_version
         await svc.delete_waiver(waiver.waiver_id, gym_id)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(WaiverNotFoundError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=member.member_id,
@@ -199,7 +209,7 @@ async def test_sign_member_not_in_gym(db_pool, gym_id):
     )
     try:
         v1 = waiver.current_version
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(WaiverSignerNotInGymError):
             await svc.sign_waiver(
                 gym_id=gym_id,
                 member_id=uuid.uuid4(),  # not a member of this gym

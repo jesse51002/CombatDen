@@ -17,6 +17,7 @@ from sqlalchemy import text
 
 from src.waivers.schema.waivers_schema import WaiverCreateRequest
 from src.waivers.service.waivers_service import WaiversService
+from src.waivers.waivers_exceptions import WaiverPayerAuthNotArchivableError
 
 
 async def _payer_auth_waiver_id(db_pool, gym_id) -> str:
@@ -65,11 +66,16 @@ async def _delete_plan_row(db_pool, plan_id) -> None:
 
 
 async def test_archive_payer_auth_waiver_rejected(db_pool, gym_id):
-    """The payer-auth waiver cannot be archived via the service."""
+    """The payer-auth waiver cannot be archived via the service.
+
+    Asserts the TYPE, not ``match="cannot be archived"``: "refused" and
+    "missing" are different answers (400 vs 404) and used to be told apart by
+    whether the message contained "not found", so a copy edit could swap them.
+    """
     svc = WaiversService(db_pool)
     payer_auth_id = await _payer_auth_waiver_id(db_pool, gym_id)
 
-    with pytest.raises(ValueError, match="cannot be archived"):
+    with pytest.raises(WaiverPayerAuthNotArchivableError):
         await svc.delete_waiver(uuid.UUID(payer_auth_id), gym_id)
 
     # Still live.

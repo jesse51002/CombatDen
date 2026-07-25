@@ -43,7 +43,8 @@ CREATE TABLE members (
     address VARCHAR,
     -- Optional date of birth, captured by the kiosk self-serve signup's
     -- optional-details step (and editable by staff). Nullable like every other
-    -- contact column: an engagement-only member may have none on file.
+    -- contact column: an engagement-only member may have none on file. Bounded
+    -- by date_of_birth_plausible below.
     date_of_birth DATE,
     emergency_contact_name VARCHAR,
     emergency_contact_phone VARCHAR,
@@ -70,6 +71,34 @@ CREATE TABLE members (
         CHECK (
             (freeze_start_date IS NULL AND freeze_end_date IS NULL)
             OR (freeze_start_date IS NOT NULL AND freeze_end_date IS NOT NULL)
+        ),
+    -- A date of birth must be a date that has HAPPENED and is not absurdly
+    -- old. The kiosk signup takes a free-form date, so without this the
+    -- backend happily stored `2035-06-01` (a slipped year) or `0202-06-01` (a
+    -- mistyped one) and every age-derived read downstream inherited the
+    -- nonsense. NULL stays legal -- the column is optional.
+    --
+    -- The floor is a fixed calendar date, not a maximum age: the oldest
+    -- verified human ever lived to 122, so 1900 can never reject a real member
+    -- while still catching the truncated-year typo class. Mirrored in
+    -- FastApiBackend/src/members/schema/members_schema.py
+    -- (EARLIEST_DATE_OF_BIRTH) so the API rejects it as a 422 before it ever
+    -- reaches here; this CHECK is the backstop for every writer that does not
+    -- pass through that model (the seed, an importer, a hand-run UPDATE).
+    --
+    -- CURRENT_DATE is STABLE, not IMMUTABLE, which is normally a footgun in a
+    -- CHECK because a row can silently stop satisfying it later. It cannot
+    -- happen for THIS predicate: the bound only moves forward, so a row that
+    -- passed today passes forever -- dump/restore and a later VALIDATE
+    -- CONSTRAINT are both safe. gyms_timezone_valid already sets the
+    -- precedent for a non-immutable CHECK in this schema.
+    CONSTRAINT date_of_birth_plausible
+        CHECK (
+            date_of_birth IS NULL
+            OR (
+                date_of_birth >= DATE '1900-01-01'
+                AND date_of_birth <= CURRENT_DATE
+            )
         )
     -- NOTE: a member MAY carry their own billing state. Billing is per PAYER
     -- (member_memberships.paid_by_member_id): a member paid for by an authorized

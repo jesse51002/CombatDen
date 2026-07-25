@@ -1,7 +1,8 @@
--- Incomplete signups: members who exist as a row but never finished buying
--- anything, and who are not paying for anybody either. The rule itself is the
--- shared predicate injected below from _member_incomplete.sql, so this list and
--- the total_counts tally can never disagree.
+-- Incomplete signups: valid member rows that never finished buying anything,
+-- are not paying for anybody either, and are not sitting on a billed-but-
+-- unconfirmed membership. The rule itself is the shared predicate injected below
+-- from _member_incomplete.sql -- which owns the reasoning for each clause -- so
+-- this list and the total_counts tally can never disagree.
 --
 -- NOTE: never name a template variable in braces inside these comments --
 -- load_sql runs str.format_map over the WHOLE file, comments included, so the

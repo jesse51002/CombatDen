@@ -294,12 +294,12 @@ async def test_total_counts_tallies_dormant_members(db_pool) -> None:
         WITH members AS (
             SELECT * FROM (VALUES
                 (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ)),
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_a'),
                 (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ)),
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_b'),
                 (CAST(:m_c AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ))
-            ) AS v(member_id, gym_id, last_class)
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_c')
+            ) AS v(member_id, gym_id, last_class, stripe_customer_id)
         ),
         gyms AS (
             SELECT
@@ -312,6 +312,21 @@ async def test_total_counts_tallies_dormant_members(db_pool) -> None:
                 (CAST(:plan_recurring AS UUID), CAST(:gym_id AS UUID),
                  'recurring')
             ) AS v(plan_id, gym_id, plan_type)
+        ),
+        member_memberships_unfiltered AS (
+            -- Shadowed EMPTY on purpose. The shared incomplete predicate
+            -- (_member_incomplete.sql) also excludes a member holding a
+            -- billed-but-unconfirmed non-recurring row, so it reads this
+            -- table; these synthetic worlds have no such row, and the CTE
+            -- must exist because every real relation the injected SQL touches
+            -- is shadowed here (otherwise the query escapes into the live DB).
+            SELECT
+                CAST(NULL AS UUID) AS member_id,
+                CAST(NULL AS UUID) AS paid_by_member_id,
+                CAST(NULL AS UUID) AS gym_id,
+                CAST(NULL AS UUID) AS plan_id,
+                CAST(NULL AS TEXT) AS stripe_sync_status
+            WHERE false
         ),
         member_memberships_status AS (
             SELECT * FROM (VALUES
@@ -394,14 +409,14 @@ async def test_total_counts_overdue_counts_only_active(db_pool) -> None:
         WITH members AS (
             SELECT * FROM (VALUES
                 (CAST(:m_a AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ)),
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_a'),
                 (CAST(:m_b AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ)),
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_b'),
                 (CAST(:m_c AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ)),
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_c'),
                 (CAST(:m_d AS UUID), CAST(:gym_id AS UUID),
-                 CAST(NULL AS TIMESTAMPTZ))
-            ) AS v(member_id, gym_id, last_class)
+                 CAST(NULL AS TIMESTAMPTZ), 'cus_synthetic_d')
+            ) AS v(member_id, gym_id, last_class, stripe_customer_id)
         ),
         gyms AS (
             SELECT
@@ -413,6 +428,21 @@ async def test_total_counts_overdue_counts_only_active(db_pool) -> None:
                 (CAST(:plan_recurring AS UUID), CAST(:gym_id AS UUID),
                  'recurring')
             ) AS v(plan_id, gym_id, plan_type)
+        ),
+        member_memberships_unfiltered AS (
+            -- Shadowed EMPTY on purpose. The shared incomplete predicate
+            -- (_member_incomplete.sql) also excludes a member holding a
+            -- billed-but-unconfirmed non-recurring row, so it reads this
+            -- table; these synthetic worlds have no such row, and the CTE
+            -- must exist because every real relation the injected SQL touches
+            -- is shadowed here (otherwise the query escapes into the live DB).
+            SELECT
+                CAST(NULL AS UUID) AS member_id,
+                CAST(NULL AS UUID) AS paid_by_member_id,
+                CAST(NULL AS UUID) AS gym_id,
+                CAST(NULL AS UUID) AS plan_id,
+                CAST(NULL AS TEXT) AS stripe_sync_status
+            WHERE false
         ),
         member_memberships_status AS (
             SELECT * FROM (VALUES

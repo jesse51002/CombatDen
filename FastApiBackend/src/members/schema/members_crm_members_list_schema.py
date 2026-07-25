@@ -12,8 +12,10 @@ class MembersListView(StrEnum):
     """Available views for the members list screen.
 
     ``incomplete`` is the staff follow-up list for signups that never
-    finished: a member row with no membership of their own who is also
-    not the payer on anyone else's. Its rule lives in SQL
+    finished: a VALID member row (one with a ``stripe_customer_id``) with
+    no membership of its own, that is also not the payer on anyone
+    else's and holds no billed-but-unconfirmed membership. Its rule — and
+    the reasoning for each exclusion — lives in SQL
     (``sql/crm_views/_member_incomplete.sql``).
     """
 
@@ -210,8 +212,8 @@ class MembersListTotalCounts(BaseModel):
     badge claims their row in the list.
 
     ``incomplete`` is the one tally that cannot overlap the others: it
-    counts members with no membership at all (and who pay for nobody),
-    while every other tally requires a membership row.
+    counts valid member rows with no VISIBLE membership at all (and who
+    pay for nobody), while every other tally requires one.
     """
 
     active: int

@@ -10,6 +10,13 @@ version-locked on the echoed version). The authorized-payer link flow
 (memberships) does NOT sign — the payer signs the gym's default waiver through
 THIS endpoint first, then the link references that signature_id (signing and
 authorizing are decoupled).
+
+**Every status here comes off the exception TYPE** (``waivers_exceptions``),
+never off words in the message. The handlers below used to grep the prose for
+"not found" and — on the signing path — for "reload", which made the copy part
+of the public API: dropping "reload" would have turned the version-lock
+conflict into a 400. ``tests/waivers/test_waivers_error_mapping.py`` locks the
+type -> status table with message-hostile fixtures.
 """
 
 import logging
@@ -34,6 +41,7 @@ from src.waivers.schema.waivers_schema import (
     WaiverVersionResponse,
 )
 from src.waivers.service.waivers_service import WaiversService
+from src.waivers.waivers_exceptions import WaiversError
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +102,12 @@ async def list_waivers(
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
+        404: {
+            "description": (
+                "The just-created waiver could not be re-read (a broken "
+                "invariant, not a normal outcome)"
+            )
+        },
     },
 )
 @inject
@@ -106,16 +120,23 @@ async def create_waiver(
     """Create a waiver.
 
     Raises:
-        HTTPException: 400/401/403/500 on respective errors.
+        HTTPException: 401/403/404/500 on respective errors.
     """
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_admin_or_owner(request.gym_id, user_payload)
 
     try:
         return await waivers_service.create_waiver(request)
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status BY TYPE. Create validates its input through pydantic (a bad
+        # name/body is a 422 before this handler runs), so the only rejection
+        # the service can raise is the re-read's WaiverNotFoundError -> 404.
+        # No generic ``except ValueError`` arm: it could only ever fire on an
+        # internal failure — and pydantic's ValidationError IS a ValueError,
+        # so it would answer a broken WaiverResponse with a 400 carrying a raw
+        # validation dump instead of a logged 500.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:
@@ -165,16 +186,22 @@ async def update_waiver(
 
     try:
         return await waivers_service.update_waiver(request)
+    except WaiversError as exc:
+        # Status BY TYPE: WaiverNotFoundError / WaiverVersionNotFoundError ->
+        # 404, WaiverNoCurrentVersionError -> 400. The message is free prose
+        # and never decides the status.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+        # A foreign bad-input ValueError — the shared, domain-agnostic
+        # ``validate_mutable_columns`` guard raises one when a rename touches
+        # an immutable column. Kept because this handler's service really does
+        # raise it (the same reason PUT /members/{id} keeps its arm).
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error("Failed to update waiver %s", request.waiver_id, exc_info=True)
@@ -218,16 +245,17 @@ async def delete_waiver(
 
     try:
         await waivers_service.delete_waiver(waiver_id, gym_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except WaiversError as exc:
+        # Status BY TYPE: WaiverNotFoundError -> 404,
+        # WaiverPayerAuthNotArchivableError -> 400 (the documented "the
+        # payer-auth waiver cannot be archived"). Those two used to be told
+        # apart by whether the message happened to contain "not found", so
+        # rewording either one swapped the statuses. No generic
+        # ``except ValueError`` arm — ``delete_waiver`` raises nothing but
+        # typed errors, so one could only ever fire on an internal failure.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error("Failed to delete waiver %s", waiver_id, exc_info=True)
@@ -428,21 +456,19 @@ async def sign_waiver(
             user_agent=capture_user_agent(http_request),
             operator_employee_id=operator_employee_id,
         )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "reload" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=error_msg,
-            ) from None
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except WaiversError as exc:
+        # Status BY TYPE: WaiverVersionStaleError -> 409 (the documented
+        # "reload and re-sign"), WaiverNotFoundError /
+        # WaiverVersionNotFoundError / WaiverSignerNotInGymError -> 404. The
+        # 409 used to hang off the word "reload" appearing in the message —
+        # nothing about that word says "conflict", so a copy edit would have
+        # quietly demoted a version-lock conflict to a 400 and let the client
+        # re-submit against the version it had already been told was stale.
+        # No generic ``except ValueError`` arm — ``sign_waiver`` raises nothing
+        # but typed errors (its request validation is pydantic's, a 422).
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -487,9 +513,15 @@ async def get_waiver(
 
     try:
         return await waivers_service.get_waiver(waiver_id, gym_id)
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status BY TYPE: the only rejection this read raises is
+        # WaiverNotFoundError -> 404. Narrowed from a blanket
+        # ``except ValueError`` -> 404: pydantic's ValidationError IS a
+        # ValueError, so a broken WaiverResponse (a version body that no
+        # longer fits the model, say) answered "Waiver not found" and hid a
+        # 500 behind a plausible 404.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:

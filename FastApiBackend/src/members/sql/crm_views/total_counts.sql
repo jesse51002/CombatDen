@@ -54,11 +54,12 @@ SELECT
         AND {is_dormant}
     ) AS dormant,
     -- Incomplete signups. Counted straight off the members table for the same
-    -- reason as dormant: the rule is member-level (no membership of their own
-    -- AND not paying for anyone), so it cannot be expressed by FILTERing the
-    -- membership-joined scan above — a member with no memberships contributes
+    -- reason as dormant: the rule is member-level (a valid row with no
+    -- membership of their own, not paying for anyone, and holding no
+    -- billed-but-unconfirmed row), so it cannot be expressed by FILTERing the
+    -- membership-joined scan above -- a member with no memberships contributes
     -- no row to it at all. The predicate is the shared one the Incomplete tab
-    -- lists with (_member_incomplete.sql).
+    -- lists with (_member_incomplete.sql), which owns the reasoning.
     (
         SELECT count(*)
         FROM members incomplete_m

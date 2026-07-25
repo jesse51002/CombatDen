@@ -382,6 +382,26 @@ src/
 
   Prove it with a test, don't assume it: the parametrized type → status/code
   tests flip to 500 the moment a re-raise stops working.
+  - **`LockBusyError` is the recurring victim of this hazard, in every router
+    that touches billing.** It subclasses `Exception` **directly**, the payer
+    lock is acquired INSIDE the service (so inside the handler's `try`), and
+    `_handle_lock_busy_error` in `src/main.py` maps it to a retryable **409** —
+    so a handler missing the re-raise arm reports ordinary contention (front
+    desk acting while a bulk reprice holds a lock) as a 500 outage. It bit
+    `memberships_router.py` across 14 handlers and then `members_router.py`'s
+    three authorized-payer handlers (`PUT /members/{id}/link`,
+    `POST /members/{id}/link/remove`, `.../remove/preview` — the preview locks
+    too, so its quoted figures can't be computed mid-converge). **Add the arm
+    ONLY where the service actually takes the lock** — `POST /link/check` is a
+    lock-free read, and a dead `except` there would read as coverage;
+    `tests/members/test_members_link_lock_guards.py` asserts that exclusion
+    against the service source so a future lock added there fails loudly.
+    Document the 409 with the shared **`BUSY_PAYER_409`** string
+    (`memberships_router.py`) — imported, never restated, so the route docs
+    cannot drift. Proof pattern:
+    `tests/memberships/test_billing_endpoint_guards.py` and
+    `tests/members/test_members_link_lock_guards.py` both parametrize
+    "the error ESCAPES the handler" over every locking handler.
 - **Declare the shape in OpenAPI.** Every `responses` entry a typed rejection
   can produce carries `{"model": <Domain>ErrorResponse, …}` (`detail: str` +
   `code: <Domain>ErrorCode | None`), so the contract is self-documenting and
