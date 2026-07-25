@@ -55,42 +55,48 @@ class KioskPlanBlock extends StatelessWidget {
                 constraints: const BoxConstraints(
                   maxWidth: DesignConstants.dialogMaxWidth,
                 ),
-                child: Container(
-                  margin: const EdgeInsets.all(DesignConstants.spacingLarge),
-                  padding: const EdgeInsets.all(DesignConstants.paddingBig),
-                  decoration: BoxDecoration(
-                    color: DesignConstants.popup,
-                    borderRadius:
-                        BorderRadius.circular(DesignConstants.radiusCard),
-                    border: Border.all(color: DesignConstants.line),
-                    boxShadow: DesignConstants.cardShadow,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: DesignConstants.spacingLarge,
-                    children: [
-                      _BlockIcon(reason: reason),
-                      Text(
-                        kioskPlanBlockTitle(reason),
-                        style: DesignConstants.kioskPanelTitle,
-                        textAlign: TextAlign.center,
-                      ),
-                      Text(
-                        kioskPlanBlockBody(state, reason),
-                        style: DesignConstants.kioskBody.copyWith(
-                          color: DesignConstants.text2nd,
+                // The card's containment from the screen edge — a Padding,
+                // never a `margin`: a margin is a gap, and a gap belongs to the
+                // parent's `spacing:`. It matches the decline popup's inset,
+                // which is the surface this one is composed from.
+                child: Padding(
+                  padding: const EdgeInsets.all(DesignConstants.spacingLarge),
+                  child: Container(
+                    padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                    decoration: BoxDecoration(
+                      color: DesignConstants.popup,
+                      borderRadius:
+                          BorderRadius.circular(DesignConstants.radiusCard),
+                      border: Border.all(color: DesignConstants.line),
+                      boxShadow: DesignConstants.cardShadow,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: DesignConstants.spacingLarge,
+                      children: [
+                        _BlockIcon(reason: reason),
+                        Text(
+                          kioskPlanBlockTitle(reason),
+                          style: DesignConstants.kioskPanelTitle,
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      _Actions(
-                        onPick: cubit.dismissPlanBlock,
-                        onHelp: cubit.planBlockHelp,
-                      ),
-                      KioskReturnTimer(
-                        total: kKioskSignupPopupHold.inSeconds,
-                        secondsLeft: state.popupCountdown,
-                      ),
-                    ],
+                        Text(
+                          kioskPlanBlockBody(state, reason),
+                          style: DesignConstants.kioskBody.copyWith(
+                            color: DesignConstants.text2nd,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        _Actions(
+                          onPick: cubit.dismissPlanBlock,
+                          onHelp: cubit.planBlockHelp,
+                        ),
+                        KioskReturnTimer(
+                          total: kKioskSignupPopupHold.inSeconds,
+                          secondsLeft: state.popupCountdown,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -54,41 +54,47 @@ class KioskRemoveConfirm extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: DesignConstants.dialogMaxWidth,
               ),
-              child: Container(
-                margin: const EdgeInsets.all(DesignConstants.paddingBig),
+              // The card's containment from the screen edge — a Padding, not a
+              // `margin`: a margin is a gap, and a gap belongs to the parent's
+              // `spacing:`. It is the idle warning's inset, like the rest of
+              // this surface.
+              child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.paddingBig),
-                decoration: BoxDecoration(
-                  color: DesignConstants.popup,
-                  borderRadius:
-                      BorderRadius.circular(DesignConstants.radiusCard),
-                  border: Border.all(color: DesignConstants.line),
-                  boxShadow: DesignConstants.cardShadow,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: DesignConstants.spacingLarge,
-                  children: [
-                    const _RemoveIcon(),
-                    Text(
-                      who.isEmpty
-                          ? 'Take them off this signup?'
-                          : 'Take $who off this signup?',
-                      style: DesignConstants.kioskPanelTitle,
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      asksNextPayer
-                          ? 'They\'re paying for everyone, so next you\'ll '
-                              'choose who pays. You can add them again.'
-                          : 'They come off the list and out of the total. You '
-                              'can add them again.',
-                      style: DesignConstants.kioskBody.copyWith(
-                        color: DesignConstants.text2nd,
+                child: Container(
+                  padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                  decoration: BoxDecoration(
+                    color: DesignConstants.popup,
+                    borderRadius:
+                        BorderRadius.circular(DesignConstants.radiusCard),
+                    border: Border.all(color: DesignConstants.line),
+                    boxShadow: DesignConstants.cardShadow,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: DesignConstants.spacingLarge,
+                    children: [
+                      const _RemoveIcon(),
+                      Text(
+                        who.isEmpty
+                            ? 'Take them off this signup?'
+                            : 'Take $who off this signup?',
+                        style: DesignConstants.kioskPanelTitle,
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const _Answers(),
-                  ],
+                      Text(
+                        asksNextPayer
+                            ? 'They\'re paying for everyone, so next you\'ll '
+                                'choose who pays. You can add them again.'
+                            : 'They come off the list and out of the total. '
+                                'You can add them again.',
+                        style: DesignConstants.kioskBody.copyWith(
+                          color: DesignConstants.text2nd,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const _Answers(),
+                    ],
+                  ),
                 ),
               ),
             ),

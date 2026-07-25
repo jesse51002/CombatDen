@@ -47,8 +47,10 @@ void main() {
     'custom_discount_',
     'live_discounted_price',
     // The CRM's own payer-selection surfaces. The kiosk has a payer picker of
-    // its own, gated on the member having no card on file; these are the desk
-    // ones, which offer payers whose saved card would then be chargeable.
+    // its own and it carries NO eligibility gate — anyone it names types a
+    // fresh card at the end, which replaces the one on their profile. These
+    // are the desk ones, which offer payers whose saved card would then be
+    // chargeable.
     'start_payer_step',
     'choose_payer_view',
     'payer_radio_tile',
@@ -116,8 +118,9 @@ void main() {
       reason: 'The kiosk must never import the CRM\'s saved-card, '
           'payer-selection or discount modules — that is the fresh-card law, '
           'and it is structural rather than a flag. A kiosk-native payer '
-          'picker is fine; it is gated on the member having no card on file. '
-          'Offending imports:\n'
+          'picker is fine: it only names WHO pays, and whoever it names types '
+          'a fresh card that replaces the one on their profile — every payer, '
+          'no eligibility gate. Offending imports:\n'
           '${offences.join('\n')}',
     );
   });

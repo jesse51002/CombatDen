@@ -167,6 +167,44 @@ void main() {
     await cubit.close();
   });
 
+  testWidgets('the roster prints every address MASKED, the gym\'s own record '
+      'included', (tester) async {
+    await createPayer();
+    // Ella is an EXISTING member, and the address on her row is the one the
+    // GYM holds — a different one from what was typed at the iPad, so this
+    // asserts against her stored record rather than against an echo of input.
+    when(() => member.createMember(any())).thenThrow(
+      const DuplicateMemberException([
+        DuplicateMemberMatch(
+          memberId: 'mem-ella',
+          firstName: 'Ella',
+          lastName: 'Bell',
+          email: 'ella.bell@icloud.com',
+        ),
+      ]),
+    );
+    await cubit.addPerson(
+      firstName: 'Ella',
+      lastName: 'Bell',
+      email: 'ella.typed@gmail.com',
+    );
+    cubit.confirmMatch();
+    await pump(tester, const KioskPeopleStep());
+
+    // **The privacy guard for the one screen that lists EVERYBODY at once.**
+    // A lobby queue reads this roster over the member's shoulder, so a stored
+    // address must never be printed here in full — and neither is anyone
+    // else's.
+    expect(find.byType(KioskRosterRow), findsNWidgets(2));
+    expect(find.text('m•••••@gmail.com'), findsOneWidget);
+    expect(find.text('e•••••@icloud.com'), findsOneWidget);
+    expect(find.textContaining('marcus.bell@'), findsNothing);
+    expect(find.textContaining('ella.bell@'), findsNothing);
+    expect(find.textContaining('ella.typed@'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await cubit.close();
+  });
+
   testWidgets('the roster offers to hand the paying over', (tester) async {
     await createPayer();
     await pump(tester, const KioskPeopleStep());

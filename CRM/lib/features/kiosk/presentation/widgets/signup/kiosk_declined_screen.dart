@@ -59,52 +59,56 @@ class KioskDeclinedScreen extends StatelessWidget {
                 constraints: const BoxConstraints(
                   maxWidth: DesignConstants.dialogMaxWidth,
                 ),
-                child: Container(
-                  // A tighter margin than the other kiosk modals: this popup
-                  // carries more (reason + chip + three stacked buttons), so it
-                  // needs the extra vertical room to sit whole on a short kiosk
-                  // fold.
-                  margin: const EdgeInsets.all(DesignConstants.spacingLarge),
-                  padding: const EdgeInsets.all(DesignConstants.paddingBig),
-                  decoration: BoxDecoration(
-                    color: DesignConstants.popup,
-                    borderRadius:
-                        BorderRadius.circular(DesignConstants.radiusCard),
-                    border: Border.all(color: DesignConstants.line),
-                    boxShadow: DesignConstants.cardShadow,
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    spacing: DesignConstants.spacingLarge,
-                    children: [
-                      const _DeclinedIcon(),
-                      Text(
-                        'Your bank declined the payment',
-                        style: DesignConstants.kioskPanelTitle,
-                        textAlign: TextAlign.center,
-                      ),
-                      Text(
-                        'You haven\'t been charged, and everything else you '
-                        'filled in is saved.',
-                        style: DesignConstants.kioskBody.copyWith(
-                          color: DesignConstants.text2nd,
+                // A tighter inset than the other kiosk modals: this popup
+                // carries more (reason + chip + three stacked buttons), so it
+                // needs the extra vertical room to sit whole on a short kiosk
+                // fold. It is the card's containment from the screen edge — a
+                // Padding, never a `margin`: a margin is a gap, and a gap
+                // belongs to the parent's `spacing:`.
+                child: Padding(
+                  padding: const EdgeInsets.all(DesignConstants.spacingLarge),
+                  child: Container(
+                    padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                    decoration: BoxDecoration(
+                      color: DesignConstants.popup,
+                      borderRadius:
+                          BorderRadius.circular(DesignConstants.radiusCard),
+                      border: Border.all(color: DesignConstants.line),
+                      boxShadow: DesignConstants.cardShadow,
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      spacing: DesignConstants.spacingLarge,
+                      children: [
+                        const _DeclinedIcon(),
+                        Text(
+                          'Your bank declined the payment',
+                          style: DesignConstants.kioskPanelTitle,
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
-                      KioskCardChip(
-                        brand: state.cardBrand,
-                        last4: state.cardLast4,
-                      ),
-                      _Actions(
-                        onRetry: cubit.retrySameCard,
-                        onTryAnother: cubit.retryCard,
-                        onHelp: cubit.getHelpAtDesk,
-                      ),
-                      KioskReturnTimer(
-                        total: kKioskSignupPopupHold.inSeconds,
-                        secondsLeft: state.popupCountdown,
-                      ),
-                    ],
+                        Text(
+                          'You haven\'t been charged, and everything else you '
+                          'filled in is saved.',
+                          style: DesignConstants.kioskBody.copyWith(
+                            color: DesignConstants.text2nd,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        KioskCardChip(
+                          brand: state.cardBrand,
+                          last4: state.cardLast4,
+                        ),
+                        _Actions(
+                          onRetry: cubit.retrySameCard,
+                          onTryAnother: cubit.retryCard,
+                          onHelp: cubit.getHelpAtDesk,
+                        ),
+                        KioskReturnTimer(
+                          total: kKioskSignupPopupHold.inSeconds,
+                          secondsLeft: state.popupCountdown,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

@@ -25,6 +25,12 @@ final DateTime kKioskDobMinDate = DateTime(1900);
 ///
 /// Optional like everything else on its step: no value is a legitimate answer,
 /// so the sheet carries a "Clear" alongside its Done.
+///
+/// **Done stays inert until the wheel actually reports a date.** An empty field
+/// has to open the wheel somewhere and that somewhere is today, which is nobody
+/// alive's birth date — so a Done that committed the opening position would
+/// write today into the member's record on a tap that chose nothing. "No date"
+/// is said with Clear, deliberately, never by leaving the wheel alone.
 class KioskDobField extends StatelessWidget {
   final DateTime? value;
   final ValueChanged<DateTime?> onChanged;
@@ -100,7 +106,12 @@ class KioskDobField extends StatelessWidget {
   Future<void> _open(BuildContext context) async {
     final today = DateTime.now();
     final maximum = DateTime(today.year, today.month, today.day);
-    final initial = value ?? maximum;
+    // The date already held (clamped, in case the day rolled over since it was
+    // picked) and the position the wheel opens on are TWO different things, and
+    // they are passed separately: with nothing held the wheel still has to open
+    // somewhere, but that position is not an answer.
+    final current = value;
+    final held = current == null || current.isAfter(maximum) ? null : current;
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: DesignConstants.popup,
@@ -111,7 +122,8 @@ class KioskDobField extends StatelessWidget {
         ),
       ),
       builder: (sheetContext) => _DobSheet(
-        initial: initial.isAfter(maximum) ? maximum : initial,
+        held: held,
+        seed: held ?? maximum,
         maximum: maximum,
         onDone: (picked) {
           onChanged(picked);
@@ -128,13 +140,21 @@ class KioskDobField extends StatelessWidget {
 
 /// The sheet body: the wheel, then its two actions.
 class _DobSheet extends StatefulWidget {
-  final DateTime initial;
+  /// The date the field already holds, or null when it holds none — what Done
+  /// starts out able to commit.
+  final DateTime? held;
+
+  /// Where the wheel opens. With nothing held that is today: a starting
+  /// position, never an answer.
+  final DateTime seed;
+
   final DateTime maximum;
   final ValueChanged<DateTime> onDone;
   final VoidCallback onClear;
 
   const _DobSheet({
-    required this.initial,
+    required this.held,
+    required this.seed,
     required this.maximum,
     required this.onDone,
     required this.onClear,
@@ -145,10 +165,30 @@ class _DobSheet extends StatefulWidget {
 }
 
 class _DobSheetState extends State<_DobSheet> {
-  late DateTime _picked = widget.initial;
+  /// What Done would commit — null until a date actually exists to commit.
+  ///
+  /// **This is the guard against a silently wrong birth date.** The wheel opens
+  /// on today when the field is empty, so a `_picked` seeded from that opening
+  /// position would let a member who taps Done without turning the wheel record
+  /// TODAY as their date of birth — a wrong value nothing on screen states, so
+  /// nobody would think to correct it. An untouched wheel has nothing to commit
+  /// and Done is inert; Clear is how "no date" is said.
+  late DateTime? _picked = widget.held;
+
+  /// The FIRST turn of the wheel is the one that changes what the sheet can do
+  /// (it releases Done), so only that one rebuilds — later ticks just move the
+  /// value the live button already carries.
+  void _pick(DateTime date) {
+    if (_picked == null) {
+      setState(() => _picked = date);
+    } else {
+      _picked = date;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final picked = _picked;
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.all(DesignConstants.paddingBig),
@@ -163,9 +203,9 @@ class _DobSheetState extends State<_DobSheet> {
               textAlign: TextAlign.center,
             ),
             _Wheel(
-              initial: widget.initial,
+              initial: widget.seed,
               maximum: widget.maximum,
-              onChanged: (date) => _picked = date,
+              onChanged: _pick,
             ),
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -174,7 +214,8 @@ class _DobSheetState extends State<_DobSheet> {
                 KioskOutlineButton(text: 'Clear', onPressed: widget.onClear),
                 KioskPrimaryButton(
                   text: 'Done',
-                  onPressed: () => widget.onDone(_picked),
+                  onPressed:
+                      picked == null ? null : () => widget.onDone(picked),
                 ),
               ],
             ),

@@ -3,6 +3,7 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_consent_check.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_row_action.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
@@ -23,9 +24,10 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// an error.
 ///
 /// **Edit appears only for a person this signup CREATED.** An existing member
-/// is here by id alone: the kiosk deliberately never prints their stored
-/// details on a shared screen, so offering to "edit" fields it refuses to show
-/// would be an affordance that lies about what it opens.
+/// is here by their id plus the two things that identify the row — their name
+/// and a MASKED address. The kiosk prints no other stored detail of theirs on a
+/// shared screen, so offering to "edit" fields it refuses to show would be an
+/// affordance that lies about what it opens.
 ///
 /// **Remove is a trash control that ASKS first**, and only while removal is
 /// still free — there is no unlink call, so the moment this person's link or a
@@ -110,8 +112,16 @@ class KioskRosterRow extends StatelessWidget {
   }
 }
 
-/// The name over its one quiet second line. A payee's own email is theirs and
-/// is shown; nothing else about them is.
+/// The name over its one quiet second line: the person's address, MASKED
+/// through [kioskMaskedEmail] — the same form the match card and the payer
+/// picker print, so no screen in this lane prints an address in full.
+///
+/// **The roster is the screen a queue reads over the member's shoulder.** It
+/// lists everybody at once, including an adopted existing member whose address
+/// the kiosk pulled from the gym's records rather than from anyone standing
+/// there, so the line says enough to recognise ("that's mine") and never enough
+/// to copy. Nothing is lost by it: the address a member actually has to CHECK
+/// is the receipt one, and the review states that in full for the payer alone.
 class _Identity extends StatelessWidget {
   final String name;
   final KioskSignupPerson person;
@@ -120,7 +130,9 @@ class _Identity extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final email = person.email.trim();
+    // Null when there is nothing to mask — a person added seconds ago whose
+    // details step has not run yet.
+    final masked = kioskMaskedEmail(person.email);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
@@ -133,7 +145,7 @@ class _Identity extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          email.isEmpty ? 'Added just now' : email,
+          masked ?? 'Added just now',
           style: DesignConstants.kioskCaption.copyWith(
             color: DesignConstants.text2nd,
           ),

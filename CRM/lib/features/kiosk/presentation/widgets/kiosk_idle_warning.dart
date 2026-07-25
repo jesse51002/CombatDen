@@ -57,38 +57,43 @@ class KioskIdleWarning extends StatelessWidget {
               constraints: const BoxConstraints(
                 maxWidth: DesignConstants.dialogMaxWidth,
               ),
-              child: Container(
-                margin: const EdgeInsets.all(DesignConstants.paddingBig),
+              // The card's containment from the screen edge — a Padding, not a
+              // `margin`: a margin is a gap, and a gap belongs to the parent's
+              // `spacing:`.
+              child: Padding(
                 padding: const EdgeInsets.all(DesignConstants.paddingBig),
-                decoration: BoxDecoration(
-                  color: DesignConstants.popup,
-                  borderRadius:
-                      BorderRadius.circular(DesignConstants.radiusCard),
-                  border: Border.all(color: DesignConstants.line),
-                  boxShadow: DesignConstants.cardShadow,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  spacing: DesignConstants.spacingLarge,
-                  children: [
-                    const _TimerIcon(),
-                    Text(
-                      'Are you still there?',
-                      style: DesignConstants.kioskPanelTitle,
-                      textAlign: TextAlign.center,
-                    ),
-                    Text(
-                      'Returning to the start in $seconds seconds.',
-                      style: DesignConstants.kioskBody.copyWith(
-                        color: DesignConstants.text2nd,
+                child: Container(
+                  padding: const EdgeInsets.all(DesignConstants.paddingBig),
+                  decoration: BoxDecoration(
+                    color: DesignConstants.popup,
+                    borderRadius:
+                        BorderRadius.circular(DesignConstants.radiusCard),
+                    border: Border.all(color: DesignConstants.line),
+                    boxShadow: DesignConstants.cardShadow,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    spacing: DesignConstants.spacingLarge,
+                    children: [
+                      const _TimerIcon(),
+                      Text(
+                        'Are you still there?',
+                        style: DesignConstants.kioskPanelTitle,
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                    KioskPrimaryButton(
-                      text: 'I\'m still here',
-                      onPressed: stillHere,
-                    ),
-                  ],
+                      Text(
+                        'Returning to the start in $seconds seconds.',
+                        style: DesignConstants.kioskBody.copyWith(
+                          color: DesignConstants.text2nd,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      KioskPrimaryButton(
+                        text: 'I\'m still here',
+                        onPressed: stillHere,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

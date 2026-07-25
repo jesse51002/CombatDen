@@ -22,7 +22,8 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 class KioskMoneyPanel extends StatelessWidget {
   final KioskSignupState state;
 
-  /// Where the receipt lands — the payer's own address.
+  /// Where the receipt lands — the payer's own address. Empty when the payer
+  /// carries none, which drops the receipt line entirely.
   final String receiptEmail;
 
   const KioskMoneyPanel({
@@ -33,6 +34,7 @@ class KioskMoneyPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final receipt = receiptEmail.trim();
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -59,12 +61,18 @@ class KioskMoneyPanel extends StatelessWidget {
             KioskProrationNote(until: state.prorationUntil),
           if (state.chargedTwiceToday) const KioskTwoChargesNote(),
           KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
-          Text(
-            'Your receipt goes to $receiptEmail.',
-            style: DesignConstants.kioskCaption.copyWith(
-              color: DesignConstants.text2nd,
+          // Unreachable blank in the ordinary flow: an email is required at the
+          // details step. A payer adopted from the gym's own records can still
+          // carry none, so the line is DROPPED rather than printed as the
+          // broken "Your receipt goes to ." — which also promises a receipt
+          // that will never be sent. The results receipt drops it the same way.
+          if (receipt.isNotEmpty)
+            Text(
+              'Your receipt goes to $receipt.',
+              style: DesignConstants.kioskCaption.copyWith(
+                color: DesignConstants.text2nd,
+              ),
             ),
-          ),
           _Then(state: state),
         ],
       ),
