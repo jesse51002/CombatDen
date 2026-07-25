@@ -22,8 +22,15 @@ import 'package:crm/features/member_details/data/models/plan_type.dart';
 class KioskMoneyPanel extends StatelessWidget {
   final KioskSignupState state;
 
-  /// Where the receipt lands — the payer's own address. Empty when the payer
-  /// carries none, which drops the receipt line entirely.
+  /// Where payment mail reaches the payer — their own address. Empty when the
+  /// payer carries none, which drops the line entirely.
+  ///
+  /// **No receipt is emailed.** CombatDen sends no mail at all (there is no
+  /// mailer in the backend), and the connected account is set to notify a member
+  /// on a FAILED payment only — so this line states the address a
+  /// failure notice would reach, never a receipt. The unmasked address on a
+  /// shared iPad is justified by exactly that: the payer confirming the address
+  /// that has to work when a renewal fails.
   final String receiptEmail;
 
   const KioskMoneyPanel({
@@ -63,12 +70,11 @@ class KioskMoneyPanel extends StatelessWidget {
           KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
           // Unreachable blank in the ordinary flow: an email is required at the
           // details step. A payer adopted from the gym's own records can still
-          // carry none, so the line is DROPPED rather than printed as the
-          // broken "Your receipt goes to ." — which also promises a receipt
-          // that will never be sent. The results receipt drops it the same way.
+          // carry none, so the line is DROPPED rather than printed with a
+          // trailing empty address. The results panel drops it the same way.
           if (receipt.isNotEmpty)
             Text(
-              'Your receipt goes to $receipt.',
+              'If a payment ever fails, we\'ll email you at $receipt.',
               style: DesignConstants.kioskCaption.copyWith(
                 color: DesignConstants.text2nd,
               ),

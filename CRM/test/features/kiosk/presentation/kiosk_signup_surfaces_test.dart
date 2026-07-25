@@ -746,12 +746,14 @@ void main() {
         expect(find.byType(KioskResultRow), findsNWidgets(5));
         expect(find.text('Marcus Bell · Unlimited'), findsOneWidget);
         expect(find.text('Started today'), findsNWidgets(5));
-        // The receipt says where the receipt went.
+        // It names where PAYMENT MAIL lands — and claims no receipt, because
+        // none is sent: CombatDen has no mailer and the connected account
+        // notifies a member on a FAILED payment only.
         expect(
-          find.textContaining('Your receipt is on its way to '
-              'marcus.bell@gmail.com'),
+          find.textContaining("we'll email you at marcus.bell@gmail.com"),
           findsOneWidget,
         );
+        expect(find.textContaining('receipt'), findsNothing);
         // ONE advance, and no escape: money has moved, so there is nothing to
         // start over — the terminal rule every kiosk terminal follows.
         expect(

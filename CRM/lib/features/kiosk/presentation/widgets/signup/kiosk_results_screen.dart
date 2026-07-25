@@ -213,11 +213,18 @@ class _ResultsPanel extends StatelessWidget {
           // "two separate charges" would be false.
           if (allCreated && state.chargedTwiceToday)
             const KioskTwoChargesNote(),
+          // **Not a receipt line — nothing emails a receipt.** CombatDen has no
+          // mailer, and the connected account notifies a member on a FAILED
+          // payment only, so promising a receipt here would be a falsehood told
+          // at the exact moment money changed hands. It states the address a
+          // failure notice would reach, which is also what makes showing it
+          // unmasked worth doing on a shared iPad.
+          //
           // Unreachable blank: an email is required at the details step. If one
           // is ever missing the line is dropped rather than printed empty.
           if (receipt.isNotEmpty)
             Text(
-              'Your receipt is on its way to $receipt.',
+              'If a payment ever fails, we\'ll email you at $receipt.',
               style: DesignConstants.kioskCaption.copyWith(
                 color: DesignConstants.text2nd,
               ),
