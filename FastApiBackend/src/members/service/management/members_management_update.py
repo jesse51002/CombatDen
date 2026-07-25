@@ -11,6 +11,12 @@ from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
 from src.members import SQL_DIR
+from src.members.members_exceptions import (
+    MemberGymStripeAccountMissingError,
+    MemberNotFoundError,
+    MemberNoUpdateFieldsError,
+    MemberStripeCustomerMissingError,
+)
 from src.members.schema.members_billing_schema import (
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
@@ -51,11 +57,16 @@ class MembersManagementUpdate(MembersManagementBase):
         Pure DB write — identity edits never touch the Stripe customer.
 
         Raises:
-            ValueError: If no fields are provided or the member is not found.
+            MemberNoUpdateFieldsError: If no fields are provided (-> 400).
+            MemberNotFoundError: If the member does not exist (-> 404).
+            ValueError: If a requested column is immutable — raised by the
+                shared ``validate_mutable_columns`` guard, which is domain-
+                agnostic and stays a plain ``ValueError`` (-> 400 via the
+                router's generic bad-input arm).
         """
         update_fields = data.model_dump(exclude_unset=True)
         if not update_fields:
-            raise ValueError("No fields provided to update")
+            raise MemberNoUpdateFieldsError("No fields provided to update")
 
         validate_mutable_columns(MEMBERS_IMMUTABLE, set(update_fields.keys()))
 
@@ -71,7 +82,7 @@ class MembersManagementUpdate(MembersManagementBase):
         params = {**normalized, "member_id": str(member_id)}
         row = await self._db_pool.execute_with_retry(sql, params)
         if not row:
-            raise ValueError("Member not found")
+            raise MemberNotFoundError("Member not found")
         return MemberResponse(**row)
 
     # ── Points ─────────────────────────────────────────────────
@@ -86,7 +97,10 @@ class MembersManagementUpdate(MembersManagementBase):
         The SQL locks the member row (FOR UPDATE) and applies the delta only
         when the result would not go below zero. An empty RETURNING means
         either the member does not exist or the adjustment would underflow —
-        both raise ValueError so the router maps them to 400.
+        the two are indistinguishable from one empty result set, so this
+        deliberately raises a PLAIN ``ValueError`` (-> the router's generic
+        400) rather than ``MemberNotFoundError`` — a typed 404 would be a
+        guess half the time, and 400 is this endpoint's documented contract.
 
         Args:
             member_id: The member whose balance to adjust.
@@ -143,21 +157,28 @@ class MembersManagementUpdate(MembersManagementBase):
             The updated billing profile with new card details.
 
         Raises:
-            ValueError: If the member is not found, the gym has no Stripe
-                account, or the member has no Stripe customer.
+            MemberNotFoundError: If the member does not exist (-> 404).
+            MemberGymStripeAccountMissingError: If the gym has no Stripe
+                account (-> 400).
+            MemberStripeCustomerMissingError: If the member has no Stripe
+                customer (-> 400).
         """
         info = await self._get_stripe_info(member_id)
         stripe_account_id = info["stripe_account_id"]
 
         if not stripe_account_id:
-            raise ValueError(f"Gym {info['gym_id']} has no Stripe account configured")
+            raise MemberGymStripeAccountMissingError(
+                f"Gym {info['gym_id']} has no Stripe account configured"
+            )
 
         # Every member is provisioned a Stripe customer at creation
         # (MembersManagementCreate). update_card never creates one — a missing
         # customer means a broken invariant, so we error out rather than
         # silently provisioning. create_customer has exactly one call site.
         if not info["stripe_customer_id"]:
-            raise ValueError(f"Member {member_id} has no Stripe customer")
+            raise MemberStripeCustomerMissingError(
+                f"Member {member_id} has no Stripe customer"
+            )
 
         name = f"{info['first_name']} {info['last_name']}"
         email = info["email"]
@@ -217,8 +238,7 @@ class MembersManagementUpdate(MembersManagementBase):
             The updated billing profile with NULLed card fields.
 
         Raises:
-            ValueError: If the member does not exist or gym has
-                no Stripe account.
+            MemberNotFoundError: If the member does not exist (-> 404).
         """
         info = await self._get_stripe_info(member_id)
 
@@ -239,7 +259,7 @@ class MembersManagementUpdate(MembersManagementBase):
             )
             row = result.mappings().fetchone()
             if not row:
-                raise ValueError(f"Member {member_id} not found")
+                raise MemberNotFoundError(f"Member {member_id} not found")
             await session.commit()
 
         return await self._get_member(member_id)

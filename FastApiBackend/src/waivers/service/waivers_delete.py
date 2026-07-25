@@ -22,6 +22,10 @@ import src.shared.db_schema_path  # noqa: F401
 from src.shared.sql_loader import load_sql
 from src.waivers import SQL_DIR
 from src.waivers.service.waivers_base import WaiversBase
+from src.waivers.waivers_exceptions import (
+    WaiverNotFoundError,
+    WaiverPayerAuthNotArchivableError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -41,12 +45,16 @@ class WaiversDelete(WaiversBase):
             gym_id: The gym owning the waiver (authorization scope).
 
         Raises:
-            ValueError: If the waiver is not found, or is the gym's
-                payer-auth waiver (never archivable).
+            WaiverNotFoundError: If the waiver is missing or already
+                archived (-> 404).
+            WaiverPayerAuthNotArchivableError: If it is the gym's payer-auth
+                waiver, which is never archivable (-> 400). Separate TYPES on
+                purpose — "refused" and "missing" are different answers and
+                must not be able to swap places.
         """
         waiver = await self._get_waiver(waiver_id, gym_id)
         if waiver["waiver_type"] == WaiverType.payer_auth:
-            raise ValueError(
+            raise WaiverPayerAuthNotArchivableError(
                 "The payer-auth waiver cannot be archived",
             )
 
@@ -58,7 +66,7 @@ class WaiversDelete(WaiversBase):
                 {"waiver_id": str(waiver_id), "gym_id": str(gym_id)},
             )
             if not result.mappings().fetchone():
-                raise ValueError(f"Waiver {waiver_id} not found")
+                raise WaiverNotFoundError(f"Waiver {waiver_id} not found")
             await session.execute(
                 text(strip_sql),
                 {"waiver_id": str(waiver_id), "gym_id": str(gym_id)},

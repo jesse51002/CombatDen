@@ -43,7 +43,8 @@ const Map<String, bool Function(EmployeeRole)> _staffCapabilities = {
   // Single-membership reprice to the plan's ACTIVE price is a member-money
   // correction front desk performs, so it is staff-wide (owner/admin/front
   // desk) — NOT staff-admin. Plan-wide reprice (canBulkReprice) stays
-  // staff-admin.
+  // staff-admin. See role_policy.dart and the employees-guide capability
+  // matrix.
   'canSetCustomMembershipPrice': _canSetCustomMembershipPrice,
   'canRedeemRewards': _canRedeemRewards,
   'canApproveRedemptions': _canApproveRedemptions,

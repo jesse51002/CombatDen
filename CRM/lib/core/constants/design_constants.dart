@@ -333,6 +333,21 @@ class DesignConstants {
   static const double rewardThumbnailHeight = 80.0;
   static const double rewardAvatarSize = 72.0;
   static const double qrThumbnailSize = 120.0;
+  // The kiosk "Get the app" modal's real scannable download QR (module box).
+  static const double kioskAppQrSize = 168.0;
+
+  // ── Kiosk QR contrast — deliberately NOT theme-aware ──
+  // A QR code's colours are a FUNCTIONAL requirement, not a themable surface:
+  // scanners expect dark modules on a light quiet zone, and many fail (or are
+  // slow) on an inverted code. Resolving these through `text` / `surface`
+  // rendered the kiosk QR light-on-dark for a gym running the dark theme,
+  // silently breaking the app-adoption funnel (and, at Phase G, the live
+  // check-in code). So both kiosk QR tiles pin to the light palette's ink +
+  // white in EVERY theme. Do NOT "fix" these back onto `text` / `surface` —
+  // the inversion is the bug, the theme-independence is the fix. The one
+  // renderer is `KioskQrFrame`.
+  static const Color kioskQrModule = _lText;
+  static const Color kioskQrQuietZone = _lSurface;
   // A default-image chip in the ImageUploadPickerField pool tray. The chip
   // width follows the field's aspectRatio, so belts render square (64x64)
   // and photos landscape at this height.
@@ -372,6 +387,16 @@ class DesignConstants {
   static const double progressBarThickness = 4.0;
   static const double verticalDividerHeight = 16.0;
 
+  /// The kiosk's CONTENT progress rail — the "Track rank" showcase bar. Twice
+  /// [progressBarThickness] for the same reason the kiosk type ramp exists:
+  /// this bar is the point of its slide and is read from ~2m, where a 4px rail
+  /// disappears. It is a separate token BY ROLE, not a re-scale of the thin
+  /// one — the kiosk's own SUBORDINATE bar, `KioskReturnTimer`'s drain track,
+  /// deliberately stays on [progressBarThickness] so it keeps reading as its
+  /// label's underline (the same way `chartStroke` / `dividerThickness` /
+  /// `buttonBorder` are kept apart by role rather than by size).
+  static const double kioskProgressBarThickness = 8.0;
+
   // Geist — the landing page's typeface (LandingPage/hifi/ds.jsx `sans`).
   static final TextStyle baseFont = GoogleFonts.geist(
     fontFeatures: const [FontFeature.tabularFigures()],
@@ -394,6 +419,350 @@ class DesignConstants {
 
   static TextStyle get big2Bold => big2.copyWith(fontWeight: FontWeight.w700);
   static TextStyle get big2Light => big2.copyWith(fontWeight: FontWeight.w300);
+
+  // ══ KIOSK TYPE RAMP ══
+  // The member kiosk (a supervised iPad read from ~2m) runs its OWN COMPLETE
+  // type ramp — it does NOT borrow the
+  // admin ramp for its smaller text. That is the whole point: a kiosk screen
+  // whose headline is kiosk-scale but whose labels are admin-scale reads
+  // broken, because the button labels then out-size the copy around them.
+  //
+  // **The ramp moves as a SET.** Never re-scale one kiosk role on its own —
+  // a change here is a change to the whole ladder, and the ordering test in
+  // `test/features/kiosk/presentation/kiosk_type_ramp_test.dart` fails if the
+  // ladder stops descending. Every kiosk call site reads one of these tokens;
+  // none restates a size. The admin ramp (h1/h2/h3/p, `AppPrimaryButton`,
+  // `AppOutlineButton`) is untouched by any of it.
+  //
+  // The ladder, largest first (see each token's own doc for its role):
+  //   kioskStreakNum 112 · kioskDisplay 40 · kioskMetric 30 ·
+  //   kioskPanelTitle 25 · kioskStatement 22 · kioskFieldText 22 ·
+  //   kioskTitle 21 · kioskButtonPrimaryLabel 19 · kioskName 19 ·
+  //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 ·
+  //   kioskButtonGhostLabel 17 · kioskBody 17 ·
+  //   kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 ·
+  //   kioskMicro 13 · kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
+  //
+  // Like the other text getters these carry `color: text`; callers apply a
+  // muted color for a role that reads as secondary (e.g. a section's
+  // sub-text via `.copyWith(color: text2nd)`) and a heavier/lighter weight
+  // where a role's two uses differ only in weight (never a different SIZE).
+  //
+  // **Muted kiosk text is [text2nd], never [text3rd].** `text3rd` (#878D99)
+  // measures 3.05:1 on the ground / 3.33:1 on white — under the 4.5:1 WCAG AA
+  // floor `PRODUCT.md` holds as a hard requirement, and unreadable anyway on a
+  // screen viewed from ~2m. The kiosk deliberately lifts every muted role
+  // that carries WORDS (timer label, section sub-text, eyebrows, search hint
+  // + empty line, "or" seam, header kicker, belt names, view counts, the
+  // rotate caption) to `text2nd`. `text3rd` survives on kiosk surfaces ONLY
+  // for non-text: a
+  // hairline, a divider, a progress-bar track, a decorative placeholder glyph.
+  // Admin surfaces keep their own `text3rd` usage — that is a separate call.
+
+  /// The post-check-in glance's hero streak numeral — 112px bold, sized for
+  /// the 2-metre glance (bigger than the whole admin ramp, which tops out at
+  /// big2/32). Carries `color: text` like the other kiosk display tokens; the
+  /// glance recolors it to the brand via `.copyWith(color: primaryColor)`
+  /// (the numeral is always sapphire).
+  static TextStyle get kioskStreakNum => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 112,
+        color: text,
+        letterSpacing: -5.6,
+      );
+
+  /// A kiosk SCREEN's title — the one line that anchors the whole view
+  /// ("Check in", "Hi Marcus, pick your class", "Nice one, Marcus.", "Let's
+  /// sort this at the front desk"). 40px bold — one shared token for all
+  /// four screen titles, even though two of them ran a touch larger (42) in
+  /// the original design; this settles on the pair's lower value.
+  static TextStyle get kioskDisplay => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 40,
+        color: text,
+        letterSpacing: -1.2,
+      );
+
+  /// A big NUMBER inside a kiosk panel — the glance's points balance, and (at
+  /// w600) the "week streak" word under the hero numeral. One shared token
+  /// for both, though the streak word ran fractionally smaller (29 vs 30) in
+  /// the original design.
+  static TextStyle get kioskMetric => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 30,
+        color: text,
+        letterSpacing: -0.9,
+      );
+
+  /// A kiosk PANEL's own title — the "Get the app" card's heading, the
+  /// showcase's rotating slide title, the idle-warning card. 25px bold, one
+  /// clear step under [kioskDisplay] so a panel never competes with the
+  /// screen.
+  static TextStyle get kioskPanelTitle => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 25,
+        color: text,
+        letterSpacing: -0.5,
+      );
+
+  /// ONE important sentence set apart — the blocked screen's why-box reason,
+  /// and a class card's name on the kiosk class pick. One shared token for
+  /// both, though the class name ran fractionally larger (23 vs 22) in the
+  /// original design.
+  static TextStyle get kioskStatement => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 22,
+        color: text,
+        letterSpacing: -0.35,
+      );
+
+  /// The kiosk's one text INPUT — the name-search field's typed text and its
+  /// hint. Deliberately large and light: a member types it standing up, from
+  /// arm's length.
+  static TextStyle get kioskFieldText => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 22,
+        color: text,
+        letterSpacing: -0.22,
+      );
+
+  /// A SECTION head inside a kiosk screen ("Scan with app" / "Name search") —
+  /// 21px semibold.
+  static TextStyle get kioskTitle => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 21,
+        color: text,
+        letterSpacing: -0.2,
+      );
+
+  /// A NAME rendered as a tap target or an identity — a search result row, the
+  /// gym's name in the kiosk header. 19px semibold — it coincides with
+  /// [kioskButtonPrimaryLabel], both sized at 19 by design.
+  static TextStyle get kioskName => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 19,
+        color: text,
+        letterSpacing: -0.19,
+      );
+
+  /// The muted explanatory line under a [kioskDisplay] SCREEN title — the
+  /// class pick's "Open for check-in right now…", the blocked screen's
+  /// reassurance, the closing screen's line.
+  static TextStyle get kioskSubtitle => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 18,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// Body copy inside a kiosk panel — the streak's keep-it-alive note, and
+  /// (at w600) the "points" unit beside the balance.
+  static TextStyle get kioskBody => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 17,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// A strong small LABEL on a kiosk surface — a week-strip day letter, the
+  /// "+N pts" chip (w700), a reward tile's title and its points line (w700),
+  /// a class card's time / instructor line (w500).
+  static TextStyle get kioskLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 16,
+        color: text,
+        letterSpacing: -0.16,
+      );
+
+  /// The muted explanatory line under a [kioskTitle] SECTION head — the home
+  /// halves' "Scan QR code with app for instant check in". One step under
+  /// [kioskSubtitle] because it answers a 21px head, not a 40px title.
+  static TextStyle get kioskSectionText => baseFont.copyWith(
+        fontWeight: FontWeight.w400,
+        fontSize: 16,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// A quiet supporting line — the app-adoption nudge, the auto-return
+  /// countdown, a sign-in step, a benefit check, a showcase slide's caption.
+  static TextStyle get kioskCaption => baseFont.copyWith(
+        fontWeight: FontWeight.w500,
+        fontSize: 15,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// The smallest kiosk label — the "or" seam badge, a reward tile's
+  /// "{balance} / {cost}" fraction, a showcase video's title, the numbered
+  /// step discs, the marketing Book pill.
+  static TextStyle get kioskMicro => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: text,
+        letterSpacing: -0.13,
+      );
+
+  /// A literal value rendered as a kiosk chip — the sign-in email on the "Get
+  /// the app" card's step 2. Geist Mono at body size so an address reads
+  /// unambiguously (l/1, O/0), untracked — unlike [kioskEyebrow], which is a
+  /// tracked uppercase micro-label.
+  static TextStyle get kioskMonoValue => monoFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+        color: text,
+        letterSpacing: 0,
+      );
+
+  /// The kiosk's tracked mono eyebrow ("YOUR POINTS", "IN THE APP", "WHY") — a
+  /// Geist-Mono micro-label above the thing it names. Muted and
+  /// letter-tracked (lifted to [text2nd] — see the contrast note at the top
+  /// of this ramp).
+  static TextStyle get kioskEyebrow => monoFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 12,
+        color: text2nd,
+        letterSpacing: 1.9,
+      );
+
+  /// A TAG pinned on artwork or the tiniest meta line — a reward tile's price
+  /// pill, the rank ladder's RESTING belt names (its featured rung steps up to
+  /// [kioskLabel]), a showcase video's view count (w500). The one kiosk role
+  /// that stays genuinely tiny: it always sits ON an image or inside a dense
+  /// strip.
+  static TextStyle get kioskTag => baseFont.copyWith(
+        fontWeight: FontWeight.w700,
+        fontSize: 11,
+        color: text,
+        letterSpacing: -0.11,
+      );
+
+  /// Inner content measure for the glance's two panels — the width the reward
+  /// tile grid and the week-day strip are capped at (and centered within)
+  /// inside a panel, so neither spreads edge-to-edge on the wide kiosk. One
+  /// token unifies what were two different caps (292 and 360) into a single
+  /// kiosk content width.
+  static const double kioskGlanceMeasure = 320.0;
+
+  /// One video card on the "Watch videos" showcase slide (two 198px columns
+  /// in a 410px grid). Wider than half of [kioskGlanceMeasure] on purpose: a
+  /// video card carries a 16:9 thumbnail AND a title line, so squeezing it
+  /// to the reward-tile measure crushes both.
+  static const double kioskVideoCardWidth = 192.0;
+
+  /// Inner content measure for a HOME half — the width the name-search field
+  /// and its result rows are capped at (and centered within) inside their
+  /// column.
+  ///
+  /// A home half is nearly half the iPad's width; a search field stretched to
+  /// all of it reads as running off the edge of the screen and leaves the two
+  /// columns feeling lopsided. Capping the control (not the column) keeps the
+  /// two heads full-width and the seam where it is, while the field lands as a
+  /// deliberate object on the column's centre line. Wider than
+  /// [kioskGlanceMeasure] because this is one long control, not a tile grid.
+  static const double kioskHomeMeasure = 440.0;
+
+  /// Content measure for the home's SPANNING adopt strip — the width its
+  /// adoption line + "Get it" button pair is capped at (and centered within)
+  /// under a hairline that runs the full stage.
+  ///
+  /// The strip is not a column foot any more; it spans both halves, so the
+  /// band it sits in is roughly twice as wide as the column that used to hold
+  /// it. Capping the PAIR (never the rule) is what keeps the two reading as one
+  /// object on the stage's centre line instead of a sentence and a button
+  /// drifting toward opposite edges, and it holds the sentence inside a
+  /// readable measure (~70 characters at [kioskCaption]) rather than letting a
+  /// long gym name run the full width of an iPad. Wider than
+  /// [kioskHomeMeasure] because this is a sentence AND a button on one row, not
+  /// a single control.
+  static const double kioskAdoptMeasure = 640.0;
+
+  /// Content measure for a signup step's FORM panel — the width the field
+  /// panel is capped at (and centred within) on the wide kiosk stage.
+  ///
+  /// A form stretched across a full iPad puts a member's eye through a
+  /// half-metre sweep between a label and its box; capping the panel keeps
+  /// each 2-up field pair inside one comfortable scan. Wider than
+  /// [kioskAdoptMeasure] because this holds two side-by-side controls, not
+  /// one sentence.
+  static const double kioskFormMeasure = 860.0;
+
+  /// Height of the kiosk's date WHEEL (`KioskDobField`'s bottom sheet).
+  ///
+  /// A `CupertinoDatePicker` has no intrinsic height — it must be given a
+  /// bounded box — and the value is a MEASURE, not a type size, so it lives
+  /// here beside the other kiosk measures rather than at the call site. Five
+  /// rows of [kioskFieldText] plus its own overscroll shading: tall enough
+  /// that the neighbouring dates are readable at 2m (which is how a wheel is
+  /// steered), short enough to leave the sheet's Done button on the fold.
+  static const double kioskWheelHeight = 260.0;
+
+  // ── Kiosk button scale ──
+  // The kiosk is read (and pressed) from standing distance on a supervised
+  // iPad, so its buttons run a full step larger than the admin defaults
+  // (13px label / 16x8 padding). They are two rungs OF the kiosk ramp above,
+  // not a separate scale — the primary label sits with [kioskName] (19) and
+  // the outline label between [kioskSubtitle] (18) and [kioskBody] (17).
+  // Applied ONLY through `KioskPrimaryButton` / `KioskOutlineButton`
+  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`) so the whole
+  // kiosk button set scales together and no call site restates a size; the
+  // admin app keeps the `AppPrimaryButton` / `AppOutlineButton` defaults.
+
+  /// Kiosk PRIMARY button label — 19px semibold.
+  static TextStyle get kioskButtonPrimaryLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 19,
+        color: text,
+        letterSpacing: -0.19,
+      );
+
+  /// Kiosk OUTLINE button label — 17px semibold.
+  static TextStyle get kioskButtonOutlineLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 17,
+        color: text,
+        letterSpacing: -0.17,
+      );
+
+  /// Kiosk PRIMARY button box — 18/34 padding.
+  static const EdgeInsets kioskButtonPrimaryPadding = EdgeInsets.symmetric(
+    horizontal: 34,
+    vertical: 18,
+  );
+
+  /// Kiosk OUTLINE button box — 15/30 padding. One step tighter than the
+  /// primary.
+  static const EdgeInsets kioskButtonOutlinePadding = EdgeInsets.symmetric(
+    horizontal: 30,
+    vertical: 15,
+  );
+
+  /// Kiosk GHOST (escape) button label — 17px medium in [text2nd]. The
+  /// quietest rung of the kiosk button ladder
+  /// (primary gradient > outline 2px ink > outline soft hairline > ghost
+  /// nothing): no border, no fill, muted label, so it can never read as a
+  /// call to action. It is the ONLY tier used for LEAVING a flow.
+  ///
+  /// It keeps the outline label's 17px — the kiosk's interactive floor, read
+  /// from ~2m — and drops a weight instead (w500 vs w600), which is what
+  /// demotes it. `text2nd` (not `text3rd`) because it carries words: the AA
+  /// floor applies to every kiosk label, escape included.
+  static TextStyle get kioskButtonGhostLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w500,
+        fontSize: 17,
+        color: text2nd,
+        letterSpacing: -0.17,
+      );
+
+  /// Kiosk GHOST button box — 13/18 padding. Tighter
+  /// than the outline on both axes (it has no chrome to balance), while the
+  /// vertical 13 + a 17px label still clears the 44pt touch minimum. Its
+  /// horizontal value doubles as the optical pull that lands the ghost's
+  /// GLYPH on the screen's content rail — see `KioskEscapeFoot`.
+  static const EdgeInsets kioskButtonGhostPadding = EdgeInsets.symmetric(
+    horizontal: 18,
+    vertical: 13,
+  );
 
   /// H2 text style (semibold, 16)
   static TextStyle get h2 => baseFont.copyWith(

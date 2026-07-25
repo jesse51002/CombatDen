@@ -18,6 +18,9 @@ from src.members.service.crm_member_services.members_crm_base_service import (
 from src.members.service.crm_member_services.members_crm_frozen_service import (
     CrmFrozenViewService,
 )
+from src.members.service.crm_member_services.members_crm_incomplete_service import (  # noqa: E501
+    CrmIncompleteViewService,
+)
 from src.members.service.crm_member_services.members_crm_overdue_service import (
     CrmOverdueViewService,
 )
@@ -55,6 +58,7 @@ class CrmMembersListService:
         self._trial = CrmTrialViewService(db_pool, dormancy_days)
         self._frozen = CrmFrozenViewService(db_pool, dormancy_days)
         self._overdue = CrmOverdueViewService(db_pool, dormancy_days)
+        self._incomplete = CrmIncompleteViewService(db_pool, dormancy_days)
 
     async def get_crm_members_list(
         self,
@@ -107,3 +111,5 @@ class CrmMembersListService:
                 return self._frozen
             case MembersListView.overdue:
                 return self._overdue
+            case MembersListView.incomplete:
+                return self._incomplete

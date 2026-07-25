@@ -184,6 +184,25 @@ tracking; body stays neutral.
 - **Label** (`h3`, 600, 13px): table headers, chips, metadata.
 - **Body** (`p`, 400, 12px, 0.03em): default reading text; cap measured text at 65–75ch.
 
+**The kiosk ramp** (`kiosk*`, 19 roles, 112 → 11px): the member self-serve kiosk (a supervised
+iPad) is read from ~2m, so it runs a **complete second ramp** with its own dedicated sizes
+rather than borrowing the admin ramp for its smaller text — `kioskStreakNum` 112 ·
+`kioskDisplay` 40 · `kioskMetric` 30 · `kioskPanelTitle` 25 · `kioskStatement` 22 ·
+`kioskFieldText` 22 · `kioskTitle` 21 · `kioskButtonPrimaryLabel` 19 · `kioskName` 19 ·
+`kioskSubtitle` 18 · `kioskButtonOutlineLabel` 17 · `kioskBody` 17 · `kioskLabel` 16 ·
+`kioskSectionText` 16 · `kioskCaption` 15 · `kioskMicro` 13 · `kioskMonoValue` 13 ·
+`kioskEyebrow` 12 · `kioskTag` 11. Kiosk-only — the admin surfaces never use these, and a
+kiosk change never touches the admin ramp.
+
+**The Kiosk-Moves-As-A-Set Rule.** Never re-scale one kiosk role alone. This ramp is
+internally proportional, so lifting only *some* roles (the buttons, say) leaves labels at desk
+scale and makes a button out-shout the copy beside it — a half-applied ramp is the same bug as
+none. Change the ladder or nothing; a test asserts the ordering.
+
+**Kiosk text holds the AA floor.** Muted words on a kiosk surface use `text2nd`, never
+`text3rd` (3.05:1 on the ground, under the 4.5:1 AA floor and unreadable at 2m). `text3rd`
+stays for non-text only — hairlines, progress tracks, placeholder glyphs.
+
 ### Named Rules
 **The Weight-Not-Family Rule.** Hierarchy comes from weight and scale within Geist, never from
 switching typefaces. Keep ≥1.25 scale steps; flat scales read as a spreadsheet.
@@ -217,6 +236,12 @@ space + hairlines + titles. Nested cards are always wrong.
   swap in a solid fill for a destructive/confirm action (that drops the gradient + shadow).
 - **Outline** (`AppOutlineButton`): 2px ink border, ink label, transparent fill, for secondary
   actions (Print, Edit, Promote, View all).
+- **Kiosk scale** (`KioskPrimaryButton` / `KioskOutlineButton`): the same two buttons one step
+  larger — 19px label / 18x34 padding and 17px / 15x30 (`kioskButtonPrimaryLabel`,
+  `kioskButtonOutlineLabel` and their padding tokens) — because the member kiosk is read and
+  pressed from standing distance, the same reason the kiosk display type exists. These two
+  wrappers are the only place those tokens are applied, so the whole kiosk button set scales
+  together; the admin surfaces keep the base defaults.
 
 ### Hairline
 - A 1px rule in the `line` tint (ink @ 9%). Horizontal separates stacked sections;

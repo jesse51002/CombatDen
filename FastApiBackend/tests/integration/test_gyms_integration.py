@@ -4,18 +4,34 @@ Covers:
     GET  /api/v1/gyms/                       — list the caller's gyms
     GET  /api/v1/gyms/{gym_id}/onboarding    — Stripe onboarding status
                                                refresh (owner only)
+    GET  /api/v1/gyms/{gym_id}/app-links     — PUBLIC resolved member-app
+                                               store links
 
-Read-only.  No POST /api/v1/gyms/ (would hit Stripe + pollute seed).
+Mostly read-only.  No POST /api/v1/gyms/ (would hit Stripe + pollute seed).
+The app-links "links set" case UPDATEs the seeded gym's two nullable
+``app_store_url`` / ``play_store_url`` columns and restores them to NULL in a
+``finally`` (the seed leaves them NULL) — a reversible mutate-and-restore for
+setup, the ``set_points_balance`` pattern; it never creates or deletes a gym.
+
+REQUIRES migration ``20260723130706_gyms_app_store_urls.sql`` applied to the
+shared local Supabase DB (adds ``gyms.app_store_url`` / ``play_store_url``) AND
+a backend on :8000 running THIS branch's code (the public ``app-links`` route).
+Until both land, the app-links cases 404/500 on the missing route/columns —
+that is a pending migration + stale server, not a code defect (see the mocked
+router tests in ``tests/test_gyms_router.py``, which prove the logic with no DB).
 
 Run with the live server already up:
     poetry run pytest tests/integration/test_gyms_integration.py -v
 """
 
+import asyncio
 import uuid
 
 import httpx
 import pytest
 
+from src.core.config import settings
+from tests.helpers.db_writes import set_gym_app_links
 from tests.integration.conftest import BACKEND_BASE_URL
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -77,18 +93,30 @@ class TestListMyGyms:
             parsed = uuid.UUID(str(gym["gym_id"]))
             assert str(parsed) == str(gym["gym_id"])
 
-    def test_no_extra_stripe_fields_leaked(self, api: httpx.Client) -> None:
-        """The list must NOT expose Stripe fields (stripe_account_id etc.)."""
+    def test_stripe_account_id_exposed_but_no_other_stripe_state(
+        self, api: httpx.Client
+    ) -> None:
+        """The list exposes the connected-account id (client-safe) but no
+        other Stripe state.
+
+        ``stripe_account_id`` rides on this authenticated staff read so the
+        CRM can set the Stripe.js connected-account context (a
+        browser-tokenized card must be minted on the gym's connected
+        account). Onboarding status / hosted-onboarding URLs stay off it —
+        those live on the owner-only onboarding endpoint.
+        """
         response = api.get("/api/v1/gyms/")
         assert response.status_code == 200, response.text
         forbidden_fields = {
-            "stripe_account_id",
             "stripe_onboarding_status",
             "onboarding_url",
         }
         for gym in response.json():
+            assert "stripe_account_id" in gym, (
+                f"connected-account id missing from gym list item: {gym}"
+            )
             leaked = forbidden_fields & set(gym.keys())
-            assert not leaked, f"Stripe fields leaked into gym list: {leaked}"
+            assert not leaked, f"Stripe state leaked into gym list: {leaked}"
 
     def test_unauthenticated_returns_401_or_403(self) -> None:
         """GET /api/v1/gyms/ without auth returns 401 or 403."""
@@ -205,3 +233,68 @@ class TestGetOnboardingStatus:
         assert response.status_code in (401, 403), (
             f"Expected 401/403 for unauthenticated request, got {response.status_code}"
         )
+
+
+# ── GET /api/v1/gyms/{gym_id}/app-links (PUBLIC) ──────────────────────────────
+
+
+class TestGetAppLinks:
+    """Tests for GET /api/v1/gyms/{gym_id}/app-links (public download page)."""
+
+    def test_public_no_auth_returns_defaults_for_seeded_gym(
+        self, gym_id: str
+    ) -> None:
+        """The seeded gym has NULL links, so a NO-AUTH GET resolves to the
+        CombatDen default listing — proving the endpoint is public and the
+        gym-value-OR-default fallback works."""
+        client = httpx.Client(base_url=BACKEND_BASE_URL, timeout=10.0)
+        response = client.get(f"/api/v1/gyms/{gym_id}/app-links")
+        client.close()
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ios_url"] == settings.combatden_app_store_url
+        assert body["android_url"] == settings.combatden_play_store_url
+
+    def test_unknown_gym_returns_404(self) -> None:
+        """A random gym_id is 404 — never a default-filled 200 for a bad QR."""
+        random_id = str(uuid.uuid4())
+        client = httpx.Client(base_url=BACKEND_BASE_URL, timeout=10.0)
+        response = client.get(f"/api/v1/gyms/{random_id}/app-links")
+        client.close()
+        assert response.status_code == 404, response.text
+
+    async def test_returns_gym_links_when_set(self, db_pool, gym_id: str) -> None:
+        """With the seeded gym's own white-label links set, the endpoint
+        returns THEM (not the CombatDen defaults). The two nullable columns
+        are restored to NULL in the finally so the shared seed is untouched.
+
+        ``async def`` shares the session-scoped loop with the ``db_pool``
+        engine; the sync ``httpx`` GET is run off-loop via ``asyncio.to_thread``
+        (the established integration pattern)."""
+        ios = "https://apps.apple.com/app/seeded-test-gym"
+        android = (
+            "https://play.google.com/store/apps/details?id=net.combatden.seededtest"
+        )
+        await set_gym_app_links(
+            db_pool,
+            uuid.UUID(gym_id),
+            app_store_url=ios,
+            play_store_url=android,
+        )
+        client = httpx.Client(base_url=BACKEND_BASE_URL, timeout=10.0)
+        try:
+            response = await asyncio.to_thread(
+                client.get, f"/api/v1/gyms/{gym_id}/app-links"
+            )
+            assert response.status_code == 200, response.text
+            body = response.json()
+            assert body["ios_url"] == ios
+            assert body["android_url"] == android
+        finally:
+            await asyncio.to_thread(client.close)
+            await set_gym_app_links(
+                db_pool,
+                uuid.UUID(gym_id),
+                app_store_url=None,
+                play_store_url=None,
+            )

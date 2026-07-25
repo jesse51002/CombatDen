@@ -4,11 +4,42 @@ List, counts, and detail schemas are membership-derived and live in
 members_crm_members_list_schema and members_billing_schema.
 """
 
-from datetime import datetime
-from typing import Literal
+from datetime import date, datetime
+from typing import Final, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+# Floor for a plausible date of birth. Wide enough that it can never reject a
+# real member, tight enough to catch the realistic typo class from the kiosk's
+# free-form date entry (a truncated or mistyped year: 0202-06-01, 1066). A
+# fixed calendar floor, not a max age, so it needs no policy and never ages.
+EARLIEST_DATE_OF_BIRTH: Final[date] = date(1900, 1, 1)
+
+
+def _validate_date_of_birth(value: date | None) -> date | None:
+    """Reject a future or pre-1900 date of birth (-> 422).
+
+    Shared by every schema that accepts a DOB so create and update cannot
+    drift. The DB carries the matching CHECK (``date_of_birth_plausible``),
+    so a writer that bypasses this model — the seed, an importer, a hand-run
+    UPDATE — still cannot store what the API refuses.
+    """
+    if value is None:
+        return value
+    today = date.today()
+    if value > today:
+        raise ValueError(
+            f"date_of_birth cannot be in the future (got {value.isoformat()}, "
+            f"today is {today.isoformat()})",
+        )
+    if value < EARLIEST_DATE_OF_BIRTH:
+        raise ValueError(
+            f"date_of_birth cannot be before "
+            f"{EARLIEST_DATE_OF_BIRTH.isoformat()} "
+            f"(got {value.isoformat()})",
+        )
+    return value
 
 
 class MemberCreateRequest(BaseModel):
@@ -24,6 +55,8 @@ class MemberCreateRequest(BaseModel):
     # engagement-only members with no contact info on file.
     phone: str | None = None
     address: str | None = None
+    # Optional date of birth (the kiosk signup's optional-details step).
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: EmailStr | None = None
@@ -50,6 +83,12 @@ class MemberCreateRequest(BaseModel):
         """
         return v.lower() if v is not None else v
 
+    @field_validator("date_of_birth")
+    @classmethod
+    def _plausible_date_of_birth(cls, v: date | None) -> date | None:
+        """Reject a future or pre-1900 date of birth (see the module helper)."""
+        return _validate_date_of_birth(v)
+
 
 class MemberUpdateData(BaseModel):
     """Mutable fields on a member row.
@@ -66,6 +105,7 @@ class MemberUpdateData(BaseModel):
     email: EmailStr | None = None
     phone: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: EmailStr | None = None
@@ -81,6 +121,16 @@ class MemberUpdateData(BaseModel):
         the stored value must be lowercase.
         """
         return v.lower() if v is not None else v
+
+    @field_validator("date_of_birth")
+    @classmethod
+    def _plausible_date_of_birth(cls, v: date | None) -> date | None:
+        """Reject a future or pre-1900 date of birth (see the module helper).
+
+        This model is the only other way a DOB reaches the column through the
+        API, so it needs the same guard as create.
+        """
+        return _validate_date_of_birth(v)
 
 
 class MemberUpdateRequest(BaseModel):
@@ -103,6 +153,7 @@ class MemberResponse(BaseModel):
     created_at: datetime
     phone: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None

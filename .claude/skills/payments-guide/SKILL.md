@@ -102,6 +102,24 @@ Every public service method takes `stripe_account_id` and threads it into the
 opts. The `PaymentsStripeClient` itself is constructed from the platform secret
 key (`stripe.StripeClient`) and is the single shared client.
 
+**The client tokenizes on the connected account too — because attach is
+connected-account-scoped.** A member's card is attached to a customer that lives
+on the gym's connected account (`create_customer` / `update_customer` /
+`attach_payment_method` all use `connect_opts(stripe_account_id)`), so the
+PaymentMethod the browser tokenizes must ALSO be minted on that connected
+account — a platform-owned `pm_…` cannot attach to a connected-account customer
+(Stripe raises `InvalidRequestError: … a platform-owned payment method ID`).
+So the CRM/kiosk sets the Stripe.js connected-account context before any card
+field mounts: `GET /api/v1/gyms/` exposes `stripe_account_id` on
+`GymWithRoleResponse` (the authenticated staff read — the `acct_…` id is
+client-safe, it rides in the browser in every Connect direct-charge
+integration), and the client sets `Stripe.stripeAccountId` + `applySettings()`
+from it when the active gym is established. The regression guard
+`tests/members/test_members_card_platform_pm_guard.py` locks the attach-side
+invariant (a platform-minted pm → `update_customer` raises). (Stripe's magic
+`pm_card_visa` test token crosses accounts, which is why the seed never
+surfaced this — a genuinely browser-tokenized card does not cross.)
+
 ### Metadata pinning — every Stripe resource carries its CRM id
 
 Each Stripe resource we create is written with a **typed metadata envelope** so
@@ -131,7 +149,14 @@ only a small set of flow-control keys off the raw envelope (§6).
 Each is one focused wrapper class in `src/payments/service/`. All raise the
 `payments_exceptions.py` hierarchy: `PaymentsStripeError` (base),
 `PaymentsResourceNotFoundError` (carries `resource_id` + a `StripeResourceType`),
-`PaymentsInvalidRequestError`, and `StripeOrphanError` (a Stripe resource was
+`PaymentsInvalidRequestError`, `PaymentsNotCollectedError` (a card charge that
+definitively did NOT collect with no decline raised — an SCA/3-D-Secure
+authentication the member must complete; a business OUTCOME a caller may answer
+with a 2xx result rather than a 500, and must never answer as success. Raised by
+the ONE detector `_require_collected`, which guards **both**
+`create_invoice_payment` (the itemized one-time / kiosk charge) and
+`pay_open_subscription_invoice_on_card` (the retry) — see both below), and
+`StripeOrphanError` (a Stripe resource was
 created but the CRM writeback failed — surfaced loudly for operator cleanup).
 
 **`PaymentsStripeMembersService`** (`payments_stripe_members_service.py`) — Stripe
@@ -140,7 +165,14 @@ created but the CRM writeback failed — surfaced loudly for operator cleanup).
 - `create_customer` — customer (optionally with a payment method set as the
   invoice-settings default).
 - `update_customer` — updates details and **swaps the card**: attaches the new
-  PaymentMethod, sets it default, then **detaches the old** one.
+  PaymentMethod, sets it default, then **detaches the old** one. The attach
+  carries a **derived** idempotency key,
+  `f"{stripe_customer_id}:{payment_method_id}:attach"` — the request has no
+  caller-supplied key, so it is built from the two ids that fully identify the
+  write, with the same `:attach` suffix the sibling's callers use. Deterministic
+  by construction: a retried save of the same card dedups at Stripe, a different
+  card is a different key. (Detach + ordering are a separate, knowingly-accepted
+  call — see the promote-then-detach note in `memberships-guide`'s start row.)
 - `attach_payment_method` / `detach_payment_method` — attach a PaymentMethod to a
   customer **without** making it default, and detach one (both idempotency-keyed).
   Used by the one-off-card charge path (`create_invoice_payment` with a
@@ -149,6 +181,15 @@ created but the CRM writeback failed — surfaced loudly for operator cleanup).
   no-op when the method is already attached (so a retry is safe); a detached
   method can **never** be re-attached, so the charge path detaches only AFTER a
   successful pay.
+- `has_attached_payment_method` — the read-only existence probe: lists the
+  customer's attached PaymentMethods (**all types**, no `type` filter, `limit=1`
+  since only existence is asked) and returns whether that list is non-empty. It
+  is the LIVE Stripe answer, deliberately not `members.stripe_payment_method_id`
+  (which records only the CRM's last saved default, so a method attached out of
+  band would leave it NULL). **A Stripe failure propagates — callers gate on
+  this, so an error must never degrade to "no card".** Called by
+  `MembersManagementPaymentMethods` behind
+  `GET /api/v1/members/{member_id}/payment-method-status`.
 - `unlink_customer_card` — clears the default PaymentMethod and detaches it
   (no-op if the customer is gone).
 - `retrieve_customer` — raises `PaymentsResourceNotFoundError` if missing/deleted.
@@ -221,11 +262,64 @@ back to active because the DB says it's current.
   `payment_method_id` is mutually exclusive with `paid_out_of_band`
   (model-validated). A `$0` invoice auto-pays at finalize and skips the pay step
   entirely, so a one-off card is never attached for a zero-total charge.
+  > **⚠️ Step order is load-bearing: READ the lines, THEN charge.** The
+  > sequence is create invoice → create items → **finalize** →
+  > `_all_invoice_lines` → `_order_lines` → **`_pay_invoice`** → assemble the
+  > response. Finalizing is what CREATES the lines; paying only moves `status`
+  > and `amount_paid` and never adds, removes, re-orders or re-prices a line
+  > (verified live on the pinned dahlia API), so the item→line map is identical
+  > either side of the pay — but building it AFTER the pay puts a raise inside
+  > the money window. `_all_invoice_lines` makes a **network** call as soon as
+  > `invoice.lines.has_more` (a cart of more than 10 lines — a large family or
+  > a class-pack signup) and `_order_lines` raises for an absent invoice item;
+  > either raise propagates out through `PaymentSyncOneTime` (`_execute` is a
+  > bare `return await`) into `MemberMembershipsStart._charge_one_time_group`'s
+  > blanket `except` → `_cleanup_states` → `_delete_pending`, so Stripe keeps
+  > the money while the membership rows are deleted. Read first and that same
+  > failure costs nothing: nothing is charged, so cleaning up the un-billed
+  > rows is the honest answer.
+  > **Nothing after the collection point may raise**, for the same reason
+  > `PaymentSyncOneTime._writeback` is unconditionally best-effort (C-025) —
+  > that hardening lives DOWNSTREAM of this service, so it cannot catch a raise
+  > from inside it. The post-pay assembly is therefore pure attribute access on
+  > objects already in hand, wrapped by `_response_after_collection`, which logs
+  > and returns a degraded response (invoice id + the pre-pay `(line id,
+  > amount)` pairs + the request's customer/currency) rather than raise. Guards:
+  > `tests/payments/test_payments_charge_ordering.py` (the recorded Stripe call
+  > ORDER, so moving a read back below the charge fails loudly) and
+  > `tests/sync/test_one_time_charge_window.py` (the same invariant at the
+  > `charge_one_time` boundary the start op wraps).
+  > **One step DOES sit between the pay and that assembly, and it is allowed to
+  > raise: `_require_collected`** (below). It asks the only question that
+  > decides everything after it — *did the money actually arrive?* — and raises
+  > `PaymentsNotCollectedError` when a pay RETURNED without collecting (SCA /
+  > 3-D Secure; `invoices.pay` raises on a decline but not on this). That is not
+  > a violation of the never-un-bill rule: it fires precisely in the branch
+  > where nothing was collected, so there is no charge to protect. It is also
+  > what keeps the membership rows honest — the raise lands before
+  > `PaymentSyncOneTime._writeback`, so nothing is ever stamped `applied` for
+  > money that never arrived. Without it the kiosk booked a `status="open"`
+  > charge as a started membership (`memberships-guide`, the start row).
 - `refund_payment` — refund a **charge** (full or partial), by the original
   `stripe_charge_id` (what `member_charges` stores and what the `refund.*`
   webhook keys on — no PaymentIntent lookup). The response carries the refund's
   `status` / `currency` / `created` so a caller can record the row without a
   second Stripe read.
+  > **The response assembly runs AFTER the money went back, so it never raises
+  > either** — `_response_after_refunding`. A raise there cost two things at
+  > once: `MemberMembershipsRefund._refund_card` never reached
+  > `_insert_refund_row` (the negative `member_charges` row simply missing), and
+  > `pydantic.ValidationError` **subclasses `ValueError`**, so the refund
+  > router's generic `ValueError` arm answered a COMPLETED refund with **400
+  > "bad request"** — after which a staff retry passed
+  > `_assert_refundable_under_lock` (no row ⇒ full balance still refundable) and
+  > issued a SECOND real refund. The degraded response keeps every field that
+  > reads back cleanly and defaults only `currency` (unused by the row, which
+  > takes the CRM charge's) and `created` (now). **`status` is never guessed:**
+  > if Stripe's own status, the refund id or the amount is unreadable it reports
+  > `pending`, so the caller writes NO row and the `refund.*` webhook records it
+  > from Stripe's copy — the same backstop an async refund already uses. Guard:
+  > `tests/payments/test_payments_refund_response_guard.py`.
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
   `paid_out_of_band=True`. Stripe then fires the normal `invoice.paid` webhook,
@@ -237,11 +331,57 @@ back to active because the DB says it's current.
   `paid_out_of_band`, no `payment_method`, no cash metadata. **Omitting both
   params is what makes Stripe charge the customer's saved DEFAULT card**, so this
   is the manual retry of a failed renewal charge. Same `invoice.paid` webhook
-  does the CRM write; a decline raises out of `pay_async` and is deliberately
-  left to propagate. Both methods share ONE private lookup,
-  `_find_open_subscription_invoice` (unknown subscription →
+  does the CRM write; a `stripe.CardError` decline raises out of `pay_async` and
+  is deliberately left to propagate — this layer never classifies it, and the
+  `retry-card` ROUTER is what turns it into a 2xx `declined` RESULT (207) rather
+  than a 500, because a bank refusal is an outcome, not a malfunction
+  (`memberships-guide`). A pay that returns WITHOUT collecting (an off-session
+  invoice whose PaymentIntent needs SCA / 3-D Secure authentication — no decline
+  raised, invoice still `open`) is caught by `_require_collected` and turned
+  into a **`PaymentsNotCollectedError`**, so it is never booked as a phantom
+  success — and never dressed up as a decline either. The dedicated TYPE is the
+  contract: that outcome is just as DEFINITIVE as a decline ("we could not
+  collect on this card, staff must act"), so the `retry-card` router answers it
+  with its own 2xx `not_collected` RESULT (**207**) instead of a 500. It
+  subclasses `PaymentsStripeError`, so an untaught caller still 500s it safely —
+  and any router that DOES handle it must catch it **above** its base
+  `PaymentsStripeError` arm.
+  Both methods share ONE private lookup,
+  `_list_open_subscription_invoices` (unknown subscription →
   `PaymentsResourceNotFoundError`, no open invoice → `ValueError`), so cash and
-  card can never drift on what "the open invoice" is.
+  card can never drift on what "the open invoice" is — **and ONE private
+  serializer, `_invoice_as_dict`**, which turns the now-paid invoice into the
+  plain nested dict the record seams consume. That step is post-collection, so
+  it never raises: `json.JSONDecodeError` **subclasses `ValueError`**, so a bare
+  `json.loads(str(paid))` here lands in the settle routers' generic `ValueError`
+  arm → **400 "bad request"** for a card that WAS charged, inviting a second
+  collection. It logs and degrades to an **id-only** payload,
+  deliberately WITHOUT `status`, so
+  `MemberMembershipsInvoiceFetch._record_invoice` (which dispatches on `status`)
+  is a clean no-op rather than writing a half-described invoice/charge row, and
+  the `invoice.paid` webhook + reconciler finalize from Stripe's own copy.
+- **`_require_collected(invoice)` — the ONE non-collection detector, shared by
+  BOTH pay paths**: `pay_open_subscription_invoice_on_card` (the retry) and
+  `create_invoice_payment` (the itemized one-time / kiosk charge; see its entry
+  above). **All THREE of its callers answer it as a 207 result, never a 500 and
+  never a success** — but only ONE of them still tells it apart from a decline.
+  Start and charge-card report the ordinary card failure it is (a per-item
+  `card declined: ` entry / `status=declined`, both carrying
+  `CARD_NOT_CHARGED_REASON`), because at a kiosk or a front desk the answer is
+  the same: that card did not work, use another. **Retry-card keeps
+  `status=not_collected` + this error's own SCA wording** — there staff are
+  deliberately repairing one card, so the distinction is actionable, and that is
+  why the enum value still exists. Charge-card keeps its **204/no-body success**
+  contract and adds the 207 body for this outcome and for a `stripe.CardError`
+  decline (`memberships-guide`). It raises
+  `PaymentsNotCollectedError` **only on a
+  positively-read non-`paid` status** — `isinstance(status, str) and status !=
+  "paid"`. That narrowing is load-bearing: on the charge path the answer is
+  DESTRUCTIVE (the start op deletes the membership rows), so an absent or
+  non-string status must fall through to the degraded response rather than be
+  reported as "nothing was collected" over a charge that may well have gone
+  through. A $0 invoice is already `paid` at finalize and never reaches the pay,
+  so free trials sail through the guard.
 - **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,
   limit, customer=None)`, `list_refunds(account_id, *, created_gte, limit)`,
   `list_invoice_payments(account_id, invoice_id, *, limit)`,
@@ -742,6 +882,7 @@ endpoints and the member_memberships refund endpoint that call the §3 primitive
 | `POST /api/v1/stripe/webhooks` | the webhook ingestion (§5–§6) |
 | `PUT /api/v1/members/{member_id}/card` | `update_card` → `PaymentsStripeMembersService.update_customer` (card swap only; raises if the member has no Stripe customer — `create_customer` runs once at member creation, never here) |
 | `DELETE /api/v1/members/{member_id}/payment` | `unlink_payment` → `unlink_customer_card` + cancel recurring subs (Stripe customer link preserved) |
+| `GET /api/v1/members/{member_id}/payment-method-status` | `has_payment_method` → `MembersManagementPaymentMethods` → `has_attached_payment_method` (live Stripe read; no Stripe customer ⇒ `false`; any Stripe failure ⇒ **500, never `false`**) |
 | `POST /api/v1/member_memberships/refund` | `MemberMembershipsRefund.refund_charge` (sibling of charge-card; standalone, not on the `MemberMembershipsService` facade) → loads the charge by PK (gym-scoped, `memberships/sql/member_charge_by_id.sql`), validates the refundable balance, then for a card charge calls `refund_payment` and records the succeeded negative row (`memberships/sql/member_refund_insert.sql`); a cash charge records a negative cash row with no Stripe call (§6) |
 
 > **⚠️ Refund assumes ONE succeeded charge per invoice — it would break down with

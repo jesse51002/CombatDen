@@ -18,6 +18,7 @@ from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.checkin import SQL_DIR
+from src.checkin.checkin_exceptions import CheckinClassNotFoundError
 from src.checkin.schema.checkin_schema import CheckinRemoveResponse
 from src.checkin.service.checkin_reverser import CheckinReverser
 from src.shared.database import DirectDatabasePool
@@ -59,7 +60,8 @@ class CheckinRemover:
         checked in.
 
         Raises:
-            ValueError: If the class does not exist for this gym (mapped to 404).
+            CheckinClassNotFoundError: If the class does not exist for this gym
+                (a ``ValueError`` subclass; mapped to 404).
         """
         async with self._db_pool.session() as session:
             class_row = await self._load_class(session, class_id, gym_id)
@@ -88,5 +90,5 @@ class CheckinRemover:
             {"class_id": str(class_id)},
         )
         if row is None or str(row["gym_id"]) != str(gym_id):
-            raise ValueError(_CLASS_NOT_FOUND_MSG)
+            raise CheckinClassNotFoundError(_CLASS_NOT_FOUND_MSG)
         return row

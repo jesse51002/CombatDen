@@ -333,6 +333,18 @@ class Settings(BaseSettings):
     task_item_retry_delay_seconds: int = 10
     task_stale_running_seconds: int = 120
 
+    # CombatDen default member-app store listings — the fallback the public
+    # GET /api/v1/gyms/{gym_id}/app-links endpoint returns when a gym has NOT
+    # set its own white-label listing (gyms.app_store_url / play_store_url are
+    # NULL). These feed the per-gym app-download page in Kiosk Mode's
+    # app-adoption funnel. PLACEHOLDER values: the CombatDen member app is not
+    # published to the stores yet, so these point at generic store-search URLs
+    # until real listings exist — override via APP env vars once published.
+    combatden_app_store_url: str = "https://apps.apple.com/app/combatden"
+    combatden_play_store_url: str = (
+        "https://play.google.com/store/apps/details?id=net.combatden.app"
+    )
+
     # Presets: email allowlist for the preset import endpoint.
     # Comma-separated; controls who may call POST /api/v1/gyms/{id}/presets/import.
     # The import itself is a real production write path — this gate is a demo

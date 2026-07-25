@@ -16,6 +16,17 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 /// the visible week (plus the gym's class catalog), re-loads on prev/next week
 /// navigation, and runs the class create / edit / soft-delete mutations,
 /// reloading the board on success.
+///
+/// This board is the ONE surface that shows PAUSED classes, so BOTH its
+/// reads opt in with `includeInactive: true`: the occurrence feed
+/// (`instances`) so a paused class's cards appear on the week grid, and the
+/// catalog (`classes`) so the instructor picker and edit-a-definition path
+/// see it too. Class management is the only place a paused class can be
+/// un-paused, which is why it must stay visible here — every OTHER
+/// occurrence surface (dashboard, kiosk, member check-in dialog) uses the
+/// paused-free default, because check-in and sign-up both reject a paused
+/// class. A paused card is badged "Paused" and its tap opens the class
+/// editor, never the check-in chooser.
 class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
   /// Backend `occurrence_date` body fields are bare `YYYY-MM-DD` (gym-local).
   static final DateFormat _dateParam = DateFormat('yyyy-MM-dd');
@@ -269,6 +280,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         _gymId,
         _weekStart,
         weekEnd,
+        includeInactive: true,
       );
       final latest = state;
       if (latest is! ScheduleLoaded) return;
@@ -363,6 +375,7 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         _gymId,
         _weekStart,
         weekEnd,
+        includeInactive: true,
       );
       final latest = state;
       if (latest is! ScheduleLoaded) return;
@@ -409,10 +422,11 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
               _gymId,
               weekStart,
               weekEnd,
+              includeInactive: true,
             )
           : const <EffectiveClassInstance>[];
-      final classes =
-          knownClasses ?? await _repository.listClasses(_gymId);
+      final classes = knownClasses ??
+          await _repository.listClasses(_gymId, includeInactive: true);
       emit(ScheduleLoaded(
         weekStart: weekStart,
         instances: instances,
@@ -445,8 +459,10 @@ class ScheduleBloc extends Bloc<ScheduleEvent, ScheduleState> {
         _gymId,
         _weekStart,
         weekEnd,
+        includeInactive: true,
       );
-      final classes = await _repository.listClasses(_gymId);
+      final classes =
+          await _repository.listClasses(_gymId, includeInactive: true);
       emit(ScheduleLoaded(
         weekStart: _weekStart,
         instances: instances,

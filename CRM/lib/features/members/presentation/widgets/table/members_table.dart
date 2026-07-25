@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/features/member_details/presentation/screens/member_detail_screen.dart';
+import 'package:crm/features/members/presentation/widgets/table/cells/finish_signup_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_contact_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_last_class_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_name_cell.dart';
+import 'package:crm/features/members/presentation/widgets/table/cells/member_phone_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/member_status_cell.dart';
+import 'package:crm/features/members/presentation/widgets/table/cells/member_waiting_cell.dart';
 import 'package:crm/features/members/presentation/widgets/table/cells/simple_text_cell.dart';
+import 'package:crm/features/members/presentation/widgets/table/members_table_columns.dart';
+import 'package:crm/features/members/presentation/widgets/table/members_table_empty_state.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/shared/widgets/app_data_table.dart';
@@ -43,130 +47,43 @@ class MembersTable extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (members.isEmpty && !isLoadingMore) {
-      return _emptyState();
+      return MembersTableEmptyState(
+        activeView: activeView,
+        hasActiveFilters: hasActiveFilters,
+      );
     }
 
     return AppDataTable(
       infiniteScroll: !hasReachedEnd,
       isLoadingMore: isLoadingMore,
       onLoadMore: onLoadMore,
-      columns: _columns(),
+      columns: membersTableColumns(activeView),
       rows: members.map((row) {
         return AppDataTableRow(
-          onTap: () {
-            Navigator.of(context).push(
-              MaterialPageRoute<void>(
-                // Name the route with the member id so the URL becomes
-                // `/members/detail/<id>` and a reload restores this member.
-                settings: RouteSettings(
-                  name: AppRoutes.memberDetailPath(row.memberId),
-                ),
-                builder: (_) => MemberDetailScreen(
-                  memberId: row.memberId,
-                  gymId: gymId,
-                ),
-              ),
-            );
-          },
+          onTap: () => _openMember(context, row.memberId),
           cells: _cellsForRow(row, context),
         );
       }).toList(),
     );
   }
 
-  List<AppDataTableColumn> _columns() {
-    return switch (activeView) {
-      MembersListView.all => const [
-          AppDataTableColumn(
-            label: 'Name',
-            minWidth: 180,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Contact',
-            minWidth: 200,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Membership',
-            minWidth: 220,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Last Class',
-            minWidth: 130,
-          ),
-        ],
-      MembersListView.trial => const [
-          AppDataTableColumn(
-            label: 'Name',
-            minWidth: 180,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Days Remaining',
-            minWidth: 140,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Trial Start Date',
-            minWidth: 140,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Trial End Date',
-            minWidth: 140,
-            fill: true,
-          ),
-        ],
-      MembersListView.frozen => const [
-          AppDataTableColumn(
-            label: 'Name',
-            minWidth: 180,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Freeze Start',
-            minWidth: 140,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Freeze End',
-            minWidth: 140,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Days Until Unfrozen',
-            minWidth: 160,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Price',
-            minWidth: 120,
-          ),
-        ],
-      MembersListView.overdue => const [
-          AppDataTableColumn(
-            label: 'Name',
-            minWidth: 180,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Contact',
-            minWidth: 200,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Membership',
-            minWidth: 200,
-            fill: true,
-          ),
-          AppDataTableColumn(
-            label: 'Days Late',
-            minWidth: 120,
-          ),
-        ],
-    };
+  /// Deep-links to a member's detail page. Shared by the whole-row tap
+  /// and the Incomplete view's "Finish signup" action so both land on
+  /// the same addressable URL.
+  void _openMember(BuildContext context, String memberId) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        // Name the route with the member id so the URL becomes
+        // `/members/detail/<id>` and a reload restores this member.
+        settings: RouteSettings(
+          name: AppRoutes.memberDetailPath(memberId),
+        ),
+        builder: (_) => MemberDetailScreen(
+          memberId: memberId,
+          gymId: gymId,
+        ),
+      ),
+    );
   }
 
   List<Widget> _cellsForRow(
@@ -223,55 +140,15 @@ class MembersTable extends StatelessWidget {
             color: DesignConstants.badRed,
           ),
         ],
-    };
-  }
-
-  Widget _emptyState() {
-    // With a filter active, zero rows means "nothing matched" — point
-    // at the filters. Otherwise it's a genuinely empty view.
-    final headline = hasActiveFilters
-        ? 'No members match your filters'
-        : switch (activeView) {
-            MembersListView.all => 'No members yet',
-            MembersListView.trial => 'No trial members',
-            MembersListView.frozen => 'No frozen members',
-            MembersListView.overdue => 'No overdue members',
-          };
-
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          Icon(
-            Symbols.people_sharp,
-            size: DesignConstants.iconSizeBig,
-            color: DesignConstants.text3rd,
-            weight: DesignConstants.iconWeight,
-          ),
-          Column(
-            mainAxisSize: MainAxisSize.min,
-            spacing: DesignConstants.spacingSmall,
-            children: [
-              Text(
-                headline,
-                textAlign: TextAlign.center,
-                style: DesignConstants.h2.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
-              ),
-              if (hasActiveFilters)
-                Text(
-                  'Try removing filters to see more.',
-                  textAlign: TextAlign.center,
-                  style: DesignConstants.p.copyWith(
-                    color: DesignConstants.text3rd,
-                  ),
-                ),
-            ],
+      IncompleteViewRow r => [
+          MemberNameCell(name: r.name, avatarUrl: r.avatarUrl),
+          MemberContactCell(email: r.email),
+          MemberPhoneCell(phone: r.phone),
+          MemberWaitingCell(daysWaiting: r.daysWaiting),
+          FinishSignupCell(
+            onPressed: () => _openMember(context, r.memberId),
           ),
         ],
-      ),
-    );
+    };
   }
 }

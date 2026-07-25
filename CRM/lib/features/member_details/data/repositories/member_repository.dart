@@ -16,6 +16,7 @@ import 'package:crm/features/member_details/data/models/member_memberships_unfre
 import 'package:crm/features/member_details/data/models/member_memberships_add_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_remove_discounts_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_update_price_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_upgrade_request.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
@@ -406,13 +407,22 @@ class MemberRepository {
   ///
   /// Throws [WaiverGateException] on 422 when required waiver signatures are
   /// missing — the wizard routes to its sign-waivers step in that case.
+  ///
+  /// [receiveTimeout] overrides the shared 30s response wait for this ONE
+  /// request. The call creates a subscription, converges it and takes the
+  /// money server-side, so a Connect charge legitimately runs 10–60s and the
+  /// default would false-fail a charge that actually went through. Only the
+  /// kiosk signup passes it (a staff member watching the CRM wizard can retry;
+  /// an unattended iPad cannot).
   Future<MemberMembershipsStartResponse> startMemberships(
-    MemberMembershipsStartRequest req,
-  ) async {
+    MemberMembershipsStartRequest req, {
+    Duration? receiveTimeout,
+  }) async {
     try {
       final response = await _apiClient.post(
         '/api/v1/member_memberships/',
         data: req.toJson(),
+        receiveTimeout: receiveTimeout,
       );
       return MemberMembershipsStartResponse.fromJson(
         response.data as Map<String, dynamic>,
@@ -731,16 +741,35 @@ class MemberRepository {
   /// `POST /api/v1/member_memberships/retry-card` — re-charge the payer's
   /// SAVED DEFAULT card against the membership's open Stripe invoice. The
   /// cash-free sibling of [markMembershipPaidCash]: same body, no card
-  /// input. A declined card comes back as a 500 whose `detail` carries the
-  /// decline reason, so it rides [ServerException] to the dialog's terminal
-  /// error step rather than being swallowed.
-  Future<void> retryMembershipCard(
+  /// input.
+  ///
+  /// The bank's answer is the RETURN VALUE, not an exception: a collected
+  /// charge is `status: paid` (HTTP 200) and a decline is `status: declined`
+  /// (HTTP 207) carrying Stripe's reason — both 2xx, so both land here.
+  /// Callers MUST branch on [MemberMembershipsRetryCardResponse.isPaid];
+  /// treating a 2xx as success would render a decline as a collected
+  /// payment. Only a real failure throws: a 409 in-task conflict as
+  /// [MembershipInTaskException], anything else as [ServerException] /
+  /// [NetworkException] — including a 2xx whose body is not the documented
+  /// outcome shape (fail closed rather than imply money moved).
+  Future<MemberMembershipsRetryCardResponse> retryMembershipCard(
     MemberMembershipsRetryCardRequest req,
   ) async {
     try {
-      await _apiClient.post(
+      final response = await _apiClient.post(
         '/api/v1/member_memberships/retry-card',
         data: req.toJson(),
+      );
+      final body = response.data;
+      if (body is! Map) {
+        throw ServerException(
+          'Retry payment returned an unreadable response; check the '
+          'payment history before trying again.',
+          statusCode: response.statusCode,
+        );
+      }
+      return MemberMembershipsRetryCardResponse.fromJson(
+        body.cast<String, dynamic>(),
       );
     } on ServerException catch (e) {
       if (e.statusCode == 409) {
@@ -897,6 +926,14 @@ class MemberRepository {
   /// card is billed (attached, charged once, detached)
   /// instead of the payer's saved default. [idempotencyKey]
   /// dedupes retries.
+  ///
+  /// Only a 204 means the money was collected. A DEFINITIVE
+  /// non-collection is the backend's 207 result (nobody
+  /// refused; the payment needs authorization the member must
+  /// complete) — still a 2xx, so `dio` never throws and a bare
+  /// `await` would render a green success over money that never
+  /// moved. Anything but 204 therefore throws with the
+  /// backend's staff-facing reason as `detail`.
   Future<void> chargeCard({
     required String memberId,
     required String paidByMemberId,
@@ -907,7 +944,7 @@ class MemberRepository {
     bool paidCash = false,
     String? paymentMethodId,
   }) async {
-    await _apiClient.post(
+    final response = await _apiClient.post(
       '/api/v1/member_memberships/charge-card',
       data: {
         'member_id': memberId,
@@ -920,6 +957,17 @@ class MemberRepository {
         'idempotency_key': idempotencyKey,
       },
     );
+    // Fail closed: never infer "charged" from the 2xx class.
+    if (response.statusCode != 204) {
+      final body = response.data;
+      throw ServerException(
+        'The charge was not collected.',
+        statusCode: response.statusCode,
+        detail: body is Map && body['decline_reason'] is String
+            ? body['decline_reason'] as String
+            : null,
+      );
+    }
   }
 
   /// Issues a refund for a prior charge — full or partial.

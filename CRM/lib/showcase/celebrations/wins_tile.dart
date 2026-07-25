@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/showcase/celebrations/showcase_celebration_stats.dart';
 import 'package:crm/showcase/showcase_tokens.dart';
-import 'package:crm/showcase/support/count_up_text.dart';
-import 'package:crm/showcase/support/staggered_reveal.dart';
+import 'package:crm/shared/widgets/animation/count_up_text.dart';
+import 'package:crm/shared/widgets/animation/staggered_reveal.dart';
 
 /// Clone of MobileApp's `WinsTile`: bordered info-tile shown in the Wins grid
 /// — icon + value + caption. If [tile.value] parses as a clean integer

@@ -23,6 +23,10 @@ def generate(
     also returned in the second element, so the bootstrap can write the
     debits back to the already-inserted member rows.
 
+    The balance debited from is what the member EARNED attending classes
+    (``award_attendance_points``, run first), so a member ends on exactly
+    (earned - spent) and the affordability gate keeps that non-negative.
+
     pending_ratio: fraction of generated rows to mint as 'pending' (awaiting
     admin approval). Default 0.0 preserves existing seed semantics — all rows
     are 'approved'. Pass e.g. 0.3 to populate the CRM approval queue for

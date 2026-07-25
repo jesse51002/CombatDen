@@ -6,6 +6,12 @@ import 'package:theme_flutter/theme/animation/celebration_timings.dart';
 /// Clone of MobileApp's `CountUpText`: an odometer/slot-counter that rolls
 /// 0 → [target] with a steep ease-out-expo curve. One vertical reel per
 /// digit, translated and clipped to a one-digit window.
+///
+/// Shared across the app: the member-app theme preview (`lib/showcase/`) and
+/// the kiosk's post-check-in glance both reuse this one implementation rather
+/// than re-deriving a curve. The default [duration] is the member app's own
+/// celebration timing; a caller on a clock (the kiosk queue) passes a
+/// tighter one.
 class CountUpText extends StatefulWidget {
   const CountUpText({
     super.key,

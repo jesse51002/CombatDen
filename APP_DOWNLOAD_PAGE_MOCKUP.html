@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Iron Den — Get the App · Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================
+   CombatDen — Per-gym APP-DOWNLOAD marketing page · mockup
+   Member-facing. A member scans the kiosk QR (or the check-in QR
+   with a plain camera) and lands here to download the app.
+
+   Tokens = the LandingPage design system (LandingPage/DESIGN.md +
+   hifi/ds.jsx): cool off-white ground, one sapphire accent + its
+   gradient, Geist + Geist Mono, soft layered shadows, lifted white
+   cards. Product surfaces (reward card, class row, video card, belt
+   strip) are composed from the approved kiosk welcome (round1.html).
+
+   PER-GYM: the live URL carries a gym_id (e.g. combatden.app/iron-den).
+   Everything gym-branded here — the "Iron Den" wordmark, the monogram,
+   the copy — is driven by that id. Placeholder gym = "Iron Den".
+
+   PLATFORM-AWARE: the live page detects iOS vs Android and leads with
+   that store button. The three device frames below hard-set the platform
+   so the treatment is visible regardless of what you open this on.
+
+   Store buttons are PLACEHOLDERS: the app is not published yet. They are
+   honest ("Coming soon"), non-clickable, on-brand.
+   ============================================================ */
+
+:root{
+  --ground:#F3F5F8;
+  --ground-alt:#EEF1F6;
+  --surface:#FFFFFF;
+  --surface-grad:linear-gradient(180deg,#FFFFFF 0%,#F5F7FB 100%);
+  --ink:#16181D;
+  --ink-2:#565B66;
+  --ink-3:#878D99;
+
+  --sapphire:#2A67BD;
+  --accent-dark:#1F5099;
+  --accent-soft:#E8F0FB;
+  --grad:linear-gradient(180deg,#2A67BD 0%,#1F5099 100%);
+  --accent-glow:rgba(42,103,189,0.18);
+
+  --good:#1D7D3E;
+
+  --line:rgba(20,22,30,0.09);
+  --line-soft:rgba(20,22,30,0.06);
+
+  /* landing soft, layered elevation */
+  --card-shadow:0 1px 2px rgba(20,22,40,0.04), 0 22px 50px -30px rgba(20,22,50,0.20), inset 0 1px 0 rgba(255,255,255,0.9);
+  --card-shadow-hi:0 2px 4px rgba(20,22,40,0.06), 0 30px 60px -28px rgba(20,22,50,0.28), inset 0 1px 0 rgba(255,255,255,0.9);
+  --button-shadow:0 1px 2px rgba(15,45,95,0.32), 0 10px 24px -8px rgba(30,80,160,0.5), inset 0 1px 0 rgba(255,255,255,0.28);
+  --control-shadow:0 1px 2px rgba(20,22,40,0.05);
+
+  --r-sm:8px; --r-md:12px; --r-btn:12px; --r-tile:16px; --r-card:22px; --r-panel:26px;
+  --sans:'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+  --mono:'Geist Mono',ui-monospace,'SF Mono',Menlo,monospace;
+}
+
+*{ box-sizing:border-box; margin:0; padding:0; }
+html,body{ height:100%; }
+body{
+  font-family:var(--sans);
+  background:#0f1013;                 /* dark stage behind the device frames = obviously review chrome */
+  color:var(--ink);
+  font-variant-numeric:tabular-nums;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* ============================================================
+   REVIEW CHROME  (dark, labelled — clearly not the page itself)
+   ============================================================ */
+.review-bar{
+  position:sticky; top:0; z-index:100;
+  height:52px; display:flex; align-items:center; gap:20px;
+  padding:0 20px;
+  background:#14161B; border-bottom:1px solid rgba(233,236,242,0.10);
+  color:#A6ACB8;
+}
+.review-brand{ display:flex; align-items:center; gap:9px; font-size:12px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:#828B98; white-space:nowrap; }
+.review-brand .dot{ width:7px; height:7px; border-radius:999px; background:#3E7CD6; box-shadow:0 0 0 4px rgba(62,124,214,0.15); }
+.review-tabs{ display:flex; gap:4px; }
+.review-tab{ appearance:none; border:0; cursor:pointer; font-family:var(--sans); font-size:12.5px; font-weight:500; letter-spacing:-0.01em; color:#A6ACB8; background:transparent; padding:7px 13px; border-radius:8px; transition:color .16s ease, background .16s ease; }
+.review-tab:hover{ color:#E9ECF2; background:rgba(233,236,242,0.06); }
+.review-tab.active{ color:#0f1115; background:#E9ECF2; font-weight:600; }
+.review-meta{ margin-left:auto; font-size:11.5px; letter-spacing:0.04em; color:#5a616e; white-space:nowrap; }
+@media (max-width:720px){ .review-meta{ display:none; } }
+
+.stage-wrap{ padding:40px 20px 72px; display:flex; justify-content:center; }
+.view{ display:none; }
+.view.active{ display:block; }
+
+/* ============================================================
+   DEVICE FRAMES
+   ============================================================ */
+/* -- phones -- */
+.phone{
+  position:relative; width:var(--pw); margin:0 auto;
+  border-radius:var(--pr);
+  background:linear-gradient(150deg,#3a3d45 0%,#191b1f 46%,#2a2d33 100%);
+  padding:13px;
+  box-shadow:0 2px 6px rgba(0,0,0,0.5), 0 40px 90px -30px rgba(0,0,0,0.8), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.phone-iphone{ --pw:404px; --pr:52px; }
+.phone-android{ --pw:404px; --pr:38px; }
+.device-screen{
+  position:relative;
+  border-radius:calc(var(--pr) - 12px);
+  background:var(--ground);
+  overflow:hidden;                     /* clip page corners to the screen */
+  height:812px;
+  container-type:inline-size; container-name:page;
+}
+.device-screen .scroll{ position:absolute; inset:0; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+/* phones only: a soft top scrim so scrolled page content fades under the OS
+   status bar / notch instead of colliding sharply with it (the browser frame
+   has no status bar, so it is excluded) */
+.phone .device-screen::after{ content:""; position:absolute; top:0; left:0; right:0; height:52px; z-index:25; pointer-events:none; background:linear-gradient(180deg, var(--ground) 34%, rgba(243,245,248,0) 100%); }
+
+/* iPhone dynamic island */
+.island{ position:absolute; top:11px; left:50%; transform:translateX(-50%); width:112px; height:31px; border-radius:999px; background:#050506; z-index:40; }
+/* Android hole-punch */
+.hole{ position:absolute; top:14px; left:50%; transform:translateX(-50%); width:11px; height:11px; border-radius:999px; background:#050506; z-index:40; box-shadow:inset 0 0 0 1.5px rgba(255,255,255,0.08); }
+
+/* OS status bar (part of the frame, does not scroll) */
+.statusbar{ position:absolute; top:0; left:0; right:0; height:46px; z-index:30; display:flex; align-items:center; justify-content:space-between; padding:0 26px; font-size:13px; font-weight:600; color:var(--ink); pointer-events:none; }
+.statusbar.android{ padding:0 18px 0 22px; font-weight:500; font-size:12.5px; }
+.sb-time{ letter-spacing:0.01em; }
+.sb-right{ display:flex; align-items:center; gap:6px; }
+.sb-right svg{ width:16px; height:15px; color:var(--ink); }
+.statusbar.android .sb-right svg{ width:14px; height:13px; }
+
+/* -- desktop browser -- */
+.browser{ width:min(1120px,calc(100vw - 44px)); margin:0 auto; border-radius:16px; overflow:hidden; background:var(--surface); box-shadow:0 2px 6px rgba(0,0,0,0.4), 0 40px 90px -30px rgba(0,0,0,0.7); border:1px solid rgba(255,255,255,0.06); }
+.browser-bar{ height:46px; display:flex; align-items:center; gap:14px; padding:0 16px; background:#e9ecf1; border-bottom:1px solid rgba(20,22,30,0.10); }
+.tl{ display:flex; gap:8px; }
+.tl span{ width:12px; height:12px; border-radius:999px; }
+.tl .r{ background:#ff5f57; } .tl .y{ background:#febc2e; } .tl .g{ background:#28c840; }
+.url{ flex:1; display:flex; align-items:center; gap:9px; height:28px; padding:0 14px; background:#fff; border-radius:8px; border:1px solid rgba(20,22,30,0.10); font-family:var(--mono); font-size:12.5px; color:var(--ink-2); max-width:520px; }
+.url svg{ width:13px; height:13px; color:var(--ink-3); }
+.url b{ color:var(--ink); font-weight:600; }
+.browser .device-screen{ height:720px; border-radius:0; }
+
+/* ============================================================
+   THE PAGE  (identical markup in every frame; container queries
+   + [data-platform] on .device-screen drive layout + button emphasis)
+   ============================================================ */
+.page{ min-height:100%; display:flex; flex-direction:column; background:
+   radial-gradient(120% 80% at 50% -8%, var(--accent-soft) 0%, rgba(232,240,251,0) 46%),
+   var(--ground); }
+
+/* faint dot-grid atmosphere, masked (landing GWDotGrid) */
+.page::before{ content:""; position:absolute; inset:0; pointer-events:none; z-index:0;
+  background-image:radial-gradient(rgba(20,22,40,0.045) 1px, transparent 1px); background-size:22px 22px;
+  -webkit-mask-image:radial-gradient(120% 70% at 50% 0%, #000 38%, transparent 82%);
+  mask-image:radial-gradient(120% 70% at 50% 0%, #000 38%, transparent 82%); }
+.page > *{ position:relative; z-index:1; }
+
+/* -- per-gym site header -- */
+.site-head{ display:flex; align-items:center; justify-content:space-between; padding:52px 22px 14px; }
+.device-screen .scroll .site-head{ padding-top:56px; }   /* clear the OS status bar on phones */
+.browser .site-head{ padding:20px 40px 14px; }
+.gym-id{ display:flex; align-items:center; gap:11px; }
+.monogram{ width:40px; height:40px; border-radius:11px; background:var(--grad); box-shadow:var(--button-shadow); display:grid; place-items:center; color:#fff; font-weight:700; font-size:16px; letter-spacing:0.01em; flex:0 0 auto; }
+.monogram svg{ width:22px; height:22px; }
+.gym-word{ font-size:16px; font-weight:600; letter-spacing:0.02em; color:var(--ink); line-height:1.1; }
+.gym-word .sub{ display:block; font-family:var(--mono); font-size:9.5px; font-weight:500; letter-spacing:0.16em; color:var(--ink-3); margin-top:3px; text-transform:uppercase; }
+.powered{ display:inline-flex; align-items:center; gap:7px; font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:0.1em; text-transform:uppercase; color:var(--ink-3); }
+.powered .cd{ width:18px; height:18px; border-radius:6px; background:var(--grad); display:grid; place-items:center; color:#fff; }
+.powered .cd svg{ width:11px; height:11px; }
+
+/* ---- HERO ---- */
+.hero{ padding:26px 22px 40px; }
+.browser .hero{ padding:44px 40px 68px; }
+.eyebrow{ font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:0.16em; text-transform:uppercase; color:var(--sapphire); }
+.hero h1{ margin-top:16px; font-size:clamp(34px,10cqw,52px); font-weight:600; letter-spacing:-0.03em; line-height:1.02; color:var(--ink); text-wrap:balance; }
+.hero .lede{ margin-top:16px; font-size:clamp(16px,4.4cqw,19px); font-weight:450; line-height:1.5; color:var(--ink-2); max-width:34ch; text-wrap:pretty; }
+
+/* the four value props as a check-row (composed from the kiosk .app-benefits) */
+.checks{ list-style:none; margin-top:22px; display:flex; flex-wrap:wrap; gap:9px 20px; }
+.checks li{ display:inline-flex; align-items:center; gap:8px; font-size:15px; font-weight:500; color:var(--ink); }
+.checks .ck{ width:19px; height:19px; border-radius:999px; background:var(--accent-soft); display:grid; place-items:center; color:var(--sapphire); flex:0 0 auto; }
+.checks .ck svg{ width:12px; height:12px; }
+
+/* CTA cluster */
+.cta{ margin-top:28px; }
+.reco{ display:none; font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:0.12em; text-transform:uppercase; color:var(--ink-3); margin-bottom:11px; }
+.reco .live{ display:inline-flex; align-items:center; gap:6px; }
+.reco .live::before{ content:""; width:6px; height:6px; border-radius:999px; background:var(--sapphire); box-shadow:0 0 0 3px rgba(42,103,189,0.18); }
+
+.store-badges{ display:flex; flex-direction:column; gap:12px; align-items:flex-start; }
+
+/* a store badge (placeholder — app unpublished) */
+.badge{ position:relative; display:inline-flex; align-items:center; gap:12px; height:58px; padding:0 20px 0 18px; border-radius:14px; cursor:default; user-select:none; min-width:212px; text-align:left; transition:transform .16s cubic-bezier(.2,.7,.3,1), box-shadow .2s ease; }
+.badge .glyph{ width:26px; height:26px; flex:0 0 auto; display:grid; place-items:center; }
+.badge .glyph svg{ width:100%; height:100%; }
+.badge .lines{ display:flex; flex-direction:column; line-height:1.05; }
+.badge .lines .top{ font-size:10.5px; font-weight:500; letter-spacing:0.02em; opacity:0.8; }
+.badge .lines .name{ font-size:19px; font-weight:600; letter-spacing:-0.01em; margin-top:2px; }
+/* "coming soon" honesty flag pinned to the badge */
+.badge .soon{ position:absolute; top:-9px; right:-8px; font-family:var(--mono); font-size:8.5px; font-weight:600; letter-spacing:0.08em; text-transform:uppercase; color:#fff; background:var(--sapphire); border-radius:999px; padding:3px 8px; box-shadow:0 4px 12px -4px rgba(42,103,189,0.6); }
+
+/* PRIMARY badge = near-black official-style store badge */
+.badge.primary{ background:#101216; color:#fff; box-shadow:0 1px 2px rgba(10,12,20,0.4), 0 14px 30px -12px rgba(10,12,20,0.55); }
+.badge.primary:hover{ transform:translateY(-2px); box-shadow:0 2px 4px rgba(10,12,20,0.4), 0 20px 40px -14px rgba(10,12,20,0.6); }
+.badge.primary .glyph{ color:#fff; }
+/* SECONDARY badge = quiet ghost so platform hierarchy is unmistakable */
+.badge.secondary{ background:var(--surface); color:var(--ink); border:1px solid var(--line); box-shadow:var(--control-shadow); }
+.badge.secondary:hover{ transform:translateY(-2px); box-shadow:var(--card-shadow); }
+.badge.secondary .glyph{ color:var(--ink); }
+.badge.secondary .soon{ background:var(--ground-alt); color:var(--ink-3); box-shadow:none; }
+
+.cta-note{ margin-top:16px; font-size:13.5px; font-weight:450; line-height:1.5; color:var(--ink-3); max-width:40ch; }
+.cta-note b{ color:var(--ink-2); font-weight:600; }
+
+/* platform emphasis: default (desktop/equal) = both PRIMARY, side by side.
+   ios / android = the matching badge PRIMARY + first, the other SECONDARY. */
+.badge-ios .glyph, .badge-android .glyph{ /* glyphs use currentColor */ }
+[data-platform="ios"] .badge-android{ order:2; }
+[data-platform="ios"] .badge-ios{ order:1; }
+[data-platform="android"] .badge-ios{ order:2; }
+[data-platform="android"] .badge-android{ order:1; }
+/* turn the non-recommended badge into the ghost variant */
+[data-platform="ios"] .badge-android{ background:var(--surface); color:var(--ink); border:1px solid var(--line); box-shadow:var(--control-shadow); }
+[data-platform="ios"] .badge-android .glyph{ color:var(--ink); }
+[data-platform="ios"] .badge-android .soon{ background:var(--ground-alt); color:var(--ink-3); box-shadow:none; }
+[data-platform="android"] .badge-ios{ background:var(--surface); color:var(--ink); border:1px solid var(--line); box-shadow:var(--control-shadow); }
+[data-platform="android"] .badge-ios .glyph{ color:var(--ink); }
+[data-platform="android"] .badge-ios .soon{ background:var(--ground-alt); color:var(--ink-3); box-shadow:none; }
+/* which reco line shows */
+[data-platform="ios"] .reco-ios{ display:block; }
+[data-platform="android"] .reco-android{ display:block; }
+[data-platform="desktop"] .reco-desktop{ display:block; }
+
+/* hero phone-proof (desktop only; a phone-in-phone on the phone views is redundant) */
+.hero-proof{ display:none; }
+
+/* ---- VALUE PROP SECTIONS ---- */
+.prop{ padding:34px 22px; }
+.browser .prop{ padding:56px 40px; }
+.prop + .prop{ border-top:1px solid var(--line-soft); }
+.prop-eyebrow{ display:flex; align-items:center; gap:10px; font-family:var(--mono); font-size:11px; font-weight:600; letter-spacing:0.14em; text-transform:uppercase; color:var(--ink-3); }
+.prop-eyebrow .idx{ color:var(--sapphire); }
+.prop h2{ margin-top:13px; font-size:clamp(24px,6.4cqw,30px); font-weight:600; letter-spacing:-0.025em; line-height:1.08; color:var(--ink); text-wrap:balance; }
+.prop p{ margin-top:11px; font-size:clamp(15px,4cqw,17px); font-weight:450; line-height:1.5; color:var(--ink-2); max-width:42ch; text-wrap:pretty; }
+.prop-visual{ margin-top:24px; }
+
+/* == composed product surfaces (from the approved kiosk welcome) == */
+
+/* class rows (kiosk .bc-row) — Book */
+.bc-list{ display:flex; flex-direction:column; gap:12px; }
+.bc-row{ display:flex; align-items:center; gap:13px; background:var(--surface-grad); border:1px solid var(--line); border-radius:var(--r-tile); box-shadow:var(--card-shadow); padding:11px 13px; }
+.bc-thumb{ position:relative; width:104px; aspect-ratio:16/10; border-radius:10px; overflow:hidden; flex:0 0 auto; background:radial-gradient(120% 130% at 30% 0%,#3a4a7a,#171a2b); }
+.bc-thumb img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.bc-meta{ display:flex; flex-direction:column; gap:3px; min-width:0; flex:1 1 auto; }
+.bc-name{ font-size:16px; font-weight:600; letter-spacing:-0.01em; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.bc-when{ font-size:13.5px; font-weight:500; color:var(--ink-2); }
+.bc-when b{ color:var(--good); font-weight:600; }
+.bc-book{ flex:0 0 auto; font-size:13px; font-weight:600; letter-spacing:-0.01em; color:#fff; background:var(--grad); border-radius:999px; padding:9px 18px; box-shadow:0 4px 12px -4px rgba(42,103,189,0.5); }
+
+/* reward cards (kiosk .reward) — Earn */
+.reward-grid{ display:grid; grid-template-columns:repeat(2,1fr); gap:12px 14px; max-width:360px; }
+.reward{ display:flex; flex-direction:column; background:var(--surface-grad); border:1px solid var(--line); border-radius:var(--r-card); box-shadow:var(--card-shadow); overflow:hidden; }
+.reward-photo{ position:relative; display:block; width:100%; aspect-ratio:3/2; overflow:hidden; background:#20242e; }
+.reward-photo img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.price-pill{ position:absolute; top:8px; right:8px; z-index:2; font-size:11.5px; font-weight:700; letter-spacing:-0.01em; line-height:1; color:#fff; background:var(--sapphire); border-radius:var(--r-sm); padding:5px 9px; box-shadow:0 3px 10px -3px rgba(42,103,189,0.55); }
+.reward-body{ padding:10px 11px 12px; display:flex; flex-direction:column; gap:6px; }
+.reward-name{ text-align:center; color:var(--ink); font-size:14.5px; font-weight:600; letter-spacing:-0.01em; line-height:1.2; }
+.reward-pts{ text-align:center; font-size:14px; font-weight:700; letter-spacing:-0.01em; color:var(--sapphire); }
+
+/* video cards (kiosk .vcard) — Watch */
+.vc-grid{ display:grid; grid-template-columns:1fr 1fr; gap:14px; max-width:440px; }
+.vcard{ display:flex; flex-direction:column; background:var(--surface-grad); border:1px solid var(--line); border-radius:var(--r-tile); box-shadow:var(--card-shadow); overflow:hidden; }
+.vcard-thumb{ position:relative; aspect-ratio:16/9; background:#20242e; }
+.vcard-thumb img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.vcard-thumb::after{ content:""; position:absolute; inset:0; background:linear-gradient(180deg,rgba(10,12,20,0) 55%,rgba(10,12,20,0.22) 100%); }
+.play{ position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); z-index:2; width:32px; height:32px; border-radius:999px; background:rgba(255,255,255,0.94); display:grid; place-items:center; box-shadow:0 5px 14px -4px rgba(15,20,35,0.55); }
+.play svg{ width:13px; height:13px; margin-left:2px; color:var(--sapphire); }
+.vcard-info{ display:flex; align-items:center; gap:9px; padding:10px 11px 12px; }
+.vcard-avatar{ width:28px; height:28px; border-radius:999px; flex:0 0 auto; display:grid; place-items:center; background:var(--ground-alt); border:1px solid var(--line); color:var(--ink-2); font-size:12px; font-weight:700; }
+.vcard-meta{ min-width:0; display:flex; flex-direction:column; gap:2px; }
+.vcard-title{ font-size:13.5px; font-weight:600; letter-spacing:-0.01em; color:var(--ink); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vcard-views{ font-size:12px; font-weight:500; color:var(--ink-3); }
+
+/* belt strip (kiosk .belt-strip) — Track rank */
+.belt-panel{ background:var(--surface-grad); border:1px solid var(--line); border-radius:var(--r-card); box-shadow:var(--card-shadow); padding:24px 22px 22px; max-width:460px; }
+.belt-strip{ display:flex; align-items:flex-end; justify-content:space-between; gap:8px; }
+.belt{ display:flex; flex-direction:column; align-items:center; gap:7px; position:relative; }
+.belt-img{ width:54px; height:36px; display:grid; place-items:center; opacity:0.42; filter:grayscale(0.25); }
+.belt-img img{ max-width:100%; max-height:100%; object-fit:contain; }
+.belt-tag{ font-size:11px; font-weight:600; letter-spacing:0.02em; color:var(--ink-3); text-transform:capitalize; }
+.belt.current .belt-img{ width:76px; height:52px; opacity:1; filter:none; }
+.belt.current .belt-tag{ color:var(--sapphire); font-weight:700; }
+.belt-here{ font-size:10px; font-weight:700; color:#fff; background:var(--sapphire); border-radius:999px; padding:3px 9px; box-shadow:0 3px 10px -3px rgba(42,103,189,0.55); }
+.rank-prog{ margin-top:22px; display:flex; flex-direction:column; gap:9px; }
+.rank-bar{ width:100%; height:8px; border-radius:999px; background:var(--ground-alt); overflow:hidden; }
+.rank-bar > span{ display:block; height:100%; border-radius:999px; background:var(--grad); }
+.rank-prog-label{ font-size:14px; font-weight:600; letter-spacing:-0.01em; color:var(--ink-2); }
+.rank-prog-label b{ color:var(--sapphire); font-weight:700; }
+
+/* ---- CLOSING CTA ---- */
+.closing{ margin-top:8px; padding:44px 22px 40px; border-top:1px solid var(--line-soft); text-align:center; display:flex; flex-direction:column; align-items:center; }
+.browser .closing{ padding:72px 40px; }
+.closing h2{ font-size:clamp(26px,7cqw,36px); font-weight:600; letter-spacing:-0.03em; line-height:1.05; color:var(--ink); text-wrap:balance; }
+.closing .sub{ margin-top:12px; font-size:16px; font-weight:450; color:var(--ink-2); max-width:38ch; }
+.closing .store-badges{ margin-top:26px; align-items:center; }
+.closing .reco{ text-align:center; }
+.closing .cta-note{ margin-left:auto; margin-right:auto; text-align:center; }
+.qr-note{ margin-top:24px; display:inline-flex; align-items:center; gap:12px; padding:12px 16px; background:var(--surface); border:1px solid var(--line); border-radius:var(--r-btn); box-shadow:var(--control-shadow); }
+.qr-mini{ width:44px; height:44px; border-radius:9px; background:#fff; border:1px solid var(--line); padding:5px; flex:0 0 auto; }
+.qr-mini svg{ width:100%; height:100%; display:block; }
+.qr-note .t{ text-align:left; font-size:13px; font-weight:500; color:var(--ink-2); line-height:1.4; max-width:26ch; }
+
+/* ---- FOOTER ---- */
+.site-foot{ margin-top:auto; padding:26px 22px 30px; border-top:1px solid var(--line-soft); display:flex; flex-direction:column; gap:8px; }
+.browser .site-foot{ padding:26px 40px 32px; flex-direction:row; align-items:center; justify-content:space-between; }
+.foot-brand{ display:inline-flex; align-items:center; gap:9px; font-size:13px; font-weight:500; color:var(--ink-2); }
+.foot-brand .cd{ width:22px; height:22px; border-radius:7px; background:var(--grad); display:grid; place-items:center; color:#fff; flex:0 0 auto; }
+.foot-brand .cd svg{ width:13px; height:13px; }
+.foot-note{ font-family:var(--mono); font-size:10.5px; font-weight:500; letter-spacing:0.04em; color:var(--ink-3); }
+
+/* ============================================================
+   DESKTOP LAYOUT  (container query — fires inside the wide browser
+   frame's .device-screen, ~1080px, NOT the ~390px phone screens)
+   ============================================================ */
+@container page (min-width:720px){
+  .hero{ display:grid; grid-template-columns:1.05fr 0.95fr; gap:44px; align-items:center; }
+  .hero .lede{ max-width:40ch; }
+  .hero-proof{ display:block; justify-self:end; }
+
+  .prop{ display:grid; grid-template-columns:1fr 1fr; gap:48px; align-items:center; }
+  .prop-visual{ margin-top:0; }
+  .prop-text{ max-width:46ch; }
+  /* alternate image side for asymmetric rhythm (avoid the generic centered stack) */
+  .prop-earn .prop-text, .prop-rank .prop-text{ order:2; }
+  .prop-earn .prop-visual, .prop-rank .prop-visual{ order:1; }
+  .prop .reward-grid, .prop .vc-grid, .prop .bc-list, .prop .belt-panel{ margin-left:auto; margin-right:auto; }
+  .prop-earn .prop-visual > *, .prop-rank .prop-visual > *{ margin-right:0; }
+
+  .store-badges{ flex-direction:row; align-items:stretch; }
+  .closing .store-badges{ justify-content:center; }
+}
+
+/* hero-proof phone (desktop) — a composed, real-feeling app home */
+.proofphone{ width:264px; border-radius:40px; background:linear-gradient(150deg,#3a3d45,#191b1f 46%,#2a2d33); padding:9px; box-shadow:0 2px 6px rgba(0,0,0,0.35), 0 40px 70px -30px rgba(20,22,50,0.55); }
+.proofphone .pscreen{ position:relative; border-radius:32px; overflow:hidden; background:var(--ground); height:520px; }
+.proof-island{ position:absolute; top:9px; left:50%; transform:translateX(-50%); width:80px; height:22px; border-radius:999px; background:#050506; z-index:5; }
+.proof-scroll{ position:absolute; inset:0; padding:40px 15px 16px; display:flex; flex-direction:column; gap:12px; }
+.proof-greet{ display:flex; align-items:center; justify-content:space-between; }
+.proof-hi{ font-size:15px; font-weight:600; letter-spacing:-0.01em; color:var(--ink); }
+.proof-hi span{ display:block; font-family:var(--mono); font-size:8.5px; font-weight:500; letter-spacing:0.12em; color:var(--ink-3); text-transform:uppercase; margin-top:3px; }
+.proof-pts{ display:flex; flex-direction:column; align-items:flex-end; }
+.proof-pts .n{ font-size:18px; font-weight:700; letter-spacing:-0.02em; color:var(--sapphire); line-height:1; }
+.proof-pts .u{ font-family:var(--mono); font-size:8px; font-weight:600; letter-spacing:0.1em; color:var(--ink-3); text-transform:uppercase; margin-top:3px; }
+.proof-card{ background:var(--surface); border:1px solid var(--line); border-radius:14px; box-shadow:var(--card-shadow); overflow:hidden; }
+.proof-hero{ position:relative; aspect-ratio:16/9; background:radial-gradient(120% 130% at 22% 0%,#3a4a7a,#171a2b); }
+.proof-hero img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.proof-hero .play{ width:30px; height:30px; }
+.proof-cbody{ padding:9px 11px 11px; }
+.proof-ctitle{ font-size:12.5px; font-weight:600; color:var(--ink); letter-spacing:-0.01em; }
+.proof-csub{ font-size:10.5px; font-weight:500; color:var(--ink-3); margin-top:2px; }
+.proof-row{ display:flex; align-items:center; gap:9px; background:var(--surface); border:1px solid var(--line); border-radius:12px; box-shadow:var(--card-shadow); padding:8px 10px; }
+.proof-rthumb{ width:52px; height:34px; border-radius:8px; overflow:hidden; flex:0 0 auto; position:relative; background:radial-gradient(120% 130% at 30% 0%,#2f5d5a,#141f1d); }
+.proof-rthumb img{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+.proof-rmeta{ flex:1 1 auto; min-width:0; }
+.proof-rname{ font-size:12px; font-weight:600; color:var(--ink); letter-spacing:-0.01em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.proof-rwhen{ font-size:10.5px; font-weight:500; color:var(--ink-2); }
+.proof-rwhen b{ color:var(--good); }
+.proof-book{ font-size:10.5px; font-weight:600; color:#fff; background:var(--grad); border-radius:999px; padding:6px 12px; box-shadow:0 3px 10px -3px rgba(42,103,189,0.5); flex:0 0 auto; }
+.proof-tab{ position:absolute; left:0; right:0; bottom:0; height:52px; background:rgba(255,255,255,0.86); backdrop-filter:blur(12px) saturate(150%); -webkit-backdrop-filter:blur(12px) saturate(150%); border-top:1px solid var(--line); display:flex; align-items:center; justify-content:space-around; padding:0 12px 8px; }
+.proof-tab .ti{ display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--ink-3); }
+.proof-tab .ti.on{ color:var(--sapphire); }
+.proof-tab .ti svg{ width:19px; height:19px; }
+.proof-tab .ti span{ font-size:8px; font-weight:600; letter-spacing:0.01em; }
+
+@media (prefers-reduced-motion: reduce){ *{ transition:none !important; } }
+</style>
+</head>
+<body>
+
+<!-- ================= REVIEW CHROME ================= -->
+<div class="review-bar">
+  <span class="review-brand"><span class="dot"></span>App Download Page · Mockup</span>
+  <div class="review-tabs">
+    <button class="review-tab active" data-view="iphone">iPhone</button>
+    <button class="review-tab" data-view="android">Android</button>
+    <button class="review-tab" data-view="desktop">Desktop</button>
+  </div>
+  <span class="review-meta">member-facing · per-gym (?gym=iron-den) · store buttons = placeholder (app unpublished)</span>
+</div>
+
+<div class="stage-wrap">
+
+  <!-- ===== iPhone ===== -->
+  <div class="view active" data-view="iphone">
+    <div class="phone phone-iphone">
+      <div class="island"></div>
+      <div class="device-screen" data-platform="ios">
+        <div class="statusbar">
+          <span class="sb-time">9:41</span>
+          <span class="sb-right">
+            <svg viewBox="0 0 24 24" fill="currentColor"><rect x="1" y="14" width="3.4" height="6" rx="1"/><rect x="6.5" y="10.5" width="3.4" height="9.5" rx="1"/><rect x="12" y="7" width="3.4" height="13" rx="1"/><rect x="17.5" y="3.5" width="3.4" height="16.5" rx="1" opacity="0.35"/></svg>
+            <svg viewBox="0 0 26 24" fill="currentColor"><path d="M13 6.5c2.9 0 5.5 1.1 7.5 2.9l1.7-1.8C19.8 5.3 16.5 4 13 4S6.2 5.3 3.8 7.6l1.7 1.8C7.5 7.6 10.1 6.5 13 6.5Zm0 4.4c1.7 0 3.3.6 4.5 1.7l1.7-1.8C17.6 9.4 15.4 8.6 13 8.6s-4.6.8-6.2 2.2l1.7 1.8c1.2-1.1 2.8-1.7 4.5-1.7Zm0 4.4c.9 0 1.7.3 2.3.9l-2.3 2.4-2.3-2.4c.6-.6 1.4-.9 2.3-.9Z"/></svg>
+            <svg viewBox="0 0 30 24" fill="none"><rect x="1.5" y="7" width="22" height="11" rx="3" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><rect x="3.5" y="9" width="16" height="7" rx="1.5" fill="currentColor"/><rect x="25" y="10.5" width="2" height="4" rx="1" fill="currentColor" opacity="0.5"/></svg>
+          </span>
+        </div>
+        <div class="scroll" data-page></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Android ===== -->
+  <div class="view" data-view="android">
+    <div class="phone phone-android">
+      <div class="hole"></div>
+      <div class="device-screen" data-platform="android">
+        <div class="statusbar android">
+          <span class="sb-time">9:41</span>
+          <span class="sb-right">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 9c5.5-5 14.5-5 20 0l-2 2c-4.4-4-11.6-4-16 0L2 9Zm4 4c3.3-3 8.7-3 12 0l-2 2c-2.2-2-5.8-2-8 0l-2-2Zm4 4c1.1-1 2.9-1 4 0l-2 2-2-2Z"/></svg>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3 3 8.5v7L12 21l9-5.5v-7L12 3Z" opacity="0.85"/></svg>
+            <svg viewBox="0 0 28 24" fill="none"><rect x="1.5" y="7" width="21" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5" opacity="0.5"/><rect x="3.5" y="9" width="15" height="7" rx="1" fill="currentColor"/><rect x="24" y="10.5" width="2" height="4" rx="1" fill="currentColor" opacity="0.5"/></svg>
+          </span>
+        </div>
+        <div class="scroll" data-page></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Desktop ===== -->
+  <div class="view" data-view="desktop">
+    <div class="browser">
+      <div class="browser-bar">
+        <div class="tl"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <div class="url">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>
+          <span>combatden.app/<b>iron-den</b></span>
+        </div>
+      </div>
+      <div class="device-screen" data-platform="desktop">
+        <div class="scroll" data-page></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ================= THE PAGE (single source, cloned into every frame) ================= -->
+<template id="page-tpl">
+  <div class="page">
+
+    <!-- per-gym header -->
+    <header class="site-head">
+      <div class="gym-id">
+        <span class="monogram">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16M17 4v16M7 12h10M4 7h3M4 17h3M17 7h3M17 17h3"/></svg>
+        </span>
+        <span class="gym-word">Iron Den<span class="sub">Combat Club</span></span>
+      </div>
+      <span class="powered">
+        <span class="cd"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg></span>
+        on CombatDen
+      </span>
+    </header>
+
+    <!-- HERO -->
+    <section class="hero">
+      <div class="hero-copy">
+        <span class="eyebrow">Iron Den Member App</span>
+        <h1>Iron Den, in your pocket.</h1>
+        <p class="lede">Book your classes, earn rewards, watch technique, and track your rank. One app, made for Iron Den.</p>
+
+        <ul class="checks">
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Book classes</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Earn rewards</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Watch videos</li>
+          <li><span class="ck"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>Track rank</li>
+        </ul>
+
+        <div class="cta">
+          <p class="reco reco-ios"><span class="live">Recommended for your iPhone</span></p>
+          <p class="reco reco-android"><span class="live">Recommended for your Android</span></p>
+          <p class="reco reco-desktop"><span class="live">Free on iOS and Android</span></p>
+
+          <div class="store-badges">
+            <span class="badge primary badge-ios" role="button" aria-disabled="true">
+              <span class="soon">Coming soon</span>
+              <span class="glyph"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 12.5c-.03-2.6 2.12-3.85 2.22-3.9-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.81 0-2.07-.92-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.15-.47 7.8 1.3 10.35.86 1.25 1.89 2.65 3.24 2.6 1.3-.05 1.79-.84 3.36-.84 1.57 0 2.01.84 3.39.81 1.4-.02 2.29-1.27 3.14-2.53.99-1.45 1.4-2.86 1.42-2.93-.03-.01-2.72-1.04-2.75-4.14zM14.6 4.97c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.08 3.18 1.15.09 2.32-.58 3.03-1.45z"/></svg></span>
+              <span class="lines"><span class="top">Coming soon to the</span><span class="name">App Store</span></span>
+            </span>
+            <span class="badge primary badge-android" role="button" aria-disabled="true">
+              <span class="soon">Coming soon</span>
+              <span class="glyph"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.2 3.3c-.3.2-.5.6-.5 1.1v15.2c0 .5.2.9.5 1.1l.1.1L13 12.1v-.2L4.3 3.2l-.1.1Z" opacity="0.9"/><path d="m16 15.1-2.9-2.9v-.2L16 9.1l.1.1 3.4 1.9c1 .6 1 1.5 0 2.1L16 15.1Z"/><path d="M16.1 15 13 12 4.2 20.7c.4.3.9.3 1.5 0l10.4-5.7Z"/><path d="M16.1 9 5.7 3.3c-.6-.3-1.1-.3-1.5 0L13 12l3.1-3Z" opacity="0.7"/></svg></span>
+              <span class="lines"><span class="top">Coming soon to</span><span class="name">Google Play</span></span>
+            </span>
+          </div>
+
+          <p class="cta-note"><b>Free for Iron Den members.</b> The app is almost here. Scan the code again at the desk soon, or ask the front desk to give you a shout when it lands.</p>
+        </div>
+      </div>
+
+      <!-- desktop-only proof phone: a real-feeling app home -->
+      <div class="hero-proof">
+        <div class="proofphone">
+          <div class="pscreen">
+            <div class="proof-island"></div>
+            <div class="proof-scroll">
+              <div class="proof-greet">
+                <div class="proof-hi">Welcome back, Marcus<span>Iron Den</span></div>
+                <div class="proof-pts"><span class="n">2,150</span><span class="u">points</span></div>
+              </div>
+              <div class="proof-card">
+                <div class="proof-hero">
+                  <img src="https://cdn.combatden.net/membership/presets/activity-04.jpg" alt="" onerror="this.remove()" />
+                  <span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span>
+                </div>
+                <div class="proof-cbody"><div class="proof-ctitle">Clinch control fundamentals</div><div class="proof-csub">Picked for you · 8 min</div></div>
+              </div>
+              <div class="proof-row">
+                <span class="proof-rthumb"><img src="https://cdn.combatden.net/membership/presets/activity-08.jpg" alt="" onerror="this.remove()" /></span>
+                <div class="proof-rmeta"><div class="proof-rname">Muay Thai Fundamentals</div><div class="proof-rwhen"><b>Today</b> · 6:00 PM</div></div>
+                <span class="proof-book">Book</span>
+              </div>
+              <div class="proof-row">
+                <span class="proof-rthumb"><img src="https://cdn.combatden.net/membership/presets/activity-01.jpg" alt="" onerror="this.remove()" /></span>
+                <div class="proof-rmeta"><div class="proof-rname">Open Mat</div><div class="proof-rwhen"><b>Tomorrow</b> · 7:00 AM</div></div>
+                <span class="proof-book">Book</span>
+              </div>
+            </div>
+            <div class="proof-tab">
+              <span class="ti on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 4l9 6.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>Home</span></span>
+              <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg><span>Classes</span></span>
+              <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 15 8.5 22 9.5l-5 4.5 1.3 7L12 17.8 5.7 21l1.3-7-5-4.5 7-1z"/></svg><span>Rewards</span></span>
+              <span class="ti"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="10 8 16 12 10 16 10 8"/><rect x="3" y="4" width="18" height="16" rx="3"/></svg><span>Watch</span></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 01 · BOOK -->
+    <section class="prop prop-book">
+      <div class="prop-text">
+        <div class="prop-eyebrow"><span class="idx">01</span> Book classes</div>
+        <h2>Reserve before you arrive.</h2>
+        <p>See what is on today and grab your spot in a tap. Show up warm, not stuck on a waitlist at the door.</p>
+      </div>
+      <div class="prop-visual">
+        <div class="bc-list">
+          <div class="bc-row">
+            <span class="bc-thumb"><img src="https://cdn.combatden.net/membership/presets/activity-08.jpg" alt="" onerror="this.remove()" /></span>
+            <div class="bc-meta"><div class="bc-name">Muay Thai Fundamentals</div><div class="bc-when"><b>Today</b> · 6:00 PM · Coach Rivera</div></div>
+            <span class="bc-book">Book</span>
+          </div>
+          <div class="bc-row">
+            <span class="bc-thumb"><img src="https://cdn.combatden.net/membership/presets/activity-09.jpg" alt="" onerror="this.remove()" /></span>
+            <div class="bc-meta"><div class="bc-name">Boxing Conditioning</div><div class="bc-when"><b>Tomorrow</b> · 7:00 AM · Coach Vega</div></div>
+            <span class="bc-book">Book</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 02 · EARN -->
+    <section class="prop prop-earn">
+      <div class="prop-text">
+        <div class="prop-eyebrow"><span class="idx">02</span> Earn rewards</div>
+        <h2>Every class pays you back.</h2>
+        <p>Rack up points at check-in and trade them for real gear, a bring-a-friend pass, or money off private training.</p>
+      </div>
+      <div class="prop-visual">
+        <div class="reward-grid">
+          <div class="reward">
+            <span class="reward-photo"><img src="https://upload.wikimedia.org/wikipedia/commons/3/38/Two_people_in_a_gym_using_BOSU_balls.jpg" alt="" onerror="this.remove()" /><span class="price-pill">Free</span></span>
+            <div class="reward-body"><div class="reward-name">Bring a friend</div><div class="reward-pts">1,000 pts</div></div>
+          </div>
+          <div class="reward">
+            <span class="reward-photo"><img src="https://images.pexels.com/photos/5746087/pexels-photo-5746087.jpeg?auto=compress&cs=tinysrgb&w=1200" alt="" onerror="this.remove()" /><span class="price-pill">Free</span></span>
+            <div class="reward-body"><div class="reward-name">Club t-shirt</div><div class="reward-pts">1,500 pts</div></div>
+          </div>
+          <div class="reward">
+            <span class="reward-photo"><img src="https://upload.wikimedia.org/wikipedia/commons/c/c8/Boxing_gloves_Bail_10-OZ_%281%29.jpg" alt="" onerror="this.remove()" /><span class="price-pill">25% off</span></span>
+            <div class="reward-body"><div class="reward-name">Boxing gloves</div><div class="reward-pts">2,000 pts</div></div>
+          </div>
+          <div class="reward">
+            <span class="reward-photo"><img src="https://upload.wikimedia.org/wikipedia/commons/0/01/Personal_trainer_monitoring_a_client%27s_movement_during_a_fitball_exercise.JPG" alt="" onerror="this.remove()" /><span class="price-pill">50% off</span></span>
+            <div class="reward-body"><div class="reward-name">1-on-1 PT session</div><div class="reward-pts">2,500 pts</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 03 · WATCH -->
+    <section class="prop prop-watch">
+      <div class="prop-text">
+        <div class="prop-eyebrow"><span class="idx">03</span> Watch videos</div>
+        <h2>Technique, picked for Iron Den.</h2>
+        <p>Breakdowns and drills chosen for how Iron Den trains. Something new to study between sessions, every week.</p>
+      </div>
+      <div class="prop-visual">
+        <div class="vc-grid">
+          <div class="vcard">
+            <div class="vcard-thumb"><img src="https://cdn.combatden.net/membership/presets/activity-04.jpg" alt="" onerror="this.remove()" /><span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div>
+            <div class="vcard-info"><span class="vcard-avatar">MT</span><div class="vcard-meta"><div class="vcard-title">Clinch control fundamentals</div><div class="vcard-views">12K views</div></div></div>
+          </div>
+          <div class="vcard">
+            <div class="vcard-thumb"><img src="https://cdn.combatden.net/membership/presets/activity-06.jpg" alt="" onerror="this.remove()" /><span class="play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span></div>
+            <div class="vcard-info"><span class="vcard-avatar">BX</span><div class="vcard-meta"><div class="vcard-title">Counter-punching basics</div><div class="vcard-views">8.4K views</div></div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 04 · RANK -->
+    <section class="prop prop-rank">
+      <div class="prop-text">
+        <div class="prop-eyebrow"><span class="idx">04</span> Track rank</div>
+        <h2>Watch your rank climb.</h2>
+        <p>See how close you are to your next belt, and every class that moves you toward it. Your whole journey in one strip.</p>
+      </div>
+      <div class="prop-visual">
+        <div class="belt-panel">
+          <div class="belt-strip">
+            <div class="belt"><span class="belt-img"><img src="https://cdn.combatden.net/rank/presets/white.png" alt="" onerror="this.remove()" /></span><span class="belt-tag">White</span></div>
+            <div class="belt current"><span class="belt-here">You're here</span><span class="belt-img"><img src="https://cdn.combatden.net/rank/presets/blue.png" alt="" onerror="this.remove()" /></span><span class="belt-tag">Blue</span></div>
+            <div class="belt"><span class="belt-img"><img src="https://cdn.combatden.net/rank/presets/purple.png" alt="" onerror="this.remove()" /></span><span class="belt-tag">Purple</span></div>
+            <div class="belt"><span class="belt-img"><img src="https://cdn.combatden.net/rank/presets/brown.png" alt="" onerror="this.remove()" /></span><span class="belt-tag">Brown</span></div>
+            <div class="belt"><span class="belt-img"><img src="https://cdn.combatden.net/rank/presets/black.png" alt="" onerror="this.remove()" /></span><span class="belt-tag">Black</span></div>
+          </div>
+          <div class="rank-prog">
+            <div class="rank-bar"><span style="width:56%"></span></div>
+            <div class="rank-prog-label"><b>14</b> / 25 classes to Purple</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLOSING CTA -->
+    <section class="closing">
+      <h2>Get the Iron Den app.</h2>
+      <p class="sub">Everything above, in your pocket. Free for members.</p>
+
+      <p class="reco reco-ios"><span class="live">Recommended for your iPhone</span></p>
+      <p class="reco reco-android"><span class="live">Recommended for your Android</span></p>
+      <p class="reco reco-desktop"><span class="live">Free on iOS and Android</span></p>
+
+      <div class="store-badges">
+        <span class="badge primary badge-ios" role="button" aria-disabled="true">
+          <span class="soon">Coming soon</span>
+          <span class="glyph"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.05 12.5c-.03-2.6 2.12-3.85 2.22-3.9-1.21-1.77-3.1-2.01-3.77-2.04-1.6-.16-3.13.94-3.94.94-.81 0-2.07-.92-3.4-.9-1.75.03-3.36 1.02-4.26 2.58-1.82 3.15-.47 7.8 1.3 10.35.86 1.25 1.89 2.65 3.24 2.6 1.3-.05 1.79-.84 3.36-.84 1.57 0 2.01.84 3.39.81 1.4-.02 2.29-1.27 3.14-2.53.99-1.45 1.4-2.86 1.42-2.93-.03-.01-2.72-1.04-2.75-4.14zM14.6 4.97c.72-.87 1.2-2.08 1.07-3.29-1.03.04-2.28.69-3.02 1.56-.66.77-1.24 2-1.08 3.18 1.15.09 2.32-.58 3.03-1.45z"/></svg></span>
+          <span class="lines"><span class="top">Coming soon to the</span><span class="name">App Store</span></span>
+        </span>
+        <span class="badge primary badge-android" role="button" aria-disabled="true">
+          <span class="soon">Coming soon</span>
+          <span class="glyph"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.2 3.3c-.3.2-.5.6-.5 1.1v15.2c0 .5.2.9.5 1.1l.1.1L13 12.1v-.2L4.3 3.2l-.1.1Z" opacity="0.9"/><path d="m16 15.1-2.9-2.9v-.2L16 9.1l.1.1 3.4 1.9c1 .6 1 1.5 0 2.1L16 15.1Z"/><path d="M16.1 15 13 12 4.2 20.7c.4.3.9.3 1.5 0l10.4-5.7Z"/><path d="M16.1 9 5.7 3.3c-.6-.3-1.1-.3-1.5 0L13 12l3.1-3Z" opacity="0.7"/></svg></span>
+          <span class="lines"><span class="top">Coming soon to</span><span class="name">Google Play</span></span>
+        </span>
+      </div>
+
+      <p class="cta-note">The stores go live at launch. Until then, this page holds your spot.</p>
+
+      <div class="qr-note">
+        <span class="qr-mini"><svg id="qr-close" viewBox="0 0 25 25" shape-rendering="crispEdges" aria-label="Save this page QR"></svg></span>
+        <span class="t">Screenshot this or scan again at the desk. It will jump straight to the store the day it opens.</span>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer class="site-foot">
+      <span class="foot-brand"><span class="cd"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="7" stroke="currentColor" stroke-width="2.4"/><circle cx="12" cy="12" r="2" fill="currentColor"/></svg></span>Iron Den runs on CombatDen</span>
+      <span class="foot-note">App Store and Google Play links open at launch.</span>
+    </footer>
+
+  </div>
+</template>
+
+<script>
+/* ---- review-bar view switching ---- */
+const rtabs = document.querySelectorAll('.review-tab');
+const views = document.querySelectorAll('.view');
+rtabs.forEach(t => t.addEventListener('click', () => {
+  rtabs.forEach(x => x.classList.toggle('active', x === t));
+  views.forEach(v => v.classList.toggle('active', v.dataset.view === t.dataset.view));
+}));
+
+/* ---- clone the single page template into every device frame ---- */
+const tpl = document.getElementById('page-tpl');
+document.querySelectorAll('[data-page]').forEach(host => {
+  host.appendChild(tpl.content.cloneNode(true));
+});
+
+/* ---- live platform detection note (the REAL page would auto-order the
+   store buttons from this; the frames above hard-set it so the treatment
+   is visible on any device you open this mockup on) ---- */
+(function(){
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPad|iPhone|iPod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/.test(ua);
+  window.__detectedPlatform = isIOS ? 'ios' : isAndroid ? 'android' : 'desktop';
+})();
+
+/* ---- fake-but-realistic QR (finder patterns + seeded modules), matches the
+   kiosk mockup's generator so the "scan again" chip reads as a real code ---- */
+function buildQR(svgId, N, seedInit){
+  const svg = document.getElementById(svgId);
+  if(!svg) return;
+  let seed = seedInit;
+  const rnd = () => { seed = (seed*1103515245 + 12345) & 0x7fffffff; return seed / 0x7fffffff; };
+  const grid = Array.from({length:N}, () => Array(N).fill(false));
+  const reserved = Array.from({length:N}, () => Array(N).fill(false));
+  function finder(r,c){
+    for(let i=-1;i<=7;i++) for(let j=-1;j<=7;j++){
+      const rr=r+i, cc=c+j; if(rr<0||cc<0||rr>=N||cc>=N) continue;
+      reserved[rr][cc]=true;
+      grid[rr][cc]=(i>=0&&i<=6&&(j===0||j===6))||(j>=0&&j<=6&&(i===0||i===6))||(i>=2&&i<=4&&j>=2&&j<=4);
+    }
+  }
+  finder(0,0); finder(0,N-7); finder(N-7,0);
+  for(let i=8;i<N-8;i++){ grid[6][i]=(i%2===0); grid[i][6]=(i%2===0); reserved[6][i]=reserved[i][6]=true; }
+  (function align(r,c){ for(let i=-2;i<=2;i++) for(let j=-2;j<=2;j++){ const rr=r+i,cc=c+j; reserved[rr][cc]=true; grid[rr][cc]=(Math.abs(i)===2||Math.abs(j)===2||(i===0&&j===0)); } })(N-7,N-7);
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(!reserved[r][c]) grid[r][c] = rnd() > 0.52;
+  let rects='';
+  for(let r=0;r<N;r++) for(let c=0;c<N;c++) if(grid[r][c]) rects += '<rect x="'+c+'" y="'+r+'" width="1" height="1"/>';
+  svg.setAttribute('viewBox','0 0 '+N+' '+N);
+  svg.innerHTML = '<g fill="#16181D" shape-rendering="crispEdges">'+rects+'</g>';
+}
+/* the QR lives inside cloned templates → build every instance */
+document.querySelectorAll('#qr-close').forEach((el,i) => { el.id = 'qr-close-'+i; buildQR('qr-close-'+i, 25, 55123901 + i); });
+</script>
+</body>
+</html>

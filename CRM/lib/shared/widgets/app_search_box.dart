@@ -16,6 +16,14 @@ class AppSearchBox extends StatelessWidget {
   final double? height;
   final TextStyle? textStyle;
 
+  /// The placeholder's ink. Defaults to the muted
+  /// [DesignConstants.text3rd] the admin filters use. The
+  /// kiosk passes [DesignConstants.text2nd] instead: its
+  /// hint is a 22px instruction read from ~2m, and
+  /// `text3rd` sits under the WCAG AA floor `PRODUCT.md`
+  /// holds as a hard requirement.
+  final Color? hintColor;
+
   const AppSearchBox({
     super.key,
     this.hintText = 'search name....',
@@ -24,11 +32,13 @@ class AppSearchBox extends StatelessWidget {
     this.width,
     this.height,
     this.textStyle,
+    this.hintColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final style = textStyle ?? DesignConstants.h3;
+    final hintInk = hintColor ?? DesignConstants.text3rd;
 
     final field = TextField(
       controller: controller,
@@ -39,7 +49,7 @@ class AppSearchBox extends StatelessWidget {
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: style.copyWith(
-          color: DesignConstants.text3rd,
+          color: hintInk,
         ),
         prefixIcon: Icon(
           Symbols.search_sharp,

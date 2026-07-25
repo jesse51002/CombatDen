@@ -279,6 +279,9 @@ class CheckinResponse(BaseModel):
             this check-in — the same value ``GET /api/v1/streak`` returns, folded
             into the check-in response so the caller needn't make a second call.
             0 when the check-in was not recorded (a rejection / needs-confirmation).
+        current_week_days: The week strip AFTER this check-in (see
+            ``StreakResult``), folded in alongside ``class_streak_weeks``.
+            All ``False`` when the check-in was not recorded.
         memberships: Breakdown of the member's active memberships.
     """
 
@@ -293,6 +296,7 @@ class CheckinResponse(BaseModel):
     warnings: list[CheckinWarning] = []
     requires_confirmation: bool = False
     class_streak_weeks: int = 0
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)
     memberships: list[CheckinMembershipBreakdown] = []
 
 
@@ -363,8 +367,29 @@ class AttendeeListResponse(BaseModel):
     attendees: list[Attendee]
 
 
+class StreakResult(BaseModel):
+    """A member's attendance streak metrics for one gym, computed together.
+
+    ``StreakService.get_streak_details``' return — an INTERNAL type, never
+    serialized; the routes map it onto ``StreakResponse`` / ``CheckinResponse``.
+    Both fields derive from the SAME session and the SAME gym-local Monday
+    anchor, so the strip and the week count can never disagree about which
+    week is "current".
+
+    Attributes:
+        weeks: Consecutive gym-local weeks with at least one class attendance.
+        current_week_days: Length-7 list, index 0 = Monday .. 6 = Sunday, each
+            ``True`` when the member attended on that weekday of the CURRENT
+            gym-local week.
+    """
+
+    weeks: int
+    current_week_days: list[bool]
+
+
 class StreakResponse(BaseModel):
-    """Response for GET /api/v1/streak."""
+    """Response for GET /api/v1/streak — ``StreakResult`` on the wire."""
 
     member_id: UUID
     class_streak_weeks: int
+    current_week_days: list[bool] = Field(default_factory=lambda: [False] * 7)

@@ -6,8 +6,17 @@ import 'package:crm/core/constants/design_constants.dart';
 /// Custom text field for forms
 class CustomTextField extends StatefulWidget {
   final TextEditingController controller;
-  final String label;
+
+  /// [label] is optional — omit it when the surrounding layout already
+  /// labels the field (e.g. a group that puts quick-pick chips between the
+  /// label and the field), mirroring [AppDropdownField] and [TappableField].
+  final String? label;
   final String? hintText;
+
+  /// Guidance rendered under the field. Material swaps it for the
+  /// validator's message while the field is in error, so the two never
+  /// stack.
+  final String? helperText;
   final bool isPassword;
   final bool enabled;
   final String? Function(String?)? validator;
@@ -34,8 +43,9 @@ class CustomTextField extends StatefulWidget {
   const CustomTextField({
     super.key,
     required this.controller,
-    required this.label,
+    this.label,
     this.hintText,
+    this.helperText,
     this.isPassword = false,
     this.enabled = true,
     this.validator,
@@ -61,10 +71,11 @@ class _CustomTextFieldState extends State<CustomTextField> {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(
-          widget.label,
-          style: DesignConstants.h2.copyWith(color: DesignConstants.text),
-        ),
+        if (widget.label != null)
+          Text(
+            widget.label!,
+            style: DesignConstants.h2.copyWith(color: DesignConstants.text),
+          ),
         TextFormField(
           controller: widget.controller,
           focusNode: widget.focusNode,
@@ -82,6 +93,10 @@ class _CustomTextFieldState extends State<CustomTextField> {
             hintText: widget.hintText,
             hintStyle: DesignConstants.p.copyWith(
               color: DesignConstants.text.withValues(alpha: 0.5),
+            ),
+            helperText: widget.helperText,
+            helperStyle: DesignConstants.pSmall.copyWith(
+              color: DesignConstants.text2nd,
             ),
             filled: true,
             fillColor: DesignConstants.card,

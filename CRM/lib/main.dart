@@ -16,8 +16,12 @@ import 'package:crm/core/state/theme_controller.dart';
 import 'package:crm/features/employees/presentation/screens/employee_detail_screen.dart';
 import 'package:crm/features/growth/presentation/screens/growth_screen.dart';
 import 'package:crm/features/home/presentation/screens/home_screen.dart';
+import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
+import 'package:crm/features/kiosk/data/kiosk_server_clock.dart';
+import 'package:crm/features/kiosk/data/kiosk_session_store.dart';
 import 'package:crm/features/login/bloc/login_bloc.dart';
 import 'package:crm/features/login/bloc/login_event.dart';
+import 'package:crm/features/login/bloc/login_state.dart';
 import 'package:crm/features/login/data/repositories/auth_repository.dart';
 import 'package:crm/features/login/presentation/screens/auth_gate.dart';
 import 'package:crm/features/members/presentation/screens/member_app_screen.dart';
@@ -133,10 +137,20 @@ class _AppManagementRootState extends State<AppManagementRoot>
   }
 }
 
-/// Provides [LoginBloc] above the [AuthGate] and wires the
-/// 401 escape hatch: when the API client gives up on a
-/// request (refresh failed), sign the session out so the
-/// gate drops back to the login screen.
+/// Provides [LoginBloc] and the app-root [KioskSessionCubit] above the
+/// [AuthGate], and wires two escape hatches:
+///
+/// - The **401 escape hatch**: when the API client gives up on a request
+///   (refresh failed), sign the session out so the gate drops to login.
+/// - The **kiosk fate-share clear**: a [BlocListener] fires when the login
+///   bloc reports the session gone ([LoginUnauthenticated]) and asks the
+///   kiosk cubit to clear its persisted flag — but the cubit only actually
+///   clears once it confirms the session is truly gone, so a failed sign-out
+///   keeps the flag (fail-closed) rather than stranding the iPad in admin.
+///
+/// The kiosk cubit sits ABOVE the gate so entering kiosk swaps the whole
+/// authenticated subtree (nested navigator, route table, `AppShell`) for the
+/// member surface without disturbing the live admin session beneath it.
 class _AuthGateHost extends StatelessWidget {
   final Route<dynamic> Function(RouteSettings) onGenerateRoute;
 
@@ -144,14 +158,49 @@ class _AuthGateHost extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // One AuthRepository backs both the login bloc and the kiosk cubit's
+    // "is the session actually gone?" check (a thin wrapper over the global
+    // Supabase client — instance identity doesn't matter).
+    final authRepository = AuthRepository();
     return BlocProvider<LoginBloc>(
       create: (_) {
-        final bloc = LoginBloc(authRepository: AuthRepository());
+        final bloc = LoginBloc(authRepository: authRepository);
         ApiClient.onUnauthorized = () =>
             bloc.add(const LoginSignOutRequested());
         return bloc;
       },
-      child: AuthGate(onGenerateRoute: onGenerateRoute),
+      child: Builder(
+        builder: (context) {
+          final loginBloc = context.read<LoginBloc>();
+          return BlocProvider<KioskSessionCubit>(
+            // Non-lazy: construct the cubit as soon as this host builds — before
+            // the authenticated branch first builds its BlocBuilder — so it is
+            // already in [KioskStatus.restoring] (and `_restore` already reading
+            // localStorage, in parallel with the gym fetch) when the gate first
+            // reads it. This guarantees there is no lazy-construct race where an
+            // earlier read could observe a pre-restore state and mount the admin
+            // workspace.
+            lazy: false,
+            create: (_) => KioskSessionCubit(
+              store: KioskSessionStore(),
+              // Anchors the 12h runway to server time (HTTP Date), so a
+              // rolled-back device clock can't extend the member surface.
+              serverClock: KioskServerClock(),
+              dispatchSignOut: () =>
+                  loginBloc.add(const LoginSignOutRequested()),
+              sessionGone: () =>
+                  authRepository.getCurrentUser() == null,
+            ),
+            child: BlocListener<LoginBloc, LoginState>(
+              listenWhen: (_, current) =>
+                  current is LoginUnauthenticated,
+              listener: (context, _) =>
+                  context.read<KioskSessionCubit>().handleSignedOut(),
+              child: AuthGate(onGenerateRoute: onGenerateRoute),
+            ),
+          );
+        },
+      ),
     );
   }
 }

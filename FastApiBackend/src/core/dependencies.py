@@ -910,6 +910,8 @@ class DependencyInjector(containers.DeclarativeContainer):
         waivers_service=waivers_service,
         classes_versions_service=classes_versions_service,
         ranks_members=ranks_members,
+        combatden_app_store_url=settings.combatden_app_store_url,
+        combatden_play_store_url=settings.combatden_play_store_url,
     )
 
     # ── Stripe webhooks ──────────────────────────────────────────

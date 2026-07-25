@@ -41,6 +41,7 @@ class MembersBillingProfileResponse(BaseModel):
     phone: str | None = None
     email: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None
@@ -52,6 +53,18 @@ class MembersBillingProfileResponse(BaseModel):
     card_exp_year: int | None = None
 
 
+class MemberPaymentMethodStatusResponse(BaseModel):
+    """Whether a member has any payment method attached in Stripe.
+
+    Resolved LIVE from Stripe, never from
+    ``members.stripe_payment_method_id`` (which only records the card the CRM
+    last saved as default). ``False`` means "verified: nothing attached" — a
+    Stripe failure surfaces as a 500, never as ``False``.
+    """
+
+    has_payment_method: bool
+
+
 # ── Member Detail sub-models ──────────────────────────────────────
 
 
@@ -61,6 +74,7 @@ class BillingPersonalInfo(BaseModel):
     phone: str | None = None
     email: str | None = None
     address: str | None = None
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None

@@ -9,7 +9,9 @@ tracked separately, not here.
 
 - **Charging gym owners** — 0% built. No subscription/tier/platform-fee concept anywhere in the `gyms` schema or Stripe wiring. `gyms.stripe_account_id` is Connect routing for *member* payments only, unrelated. Needs: pricing model decided, schema, Stripe wiring, CRM/ops surface.
 
-- **Kiosk mode** — no kiosk UI/screen exists in CRM or MobileApp. Backend building block already exists: `checkin_member_gate.py` implements `is_member` true/false gating (member kiosk-reject vs staff-confirm) — reusable, not a rebuild.
+- **Kiosk mode — two follow-ups left; the kiosk itself is BUILT.** `CRM/lib/features/kiosk/` is the member-facing self-serve surface that runs on the gym's front-desk iPad inside the authenticated CRM: the check-in lane (name search → class pick → the glance, on the backend's strict `is_member: true` gate in `checkin_member_gate.py`) and the full solo + group self-serve signup lane (payer seating, plan pick, waiver sign, card, per-person results receipt, decline retry). The kiosk is CRM-only by design — the MobileApp is the member's own phone client, not a kiosk host. Deep contract: the `kiosk-guide` skill. Still not started:
+  - **Phase G — the rotating check-in QR.** The kiosk home's QR is a deliberately inert glyph. The design (hourly server-minted per-gym tokens, a new `src/kiosk/` backend domain, the member-portal scan-checkin route) is DESIGN ONLY in `PHASE_G_QR_PLAN.md`, whose §10 open questions are unanswered.
+  - **The per-gym app-download page** the separate "Get the app" QR points at (mockup: `APP_DOWNLOAD_PAGE_MOCKUP.html`). The backend half has shipped (`gyms.app_store_url` / `play_store_url` + the public read) and the kiosk already encodes the right URL, so what is missing is the page.
 
 - **Mobile app — member auth** — 0% built. No login/session code exists anywhere in `MobileApp/lib` (confirmed via grep — only hit is unrelated `video_api_client.dart`). This blocks check-in QR scan-to-self-checkin, member self-service, and anything member-identity-scoped in the app.
 

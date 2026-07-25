@@ -6,6 +6,8 @@ import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_retry_card_request.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_response.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_retry_card_status.dart';
 import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
@@ -88,11 +90,23 @@ void main() {
         poller: FakeInvoicePoller(),
       );
 
+  MemberMembershipsRetryCardResponse outcome(
+    MemberMembershipsRetryCardStatus status, {
+    String? declineReason,
+  }) =>
+      MemberMembershipsRetryCardResponse(
+        itemId: 'it_1',
+        memberId: memberId,
+        status: status,
+        declineReason: declineReason,
+      );
+
   group('retry-payment channel', () {
     blocTest<MemberDetailBloc, MemberDetailState>(
-      'success bumps retryPaymentSuccess + refreshToken (own channel)',
-      setUp: () => when(() => repo.retryMembershipCard(any()))
-          .thenAnswer((_) async {}),
+      'a paid outcome bumps retryPaymentSuccess + refreshToken (own channel)',
+      setUp: () => when(() => repo.retryMembershipCard(any())).thenAnswer(
+        (_) async => outcome(MemberMembershipsRetryCardStatus.paid),
+      ),
       build: build,
       seed: seedState,
       act: (bloc) => bloc.add(const RetryCardPaymentRequested(
@@ -112,14 +126,18 @@ void main() {
       ],
     );
 
+    // THE regression guard for the 500 → 207 move: the backend now returns a
+    // decline as a 2xx RESULT, so it no longer throws. If the bloc ever
+    // treats a returned outcome as success again, retryPaymentSuccess bumps
+    // and retryPaymentError stays null — and this test fails. The dialog reads
+    // exactly these two fields, so a green-but-declined retry would tell staff
+    // an unpaid invoice was collected.
     blocTest<MemberDetailBloc, MemberDetailState>(
-      'a decline surfaces the backend detail on retryPaymentError, '
-      'never on actionError',
-      setUp: () => when(() => repo.retryMembershipCard(any())).thenThrow(
-        const ServerException(
-          'Internal Server Error',
-          statusCode: 500,
-          detail: 'Your card was declined.',
+      'a DECLINED 2xx outcome is an error, never a success',
+      setUp: () => when(() => repo.retryMembershipCard(any())).thenAnswer(
+        (_) async => outcome(
+          MemberMembershipsRetryCardStatus.declined,
+          declineReason: 'Your card was declined.',
         ),
       ),
       build: build,
@@ -137,6 +155,68 @@ void main() {
               (s) => s.retryPaymentError,
               'retryPaymentError',
               'Your card was declined.',
+            )
+            .having((s) => s.retryPaymentSuccess, 'retryPaymentSuccess', 0)
+            .having((s) => s.refreshToken, 'refreshToken', 0)
+            .having((s) => s.actionError, 'actionError', isNull),
+      ],
+      verify: (_) {
+        // A decline must not be followed by the success path's re-fetch or
+        // invoice poll — nothing was collected.
+        verifyNever(() => repo.getMemberDetail(any()));
+      },
+    );
+
+    blocTest<MemberDetailBloc, MemberDetailState>(
+      'an unknown status fails closed with the unconfirmed message',
+      setUp: () => when(() => repo.retryMembershipCard(any())).thenAnswer(
+        (_) async => outcome(MemberMembershipsRetryCardStatus.unknown),
+      ),
+      build: build,
+      seed: seedState,
+      act: (bloc) => bloc.add(const RetryCardPaymentRequested(
+        itemId: 'it_1',
+        memberId: memberId,
+      )),
+      expect: () => [
+        isA<MemberDetailLoaded>()
+            .having((s) => s.isRetryingPayment, 'isRetryingPayment', true),
+        isA<MemberDetailLoaded>()
+            .having((s) => s.isRetryingPayment, 'isRetryingPayment', false)
+            .having(
+              (s) => s.retryPaymentError,
+              'retryPaymentError',
+              contains('not confirmed'),
+            )
+            .having((s) => s.retryPaymentSuccess, 'retryPaymentSuccess', 0),
+      ],
+    );
+
+    blocTest<MemberDetailBloc, MemberDetailState>(
+      'a system failure (500) still surfaces its detail on retryPaymentError, '
+      'never on actionError',
+      setUp: () => when(() => repo.retryMembershipCard(any())).thenThrow(
+        const ServerException(
+          'Internal Server Error',
+          statusCode: 500,
+          detail: 'Failed to retry the card on membership',
+        ),
+      ),
+      build: build,
+      seed: seedState,
+      act: (bloc) => bloc.add(const RetryCardPaymentRequested(
+        itemId: 'it_1',
+        memberId: memberId,
+      )),
+      expect: () => [
+        isA<MemberDetailLoaded>()
+            .having((s) => s.isRetryingPayment, 'isRetryingPayment', true),
+        isA<MemberDetailLoaded>()
+            .having((s) => s.isRetryingPayment, 'isRetryingPayment', false)
+            .having(
+              (s) => s.retryPaymentError,
+              'retryPaymentError',
+              'Failed to retry the card on membership',
             )
             .having((s) => s.retryPaymentSuccess, 'retryPaymentSuccess', 0)
             .having((s) => s.actionError, 'actionError', isNull),

@@ -4,7 +4,8 @@ import 'package:crm/features/members_list/data/models/members_list_total_counts.
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
 
-/// View-switcher tabs for All / Trial / Frozen / Overdue.
+/// View-switcher tabs for All / Trial / Frozen / Overdue /
+/// Incomplete.
 ///
 /// Wraps [ViewSwitcher] and appends the count from
 /// [totalCounts] to each tab label, e.g. "Active (42)".
@@ -25,6 +26,7 @@ class MembersListViewSwitcher extends StatelessWidget {
     MembersListView.trial,
     MembersListView.frozen,
     MembersListView.overdue,
+    MembersListView.incomplete,
   ];
 
   String _label(MembersListView view) {
@@ -34,6 +36,8 @@ class MembersListViewSwitcher extends StatelessWidget {
       MembersListView.trial => totalCounts.trial,
       MembersListView.frozen => totalCounts.frozen,
       MembersListView.overdue => totalCounts.overdue,
+      MembersListView.incomplete =>
+        totalCounts.incomplete,
     };
     return '${view.displayLabel} ($count)';
   }

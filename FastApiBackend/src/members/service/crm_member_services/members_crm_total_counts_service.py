@@ -10,6 +10,7 @@ from src.members.schema.members_crm_members_list_schema import (
 )
 from src.members.service.members_status_mapping import (
     load_member_dormant_sql,
+    load_member_incomplete_sql,
 )
 from src.shared.database import DirectDatabasePool
 from src.shared.membership_status import load_membership_overdue_sql
@@ -20,6 +21,11 @@ from src.shared.sql_loader import load_sql
 DORMANT_COUNT_SQL = load_member_dormant_sql(
     "dormant_m.member_id",
     "dormant_m.gym_id",
+)
+# Its own scan alias, the same shared text the Incomplete tab lists with.
+INCOMPLETE_COUNT_SQL = load_member_incomplete_sql(
+    "incomplete_m.member_id",
+    "incomplete_m.gym_id",
 )
 
 # The overdue tally runs over its own deduped subquery so it lists exactly
@@ -59,12 +65,13 @@ class CrmTotalCountsService:
 
         Returns:
             MembersListTotalCounts with active, trial,
-            frozen, overdue, dormant.
+            frozen, overdue, dormant, incomplete.
         """
         sql = load_sql(
             SQL_DIR / "crm_views" / "total_counts.sql",
             {
                 "is_dormant": DORMANT_COUNT_SQL,
+                "is_incomplete": INCOMPLETE_COUNT_SQL,
                 "is_overdue": OVERDUE_COUNT_SQL,
             },
         )
@@ -83,4 +90,5 @@ class CrmTotalCountsService:
             frozen=row["frozen"],
             overdue=row["overdue"],
             dormant=row["dormant"],
+            incomplete=row["incomplete"],
         )

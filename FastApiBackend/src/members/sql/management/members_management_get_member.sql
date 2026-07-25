@@ -6,6 +6,7 @@ SELECT
     mbp.phone,
     mbp.email,
     mbp.address,
+    mbp.date_of_birth,
     mbp.emergency_contact_name,
     mbp.emergency_contact_phone,
     mbp.emergency_contact_email,

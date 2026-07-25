@@ -28,19 +28,22 @@ void main() {
 
     test(
       'front desk sees the Add New Member CTA, Dashboard, People, Schedule, '
-      'Gym, and Settings — Growth and Member App are hidden',
+      'Gym, Kiosk Mode, and Settings — Growth and Member App are hidden',
       () {
-        final routes =
-            visibleNavSections(EmployeeRole.frontDesk).map((s) => s.route);
+        final sections = visibleNavSections(EmployeeRole.frontDesk);
+        // Two routeless items (route == null) are visible — Add New Member
+        // (canCreateMembers) and Kiosk Mode (canOperateKiosk) — so assert on
+        // the unique labels, which the route map cannot disambiguate.
         expect(
-          routes,
+          sections.map((s) => s.label),
           [
-            null,
-            AppRoutes.home,
-            AppRoutes.members,
-            AppRoutes.schedule,
-            AppRoutes.memberships,
-            AppRoutes.settings,
+            'Add New Member',
+            'Dashboard',
+            'People',
+            'Schedule',
+            'Gym',
+            'Kiosk Mode',
+            'Settings',
           ],
         );
       },

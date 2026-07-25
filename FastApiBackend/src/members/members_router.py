@@ -10,9 +10,11 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.members.members_exceptions import MembersError
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
     MemberBillingDetailResponse,
+    MemberPaymentMethodStatusResponse,
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
     PointsAdjustRequest,
@@ -45,6 +47,10 @@ from src.members.service.member_payments_service import (
     MembersPaymentsService,
 )
 from src.memberships.memberships_exceptions import PartialCancelError
+
+# Imported, never restated, so the 409 route docs cannot drift. Cycle-free:
+# memberships_router imports nothing from src.members.
+from src.memberships.memberships_router import BUSY_PAYER_409
 from src.memberships.memberships_schema import (
     MemberMembershipsCancelResponse,
     MembersBillingLinkCheckRequest,
@@ -63,6 +69,7 @@ from src.payments.schema.payments_invoice_schema import (
     PreviewInvoice,
 )
 from src.shared.auth import OWNER_ADMIN, STAFF, Auth, security
+from src.shared.paying_member_lock import LockBusyError
 from src.shared.request_audit import capture_ip_address, capture_user_agent
 from src.waivers.schema.waivers_schema import (
     AuthorizedPayerWaiverResponse,
@@ -70,6 +77,7 @@ from src.waivers.schema.waivers_schema import (
 from src.waivers.service.waivers_service import (
     WaiversService,
 )
+from src.waivers.waivers_exceptions import WaiversError
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +138,13 @@ async def create_member(
         # The duplicate gate raises HTTPException(409) directly — re-raise it
         # as-is instead of letting the generic handler mask it as a 500.
         raise
+    except MembersError as exc:
+        # Status by TYPE (see members_exceptions). Explicit so a future
+        # 404-shaped rejection can't be flattened to 400 by the arm below.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -177,16 +192,18 @@ async def update_member(
 
     try:
         return await management_service.update_member(member_id, request.data)
+    except MembersError as exc:
+        # Status by TYPE — the message is free prose and never decides it.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
-        msg = str(exc)
-        if "not found" in msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=msg,
-            ) from None
+        # Kept because this service really does raise a bare ValueError: the
+        # shared ``validate_mutable_columns`` guard, on an immutable column.
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=msg,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -207,7 +224,7 @@ async def update_member(
     description=(
         "Returns a filtered, sorted, paginated list of gym members "
         "for the CRM members list screen. The view (all / trial / "
-        "frozen / overdue) decides the row shape; the filters and "
+        "frozen / overdue / incomplete) decides the row shape; the filters and "
         "pagination are applied as given (the view and filters are "
         "independent — no reconciliation), and the rows are "
         "pre-formatted per view. Membership status is derived from "
@@ -254,8 +271,11 @@ async def list_members(
     summary="Unfiltered member counts per status",
     description=(
         "Returns unfiltered member counts per status (active / trial / "
-        "frozen / overdue) for the CRM members list subtitle. Counts are "
-        "membership-derived from member_memberships_status."
+        "frozen / overdue / dormant / incomplete) for the CRM members list "
+        "subtitle. Counts are membership-derived from "
+        "member_memberships_status; incomplete counts valid member rows (a "
+        "Stripe customer on file) with no membership of their own that also "
+        "pay for nobody and hold no billed-but-unconfirmed membership."
     ),
     responses={
         200: {"description": "Counts retrieved"},
@@ -325,10 +345,14 @@ async def get_member_detail(
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
-    except ValueError:
+    except MembersError as exc:
+        # Status by TYPE — do NOT widen this back to a blanket
+        # ``except ValueError`` -> 404. This is the largest response model in
+        # the CRM and pydantic's ValidationError IS a ValueError, so a blanket
+        # arm reports a member who plainly exists as missing and hides the 500.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -377,10 +401,12 @@ async def get_member_billing_detail(
 
     try:
         return await billing_detail_service.get_member_billing_detail(member_id)
-    except ValueError:
+    except MembersError as exc:
+        # Status by TYPE — same read, same pydantic-trap reasoning as
+        # GET /{member_id} above.
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Member not found",
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -484,16 +510,14 @@ async def update_member_card(
 
     try:
         return await management_service.update_card(member_id, request)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status by TYPE. Deliberately no generic ``except ValueError`` arm:
+        # this service raises no untyped bad input, so one could only ever
+        # fire on our own failure (pydantic's ValidationError is a ValueError)
+        # and would answer a broken model with a 4xx instead of a logged 500.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except PaymentsStripeError as exc:
         logger.error(
@@ -522,8 +546,15 @@ async def update_member_card(
     response_model=MembersBillingProfileResponse,
     summary="Unlink member payment",
     description=(
-        "Removes a member's payment card from the CRM and immediately cancels "
-        "all active recurring memberships. The Stripe customer link is preserved."
+        "Clears the member's stored card fields (stripe_payment_method_id, "
+        "card brand / last four / expiry) and, in Stripe, unsets the "
+        "customer's default payment method and detaches it — so nothing can "
+        "be charged to that card again. The Stripe customer link itself is "
+        "preserved. Memberships are NOT touched: an active recurring "
+        "membership stays active and keeps its next due date, so its next "
+        "cycle attempts collection with no card on file and Stripe's dunning "
+        "reports the failure. Cancelling is a separate, explicit decision the "
+        "cancel endpoints own."
     ),
     responses={
         200: {"description": "Payment unlinked successfully"},
@@ -542,7 +573,7 @@ async def unlink_member_payment(
         Provide[DependencyInjector.members_management_service]
     ),
 ) -> MembersBillingProfileResponse:
-    """Unlink a member's payment card and cancel recurring memberships."""
+    """Unlink a member's payment card. Memberships are left untouched."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
         member_id, user_payload, staff_roles=STAFF
@@ -550,16 +581,12 @@ async def unlink_member_payment(
 
     try:
         return await management_service.unlink_payment(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status by TYPE. No generic ValueError arm, for the same reason as
+        # update_card above.
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -570,6 +597,86 @@ async def unlink_member_payment(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to unlink payment",
+        ) from None
+
+
+@members_router.get(
+    "/{member_id}/payment-method-status",
+    response_model=MemberPaymentMethodStatusResponse,
+    summary="Whether the member has any payment method attached",
+    description=(
+        "Reports whether the member's Stripe customer has ANY payment "
+        "method attached, read LIVE from Stripe rather than from the "
+        "cached ``stripe_payment_method_id`` column (which only records "
+        "the card the CRM last saved as default, so a method attached out "
+        "of band would not appear there). A member with no Stripe "
+        "customer is ``false`` — nothing can be attached. A Stripe "
+        "failure is a 500, NEVER a ``false``: callers gate on this, so "
+        "'unknown' must never read as 'nothing on file'. Gym staff only."
+    ),
+    responses={
+        200: {"description": "Status resolved from Stripe"},
+        400: {"description": "The member's gym has no Stripe account configured"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not authorized to view this member"},
+        404: {"description": "Member not found"},
+        500: {
+            "description": (
+                "Stripe / upstream error (no auto-retry) — never reported "
+                "as has_payment_method=false"
+            )
+        },
+    },
+)
+@inject
+async def get_member_payment_method_status(
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    management_service: MembersManagementService = Depends(
+        Provide[DependencyInjector.members_management_service]
+    ),
+) -> MemberPaymentMethodStatusResponse:
+    """Report whether a member has a payment method attached in Stripe."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_gym_employee_for_member(
+        member_id, user_payload, staff_roles=STAFF
+    )
+
+    try:
+        has_payment_method = await management_service.has_payment_method(
+            member_id,
+        )
+        return MemberPaymentMethodStatusResponse(
+            has_payment_method=has_payment_method,
+        )
+    except MembersError as exc:
+        # Status by TYPE — the 404 and the 400 here are both documented above.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
+    except PaymentsStripeError as exc:
+        # A Stripe failure must surface as an ERROR, never as a false. 500,
+        # not 502/503/504, so no proxy auto-retries it.
+        logger.error(
+            "Stripe error reading payment-method status: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from None
+    except Exception:
+        logger.error(
+            "Failed to get payment-method status: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to get payment-method status",
         ) from None
 
 
@@ -592,8 +699,16 @@ async def unlink_member_payment(
         400: {"description": "Payer invalid / wrong gym / already authorized / no consent"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
-        404: {"description": "Member not found"},
-        409: {"description": "Waiver was updated — reload and re-sign"},
+        404: {
+            "description": (
+                "Member not found, or the gym has no payer-auth waiver to sign"
+            )
+        },
+        409: {
+            "description": (
+                f"Waiver was updated — reload and re-sign, or {BUSY_PAYER_409}"
+            )
+        },
     },
 )
 @inject
@@ -627,13 +742,30 @@ async def link_member_account(
             user_agent=capture_user_agent(http_request),
             operator_employee_id=operator_employee_id,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler. The lock is taken INSIDE
+        # the service (so within this try) and LockBusyError subclasses
+        # Exception directly, so without this arm the generic arm below buries
+        # a retryable conflict as a 500. A `raise` inside an `except` escapes
+        # the whole `try`, so the sibling arm cannot re-catch it.
+        raise
+    except WaiversError as exc:
+        # Status by TYPE for the WAIVER half of this handler — link_account
+        # signs the gym's payer-auth agreement through the shared
+        # ``sign_waiver``, so the version-lock 409 is a waivers rejection.
+        # Must sit ABOVE the ValueError arm: WaiversError subclasses
+        # ValueError, so the prose arm would otherwise swallow it.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=str(exc),
+        ) from None
     except ValueError as exc:
+        # KNOWN GAP — prose dispatch. These ValueErrors are raised by
+        # ``src/memberships/service/memberships_linked.py``, so typing them
+        # needs a hierarchy in THAT domain (a money domain, so its base stays
+        # on ``Exception``). Until then, rewording a memberships message moves
+        # this status. Same gap on ``/link/check`` and ``/link/remove`` below.
         error_msg = str(exc)
-        if "reload" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=error_msg,
-            ) from None
         if "not found" in error_msg.lower():
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -692,6 +824,7 @@ async def check_link_member_account(
             request.payer_member_id,
         )
     except ValueError as exc:
+        # KNOWN GAP — prose dispatch, same reason as PUT /{id}/link above.
         error_msg = str(exc)
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -729,6 +862,7 @@ async def check_link_member_account(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to view this member"},
         404: {"description": "Member not found"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -752,6 +886,10 @@ async def preview_remove_authorization(
             member_id,
             request.payer_member_id,
         )
+    except LockBusyError:
+        # Busy payer -> 409. Even this READ takes the lock (the figures it
+        # quotes must not be computed mid-converge), so it can answer busy.
+        raise
     except Exception:
         logger.error(
             "Failed to preview remove authorization: member_id=%s",
@@ -791,6 +929,7 @@ async def preview_remove_authorization(
                 "authorization row is left intact. A 2xx, never auto-retried."
             )
         },
+        409: {"description": BUSY_PAYER_409.capitalize()},
         500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
@@ -822,6 +961,11 @@ async def remove_authorization(
                 for item_id, cancel_date in cancel_dates.items()
             },
         )
+    except LockBusyError:
+        # Busy payer -> 409. The most damaging place to bury this: a 500 on a
+        # cascading cancel reads as "money may have half-moved" when the lock
+        # was never acquired and nothing ran, so the op is safe to retry.
+        raise
     except PartialCancelError as exc:
         # The cascading cancel partially applied (one payer converged, a later
         # one failed). Mirror the cancel router: this is a real, parseable
@@ -849,6 +993,7 @@ async def remove_authorization(
             },
         )
     except ValueError as exc:
+        # KNOWN GAP — prose dispatch, same reason as PUT /{id}/link above.
         error_msg = str(exc)
         if "not found" in error_msg.lower():
             raise HTTPException(
@@ -921,9 +1066,12 @@ async def get_authorized_payer_waiver(
         return await waivers_service.get_payer_auth_waiver_with_body_for_member(
             member_id,
         )
-    except ValueError as exc:
+    except WaiversError as exc:
+        # Status by TYPE. Every rejection this read raises is a 404, but do
+        # not hard-code it back for any ``ValueError``: a ValidationError
+        # building the response is one, and would read as "waiver not found".
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
+            status_code=exc.status_code,
             detail=str(exc),
         ) from None
     except Exception:
@@ -974,16 +1122,12 @@ async def list_member_invoices(
             limit=limit,
             starting_after=starting_after,
         )
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status by TYPE. No generic ValueError arm — this service raises no
+        # untyped bad input (see update_card).
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(
@@ -1030,16 +1174,12 @@ async def get_member_upcoming_invoice(
 
     try:
         return await management_service.get_upcoming_invoice(member_id)
-    except ValueError as exc:
-        error_msg = str(exc)
-        if "not found" in error_msg.lower():
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=error_msg,
-            ) from None
+    except MembersError as exc:
+        # Status by TYPE. No generic ValueError arm — this service raises no
+        # untyped bad input (a member with no subscription returns ``None``).
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            status_code=exc.status_code,
+            detail=str(exc),
         ) from None
     except Exception:
         logger.error(

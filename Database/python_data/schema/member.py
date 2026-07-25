@@ -42,6 +42,9 @@ class MemberCreate(SeedModel):
     photo_url: str | None = None
     phone: str | None = None
     address: str | None = None
+    # Nullable in the DB (the kiosk signup captures it as an optional
+    # detail), but every seeded member gets one.
+    date_of_birth: date | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
     emergency_contact_email: str | None = None

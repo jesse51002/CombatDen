@@ -43,9 +43,9 @@ MEMBERS: frozenset[str] = frozenset(
         "current_sub_index",  # leaf position — written only by the ranks endpoints
         # Merged billing columns (was member_billing_profile) — managed by the
         # backend / Stripe, never by the client. Contact fields (photo_url,
-        # phone, address, emergency_contact_*) are client-editable and are
-        # accepted by the create/update member endpoints, so are intentionally
-        # NOT listed here.
+        # phone, address, date_of_birth, emergency_contact_*) are
+        # client-editable and are accepted by the create/update member
+        # endpoints, so are intentionally NOT listed here.
         "total_monthly_recurring_price",  # managed by backend membership logic
         "stripe_customer_id",  # trigger: trg_prevent_stripe_customer_id_overwrite
         "stripe_payment_method_id",

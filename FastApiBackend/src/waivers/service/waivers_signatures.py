@@ -35,6 +35,13 @@ from src.waivers.schema.waivers_schema import (
     WaiverSignatureResponse,
 )
 from src.waivers.service.waivers_base import WaiversBase
+from src.waivers.waivers_exceptions import (
+    WaiverNotFoundError,
+    WaiverPayerAuthMissingError,
+    WaiverSignerNotInGymError,
+    WaiverVersionNotFoundError,
+    WaiverVersionStaleError,
+)
 
 # A waiver token as a markdown serializer may store it: each brace and the
 # underscores optionally backslash-escaped (e.g. ``\{\{member\_name\}\}``).
@@ -85,8 +92,9 @@ class WaiversSignatures(WaiversBase):
         """Resolve a member's gym payer-auth waiver + version.
 
         Raises:
-            ValueError: If the member's gym has no payer-auth waiver (the
-                authorized-payer gate cannot proceed).
+            WaiverPayerAuthMissingError: The member's gym has no payer-auth
+                waiver, so the authorized-payer gate cannot proceed. 404 on
+                EVERY caller — see ``waivers_exceptions``.
         """
         sql = load_sql(SQL_DIR / "waiver_payer_auth_for_member.sql")
         async with self._db_pool.session() as session:
@@ -97,7 +105,7 @@ class WaiversSignatures(WaiversBase):
             row = result.mappings().fetchone()
 
         if row is None:
-            raise ValueError(
+            raise WaiverPayerAuthMissingError(
                 f"No payer-auth waiver for member {member_id}'s gym",
             )
         return WaiverPayerAuthInfo(**dict(row))
@@ -206,10 +214,12 @@ class WaiversSignatures(WaiversBase):
         sha256 are frozen on the row.
 
         Raises:
-            ValueError: ``"... not found ..."`` if the waiver is missing /
-                archived / has no current version, or the member is not in the
-                gym (→ 404); a message containing ``"reload"`` if the echoed
-                version is stale (→ 409).
+            WaiverNotFoundError: The waiver is missing or archived (→ 404).
+            WaiverVersionNotFoundError: The waiver has no current version to
+                sign (→ 404).
+            WaiverVersionStaleError: The echoed version is not the current
+                one (→ 409).
+            WaiverSignerNotInGymError: The member is not in this gym (→ 404).
         """
         sql = load_sql(SQL_DIR / "waiver_current_version_for_sign.sql")
         async with self._db_pool.session() as session:
@@ -224,16 +234,16 @@ class WaiversSignatures(WaiversBase):
             waiver = result.mappings().fetchone()
 
             if waiver is None or waiver["is_deleted"]:
-                raise ValueError(
+                raise WaiverNotFoundError(
                     f"Waiver {waiver_id} not found in gym {gym_id}",
                 )
             current_version_id = waiver["current_version_id"]
             if current_version_id is None:
-                raise ValueError(
-                    f"Waiver {waiver_id} not found: no current version to sign",
+                raise WaiverVersionNotFoundError(
+                    f"Waiver {waiver_id} has no current version to sign",
                 )
             if str(waiver_version_id) != str(current_version_id):
-                raise ValueError(
+                raise WaiverVersionStaleError(
                     "Waiver was updated since it was displayed — reload and "
                     "sign the current version",
                 )
@@ -265,7 +275,7 @@ class WaiversSignatures(WaiversBase):
                 # The waiver + version are pre-validated above and the operator
                 # is auth-verified, so the only FK left to trip is the member's
                 # (member_id, gym_id) — i.e. the member is not in this gym.
-                raise ValueError(
+                raise WaiverSignerNotInGymError(
                     f"Member {member_id} not found in gym {gym_id}",
                 ) from exc
 
