@@ -1,6 +1,13 @@
 """Start memberships: validate → DB insert + discounts → one-time invoice + recurring converge.
 
 At most two charges per request. Billed charges are never un-billed.
+
+Failure reporting follows one rule: **the response never claims less than what
+actually happened.** A bank decline is per-item DATA (``card declined: …`` → the
+router's 207). A system failure raises → 500 *while nothing has been collected*;
+once the one-time leg of the same request has charged, the same system failure
+becomes per-item DATA too (``system failure: …`` → 207), because a 500 whose
+contract reads "nothing created" would be a lie about money that moved.
 """
 
 from __future__ import annotations
@@ -53,6 +60,17 @@ if TYPE_CHECKING:
     )
 
 logger = logging.getLogger(__name__)
+
+# The two reason prefixes stamped on a ``failed`` result item's ``error``. They
+# are the greppable, stable discriminator between the only two ways a start can
+# fail once it has begun: the BANK said no, or OUR side broke. Staff act on them
+# differently (another card vs. finish it at the desk) and monitoring must not
+# confuse an ordinary decline with an outage, so neither is ever phrased as the
+# other. Part of the API contract — see
+# ``MemberMembershipsStartResultItem``; the prose after the prefix is free to
+# change, the prefix is not.
+CARD_DECLINED_PREFIX = "card declined: "
+SYSTEM_FAILURE_PREFIX = "system failure: "
 
 
 class MemberMembershipsStart(MemberMembershipsBase):
@@ -138,10 +156,22 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         await self._insert_all(request, payer, plan_prices, states)
 
+        # Whether the one-time leg of THIS request already committed a charge.
+        # It decides how a later NON-card failure in the recurring converge is
+        # reported: once money has moved and live rows are kept, the request can
+        # no longer honestly answer the router's 500 ("nothing created") — see
+        # ``_converge_recurring_group``.
+        one_time_committed = False
         if one_time:
-            await self._charge_one_time_group(request, one_time)
+            one_time_committed = await self._charge_one_time_group(
+                request, one_time,
+            )
         if recurring:
-            await self._converge_recurring_group(request, recurring)
+            await self._converge_recurring_group(
+                request,
+                recurring,
+                one_time_committed=one_time_committed,
+            )
 
         charge_count = (1 if one_time else 0) + (1 if recurring else 0)
         return self._build_response(states, charge_count)
@@ -190,7 +220,7 @@ class MemberMembershipsStart(MemberMembershipsBase):
         """
         for state in states:
             state.status = MemberMembershipsStartStatus.failed
-            state.error = f"card declined: {error}"
+            state.error = f"{CARD_DECLINED_PREFIX}{error}"
         return self._build_response(states, charge_count=0)
 
     # ── Private — the phases ───────────────────────────────────
@@ -236,9 +266,19 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
         group: list[MemberMembershipsStartItemState],
-    ) -> None:
+    ) -> bool:
         """Charge one consolidated invoice for the one-time group.
-        Keeps rows on success — billed lines are never un-billed."""
+        Keeps rows on success — billed lines are never un-billed.
+
+        Returns:
+            Whether the charge COMMITTED — i.e. the invoice went through and its
+            rows are kept (``_verify_group(keep_unverified=True)`` never un-bills
+            a billed line, so a kept-but-unconfirmed row still counts). ``False``
+            only on a decline, where the group's rows were cleaned up and
+            nothing was collected. A non-card failure raises instead, so it never
+            returns. The recurring arm needs this answer to know whether a later
+            failure can still claim "nothing created".
+        """
         payment = request.payment
         one_off_pm = (
             payment.payment_method_id
@@ -260,9 +300,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
             # pending rows are cleaned up) so the response carries a `failed`
             # item -> the router's 207 decline contract, never a 500.
             await self._fail_group(
-                group, f"card declined: {exc}", cleanup=True,
+                group, f"{CARD_DECLINED_PREFIX}{exc}", cleanup=True,
             )
-            return
+            return False
         except Exception:
             # Any NON-card failure (a Stripe system/gateway error, a network
             # timeout, a rate limit) is NOT a decline. Clean up the un-billed
@@ -272,6 +312,10 @@ class MemberMembershipsStart(MemberMembershipsBase):
             await self._cleanup_states(group)
             raise
         await self._verify_group(group, keep_unverified=True)
+        # The invoice went through. Even a row whose writeback could not be
+        # confirmed is KEPT and flagged (billed lines are never un-billed), so
+        # from here on this request has moved money whatever else fails.
+        return True
 
     async def _set_default_card(
         self,
@@ -290,8 +334,15 @@ class MemberMembershipsStart(MemberMembershipsBase):
         self,
         request: MemberMembershipsStartRequest,
         group: list[MemberMembershipsStartItemState],
+        *,
+        one_time_committed: bool,
     ) -> None:
-        """Converge the recurring group into Stripe; reverts unconfirmed rows."""
+        """Converge the recurring group into Stripe; reverts unconfirmed rows.
+
+        ``one_time_committed`` says whether the one-time leg of this SAME
+        request already charged. It changes only how a NON-card failure here is
+        reported — see that arm.
+        """
         try:
             await self._payment_sync.update_payments_recurring(
                 request.payer_member_id,
@@ -309,17 +360,62 @@ class MemberMembershipsStart(MemberMembershipsBase):
             # are cleaned up) so the response carries a `failed` item -> the
             # router's 207 decline contract, never a 500.
             await self._fail_group(
-                group, f"card declined: {exc}", cleanup=True,
+                group, f"{CARD_DECLINED_PREFIX}{exc}", cleanup=True,
             )
             return
-        except Exception:
+        except Exception as exc:
             # Any NON-card failure (a Stripe system/gateway error, a lost
-            # subscription, a network timeout) is NOT a decline. Clean up the
-            # un-billed pending rows (nothing half-committed) and propagate so
-            # the router returns a non-retryable 500 — a system failure must
-            # never masquerade as a card decline.
+            # subscription, a network timeout) is NOT a decline, and is never
+            # dressed up as one. Either way the recurring group's un-billed
+            # pending rows go (nothing half-committed); what differs is how the
+            # request ANSWERS.
             await self._cleanup_states(group)
-            raise
+            if not one_time_committed:
+                # Nothing in this request ever collected, so "the whole start
+                # failed and nothing was created" is the literal truth:
+                # propagate and let the router answer a non-retryable 500.
+                raise
+            # The one-time leg of this SAME request already charged, and
+            # `_verify_group(keep_unverified=True)` deliberately KEEPS those
+            # billed rows — so a live membership exists and money has moved. The
+            # 500's contract says "nothing created", which would now be a flat
+            # lie about a collected charge; the house rule is that a 2xx no
+            # longer implies money moved and the client branches on the per-item
+            # result. So report the truth per item instead: these recurring
+            # items `failed` -> the router's 207, carrying a SYSTEM-FAILURE
+            # reason that is unmistakably not a bank decline (another card
+            # cannot fix this; staff must finish it). 207 is a 2xx, so no proxy
+            # auto-replays this money-moving request either.
+            #
+            # Swallowing the exception is what would otherwise make the outage
+            # invisible — the router never sees it — so it is logged HERE, with
+            # the stack, before the group is folded into the response.
+            logger.error(
+                "Start: the recurring converge failed AFTER the one-time leg "
+                "already collected (payer_member_id=%s, gym_id=%s). The "
+                "one-time memberships stand; the recurring items are reported "
+                "failed with a system-failure reason on a 207.",
+                request.payer_member_id,
+                request.gym_id,
+                exc_info=True,
+            )
+            await self._fail_group(
+                group,
+                # No form of the word "decline" appears here on purpose: this
+                # reason is read by staff (and matched by clients) and the card
+                # was never the problem — saying so in passing invites exactly
+                # the misread the prefix exists to prevent.
+                (
+                    f"{SYSTEM_FAILURE_PREFIX}the recurring memberships could "
+                    f"not be set up ({type(exc).__name__}). The card was not "
+                    f"the problem — our side failed. The one-time purchase on "
+                    f"this order WAS charged and is live; nothing recurring was "
+                    f"created. Front desk must start the recurring items again."
+                ),
+                # Already cleaned above — do not delete twice.
+                cleanup=False,
+            )
+            return
         await self._verify_group(group, keep_unverified=False)
 
     async def _verify_group(

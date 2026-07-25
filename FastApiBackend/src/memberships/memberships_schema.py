@@ -213,6 +213,19 @@ class MemberMembershipsStartResultItem(BaseModel):
     failure reason when ``status = failed``. Failure granularity is the
     charge group (the one-time invoice / the recurring converge), so
     same-group items share fate.
+
+    ``error`` is prefixed so a client (and the front desk reading the receipt)
+    can tell the two kinds of failure apart without parsing prose:
+
+    * ``card declined: …`` — the BANK refused. Nothing was collected for this
+      group; offering another card is the right next step.
+    * ``system failure: …`` — OUR side broke. Only reachable when an earlier
+      charge in the SAME request already collected, which is why the response is
+      a 207 rather than a 500 (see ``MemberMembershipsStart``): another card
+      will not help, staff have to finish the job.
+
+    The prefixes are a stable part of the contract — reword the text after them
+    freely, never the prefix itself.
     """
 
     member_id: UUID
@@ -295,21 +308,43 @@ class MemberMembershipsRetryCardRequest(BaseModel):
 
 
 class MemberMembershipsRetryCardStatus(StrEnum):
-    """Outcome of a card retry on ONE membership's open invoice."""
+    """Outcome of a card retry on ONE membership's open invoice.
+
+    Three outcomes, all of them DATA: the bank collected, the bank refused, or
+    nobody refused but the money did not arrive either. Only ``paid`` means
+    money moved — see :class:`MemberMembershipsRetryCardResponse`.
+    """
 
     paid = "paid"
     declined = "declined"
+    not_collected = "not_collected"
 
 
 class MemberMembershipsRetryCardResponse(BaseModel):
-    """The outcome of one card retry — a decline is a RESULT, not a failure.
+    """The outcome of one card retry — a definitive answer is a RESULT, not a
+    failure.
 
-    ``paid`` (HTTP 200) — the bank collected; the open invoice is settled.
+    ``paid`` (HTTP 200) — the bank collected; the open invoice is settled. The
+    ONLY outcome that means money moved.
+
     ``declined`` (HTTP 207) — the bank refused; nothing was collected and the
     membership stays overdue, with ``decline_reason`` carrying Stripe's own
     end-user wording so staff know what to do next (expired → Update Card;
-    insufficient funds → tell the member). A system/upstream failure is NOT
-    this shape — it is still a 500.
+    insufficient funds → tell the member).
+
+    ``not_collected`` (HTTP 207) — nothing was refused, but nothing was
+    collected either: the off-session invoice's PaymentIntent needs
+    authentication (SCA / 3-D Secure) the member has to complete, so it came
+    back still ``open``. A distinct outcome from ``declined`` on purpose — the
+    bank never said no, so "try another card" is the wrong advice; staff have to
+    collect another way. Raised as ``PaymentsNotCollectedError``.
+
+    A system/upstream failure is NOT any of these shapes — it is still a 500.
+
+    ``decline_reason`` is the one "why nothing was collected" slot, populated on
+    BOTH non-``paid`` outcomes (Stripe's decline wording on ``declined``, the
+    authorization-needed explanation on ``not_collected``); the machine-readable
+    discriminator is ``status``, never the prose.
 
     Single-item on purpose: this endpoint settles exactly ONE membership's
     invoice, so the start path's ``results`` LIST would misrepresent it. The

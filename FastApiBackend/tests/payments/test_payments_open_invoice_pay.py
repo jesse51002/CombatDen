@@ -16,8 +16,10 @@ the load-bearing difference between them:
 * both RETURN the now-paid invoice (the plain nested dict the record seam
   consumes) so the settle can apply it in-request; the CARD path additionally
   refuses to return success when ``invoices.pay`` came back without collecting
-  (SCA needs authentication) — a non-``paid`` return raises rather than being
-  booked as a phantom success.
+  (SCA needs authentication) — a non-``paid`` return raises the DISTINCT
+  ``PaymentsNotCollectedError`` rather than being booked as a phantom success.
+  The type is load-bearing: the retry-card router answers it with its own 207
+  ``not_collected`` result, while a base ``PaymentsStripeError`` is a 500.
 """
 
 import json
@@ -27,6 +29,7 @@ import pytest
 import stripe
 
 from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
     PaymentsResourceNotFoundError,
     PaymentsStripeError,
 )
@@ -221,7 +224,13 @@ async def test_on_card_uncollected_return_raises_not_phantom_success() -> None:
     off-session invoice needing authentication (SCA / 3-D Secure) can come back
     with the invoice still ``open`` and no exception. Booking that as success
     would clear the member off every overdue surface while no money moved, so
-    the card path turns a non-``paid`` return into a ``PaymentsStripeError``.
+    the card path raises the DEDICATED ``PaymentsNotCollectedError``.
+
+    The exact TYPE is the contract, not just "some error": the retry-card router
+    answers this one with its own 207 ``not_collected`` result — a definitive
+    business outcome, like a decline — whereas a plain ``PaymentsStripeError``
+    stays a 500. Widening this assertion back to the base class would let a
+    regression silently push a definitive outcome back onto the outage path.
     """
     service, fake_stripe = _build_service()
     uncollected = MagicMock()
@@ -231,10 +240,33 @@ async def test_on_card_uncollected_return_raises_not_phantom_success() -> None:
     )
     fake_stripe.v1.invoices.pay_async.return_value = uncollected
 
-    with pytest.raises(PaymentsStripeError, match="could not be charged"):
+    with pytest.raises(PaymentsNotCollectedError, match="could not be charged"):
         await service.pay_open_subscription_invoice_on_card(
             STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
         )
+
+
+@pytest.mark.asyncio
+async def test_uncollected_error_is_not_mistaken_for_a_generic_stripe_error() -> None:
+    """It IS a ``PaymentsStripeError`` (so an untaught caller still 500s it
+    safely), which is exactly why the retry-card router must catch it ABOVE its
+    base arm — otherwise the base wins and the 207 is unreachable."""
+    service, fake_stripe = _build_service()
+    uncollected = MagicMock()
+    uncollected.status = "open"
+    uncollected.__str__.return_value = json.dumps(
+        {"id": INVOICE_ID, "status": "open"}
+    )
+    fake_stripe.v1.invoices.pay_async.return_value = uncollected
+
+    with pytest.raises(PaymentsStripeError) as caught:
+        await service.pay_open_subscription_invoice_on_card(
+            STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
+        )
+
+    assert isinstance(caught.value, PaymentsNotCollectedError)
+    # Not the not-found sibling — nothing is missing, the money just didn't move.
+    assert not isinstance(caught.value, PaymentsResourceNotFoundError)
 
 
 def _build_service_pay_error(exc: Exception) -> PaymentsStripePaymentService:

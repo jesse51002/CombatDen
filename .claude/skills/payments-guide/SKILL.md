@@ -149,7 +149,11 @@ only a small set of flow-control keys off the raw envelope (§6).
 Each is one focused wrapper class in `src/payments/service/`. All raise the
 `payments_exceptions.py` hierarchy: `PaymentsStripeError` (base),
 `PaymentsResourceNotFoundError` (carries `resource_id` + a `StripeResourceType`),
-`PaymentsInvalidRequestError`, and `StripeOrphanError` (a Stripe resource was
+`PaymentsInvalidRequestError`, `PaymentsNotCollectedError` (a card charge that
+definitively did NOT collect with no decline raised — an SCA/3-D-Secure
+authentication the member must complete; a business OUTCOME a caller may answer
+with a 2xx result rather than a 500, see `pay_open_subscription_invoice_on_card`
+below), and `StripeOrphanError` (a Stripe resource was
 created but the CRM writeback failed — surfaced loudly for operator cleanup).
 
 **`PaymentsStripeMembersService`** (`payments_stripe_members_service.py`) — Stripe
@@ -158,7 +162,14 @@ created but the CRM writeback failed — surfaced loudly for operator cleanup).
 - `create_customer` — customer (optionally with a payment method set as the
   invoice-settings default).
 - `update_customer` — updates details and **swaps the card**: attaches the new
-  PaymentMethod, sets it default, then **detaches the old** one.
+  PaymentMethod, sets it default, then **detaches the old** one. The attach
+  carries a **derived** idempotency key,
+  `f"{stripe_customer_id}:{payment_method_id}:attach"` — the request has no
+  caller-supplied key, so it is built from the two ids that fully identify the
+  write, with the same `:attach` suffix the sibling's callers use. Deterministic
+  by construction: a retried save of the same card dedups at Stripe, a different
+  card is a different key. (Detach + ordering are a separate, knowingly-accepted
+  call — see the promote-then-detach note in `memberships-guide`'s start row.)
 - `attach_payment_method` / `detach_payment_method` — attach a PaymentMethod to a
   customer **without** making it default, and detach one (both idempotency-keyed).
   Used by the one-off-card charge path (`create_invoice_payment` with a
@@ -271,10 +282,16 @@ back to active because the DB says it's current.
   (`memberships-guide`). A pay that returns WITHOUT collecting (an off-session
   invoice whose PaymentIntent needs SCA / 3-D Secure authentication — no decline
   raised, invoice still `open`) is caught by `_require_card_collected` and turned
-  into a `PaymentsStripeError`, so it lands as a **500** with actionable wording
-  and is never booked as a phantom success — and never dressed up as a decline.
+  into a **`PaymentsNotCollectedError`**, so it is never booked as a phantom
+  success — and never dressed up as a decline either. The dedicated TYPE is the
+  contract: that outcome is just as DEFINITIVE as a decline ("we could not
+  collect on this card, staff must act"), so the `retry-card` router answers it
+  with its own 2xx `not_collected` RESULT (**207**) instead of a 500. It
+  subclasses `PaymentsStripeError`, so an untaught caller still 500s it safely —
+  and any router that DOES handle it must catch it **above** its base
+  `PaymentsStripeError` arm.
   Both methods share ONE private lookup,
-  `_find_open_subscription_invoice` (unknown subscription →
+  `_list_open_subscription_invoices` (unknown subscription →
   `PaymentsResourceNotFoundError`, no open invoice → `ValueError`), so cash and
   card can never drift on what "the open invoice" is.
 - **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,

@@ -312,14 +312,44 @@ src/
   {"detail": "Class is not active", "code": "class_inactive"}
   ```
 
-  - **`detail` MUST stay a plain string on every endpoint** — never an object,
-    never a nested `{"message": …, "code": …}`. The CRM's
-    `lib/core/network/api_client.dart` `_extractDetail` returns `data['detail']`
-    only when it is a `String`, and `member_detail_bloc.dart` renders
-    `(e.detail ?? e.message)`, so nesting would silently degrade every real
-    error message to "Server error 400: Bad Request". This is *why* the sibling
-    shape was chosen. If a change makes preserving the string impossible, stop
-    and raise it — don't reshape the body.
+  - **Never declare a `code` you do not also put on the wire.** A code cannot
+    reach a client without the one global `app.add_exception_handler` formatter
+    in `src/main.py`; declaring the enum without registering that handler
+    test-locks a set of strings into the public contract while no caller can
+    ever read them — declared, invisible, and pure liability. `members` and
+    `waivers` both went through this state and both dropped the enum:
+    no CRM caller branches past the STATUS on either domain's rejections, so
+    each has typed exceptions carrying **only** `status_code`, and their
+    error-mapping tests assert positively that no `code` attribute exists.
+    If a client ever does need to branch, add the enum AND the formatter in the
+    SAME change.
+  - **`detail` is a plain string by default, and that default holds for every
+    ordinary endpoint.** The CRM's `lib/core/network/api_client.dart`
+    `_extractDetail` returns `data['detail']` **only** when it is a `String`
+    (yielding `null` otherwise), and `member_detail_bloc.dart` renders
+    `(e.detail ?? e.message)` — so an endpoint whose error is meant to be READ
+    as prose must keep `detail` a string, or its message silently degrades to
+    "Server error 400: Bad Request". This is *why* the sibling-`code` shape
+    exists: structure never has to go inside `detail`.
+  - **Two endpoints deliberately return an OBJECT `detail`, and they are
+    correct.** The duplicate-member **409** (`POST /members/` →
+    `{"code": "duplicate_member", "matches": [...]}`, raised at
+    `members_management_create.py:131`) and the waiver-gate **422**
+    (`{"message": …, "unsigned": [...]}`). Each has a purpose-built client
+    parser that reads the RAW response body, never `_extractDetail`:
+    `member_repository.dart` `_parseDuplicateMember` (`:153`, called from the
+    409 arm at `:141`) and `_parseWaiverGate` (`:469`). Both require `detail`
+    to be a `Map`, check their discriminator, and **return null on a shape
+    mismatch**, so a plain 409/422 from anywhere else still propagates
+    normally.
+  - **The invariant that keeps that safe: an object `detail` is allowed ONLY
+    when a purpose-built client parser owns that endpoint's body.** Absent
+    such a parser, the object is unreadable (`_extractDetail` yields null) and
+    the error renders as the bare status line. So: don't "fix" those two
+    endpoints to comply with the default, and don't copy their shape onto a
+    third endpoint without writing its parser in the same change. If a change
+    makes preserving a string impossible on an endpoint that has no parser,
+    stop and raise it — don't reshape the body.
   - **`code` is the stable machine-readable discriminator** clients switch on;
     `detail` is prose for humans and may be reworded freely.
   - **Codes are part of the public contract. Renaming one is a BREAKING
@@ -328,7 +358,8 @@ src/
   - `code` is a `StrEnum` in the domain's exceptions module
     (`CheckinErrorCode`), and each concrete exception declares **both**
     `status_code` and `code` as class attributes — the type is the single
-    source of truth for the whole contract.
+    source of truth for the whole contract. In a domain with no code (the
+    common case) the type declares `status_code` alone.
 - **One global handler formats the body; routers only re-raise.** Register the
   domain base with `app.add_exception_handler` in `src/main.py` (the
   `_handle_lock_busy_error` template) — Starlette resolves a handler by walking
@@ -356,12 +387,14 @@ src/
   `code: <Domain>ErrorCode | None`), so the contract is self-documenting and
   client codegen sees the enum. `code` is nullable because the generic
   `except ValueError` → 400 arm emits none — clients fall back to `detail` when
-  it is absent. Model: `src/checkin/schema/checkin_error_schema.py`.
+  it is absent. Model: `src/checkin/schema/checkin_error_schema.py`. A domain
+  with no code has nothing to declare beyond its per-status descriptions.
 - **An INPUT-VALIDATION domain's exception base subclasses `ValueError`** so an
   unmapped domain error lands as a 400 (bad input), not a 500 — the router's
   existing `except ValueError` → 400 arm catches it, so a typed hierarchy is
   additive, never a breaking sweep. Models: `src/checkin/checkin_exceptions.py`,
-  `src/employees/employees_exceptions.py`, `src/members/members_exceptions.py`.
+  `src/employees/employees_exceptions.py`, `src/members/members_exceptions.py`,
+  `src/waivers/waivers_exceptions.py`.
   This is **deliberately not universal**: the money / external-system domains
   (`payments`, `memberships`, `tasks`, `stripe_webhooks`) base on `Exception` on
   purpose, because their unmapped failures must map to 500 / retryable — never a
@@ -371,44 +404,73 @@ src/
   `MembersError` + its four subclasses (`MemberNotFoundError` → 404; the
   gym-has-no-Connect-account, member-has-no-Stripe-customer and
   no-update-fields types → 400) cover the seven handlers backed by
-  `MembersManagementService`: the SIX that used substring dispatch (update
+  `MembersManagementService` — the SIX that used substring dispatch (update
   member, card update, unlink payment, payment-method-status, invoices,
   upcoming-invoice) plus `POST /members/`, whose 400 was already right and now
-  comes off the type rather than by coincidence. Two things are knowingly
-  unfinished, documented in the code, and should be picked up rather than
-  rediscovered:
-  - The `code` values are declared on the types and locked by
-    `tests/members/test_members_error_mapping.py`, but are **not on the wire** —
-    that needs the one global `app.add_exception_handler` formatter in
-    `src/main.py`. Until it is registered, a members rejection serializes as a
-    plain-string `detail` only, and the router arms map `exc.status_code`
-    themselves. Registering it collapses all seven arms to a bare `raise` and
-    flips one tripwire test.
-  - The three linked-account handlers (`PUT /members/{id}/link`,
-    `/link/check`, `/link/remove`) **still dispatch on the message's prose**,
-    because their `ValueError`s are raised by `src/memberships/` and
-    `src/waivers/` — a members-side type cannot classify an error members never
-    raises. Fixing them means typed hierarchies in those two domains; note
-    `memberships` is a money domain, so per the rule above its base must stay
-    on `Exception` and each router arm maps its types explicitly.
+  comes off the type rather than by coincidence — **plus the two member-DETAIL
+  reads** (`GET /members/{id}`, `GET /members/{id}/billing`), whose blanket
+  `except ValueError` → 404 "Member not found" is now a typed arm (see the
+  pydantic-trap rule below; `MembersBillingDetailService` raises
+  `MemberNotFoundError`). The domain carries **no `code` enum** — no client
+  branches past the status, so declaring one would be four invisible strings
+  (see the never-declare-an-unwired-code rule above). One thing is still
+  knowingly unfinished, documented in the code, and should be picked up rather
+  than rediscovered:
+  - Two of the three linked-account handlers (`POST /members/{id}/link/check`
+    and `/link/remove`) **still dispatch on the message's prose**, because
+    their `ValueError`s are raised by `src/memberships/` — a members-side type
+    cannot classify an error members never raises. Fixing them means a typed
+    hierarchy in that domain; note `memberships` is a money domain, so per the
+    rule above its base must stay on `Exception` and each router arm maps its
+    types explicitly. `PUT /members/{id}/link` is now **half** converted on
+    purpose: a `WaiversError` arm above the prose arm handles its waiver half
+    (signing the payer-auth agreement) by type, and the prose arm below keeps
+    the `KNOWN GAP` comment for the memberships half. Its `"reload"` → 409
+    branch is **gone** — that conflict was exclusively the waivers version-lock
+    and the typed arm owns it now.
+- **`waivers` is fully typed, and it is the cautionary tale for prose
+  dispatch.** `WaiversError` + seven subclasses
+  (`src/waivers/waivers_exceptions.py`): the not-found family
+  (`WaiverNotFoundError`, `WaiverVersionNotFoundError`,
+  `WaiverSignerNotInGymError`, `WaiverPayerAuthMissingError`) → 404,
+  `WaiverNoCurrentVersionError` + `WaiverPayerAuthNotArchivableError` → 400,
+  `WaiverVersionStaleError` → 409. Two things are worth carrying forward:
+  - The 409 used to hang off `if "reload" in str(exc).lower()`. **Nothing about
+    the word "reload" says "conflict"**, so a copy edit to the signer-facing
+    message would have demoted a version-lock conflict to a 400 — telling a
+    client its request was malformed when the document had simply moved, which
+    invites it to re-submit the same stale version. This is the sharpest
+    example of why status-by-prose is banned.
+  - One raise (`get_payer_auth_waiver_for_member`) answered **404 on the read
+    route and 400 on the link route**, purely because its message happens not
+    to contain "not found". One type cannot keep both; it is 404 everywhere now
+    (the status the read path documents). Two of the seven statuses are
+    inherited from the prose dispatch rather than chosen — recorded in the
+    module docstring so nobody mistakes an accident for a decision.
 - **Keep the generic `except Exception` → 500 arm** (with
   `logger.error(..., exc_info=True)`) below the typed arms. Add a generic
   `except ValueError` → 400 arm between them **only on a handler whose service
   actually raises a `ValueError` for bad input** — omit it where the service
   raises none, or it becomes the catch-all bug described below.
-- **The type → (status, code) table belongs in a test, not in a comment.** A
-  parametrized test over that table, using deliberately message-hostile strings
-  (a 404 type whose message lacks "not found", a 400 type whose message
-  contains it), is what actually locks the contract — assert the status, that
-  `detail` is a `str`, and the exact `code`. Add reflection tests so a new
-  exception can't silently inherit a default: every concrete subclass in the
-  module must appear in the table, and must declare `status_code` + `code` in
-  its **own** `vars()` (the base keeps safe fallbacks so a forgotten subclass
-  can't 500 a live request — the test is what fails loudly instead). Models:
-  `tests/checkin/test_checkin_error_mapping.py`,
-  `tests/members/test_members_error_mapping.py` (the latter parametrizes the
-  same table across all six of its endpoints, and asserts the `code` at the
-  TYPE level because it is not on the wire yet).
+- **The type → status (and, where one exists, `code`) table belongs in a test,
+  not in a comment.** A parametrized test over that table, using deliberately
+  message-hostile strings (a 404 type whose message lacks "not found", a 400
+  type whose message contains it, a 409 type whose message contains neither the
+  409 nor the 404 trigger word), is what actually locks the contract — assert
+  the status, that `detail` is a `str`, and the exact `code` where there is one.
+  Add reflection tests so a new exception can't silently inherit a default:
+  every concrete subclass in the module must appear in the table and must
+  declare `status_code` (plus `code`, in a domain that has one) in its **own**
+  `vars()` (the base keeps safe fallbacks so a forgotten subclass can't 500 a
+  live request — the test is what fails loudly instead). In a
+  deliberately code-less domain, also assert **positively that no `code`
+  attribute exists**, so the half-wired state cannot creep back. Models:
+  `tests/checkin/test_checkin_error_mapping.py` (with codes),
+  `tests/members/test_members_error_mapping.py` and
+  `tests/waivers/test_waivers_error_mapping.py` (both without — each
+  parametrizes the same table across every one of its endpoints, and asserts
+  the body equals `{"detail": …}` exactly so nothing can quietly grow a second
+  key).
 - Include meaningful error messages; customize validation error responses.
 - **Status codes are a contract — don't "improve" one during a refactor.**
   `checkin`'s "not an occurrence of this class" is a **400, not a 404**, because
@@ -431,6 +493,22 @@ src/
   `PUT /members/{id}` KEEPS its generic arm because the shared, domain-agnostic
   `validate_mutable_columns` guard really does raise a plain `ValueError` for an
   immutable column.
+  **The worst instance of this trap was the member-DETAIL read**, and it is
+  worth remembering as the pattern to look for: `GET /members/{id}` and
+  `GET /members/{id}/billing` both serve
+  `MembersBillingDetailService.get_member_billing_detail` — the largest response
+  model in the API (memberships grouped by plan, authorized payers,
+  who-pays-for-whom, payment history, rewards, pending redemptions, rank, card)
+  — behind a blanket `except ValueError` → 404 `"Member not found"`. So ONE bad
+  field anywhere in that payload reported a member who plainly exists as
+  missing: staff re-checked the id, and the 500 that should have paged someone
+  was indistinguishable from a typo. The bigger the payload behind a blanket
+  arm, the more likely it fires on our own bug rather than the caller's. Same
+  shape in `waivers`: `GET /waivers/{id}` mapped any `ValueError` to 404, so a
+  stored body that no longer fit `WaiverResponse` reported the document as
+  missing; and `GET /members/{id}/authorized-payer-waiver` did the same. All
+  three are typed arms now; `PUT /waivers/` keeps its generic arm for the same
+  `validate_mutable_columns` reason as `PUT /members/{id}`.
 
 **Logging and Exception Strategy**
 - **API/Router layer**: Use `logger.error()` with `exc_info=True` to log full stack traces
@@ -444,15 +522,19 @@ src/
   - Focus on clear, descriptive exception messages that help debugging
 - **Layer Separation**: API logs + handles, Services raise + describe
 
-**Billing / Stripe error status codes — never 502/503/504, and a card decline is a RESULT**
+**Billing / Stripe error status codes — never 502/503/504, and a DEFINITIVE outcome is a RESULT**
 - **A system/upstream failure is a 500** — never 502/503/504. The 5xx proxy auto-retry family (502/503/504) causes reverse proxies and load balancers to replay the request automatically; auto-retrying a mutating billing op (charge, cancel, refund, reprice, freeze, …) risks duplicate side-effects. This covers `PaymentsStripeError`, a lost subscription, a gateway/network failure, an unexpected exception — anything where OUR side or Stripe's malfunctioned.
-- **A CARD DECLINE is not a failure — it is a definitive business OUTCOME, returned as a 2xx RESULT with the reason in the body, never a 500.** A bank saying no means the system worked; reporting it as a 500 misreports an ordinary decline as an outage and buries genuine outages in monitoring. 207 satisfies the no-auto-retry rule exactly as well as 500 (it is a 2xx, so no proxy replays a money-moving op).
-  - **Start** (`POST /api/v1/member_memberships/`) — `MemberMembershipsStart` catches `stripe.CardError` and folds it into a per-item `failed` entry with the decline reason; the router maps any failed item to **207**. Even an ALL-failed start is a 2xx.
-  - **Retry-card** (`POST /api/v1/member_memberships/retry-card`) — the router turns `stripe.CardError` into a `MemberMembershipsRetryCardResponse` with `status=declined` + `decline_reason` on **207**; a collected charge is `status=paid` on 200. Single-item, so no list.
-  - The reason surfaced is Stripe's own `user_message` (what it writes for end-user display) — staff read it to know what to do next (expired → Update Card; insufficient funds → tell the member).
-  - Only `stripe.CardError` moves. Every other arm on those handlers is unchanged: `MembershipInTaskError` → 409, `ValueError` → 404/400, `PaymentsStripeError` → 500, bare `Exception` → 500. A system failure must never masquerade as a decline, and a decline must never masquerade as a system failure.
+- **A DEFINITIVE ANSWER ABOUT THE MONEY is not a failure — it is a business OUTCOME, returned as a 2xx RESULT with the reason in the body, never a 500.** A bank saying no means the system worked; reporting it as a 500 misreports an ordinary decline as an outage and buries genuine outages in monitoring. 207 satisfies the no-auto-retry rule exactly as well as 500 (it is a 2xx, so no proxy replays a money-moving op). Two kinds of definitive answer qualify: a **card decline** (`stripe.CardError` — the bank refused) and a **definitive non-collection** (`PaymentsNotCollectedError` — nobody refused, but the money did not arrive either). Both are results; each carries its OWN reason, because staff act on them differently.
+  - **Start** (`POST /api/v1/member_memberships/`) — `MemberMembershipsStart` catches `stripe.CardError` and folds it into a per-item `failed` entry with the decline reason; the router maps any failed item to **207**. Even an ALL-failed start is a 2xx. Both the 201 and the 207 declare `MemberMembershipsStartResponse` as their `model` — the 207 is the primary kiosk decline surface, so a generated client must see the `results[]` body, not just a description.
+  - **Retry-card** (`POST /api/v1/member_memberships/retry-card`) — the router turns `stripe.CardError` into a `MemberMembershipsRetryCardResponse` with `status=declined` + `decline_reason` on **207**; `PaymentsNotCollectedError` into the same model with `status=not_collected` + its own reason on **207**; a collected charge is `status=paid` on 200. Single-item, so no list. `PaymentsNotCollectedError` **subclasses** `PaymentsStripeError`, so its arm MUST sit above the base arm or the 500 wins.
+  - The three reason strings are deliberately distinguishable — the whole point is that a client and the front desk can tell whose fault it was:
+    - **`card declined: …`** (start `results[].error`) / `status=declined` + Stripe's `user_message` (retry-card) — the BANK refused. Offer another card. Stripe's `user_message` is what it writes for end-user display (expired → Update Card; insufficient funds → tell the member).
+    - **`system failure: …`** (start `results[].error`) — OUR side broke. Another card cannot help; staff must finish the job. Only reachable after an earlier charge in the same request collected (see the next bullet).
+    - **`status=not_collected`** + *"The card on file could not be charged automatically — the payment needs extra authorization the member has to complete. Collect payment another way."* (retry-card) — the off-session PaymentIntent needs SCA / 3-D Secure. Nobody refused, so "try another card" would be wrong advice. Never booked as a phantom success.
+- **A system failure AFTER money already moved is a 207, not a 500 — a 500 there would be a lie.** `start()` charges the one-time group BEFORE converging recurring, and `_verify_group(keep_unverified=True)` deliberately KEEPS billed one-time rows ("billed lines are never un-billed"). So once the one-time leg has charged, the 500's contract ("nothing created") is false: the recurring arm instead marks its items `failed` with the `system failure: ` reason → **207**. With **nothing** collected it still raises → 500, because then "nothing created" is literally true. The rule generalizes: *the response never claims less than what actually happened.*
 - **A partial batch result** (some items succeeded, some failed) also returns **207 Multi-Status** with the per-item succeeded/failed split in the body.
-- **Clients must branch on the RESULT, not on the status class.** A 2xx no longer implies the money moved — the CRM's `retryMembershipCard` returns the typed outcome and the bloc branches on it, so a decline can't render as a collected payment.
+- **`LockBusyError` (a busy payer lock) is a 409, and the router must RE-RAISE it.** The global handler in `src/main.py` maps the type, but the lock is acquired INSIDE each handler's `try` and `LockBusyError` subclasses `Exception` directly — so without a typed `except LockBusyError: raise` arm above the generic one, the handler's own `except Exception` → 500 swallows it and the front desk gets an opaque server error for a perfectly retryable conflict. **Every** handler in `memberships_router.py` whose service takes the lock carries that arm and documents the 409 (14 of them; `cancel-one-time`, `reprice-plan` and `refund` take no payer lock). Proven by `tests/memberships/test_billing_endpoint_guards.py::test_lock_busy_error_propagates_out_of_locking_handler`, parametrized over all 14 — never assume the re-raise works.
+- **Clients must branch on the RESULT, not on the status class.** A 2xx no longer implies the money moved — the CRM's `retryMembershipCard` returns the typed outcome and the bloc branches on `isPaid` (fail-closed: anything that is not explicitly `paid`, including an unrecognised new status, renders as not collected), so neither a decline nor an SCA non-collection can render as a collected payment.
 
 **Middleware**
 - CORS must be first in middleware stack
@@ -546,14 +628,33 @@ the two must be kept in agreement.
 
 `incomplete` (the members list's Incomplete tab — signups that never
 finished) is the second fragment of that shape,
-`src/members/sql/crm_views/_member_incomplete.sql`: a member with NO
-membership of their own who is ALSO not the payer on anyone else's (without
-that second half a non-training parent paying for their kid would sit in the
-list forever with nothing to finish). One `NOT EXISTS` covering both halves,
-injected into the list (`incomplete_view.sql`) and the tally
-(`total_counts.sql`) so the tab and its count can never disagree. It binds no
-parameters, and unlike `dormant` it is never a row badge — there is no
-`CrmMemberStatus.incomplete`.
+`src/members/sql/crm_views/_member_incomplete.sql`. It is injected into the
+list (`incomplete_view.sql`) and the tally (`total_counts.sql`) so the tab and
+its count can never disagree; it binds no parameters, joins its own `members`
+row (like `_member_dormant.sql`), and unlike `dormant` it is never a row badge
+— there is no `CrmMemberStatus.incomplete`. **Four clauses, and every one is
+there to keep a specific wrong person OFF a staff follow-up list** (the file
+itself carries the full reasoning — read it before changing the rule):
+
+1. the row is **VALID** — it has a `stripe_customer_id`. A NULL means the
+   create never finished, so the row has no billing identity, is invisible to
+   `member_billing_profile`, and every next step staff could take against it is
+   rejected. Founder's ruling: *"customer id is required, without it the row is
+   invalid, it shouldn't be shown anywhere."*
+2. they hold no membership of their own, and
+3. they are not the payer on anyone else's (2 and 3 are one `NOT EXISTS` over
+   `member_memberships_status`; without the payer half a non-training parent
+   paying for their kid would sit in the list forever with nothing to finish);
+4. they hold no **billed-but-unconfirmed** non-recurring membership. When a
+   one-time group's invoice is PAID but the sync writeback fails,
+   `MemberMembershipsStart` deliberately KEEPS the row `'not_added'` ("billed
+   lines are never un-billed"), and the `member_memberships` view hides exactly
+   that status — so the member read as owning nothing and staff chased someone
+   whose card had already been charged. Scoped to non-recurring because that is
+   the only group the start op keeps: an unconfirmed recurring row is deleted,
+   so a surviving one is either in flight this second or a crash orphan the
+   reconciler removes. Reads `member_memberships_unfiltered`, since it is ABOUT
+   a row the filtered view hides.
 
 **`overdue` is the row-level sibling, and it is shared ACROSS domains — one
 file, no mirror.** A membership is overdue when it is **active** with a

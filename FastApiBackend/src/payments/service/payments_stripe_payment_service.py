@@ -22,6 +22,7 @@ from stripe.params._refund_create_params import RefundCreateParams
 
 from src.core.config import settings
 from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
     PaymentsResourceNotFoundError,
     PaymentsStripeError,
 )
@@ -596,12 +597,18 @@ class PaymentsStripePaymentService:
         but an off-session invoice whose PaymentIntent needs authentication
         (SCA / 3-D Secure) can come back with the invoice still ``open``
         instead of raising. Booking that as success would clear the member off
-        every overdue surface while no money moved, so a non-``paid`` return is
-        turned into a ``PaymentsStripeError`` staff can see and act on (surfaced
-        as a 500 with this message, never a phantom success).
+        every overdue surface while no money moved.
+
+        A non-``paid`` return is therefore a definitive
+        ``PaymentsNotCollectedError`` — a business OUTCOME, not a malfunction —
+        which the retry-card router surfaces as its **207**
+        ``not_collected`` result carrying this message verbatim (the same
+        "a definitive answer is data, not a 500" contract a decline rides).
+        It is still NOT a decline: the bank never refused, so the message tells
+        staff to collect another way rather than to try another card.
         """
         if invoice.status != INVOICE_STATUS_PAID:
-            raise PaymentsStripeError(
+            raise PaymentsNotCollectedError(
                 "The card on file could not be charged automatically — the "
                 "payment needs extra authorization the member has to complete. "
                 "Collect payment another way."
@@ -623,9 +630,13 @@ class PaymentsStripePaymentService:
         makes Stripe charge the customer's saved default card, so nothing here
         stamps the cash metadata either. A decline raises out of ``pay_async``
         and is left to propagate; a return that did NOT collect (SCA) is turned
-        into an error by :meth:`_require_card_collected`. On success returns the
-        now-paid invoice so the caller records it in-request; Stripe still fires
-        the ``invoice.paid`` webhook as a backstop.
+        into a ``PaymentsNotCollectedError`` by
+        :meth:`_require_card_collected` — a distinct type, because the
+        retry-card router answers it with its own **207** ``not_collected``
+        result rather than the 500 an unrecognised Stripe failure gets. On
+        success returns the now-paid invoice so the caller records it
+        in-request; Stripe still fires the ``invoice.paid`` webhook as a
+        backstop.
 
         Returns:
             The paid invoice as the plain nested dict the record seams consume.

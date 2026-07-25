@@ -86,6 +86,36 @@ void main() {
     expect(outcome.declineReason, 'Your card has insufficient funds.');
   });
 
+  test('207: not-collected is its OWN outcome, not a decline', () async {
+    // Nobody refused this card — the charge needs authorization only the
+    // member can complete. Before this status existed the value fell through
+    // to `unknown`, so the desk saw a generic non-payment and could only
+    // guess; retrying at the counter can never settle it, which is why it
+    // must not read as `declined`.
+    stubPost(
+      () => response(
+        {
+          'item_id': 'item-a',
+          'member_id': 'member-1',
+          'status': 'not_collected',
+          'decline_reason':
+              'The card on file could not be charged automatically — the '
+              'payment needs extra authorization the member has to '
+              'complete. Collect payment another way.',
+        },
+        statusCode: 207,
+      ),
+    );
+
+    final outcome = await repo.retryMembershipCard(req);
+
+    expect(outcome.status, MemberMembershipsRetryCardStatus.notCollected);
+    expect(outcome.status, isNot(MemberMembershipsRetryCardStatus.declined));
+    expect(outcome.status, isNot(MemberMembershipsRetryCardStatus.unknown));
+    expect(outcome.isPaid, isFalse);
+    expect(outcome.declineReason, contains('extra authorization'));
+  });
+
   test('an unknown status is NOT paid (fail closed)', () async {
     stubPost(
       () => response(

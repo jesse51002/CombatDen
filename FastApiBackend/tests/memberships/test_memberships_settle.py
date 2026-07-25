@@ -28,8 +28,14 @@ Scenarios:
    ``CardError`` into a 207 ``declined`` RESULT carrying Stripe's own reason.
 6. ``test_endpoint_returns_paid_on_success`` — a collected retry is a 200
    ``paid`` result (the router leaves the response status alone).
-7. ``test_endpoint_non_card_stripe_failure_is_500`` — a system/upstream
-   failure is STILL a 500; only the decline moved.
+7. ``test_endpoint_returns_not_collected_as_207_result`` — a definitive
+   NOT-COLLECTED (``PaymentsNotCollectedError``: no decline raised, but the
+   payment needs SCA authentication) is the THIRD outcome — its own 207
+   ``not_collected`` status, deliberately not ``declined``, since the bank never
+   refused and "try another card" is the wrong advice.
+8. ``test_endpoint_non_card_stripe_failure_is_500`` — an UNRECOGNISED
+   system/upstream failure is STILL a 500; only the two definitive outcomes are
+   results.
 """
 
 from datetime import timedelta
@@ -48,7 +54,10 @@ from src.memberships.memberships_schema import (
 from src.memberships.service.memberships_settle import (
     MemberMembershipsSettle,
 )
-from src.payments.payments_exceptions import PaymentsStripeError
+from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
+    PaymentsStripeError,
+)
 from src.shared.gym_timezone import gym_today
 from src.shared.payer_profile import PayerProfile
 
@@ -371,12 +380,64 @@ async def test_endpoint_returns_paid_on_success() -> None:
 
 
 @pytest.mark.asyncio
-async def test_endpoint_non_card_stripe_failure_is_500() -> None:
-    """A system/upstream Stripe failure is STILL a 500 — only the decline moved.
+async def test_endpoint_returns_not_collected_as_207_result() -> None:
+    """A definitive NOT-COLLECTED is the third outcome — its own 207 status.
 
-    ``PaymentsStripeError`` is not a bank refusal (an SCA-required invoice, a
-    gateway failure), so it must never come back as a 2xx ``declined`` result:
-    that would tell staff the member's card was refused when the system broke.
+    ``invoices.pay`` returned without raising, but the invoice never reached
+    ``paid`` because the off-session PaymentIntent needs authentication (SCA /
+    3-D Secure). That is as DEFINITIVE as a decline — "we could not collect on
+    this card, staff must act" — so it rides the same 2xx RESULT contract rather
+    than a 500 that would bury real outages under an ordinary business outcome.
+
+    But it is NOT a decline, and must not be reported as one: no bank refused,
+    so ``declined`` would send staff to "try another card" for a payment that
+    needs the member to authenticate instead. Hence its own ``not_collected``
+    status, with the service's staff-facing explanation as the reason.
+    """
+    from src.memberships.memberships_router import retry_membership_card
+
+    reason = (
+        "The card on file could not be charged automatically — the payment "
+        "needs extra authorization the member has to complete. Collect payment "
+        "another way."
+    )
+    auth, service, tasks_service = _retry_router_doubles(
+        side_effect=PaymentsNotCollectedError(reason),
+    )
+    request = _retry_request()
+    response = Response()
+
+    result = await retry_membership_card(
+        request=request,
+        response=response,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+        tasks_service=tasks_service,
+    )
+
+    assert response.status_code == 207
+    assert result.status == MemberMembershipsRetryCardStatus.not_collected
+    # Distinguishable from a decline: a different status AND a reason that never
+    # tells staff the card was refused.
+    assert result.status != MemberMembershipsRetryCardStatus.declined
+    assert result.decline_reason == reason
+    assert "declin" not in (result.decline_reason or "").lower()
+    assert result.item_id == request.item_id
+    assert result.member_id == request.member_id
+
+
+@pytest.mark.asyncio
+async def test_endpoint_non_card_stripe_failure_is_500() -> None:
+    """An UNRECOGNISED system/upstream Stripe failure is STILL a 500.
+
+    A gateway failure, a malformed response, Stripe having a bad day — none is a
+    definitive answer about the money, so none may come back as a 2xx result:
+    that would tell staff something conclusive about a card when the system
+    simply broke. Only the two DEFINITIVE outcomes are results (``CardError`` →
+    ``declined``, ``PaymentsNotCollectedError`` → ``not_collected``); the base
+    ``PaymentsStripeError`` stays a 500, never a 502/503/504, so no proxy
+    replays a money-moving retry.
     """
     from fastapi import HTTPException
 

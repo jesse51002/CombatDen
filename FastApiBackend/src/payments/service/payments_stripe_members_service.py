@@ -147,7 +147,21 @@ class PaymentsStripeMembersService:
             params=PaymentMethodAttachParams(
                 customer=request.stripe_customer_id,
             ),
-            options=opts,
+            # Every external write carries a deterministic idempotency key. This
+            # request carries no caller-supplied one, so derive it from the two
+            # ids that fully identify the write — the customer and the card being
+            # attached — and suffix it ``:attach``, exactly the shape the sibling
+            # ``attach_payment_method``'s callers build (``{base}:attach``). A
+            # retried card update for the same (customer, card) therefore dedups
+            # at Stripe instead of firing a second attach; a genuinely different
+            # card is a different key and attaches normally.
+            options=self._client.connect_opts(
+                stripe_account_id,
+                idempotency_key=(
+                    f"{request.stripe_customer_id}:"
+                    f"{request.payment_method_id}:attach"
+                ),
+            ),
         )
 
         customer = await self._stripe.v1.customers.update_async(

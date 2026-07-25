@@ -51,11 +51,15 @@ from src.memberships.service.memberships_refund import (
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
 )
-from src.payments.payments_exceptions import PaymentsStripeError
+from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
+    PaymentsStripeError,
+)
 from src.payments.schema.payments_invoice_schema import (
     DueNowVsRecurringPreview,
 )
 from src.shared.auth import STAFF, Auth, security
+from src.shared.paying_member_lock import LockBusyError
 from src.tasks.service.tasks_executor import TasksExecutor
 from src.tasks.service.tasks_membership_reprice_handler import (
     MembershipRepriceTaskHandler,
@@ -64,6 +68,14 @@ from src.tasks.service.tasks_service import TasksService
 from src.tasks.tasks_exceptions import MembershipInTaskError
 
 logger = logging.getLogger(__name__)
+
+# Every handler below whose service takes the payer's billing lock can answer a
+# BUSY payer, so each documents this 409 and each RE-RAISES ``LockBusyError``
+# (see the `except LockBusyError: raise` arms) instead of letting its generic
+# `except Exception` bury it in a 500. One string so the route docs cannot drift.
+BUSY_PAYER_409 = (
+    "the payer is busy (another billing op holds their lock) — retryable"
+)
 
 member_memberships_router = APIRouter(
     prefix="/api/v1/member_memberships",
@@ -88,6 +100,11 @@ member_memberships_router = APIRouter(
         },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {
+            "description": (
+                f"A membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
         500: {"description": "Total failure — nothing cancelled (Stripe/sync)"},
     },
 )
@@ -124,6 +141,10 @@ async def cancel_membership(
                 for item_id, cancel_date in cancel_dates.items()
             },
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -195,6 +216,7 @@ async def cancel_membership(
         204: {"description": "Account frozen successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -218,6 +240,10 @@ async def freeze_membership(
             request.freeze_months,
             request.idempotency_key,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -255,6 +281,7 @@ async def freeze_membership(
         204: {"description": "Account unfrozen successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -277,6 +304,10 @@ async def unfreeze_membership(
             request.member_id,
             request.idempotency_key,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -316,13 +347,34 @@ async def unfreeze_membership(
     ),
     responses={
         201: {"description": "All memberships created (full breakdown)"},
+        # Same model on the 207 as on the 201 so a client generator sees the
+        # per-item breakdown BODY, not just a description. This is the primary
+        # kiosk decline surface — the client has to read `results[]` to know
+        # which memberships exist and why the rest do not.
         207: {
-            "description": "Partial — results[] carries the per-item split."
+            "model": MemberMembershipsStartResponse,
+            "description": (
+                "Partial — results[] carries the per-item split. A failed item "
+                "is either a bank DECLINE (`card declined: …`, nothing "
+                "collected for that group) or, once this request's one-time "
+                "charge already collected, a SYSTEM failure on the rest "
+                "(`system failure: …`). Branch on the item, never on the status."
+            ),
         },
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
-        409: {"description": "Retried start replayed — original stands"},
-        500: {"description": "Total failure — nothing created (Stripe/sync)"},
+        409: {
+            "description": (
+                f"Retried start replayed — original stands, or {BUSY_PAYER_409}"
+            )
+        },
+        500: {
+            "description": (
+                "Total failure — nothing created and nothing charged "
+                "(Stripe/sync). A system failure AFTER a charge collected is a "
+                "207 instead, never this."
+            )
+        },
     },
 )
 @inject
@@ -347,6 +399,10 @@ async def start_membership(
 
     try:
         result = await memberships_service.start(request)
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipStartReplayError as exc:
         # Retried start detected as an idempotent replay — the original rows,
         # discounts, and charge stand. A conflict, not a server error: 409
@@ -398,7 +454,12 @@ async def start_membership(
             detail="Failed to start memberships",
         ) from None
 
-    # Any failed charge group → 207 partial; all-created stays 201.
+    # Any failed charge group → 207 partial; all-created stays 201. The item's
+    # `error` prefix says WHICH kind of failure it was — `card declined: ` (the
+    # bank refused) or `system failure: ` (our side broke after an earlier
+    # charge in this same request already collected, so a 500 claiming "nothing
+    # created" would have been a lie). The status alone can't carry that, which
+    # is exactly why clients branch on the item.
     if any(
         item.status == MemberMembershipsStartStatus.failed
         for item in result.results
@@ -420,7 +481,11 @@ async def start_membership(
         400: {"description": "Invalid request (cancelled / ended membership)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
-        409: {"description": "Membership is inside an unfinished task"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
@@ -454,6 +519,10 @@ async def update_membership_price(
             proration_behavior=request.proration_behavior,
         )
         return MemberMembershipsUpdatePriceResponse(item_id=new_item_id)
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -502,7 +571,11 @@ async def update_membership_price(
         400: {"description": "Invalid request (same plan / window / state)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
-        409: {"description": "Membership is inside an unfinished task"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
         500: {"description": "Stripe error"},
     },
 )
@@ -534,6 +607,10 @@ async def upgrade_membership(
             idempotency_key=request.idempotency_key,
         )
         return MemberMembershipsUpgradeResponse(item_id=new_item_id)
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -578,6 +655,7 @@ async def upgrade_membership(
         400: {"description": "Invalid request (same plan / window / state)"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -602,6 +680,10 @@ async def preview_upgrade_membership(
             target_plan_id=request.target_plan_id,
             proration_behavior=request.proration_behavior,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -770,6 +852,7 @@ async def batch_reprice_plan(
         200: {"description": "Preview retrieved successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update these members"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -793,6 +876,10 @@ async def preview_start_membership(
 
     try:
         return await memberships_service.preview_start(request)
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except WaiverGateError as exc:
         # Same gate as the real start (shared validation): surface the unsigned
         # waivers so the CRM blocks the preview/purchase until they're signed.
@@ -837,6 +924,7 @@ async def preview_start_membership(
         200: {"description": "Preview retrieved successfully"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
     },
 )
 @inject
@@ -859,6 +947,10 @@ async def preview_cancel_membership(
             request.item_ids,
             request.member_id,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
@@ -900,6 +992,11 @@ async def preview_cancel_membership(
         200: {"description": "Discounts added, or preview returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
     },
 )
 @inject
@@ -929,6 +1026,10 @@ async def add_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -975,6 +1076,11 @@ async def add_membership_discounts(
         200: {"description": "Discounts removed, or preview returned"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
     },
 )
 @inject
@@ -1004,6 +1110,10 @@ async def remove_membership_discounts(
             idempotency_key=request.idempotency_key,
             preview=request.preview,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1052,6 +1162,11 @@ async def remove_membership_discounts(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Membership not found"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
     },
 )
 @inject
@@ -1079,6 +1194,10 @@ async def mark_membership_paid_cash(
             member_id=request.member_id,
             idempotency_key=request.idempotency_key,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1120,25 +1239,34 @@ async def mark_membership_paid_cash(
     description=(
         "Charges the payer's saved default card for the membership's open "
         "Stripe invoice. Recurring memberships only. A collected charge is "
-        "``paid`` (200); a bank DECLINE is a result, not a server failure — "
-        "``declined`` with Stripe's reason in ``decline_reason`` (207)."
+        "``paid`` (200); a DEFINITIVE non-collection is a result, not a server "
+        "failure — ``declined`` (the bank refused) or ``not_collected`` (the "
+        "payment needs authentication the member must complete), each with its "
+        "reason in ``decline_reason`` (207)."
     ),
     responses={
         200: {"description": "Card charged — status=paid"},
-        # Same model on the 207 so a client generator sees the decline body,
-        # not just a description.
+        # Same model on the 207 so a client generator sees the not-collected
+        # body, not just a description.
         207: {
             "model": MemberMembershipsRetryCardResponse,
             "description": (
-                "Card DECLINED — status=declined, decline_reason carries "
-                "Stripe's reason. Nothing collected; still overdue."
+                "Nothing collected; still overdue. status=declined (the bank "
+                "refused — offer another card) or status=not_collected (nobody "
+                "refused, but the payment needs extra authorization the member "
+                "has to complete — collect another way). ``decline_reason`` "
+                "carries the reason either way."
             ),
         },
         400: {"description": "Not recurring, no open invoice, or invalid state"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Membership not found"},
-        409: {"description": "Membership is inside an unfinished task"},
+        409: {
+            "description": (
+                f"Membership is inside an unfinished task, or {BUSY_PAYER_409}"
+            )
+        },
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
@@ -1168,6 +1296,10 @@ async def retry_membership_card(
             member_id=request.member_id,
             idempotency_key=request.idempotency_key,
         )
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except MembershipInTaskError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -1207,6 +1339,35 @@ async def retry_membership_card(
             member_id=request.member_id,
             status=MemberMembershipsRetryCardStatus.declined,
             decline_reason=(exc.user_message or str(exc)),
+        )
+    except PaymentsNotCollectedError as exc:
+        # NOT a decline and NOT a malfunction: Stripe accepted the pay call but
+        # the invoice never reached ``paid`` because the off-session
+        # PaymentIntent needs authentication (SCA / 3-D Secure) the member has
+        # to complete. That is just as DEFINITIVE as a decline — "we could not
+        # collect on this card, staff must act" — so it rides the same 2xx
+        # RESULT contract (207, never auto-replayed by a proxy) instead of the
+        # 500 an unrecognised Stripe failure gets, which would bury genuine
+        # outages under an ordinary business outcome.
+        #
+        # Its OWN status, though: telling staff "declined" here would send them
+        # to "try another card" when the bank never refused. The service's
+        # message is written for the front desk, so surface it verbatim.
+        #
+        # MUST stay ABOVE the ``PaymentsStripeError`` arm — this is a subclass,
+        # so the base arm would otherwise win and 500 it.
+        logger.warning(
+            "Retry card not collected (needs authentication): item_id=%s, "
+            "member_id=%s",
+            request.item_id,
+            request.member_id,
+        )
+        response.status_code = status.HTTP_207_MULTI_STATUS
+        return MemberMembershipsRetryCardResponse(
+            item_id=request.item_id,
+            member_id=request.member_id,
+            status=MemberMembershipsRetryCardStatus.not_collected,
+            decline_reason=str(exc),
         )
     except PaymentsStripeError as exc:
         raise HTTPException(
@@ -1248,6 +1409,7 @@ async def retry_membership_card(
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
         404: {"description": "Member profile not found"},
+        409: {"description": BUSY_PAYER_409.capitalize()},
         500: {"description": "Stripe / upstream error (no auto-retry)"},
     },
 )
@@ -1268,6 +1430,10 @@ async def charge_member_card(
 
     try:
         await memberships_service.charge_card(request)
+    except LockBusyError:
+        # Busy payer -> 409 via the global handler; re-raised ABOVE the generic
+        # arm because a `raise` inside an `except` escapes the whole `try`.
+        raise
     except ValueError as exc:
         error_msg = str(exc)
         if "not found" in error_msg.lower():
