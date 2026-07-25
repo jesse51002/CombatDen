@@ -20,6 +20,13 @@ the load-bearing difference between them:
   ``PaymentsNotCollectedError`` rather than being booked as a phantom success.
   The type is load-bearing: the retry-card router answers it with its own 207
   ``not_collected`` result, while a base ``PaymentsStripeError`` is a 500.
+* and neither may turn a COMPLETED payment into a failure while serializing it.
+  ``json.JSONDecodeError`` **subclasses ``ValueError``**, so a raise from the
+  ``json.loads(str(invoice))`` round-trip landed in the settle routers' generic
+  ``except ValueError`` arm and answered **400 "bad request"** for an invoice
+  Stripe had already marked paid — telling staff nothing was collected and
+  inviting a second collection. Both paths now serialize through
+  ``_invoice_as_dict``, which logs and degrades instead.
 """
 
 import json
@@ -267,6 +274,83 @@ async def test_uncollected_error_is_not_mistaken_for_a_generic_stripe_error() ->
     assert isinstance(caught.value, PaymentsNotCollectedError)
     # Not the not-found sibling — nothing is missing, the money just didn't move.
     assert not isinstance(caught.value, PaymentsResourceNotFoundError)
+
+
+# ── Nothing may raise while serializing an ALREADY-PAID invoice ─────
+
+
+def _unserializable(status: str) -> MagicMock:
+    """A Stripe invoice object whose ``str()`` is not JSON.
+
+    ``str(stripe_obj)`` being the object's canonical JSON is an SDK contract, so
+    this models that contract shifting under us (a repr change, a partial
+    object) — the one step standing between a completed charge and the caller.
+    """
+    invoice = MagicMock()
+    invoice.id = INVOICE_ID
+    invoice.status = status
+    invoice.__str__.return_value = "<Invoice not JSON>"
+    return invoice
+
+
+@pytest.mark.asyncio
+async def test_on_card_unserializable_paid_invoice_never_raises() -> None:
+    """A card that WAS charged must never come back as a failure.
+
+    The raise this guards is a ``json.JSONDecodeError`` — a ``ValueError`` — so
+    it landed in the retry-card router's generic ``except ValueError`` arm and
+    reported **400 "bad request"** for a collected charge. Staff read that as
+    "nothing was taken" and collect again.
+    """
+    service, fake_stripe = _build_service()
+    fake_stripe.v1.invoices.pay_async.return_value = _unserializable("paid")
+
+    result = await service.pay_open_subscription_invoice_on_card(
+        STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
+    )
+
+    # The invoice id is all we can honestly claim, and it is enough for the
+    # settle's log line.
+    assert result == {"id": INVOICE_ID}
+    # ``status`` is deliberately ABSENT: the in-request apply dispatches on it,
+    # so omitting it makes the apply a clean no-op rather than writing an
+    # invoice/charge row out of a payload we could not read. The invoice.paid
+    # webhook + reconciler finalize the rows from Stripe's own copy.
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
+async def test_out_of_band_unserializable_paid_invoice_never_raises() -> None:
+    """The cash path has no card to protect, but Stripe has ALREADY marked the
+    invoice paid — so the same rule holds: a serialization failure must not read
+    as "the settle failed"."""
+    service, fake_stripe = _build_service()
+    fake_stripe.v1.invoices.pay_async.return_value = _unserializable("paid")
+
+    result = await service.pay_open_subscription_invoice_out_of_band(
+        STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
+    )
+
+    assert result == {"id": INVOICE_ID}
+    assert "status" not in result
+
+
+@pytest.mark.asyncio
+async def test_uncollected_still_raises_when_the_invoice_is_unserializable() -> None:
+    """Order matters: the collection guard runs BEFORE the serialization.
+
+    The serialization guard must never swallow the ``not_collected`` signal —
+    that raise is the deliberate outcome the router turns into its 207, not a
+    failure to degrade around. Swapping the two would book an uncollected
+    invoice as a settled one.
+    """
+    service, fake_stripe = _build_service()
+    fake_stripe.v1.invoices.pay_async.return_value = _unserializable("open")
+
+    with pytest.raises(PaymentsNotCollectedError):
+        await service.pay_open_subscription_invoice_on_card(
+            STRIPE_SUB_ID, STRIPE_ACCOUNT_ID, idempotency_key=IDEMPOTENCY_KEY
+        )
 
 
 def _build_service_pay_error(exc: Exception) -> PaymentsStripePaymentService:

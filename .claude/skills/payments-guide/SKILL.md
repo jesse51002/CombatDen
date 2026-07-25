@@ -152,8 +152,10 @@ Each is one focused wrapper class in `src/payments/service/`. All raise the
 `PaymentsInvalidRequestError`, `PaymentsNotCollectedError` (a card charge that
 definitively did NOT collect with no decline raised — an SCA/3-D-Secure
 authentication the member must complete; a business OUTCOME a caller may answer
-with a 2xx result rather than a 500, see `pay_open_subscription_invoice_on_card`
-below), and `StripeOrphanError` (a Stripe resource was
+with a 2xx result rather than a 500. Raised by the ONE detector
+`_require_collected`, which guards **both** `create_invoice_payment` (the
+itemized one-time / kiosk charge) and `pay_open_subscription_invoice_on_card`
+(the retry) — see both below), and `StripeOrphanError` (a Stripe resource was
 created but the CRM writeback failed — surfaced loudly for operator cleanup).
 
 **`PaymentsStripeMembersService`** (`payments_stripe_members_service.py`) — Stripe
@@ -286,11 +288,37 @@ back to active because the DB says it's current.
   > ORDER, so moving a read back below the charge fails loudly) and
   > `tests/sync/test_one_time_charge_window.py` (the same invariant at the
   > `charge_one_time` boundary the start op wraps).
+  > **One step DOES sit between the pay and that assembly, and it is allowed to
+  > raise: `_require_collected`** (below). It asks the only question that
+  > decides everything after it — *did the money actually arrive?* — and raises
+  > `PaymentsNotCollectedError` when a pay RETURNED without collecting (SCA /
+  > 3-D Secure; `invoices.pay` raises on a decline but not on this). That is not
+  > a violation of the never-un-bill rule: it fires precisely in the branch
+  > where nothing was collected, so there is no charge to protect. It is also
+  > what keeps the membership rows honest — the raise lands before
+  > `PaymentSyncOneTime._writeback`, so nothing is ever stamped `applied` for
+  > money that never arrived. Without it the kiosk booked a `status="open"`
+  > charge as a started membership (`memberships-guide`, the start row).
 - `refund_payment` — refund a **charge** (full or partial), by the original
   `stripe_charge_id` (what `member_charges` stores and what the `refund.*`
   webhook keys on — no PaymentIntent lookup). The response carries the refund's
   `status` / `currency` / `created` so a caller can record the row without a
   second Stripe read.
+  > **The response assembly runs AFTER the money went back, so it never raises
+  > either** — `_response_after_refunding`. A raise there cost two things at
+  > once: `MemberMembershipsRefund._refund_card` never reached
+  > `_insert_refund_row` (the negative `member_charges` row simply missing), and
+  > `pydantic.ValidationError` **subclasses `ValueError`**, so the refund
+  > router's generic `ValueError` arm answered a COMPLETED refund with **400
+  > "bad request"** — after which a staff retry passed
+  > `_assert_refundable_under_lock` (no row ⇒ full balance still refundable) and
+  > issued a SECOND real refund. The degraded response keeps every field that
+  > reads back cleanly and defaults only `currency` (unused by the row, which
+  > takes the CRM charge's) and `created` (now). **`status` is never guessed:**
+  > if Stripe's own status, the refund id or the amount is unreadable it reports
+  > `pending`, so the caller writes NO row and the `refund.*` webhook records it
+  > from Stripe's copy — the same backstop an async refund already uses. Guard:
+  > `tests/payments/test_payments_refund_response_guard.py`.
 - `pay_open_subscription_invoice_out_of_band` — find the subscription's single
   open invoice, stamp `crm_paid_with_cash="true"` on it, and `invoices.pay` with
   `paid_out_of_band=True`. Stripe then fires the normal `invoice.paid` webhook,
@@ -308,7 +336,7 @@ back to active because the DB says it's current.
   than a 500, because a bank refusal is an outcome, not a malfunction
   (`memberships-guide`). A pay that returns WITHOUT collecting (an off-session
   invoice whose PaymentIntent needs SCA / 3-D Secure authentication — no decline
-  raised, invoice still `open`) is caught by `_require_card_collected` and turned
+  raised, invoice still `open`) is caught by `_require_collected` and turned
   into a **`PaymentsNotCollectedError`**, so it is never booked as a phantom
   success — and never dressed up as a decline either. The dedicated TYPE is the
   contract: that outcome is just as DEFINITIVE as a decline ("we could not
@@ -320,7 +348,28 @@ back to active because the DB says it's current.
   Both methods share ONE private lookup,
   `_list_open_subscription_invoices` (unknown subscription →
   `PaymentsResourceNotFoundError`, no open invoice → `ValueError`), so cash and
-  card can never drift on what "the open invoice" is.
+  card can never drift on what "the open invoice" is — **and ONE private
+  serializer, `_invoice_as_dict`**, which turns the now-paid invoice into the
+  plain nested dict the record seams consume. That step is post-collection, so
+  it never raises: `json.JSONDecodeError` **subclasses `ValueError`**, so a bare
+  `json.loads(str(paid))` here lands in the settle routers' generic `ValueError`
+  arm → **400 "bad request"** for a card that WAS charged, inviting a second
+  collection. It logs and degrades to an **id-only** payload,
+  deliberately WITHOUT `status`, so
+  `MemberMembershipsInvoiceFetch._record_invoice` (which dispatches on `status`)
+  is a clean no-op rather than writing a half-described invoice/charge row, and
+  the `invoice.paid` webhook + reconciler finalize from Stripe's own copy.
+- **`_require_collected(invoice)` — the ONE non-collection detector, shared by
+  BOTH pay paths**: `pay_open_subscription_invoice_on_card` (the retry) and
+  `create_invoice_payment` (the itemized one-time / kiosk charge; see its entry
+  above). It raises `PaymentsNotCollectedError` **only on a
+  positively-read non-`paid` status** — `isinstance(status, str) and status !=
+  "paid"`. That narrowing is load-bearing: on the charge path the answer is
+  DESTRUCTIVE (the start op deletes the membership rows), so an absent or
+  non-string status must fall through to the degraded response rather than be
+  reported as "nothing was collected" over a charge that may well have gone
+  through. A $0 invoice is already `paid` at finalize and never reaches the pay,
+  so free trials sail through the guard.
 - **Paginated list read-primitives** — `list_invoices(account_id, *, created_gte,
   limit, customer=None)`, `list_refunds(account_id, *, created_gte, limit)`,
   `list_invoice_payments(account_id, invoice_id, *, limit)`,

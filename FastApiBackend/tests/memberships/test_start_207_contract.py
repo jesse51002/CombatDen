@@ -2,12 +2,19 @@
 
 Two things are pinned here.
 
-**1. What a ``failed`` result item MEANS.** A start can fail in exactly two ways
-once it has begun, and they demand opposite responses from the front desk, so
-the reason prefix distinguishes them:
+**1. What a ``failed`` result item MEANS.** A start can fail in three ways once
+it has begun, and they demand different responses from the front desk, so the
+reason prefix distinguishes them:
 
 * ``card declined: …`` — the BANK refused. Nothing was collected for that
   group; offering another card is the fix.
+* ``not collected: …`` — nobody refused and the money still did not arrive:
+  ``invoices.pay`` RETURNED with the invoice open because the off-session
+  PaymentIntent needs SCA / 3-D Secure. Nothing collected, nothing booked.
+  Deliberately NOT ``declined`` — "try another card" is wrong advice when no
+  bank said no. This is the outcome the kiosk path had NO answer for: the
+  charge reported ``status="open"``, the writeback stamped the rows
+  ``applied``, and a membership nobody paid for was booked on a 201.
 * ``system failure: …`` — OUR side broke. Another card cannot help.
 
 The change these tests lock in: a NON-card failure in the recurring converge
@@ -29,10 +36,12 @@ from uuid import uuid4
 
 import pytest
 import stripe
+from fastapi import Response, status
 from schema.membership_plan import PlanType
 
 from src.memberships.memberships_router import (
     member_memberships_router,
+    start_membership,
 )
 from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
@@ -43,9 +52,11 @@ from src.memberships.memberships_schema import (
 )
 from src.memberships.service.memberships_start import (
     CARD_DECLINED_PREFIX,
+    NOT_COLLECTED_PREFIX,
     SYSTEM_FAILURE_PREFIX,
     MemberMembershipsStart,
 )
+from src.payments.payments_exceptions import PaymentsNotCollectedError
 
 GYM_ID = uuid4()
 PAYER_ID = uuid4()
@@ -116,17 +127,34 @@ def _decline() -> stripe.CardError:
     )
 
 
-# ── The two reason prefixes must stay tellable apart ────────────────
+# ── The three reason prefixes must stay tellable apart ──────────────
 
 
-def test_reason_prefixes_are_mutually_exclusive() -> None:
-    """Neither prefix may be a prefix of the other, or a client that switches on
-    "starts with" would classify a system failure as a decline (and send the
-    member off to find another card for an outage)."""
-    assert CARD_DECLINED_PREFIX != SYSTEM_FAILURE_PREFIX
-    assert not CARD_DECLINED_PREFIX.startswith(SYSTEM_FAILURE_PREFIX)
-    assert not SYSTEM_FAILURE_PREFIX.startswith(CARD_DECLINED_PREFIX)
-    assert "declin" not in SYSTEM_FAILURE_PREFIX
+@pytest.mark.parametrize(
+    ("left", "right"),
+    [
+        (CARD_DECLINED_PREFIX, SYSTEM_FAILURE_PREFIX),
+        (CARD_DECLINED_PREFIX, NOT_COLLECTED_PREFIX),
+        (NOT_COLLECTED_PREFIX, SYSTEM_FAILURE_PREFIX),
+    ],
+)
+def test_reason_prefixes_are_mutually_exclusive(left: str, right: str) -> None:
+    """No prefix may be a prefix of another, or a client that switches on
+    "starts with" would classify one outcome as a different one — sending the
+    member off to find another card for an outage, or telling staff a bank
+    refused when none did."""
+    assert left != right
+    assert not left.startswith(right)
+    assert not right.startswith(left)
+
+
+@pytest.mark.parametrize(
+    "prefix", [SYSTEM_FAILURE_PREFIX, NOT_COLLECTED_PREFIX]
+)
+def test_only_a_real_decline_says_declined(prefix: str) -> None:
+    """Staff skim these reasons, so the word must not leak into the two
+    outcomes where no bank refused."""
+    assert "declin" not in prefix
 
 
 # ── The recurring arm: NON-card failure after money moved → data ────
@@ -260,6 +288,98 @@ async def test_one_time_non_card_failure_still_raises() -> None:
 
     with pytest.raises(RuntimeError):
         await start._charge_one_time_group(_request([uuid4()]), group)
+
+
+# ── The third outcome: nobody refused, nothing was collected ────────
+
+
+@pytest.mark.asyncio
+async def test_one_time_not_collected_is_data_with_its_own_reason() -> None:
+    """A ``PaymentsNotCollectedError`` is a DEFINITIVE outcome, not an outage.
+
+    It must not raise (that would be a 500 for an ordinary business result),
+    must not wear the decline prefix (no bank refused, so "try another card" is
+    wrong advice), and must not wear the system-failure prefix (our side is
+    fine). It reports ``False``, so a later recurring failure can still honestly
+    claim nothing was collected.
+    """
+    start = _build_start(charge_error=PaymentsNotCollectedError("needs auth"))
+    group = [_state(PlanType.one_time)]
+
+    committed = await start._charge_one_time_group(_request([uuid4()]), group)
+
+    assert committed is False
+    state = group[0]
+    assert state.status == MemberMembershipsStartStatus.failed
+    assert state.error is not None
+    assert state.error.startswith(NOT_COLLECTED_PREFIX)
+    assert not state.error.startswith(CARD_DECLINED_PREFIX)
+    assert not state.error.startswith(SYSTEM_FAILURE_PREFIX)
+    assert "declin" not in state.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_not_collected_never_books_the_membership() -> None:
+    """Nothing collected ⇒ nothing booked, and nothing left looking booked.
+
+    Two things make that true and both are asserted: the rows are cleaned up
+    (they are provably un-billed — the raise happened before
+    ``PaymentSyncOneTime._writeback``, so no ``stripe_item_id`` and still
+    ``not_added``), and ``_verify_group`` is never reached, so its
+    ``keep_unverified=True`` cannot preserve them as "billed but unconfirmed".
+    """
+    start = _build_start(charge_error=PaymentsNotCollectedError("needs auth"))
+    group = [_state(PlanType.one_time)]
+
+    await start._charge_one_time_group(_request([uuid4()]), group)
+
+    start._cleanup_states.assert_awaited_once_with(group)
+    start._verify_group.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_start_returns_207_for_a_non_collecting_charge() -> None:
+    """End of the chain: the router answers 207, never 201 and never 500.
+
+    The whole path runs for real here — the payment layer's
+    ``PaymentsNotCollectedError`` goes through ``start()`` into the response
+    breakdown and out through the actual route handler — because every link is
+    where this used to silently succeed.
+    """
+    price_id = uuid4()
+    request = _request([price_id])
+
+    start = _build_start(charge_error=PaymentsNotCollectedError("needs auth"))
+    start._insert_all = AsyncMock()
+    start._validation.validate = AsyncMock(
+        return_value=(
+            MagicMock(timezone="America/Chicago"),
+            {price_id: {"plan_id": uuid4(), "plan_type": PlanType.one_time.value}},
+        ),
+    )
+
+    auth = MagicMock()
+    auth.get_current_user = MagicMock(return_value={})
+    auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+    service = MagicMock()
+    service.start = start.start
+    response = Response()
+
+    result = await start_membership(
+        request=request,
+        response=response,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    assert response.status_code == status.HTTP_207_MULTI_STATUS
+    assert len(result.results) == 1
+    item = result.results[0]
+    assert item.status == MemberMembershipsStartStatus.failed
+    # No membership id is handed back — nothing was created.
+    assert item.item_id is None
+    assert item.error is not None and item.error.startswith(NOT_COLLECTED_PREFIX)
 
 
 # ── start() threads the answer from one arm to the other ────────────

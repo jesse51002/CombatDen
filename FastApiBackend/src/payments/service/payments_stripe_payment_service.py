@@ -1,6 +1,7 @@
 import json
 import logging
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from functools import partial
 from typing import Any
 
@@ -50,6 +51,15 @@ from src.payments.service.payments_stripe_members_service import (
 INVOICE_STATUS_OPEN = "open"
 INVOICE_STATUS_PAID = "paid"
 
+# Stripe's own refund statuses, kept as local literals for the same reason the
+# invoice ones are: this layer speaks Stripe's vocabulary and maps to the CRM
+# enums at its callers. ``pending`` is the domain's established "we do not know"
+# value (``MemberMembershipsRefund._safe_charge_status`` falls back to it too).
+REFUND_STATUS_PENDING = "pending"
+# Matches ``PaymentsInvoicePaymentCreateRequest.currency``'s default; used only
+# to keep a degraded refund response constructible, never to bill anything.
+FALLBACK_CURRENCY = "usd"
+
 logger = logging.getLogger(__name__)
 
 
@@ -88,9 +98,17 @@ class PaymentsStripePaymentService:
         ``line_item_ids`` are in the same order as ``request.items`` so a caller
         can map each item to its Stripe line id.
 
-        **The step order is load-bearing.** Every read runs BEFORE the charge
-        and everything after it is pure attribute access — see the two banner
-        comments below.
+        **The step order is load-bearing.** Every read runs BEFORE the charge;
+        the pay is followed by the one question that decides everything after it
+        (did the money arrive?), and only then is the response assembled from
+        objects already in hand — see the banner comments below.
+
+        Raises:
+            PaymentsNotCollectedError: The pay returned without collecting (an
+                off-session PaymentIntent needing SCA / 3-D Secure). A
+                definitive business OUTCOME, not a malfunction — the start path
+                folds it into a per-item ``failed`` result on a 207.
+            stripe.CardError: The bank refused.
         """
         read_opts = self._client.connect_opts_readonly(stripe_account_id)
         base_key = request.idempotency_key
@@ -165,6 +183,20 @@ class PaymentsStripePaymentService:
                 request,
                 stripe_account_id,
             )
+
+        # Did the money actually arrive? ``invoices.pay`` raises on a decline,
+        # but an off-session PaymentIntent needing SCA / 3-D Secure RETURNS with
+        # the invoice still ``open`` — and nothing downstream inspected
+        # ``status``, so that outcome was assembled into a response,
+        # written back as ``applied`` by ``PaymentSyncOneTime._writeback``, and
+        # reported to the kiosk as a started membership nobody paid for.
+        #
+        # Raising here does NOT violate the never-un-bill rule below: this
+        # branch is by definition the one where nothing was collected, so there
+        # is no charge to protect. It fires BEFORE the writeback (``_execute``
+        # is a bare ``return await``), which is what keeps the rows un-billed
+        # rather than falsely stamped.
+        self._require_collected(invoice)
 
         # ── PAST THIS LINE THE MONEY IS COLLECTED ─────────────────────
         return self._response_after_collection(
@@ -504,14 +536,89 @@ class PaymentsStripePaymentService:
             options=opts,
         )
 
-        return PaymentsRefundResponse(
-            stripe_refund_id=refund.id,
-            stripe_charge_id=request.stripe_charge_id,
-            amount=refund.amount,
-            status=refund.status,
-            currency=refund.currency,
-            created=refund.created,
-        )
+        # ── PAST THIS LINE THE MONEY HAS ALREADY GONE BACK ────────────
+        return self._response_after_refunding(refund, request)
+
+    @staticmethod
+    def _response_after_refunding(
+        refund: stripe.Refund,
+        request: PaymentsRefundRequest,
+    ) -> PaymentsRefundResponse:
+        """Assemble the refund response after Stripe refunded — NEVER raises.
+
+        The refund is already issued by the time this runs, so a raise here is
+        not a failed refund — it is us losing an outcome Stripe already gave
+        us. It cost two things at once: ``MemberMembershipsRefund._refund_card``
+        never reached ``_insert_refund_row``, so the negative ``member_charges``
+        row was missing; and a ``pydantic.ValidationError`` **subclasses
+        ``ValueError``**, so the refund router's generic ``ValueError`` arm
+        answered a completed refund with **400 "bad request"**. Staff then retry
+        — and because no row was written, ``_assert_refundable_under_lock``
+        still sees the full balance as refundable and lets a SECOND real refund
+        through (Stripe's idempotency key only dedups a retry that reuses it).
+
+        So the assembly is wrapped rather than trusted. The degraded response
+        keeps every field Stripe gave us that reads back cleanly, and falls back
+        only where a safe default exists:
+
+        * ``currency`` — unused by the caller's row (which takes the currency
+          from the CRM charge) and defaulted;
+        * ``created`` — now, for a refund that just happened.
+
+        **``status`` is never guessed.** If Stripe's own status, the refund id,
+        or the amount cannot be read, the response reports ``pending``, which
+        makes the caller write NO row and defer to the ``refund.*`` webhook —
+        the same backstop a genuinely async refund already relies on. Inventing
+        ``succeeded`` would put real money into the books on a guess; deferring
+        only delays a row the webhook writes from Stripe's own copy.
+        """
+        refund_id = getattr(refund, "id", None)
+        amount = getattr(refund, "amount", None)
+        status = getattr(refund, "status", None)
+        currency = getattr(refund, "currency", None)
+        created = getattr(refund, "created", None)
+        try:
+            return PaymentsRefundResponse(
+                stripe_refund_id=refund_id,
+                stripe_charge_id=request.stripe_charge_id,
+                amount=amount,
+                status=status,
+                currency=currency,
+                created=created,
+            )
+        except Exception:
+            logger.error(
+                "Failed to assemble the response for refund %s on charge %s "
+                "AFTER Stripe already refunded; returning a degraded response "
+                "rather than raising, because a raise here reports a completed "
+                "refund as a bad request and invites a second one.",
+                refund_id,
+                request.stripe_charge_id,
+                exc_info=True,
+            )
+            resolved_amount = (
+                amount if isinstance(amount, int) else request.amount
+            )
+            recordable = (
+                isinstance(refund_id, str)
+                and refund_id != ""
+                and resolved_amount is not None
+                and isinstance(status, str)
+            )
+            return PaymentsRefundResponse(
+                stripe_refund_id=refund_id if isinstance(refund_id, str) else "",
+                stripe_charge_id=request.stripe_charge_id,
+                amount=resolved_amount if resolved_amount is not None else 0,
+                status=status if recordable else REFUND_STATUS_PENDING,
+                currency=(
+                    currency if isinstance(currency, str) else FALLBACK_CURRENCY
+                ),
+                created=(
+                    created
+                    if isinstance(created, int)
+                    else int(datetime.now(UTC).timestamp())
+                ),
+            )
 
     # ── Pay the Open Subscription Invoice (cash / card) ──────────
 
@@ -656,7 +763,11 @@ class PaymentsStripePaymentService:
         except stripe.InvalidRequestError as exc:
             raise self._pay_invoice_error(exc, invoice.id) from exc
 
-        return json.loads(str(paid))
+        # No card was charged here, but Stripe has already marked the invoice
+        # PAID, so the same rule applies: a serialization failure must not be
+        # converted into a settle failure (a 400 telling staff nothing was
+        # collected, over an invoice Stripe now considers settled).
+        return self._invoice_as_dict(paid)
 
     @staticmethod
     def _pay_invoice_error(
@@ -681,8 +792,45 @@ class PaymentsStripePaymentService:
         return PaymentsStripeError(str(exc), stripe_error_code=exc.code)
 
     @staticmethod
-    def _require_card_collected(invoice: stripe.Invoice) -> None:
-        """Guard that a card retry actually COLLECTED before it's booked paid.
+    def _invoice_as_dict(invoice: stripe.Invoice) -> dict:
+        """Serialize an already-PAID invoice for the record seam — NEVER raises.
+
+        ``str(stripe_obj)`` is the object's canonical JSON, so this round-trip
+        yields exactly the plain nested dict the webhook ``record()`` seams
+        consume. It runs AFTER the invoice has been paid, which is what makes a
+        raise here unaffordable: ``json.JSONDecodeError`` **subclasses
+        ``ValueError``**, so it would land in the settle routers' generic
+        ``except ValueError`` arm and report a **400 "bad request"** for money
+        that Stripe already took — inviting staff to collect a second time. The
+        same rule ``PaymentSyncOneTime._writeback`` (C-025) and
+        ``_response_after_collection`` follow: once a money movement has
+        completed at Stripe, nothing of ours may turn it into a failure.
+
+        The degraded dict carries the invoice **id only, deliberately without
+        ``status``**: ``MemberMembershipsInvoiceFetch._record_invoice``
+        dispatches on ``status``, so an absent one makes the in-request apply a
+        clean no-op instead of writing a half-described invoice/charge row from
+        a payload we could not read. The ``invoice.paid`` webhook and the
+        reconciler sweep then finalize the rows from Stripe's own copy — which
+        is the settle's documented backstop anyway.
+        """
+        try:
+            return json.loads(str(invoice))
+        except Exception:
+            invoice_id = getattr(invoice, "id", None)
+            logger.error(
+                "Could not serialize invoice %s AFTER it was paid; returning "
+                "an id-only payload rather than raising, because a raise here "
+                "would report a completed charge as a failure. The "
+                "invoice.paid webhook + reconciler will finalize the CRM rows.",
+                invoice_id,
+                exc_info=True,
+            )
+            return {"id": invoice_id}
+
+    @staticmethod
+    def _require_collected(invoice: stripe.Invoice) -> None:
+        """Guard that a pay actually COLLECTED before it's booked as paid.
 
         ``invoices.pay`` raises ``stripe.CardError`` on an outright decline,
         but an off-session invoice whose PaymentIntent needs authentication
@@ -692,13 +840,33 @@ class PaymentsStripePaymentService:
 
         A non-``paid`` return is therefore a definitive
         ``PaymentsNotCollectedError`` — a business OUTCOME, not a malfunction —
-        which the retry-card router surfaces as its **207**
-        ``not_collected`` result carrying this message verbatim (the same
-        "a definitive answer is data, not a 500" contract a decline rides).
-        It is still NOT a decline: the bank never refused, so the message tells
-        staff to collect another way rather than to try another card.
+        carrying this message verbatim to the front desk (the same "a definitive
+        answer is data, not a 500" contract a decline rides). It is still NOT a
+        decline: the bank never refused, so the message tells staff to collect
+        another way rather than to try another card.
+
+        **BOTH pay paths need it, which is why it is not card-retry-specific.**
+        The retry (``pay_open_subscription_invoice_on_card``) surfaces it as its
+        **207** ``not_collected`` result. The itemized charge
+        (``create_invoice_payment`` — the kiosk / one-time signup path) had NO
+        such check at all: a pay that returned ``open`` was assembled into a
+        ``status="open"`` response that nobody inspected, so
+        ``PaymentSyncOneTime._writeback`` stamped the rows ``applied`` and a
+        membership nobody paid for was booked as started. The start path now
+        answers it as a per-item ``failed`` entry on its own **207** as well.
+
+        **Only a POSITIVELY-READ non-paid status counts.** An absent or
+        non-string ``status`` means we do not know what happened, and "we do not
+        know" must never be reported as "nothing was collected": on the charge
+        path that answer makes the start op DELETE the membership rows, so an
+        unreadable object would un-do a charge that may well have gone through —
+        the exact failure ``_response_after_collection`` and
+        ``PaymentSyncOneTime._writeback`` (C-025) exist to prevent. An unknown
+        status therefore falls through to the degraded response, which already
+        owns that case.
         """
-        if invoice.status != INVOICE_STATUS_PAID:
+        status = getattr(invoice, "status", None)
+        if isinstance(status, str) and status != INVOICE_STATUS_PAID:
             raise PaymentsNotCollectedError(
                 "The card on file could not be charged automatically — the "
                 "payment needs extra authorization the member has to complete. "
@@ -722,7 +890,7 @@ class PaymentsStripePaymentService:
         stamps the cash metadata either. A decline raises out of ``pay_async``
         and is left to propagate; a return that did NOT collect (SCA) is turned
         into a ``PaymentsNotCollectedError`` by
-        :meth:`_require_card_collected` — a distinct type, because the
+        :meth:`_require_collected` — a distinct type, because the
         retry-card router answers it with its own **207** ``not_collected``
         result rather than the 500 an unrecognised Stripe failure gets. On
         success returns the now-paid invoice so the caller records it
@@ -750,8 +918,14 @@ class PaymentsStripePaymentService:
         except stripe.InvalidRequestError as exc:
             raise self._pay_invoice_error(exc, invoice.id) from exc
 
-        self._require_card_collected(paid)
-        return json.loads(str(paid))
+        # The guard runs FIRST and its raise is deliberate: a non-collection is
+        # the ``not_collected`` signal, not a failure to swallow. Everything
+        # after it, though, is downstream of a completed charge — so the
+        # serialization goes through the never-raising helper (a JSON failure
+        # here is a ``ValueError``, which the router would answer with a 400 for
+        # a card that WAS charged).
+        self._require_collected(paid)
+        return self._invoice_as_dict(paid)
 
     # ── Paginated read primitives (lists → plain nested dicts) ───
     #

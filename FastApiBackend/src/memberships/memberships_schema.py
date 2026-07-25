@@ -215,17 +215,24 @@ class MemberMembershipsStartResultItem(BaseModel):
     same-group items share fate.
 
     ``error`` is prefixed so a client (and the front desk reading the receipt)
-    can tell the two kinds of failure apart without parsing prose:
+    can tell the kinds of failure apart without parsing prose:
 
     * ``card declined: …`` — the BANK refused. Nothing was collected for this
       group; offering another card is the right next step.
+    * ``not collected: …`` — nobody refused, and the money still did not
+      arrive: the charge needs authentication (SCA / 3-D Secure) the member has
+      to complete. Nothing was collected and nothing was booked. Deliberately
+      NOT ``declined`` — no bank said no, so "try another card" is the wrong
+      advice; staff collect another way.
     * ``system failure: …`` — OUR side broke. Only reachable when an earlier
       charge in the SAME request already collected, which is why the response is
       a 207 rather than a 500 (see ``MemberMembershipsStart``): another card
       will not help, staff have to finish the job.
 
-    The prefixes are a stable part of the contract — reword the text after them
-    freely, never the prefix itself.
+    The first two are DEFINITIVE answers about the money and never imply an
+    outage; the third is the outage. The prefixes are a stable part of the
+    contract — reword the text after them freely, never the prefix itself, and
+    never let one become a prefix of another.
     """
 
     member_id: UUID

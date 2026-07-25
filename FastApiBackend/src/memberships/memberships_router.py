@@ -355,10 +355,13 @@ async def unfreeze_membership(
             "model": MemberMembershipsStartResponse,
             "description": (
                 "Partial — results[] carries the per-item split. A failed item "
-                "is either a bank DECLINE (`card declined: …`, nothing "
-                "collected for that group) or, once this request's one-time "
-                "charge already collected, a SYSTEM failure on the rest "
-                "(`system failure: …`). Branch on the item, never on the status."
+                "is a bank DECLINE (`card declined: …`, nothing collected for "
+                "that group), a definitive NON-COLLECTION (`not collected: …` "
+                "— nobody refused, the charge needs authentication the member "
+                "must complete; nothing collected, nothing booked) or, once "
+                "this request's one-time charge already collected, a SYSTEM "
+                "failure on the rest (`system failure: …`). Branch on the "
+                "item, never on the status."
             ),
         },
         401: {"description": "Not authenticated"},
@@ -456,10 +459,12 @@ async def start_membership(
 
     # Any failed charge group → 207 partial; all-created stays 201. The item's
     # `error` prefix says WHICH kind of failure it was — `card declined: ` (the
-    # bank refused) or `system failure: ` (our side broke after an earlier
-    # charge in this same request already collected, so a 500 claiming "nothing
-    # created" would have been a lie). The status alone can't carry that, which
-    # is exactly why clients branch on the item.
+    # bank refused), `not collected: ` (nobody refused and the money still did
+    # not arrive: the charge needs SCA / 3-D Secure authentication) or
+    # `system failure: ` (our side broke after an earlier charge in this same
+    # request already collected, so a 500 claiming "nothing created" would have
+    # been a lie). The status alone can't carry that, which is exactly why
+    # clients branch on the item.
     if any(
         item.status == MemberMembershipsStartStatus.failed
         for item in result.results

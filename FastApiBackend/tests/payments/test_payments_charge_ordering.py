@@ -31,7 +31,10 @@ from uuid import uuid4
 
 import pytest
 
-from src.payments.payments_exceptions import PaymentsStripeError
+from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
+    PaymentsStripeError,
+)
 from src.payments.schema.metadata.stripe_membership_one_time_metadata import (
     StripeMembershipOneTimeMetadata,
 )
@@ -83,6 +86,7 @@ class _FakeStripe:
         n_lines: int,
         line_items_error: Exception | None,
         zero_amount: bool,
+        pay_status: str = "paid",
     ) -> None:
         self.calls: list[str] = []
         lines = [_line(i) for i in range(n_lines)]
@@ -112,7 +116,10 @@ class _FakeStripe:
             MagicMock(data=lines[EMBEDDED_PAGE:], has_more=False),
             error=line_items_error,
         )
-        self.root.v1.invoices.pay_async = self._step(PAY, invoice("paid"))
+        # ``pay_status`` models what the pay RETURNED: "paid" (collected) or
+        # "open" (an off-session PaymentIntent that needs SCA / 3-D Secure —
+        # Stripe returns without raising and without taking the money).
+        self.root.v1.invoices.pay_async = self._step(PAY, invoice(pay_status))
 
     def _step(
         self,
@@ -150,6 +157,7 @@ def _build_service(
     n_lines: int | None = None,
     line_items_error: Exception | None = None,
     zero_amount: bool = False,
+    pay_status: str = "paid",
 ) -> tuple[PaymentsStripePaymentService, _FakeStripe]:
     """Build the payment service over the recording Stripe double.
 
@@ -161,6 +169,7 @@ def _build_service(
         n_lines=n_items if n_lines is None else n_lines,
         line_items_error=line_items_error,
         zero_amount=zero_amount,
+        pay_status=pay_status,
     )
     stripe_client = MagicMock()
     stripe_client.client = fake.root
@@ -354,14 +363,98 @@ async def test_response_assembly_failure_after_pay_never_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_degraded_response_keeps_the_invoices_own_status() -> None:
-    """The fallback prefers what the invoice says over assuming success."""
+async def test_degraded_response_keeps_the_invoices_own_figures() -> None:
+    """The fallback prefers what the invoice says over reconstructing it.
+
+    ``amount_paid`` is the observable: the invoice reports 0 while the line map
+    sums to a full line's worth, so a fallback that reconstructed the total
+    would report money that was never taken.
+
+    This used to be asserted with a post-pay ``status="open"`` invoice. That
+    state is now UNREACHABLE, not merely unasserted — ``_require_collected``
+    raises on it before any response is assembled, which is the item-4 guard
+    below. The premise changed; the behaviour under test did not.
+    """
     service, fake = _build_service(n_items=1)
-    fake.root.v1.invoices.pay_async = AsyncMock(
-        return_value=_broken_invoice(status="open", amount_paid=0),
-    )
+    broken = _broken_invoice(status="paid", amount_paid=0)
+    fake.root.v1.invoices.pay_async = AsyncMock(return_value=broken)
 
     resp = await service.create_invoice_payment(_request(1), STRIPE_ACCOUNT_ID)
 
-    assert resp.status == "open"
-    assert resp.amount_paid == 0
+    assert resp.status == "paid"
+    assert resp.amount_paid == 0, "reconstructed the total instead of reading it"
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_status_is_not_reported_as_a_non_collection() -> None:
+    """"We could not read it" must never be answered "nothing was collected".
+
+    The collection guard's answer is destructive on this path — the start op
+    DELETES the membership rows on a non-collection — so it fires only on a
+    positively-read non-paid status. An absent/unreadable one falls through to
+    the degraded response, because a charge that may well have gone through must
+    never be un-done by our own inability to parse the reply.
+    """
+    service, fake = _build_service(n_items=2)
+    fake.root.v1.invoices.pay_async = AsyncMock(
+        return_value=_broken_invoice(status=None, amount_paid=None),
+    )
+
+    resp = await service.create_invoice_payment(_request(2), STRIPE_ACCOUNT_ID)
+
+    assert resp.line_item_ids == ["il_0", "il_1"]
+
+
+# ── A pay that RETURNED without collecting is not a success ─────────
+
+
+@pytest.mark.asyncio
+async def test_charge_that_did_not_collect_raises_not_collected() -> None:
+    """THE item-4 guard: an ``open`` return must never be booked as billed.
+
+    ``invoices.pay`` raises on an outright decline, but an off-session
+    PaymentIntent that needs SCA / 3-D Secure comes back with the invoice still
+    ``open`` and no exception. Nothing downstream inspected ``status``:
+    ``create_invoice_payment`` returned ``status="open"``,
+    ``PaymentSyncOneTime._writeback`` stamped the membership rows ``applied``,
+    ``MemberMembershipsStart._charge_one_time_group`` returned ``True``, and the
+    kiosk printed a 201 for a membership nobody paid for.
+    """
+    service, fake = _build_service(n_items=2, pay_status="open")
+
+    with pytest.raises(PaymentsNotCollectedError):
+        await service.create_invoice_payment(_request(2), STRIPE_ACCOUNT_ID)
+
+    # It really did try to charge — this is the "we asked and nothing arrived"
+    # outcome, not a request we never made.
+    assert PAY in fake.calls
+
+
+@pytest.mark.asyncio
+async def test_not_collected_is_a_stripe_error_subclass() -> None:
+    """The type hierarchy is the safety net: a caller that has NOT been taught
+    the distinction still maps it to the safe, non-retryable 500 rather than
+    booking a phantom success. Only a caller that catches it ABOVE its base
+    ``PaymentsStripeError`` arm gets the 2xx result contract."""
+    service, _fake = _build_service(n_items=1, pay_status="open")
+
+    with pytest.raises(PaymentsStripeError) as caught:
+        await service.create_invoice_payment(_request(1), STRIPE_ACCOUNT_ID)
+
+    assert isinstance(caught.value, PaymentsNotCollectedError)
+
+
+@pytest.mark.asyncio
+async def test_zero_amount_invoice_is_not_mistaken_for_a_non_collection() -> None:
+    """A $0 invoice is ``paid`` at finalize with no pay step at all.
+
+    The guard sits on the same path, so a trial line (a legitimate $0 charge)
+    must sail through it — reporting a free trial as "nothing was collected"
+    would block every trial signup at the kiosk.
+    """
+    service, fake = _build_service(n_items=2, zero_amount=True)
+
+    resp = await service.create_invoice_payment(_request(2), STRIPE_ACCOUNT_ID)
+
+    fake.root.v1.invoices.pay_async.assert_not_awaited()
+    assert resp.status == "paid"

@@ -14,11 +14,14 @@ guard around it, so anything that raises out of the payment service lands in
 when that raise happened, Stripe keeps it and the membership rows the member
 paid for are deleted.
 
-The two halves of the invariant, asserted at this boundary:
+The halves of the invariant, asserted at this boundary:
 
 1. a read failure propagates (so the caller cleans up) but must happen with
    NOTHING collected — the member is honestly told nothing happened;
-2. once the money IS collected, nothing propagates — the rows survive.
+2. once the money IS collected, nothing propagates — the rows survive;
+3. and the mirror of (2): a pay that RETURNED without collecting (SCA / 3-D
+   Secure) propagates a ``PaymentsNotCollectedError`` BEFORE ``_writeback``, so
+   no row is ever stamped billed for money that never arrived.
 
 Pure unit tests: the DB / payer collaborators are mocked and the payment
 service runs for real over a fake Stripe client. Nothing touches a live DB or
@@ -30,6 +33,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.payments.payments_exceptions import PaymentsNotCollectedError
 from src.payments.service.payments_stripe_client import PaymentsStripeClient
 from src.payments.service.payments_stripe_payment_service import (
     PaymentsStripePaymentService,
@@ -55,6 +59,7 @@ def _fake_stripe(
     n_items: int,
     line_items_error: Exception | None = None,
     broken_pay_result: bool = False,
+    uncollected_pay: bool = False,
 ) -> MagicMock:
     """A Stripe double for the create -> finalize -> read -> pay sequence."""
     lines = []
@@ -96,6 +101,11 @@ def _fake_stripe(
         paid.status = "paid"
         paid.amount_paid = n_items * LINE_AMOUNT
         paid.metadata = None
+    elif uncollected_pay:
+        # The pay RETURNED — no decline raised — but the invoice never reached
+        # ``paid``: the off-session PaymentIntent needs SCA / 3-D Secure. No
+        # money moved.
+        paid = invoice("open")
     else:
         paid = invoice("paid")
 
@@ -220,6 +230,35 @@ async def test_post_collection_failure_never_reaches_the_caller() -> None:
         for call in service._queries.apply_one_time_membership_sync.await_args_list
     ]
     assert stamped == ["il_0", "il_1"]
+
+
+@pytest.mark.asyncio
+async def test_uncollected_pay_writes_nothing_back() -> None:
+    """The mirror invariant: nothing collected ⇒ no row may look billed.
+
+    The writeback is the ONLY thing that makes a membership row look paid — it
+    stamps ``stripe_item_id``, the consolidated invoice id and
+    ``stripe_sync_status = 'applied'``. ``_execute`` is a bare ``return await``,
+    so a raise from ``create_invoice_payment`` skips ``_writeback`` entirely and
+    the rows stay ``not_added`` with a NULL ``stripe_item_id`` — provably
+    un-billed, which is what makes the start op's cleanup of them correct.
+
+    Before the collection guard, this exact scenario wrote back all three rows
+    as ``applied`` off a ``status="open"`` response and the kiosk booked a
+    membership nobody had paid for.
+    """
+    plan = _plan(3)
+    root = _fake_stripe(n_items=3, uncollected_pay=True)
+    service = _make_service(plan, root)
+
+    with pytest.raises(PaymentsNotCollectedError):
+        await service.charge_one_time(
+            payer_member_id=plan.payer.member_id,
+            idempotency_key=uuid4(),
+        )
+
+    root.v1.invoices.pay_async.assert_awaited_once()
+    service._queries.apply_one_time_membership_sync.assert_not_awaited()
 
 
 @pytest.mark.asyncio
