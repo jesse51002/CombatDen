@@ -152,10 +152,11 @@ Each is one focused wrapper class in `src/payments/service/`. All raise the
 `PaymentsInvalidRequestError`, `PaymentsNotCollectedError` (a card charge that
 definitively did NOT collect with no decline raised — an SCA/3-D-Secure
 authentication the member must complete; a business OUTCOME a caller may answer
-with a 2xx result rather than a 500. Raised by the ONE detector
-`_require_collected`, which guards **both** `create_invoice_payment` (the
-itemized one-time / kiosk charge) and `pay_open_subscription_invoice_on_card`
-(the retry) — see both below), and `StripeOrphanError` (a Stripe resource was
+with a 2xx result rather than a 500, and must never answer as success. Raised by
+the ONE detector `_require_collected`, which guards **both**
+`create_invoice_payment` (the itemized one-time / kiosk charge) and
+`pay_open_subscription_invoice_on_card` (the retry) — see both below), and
+`StripeOrphanError` (a Stripe resource was
 created but the CRM writeback failed — surfaced loudly for operator cleanup).
 
 **`PaymentsStripeMembersService`** (`payments_stripe_members_service.py`) — Stripe
@@ -362,12 +363,17 @@ back to active because the DB says it's current.
 - **`_require_collected(invoice)` — the ONE non-collection detector, shared by
   BOTH pay paths**: `pay_open_subscription_invoice_on_card` (the retry) and
   `create_invoice_payment` (the itemized one-time / kiosk charge; see its entry
-  above). **All THREE of its callers now answer it as a 207 result, never a
-  500** — start (per-item `failed` + the `not collected: ` prefix), retry-card
-  and charge-card (both `status=not_collected` + the same reason wording).
-  Charge-card keeps its **204/no-body success** contract and adds the 207 body
-  for this outcome and for a `stripe.CardError` decline (`memberships-guide`).
-  It raises
+  above). **All THREE of its callers answer it as a 207 result, never a 500 and
+  never a success** — but only ONE of them still tells it apart from a decline.
+  Start and charge-card report the ordinary card failure it is (a per-item
+  `card declined: ` entry / `status=declined`, both carrying
+  `CARD_NOT_CHARGED_REASON`), because at a kiosk or a front desk the answer is
+  the same: that card did not work, use another. **Retry-card keeps
+  `status=not_collected` + this error's own SCA wording** — there staff are
+  deliberately repairing one card, so the distinction is actionable, and that is
+  why the enum value still exists. Charge-card keeps its **204/no-body success**
+  contract and adds the 207 body for this outcome and for a `stripe.CardError`
+  decline (`memberships-guide`). It raises
   `PaymentsNotCollectedError` **only on a
   positively-read non-`paid` status** — `isinstance(status, str) and status !=
   "paid"`. That narrowing is load-bearing: on the charge path the answer is

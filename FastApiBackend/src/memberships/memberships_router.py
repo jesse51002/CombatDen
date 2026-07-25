@@ -52,6 +52,9 @@ from src.memberships.service.memberships_refund import (
 from src.memberships.service.memberships_service import (
     MemberMembershipsService,
 )
+from src.memberships.service.memberships_start import (
+    CARD_NOT_CHARGED_REASON,
+)
 from src.payments.payments_exceptions import (
     PaymentsNotCollectedError,
     PaymentsStripeError,
@@ -354,13 +357,12 @@ async def unfreeze_membership(
             "model": MemberMembershipsStartResponse,
             "description": (
                 "Partial — results[] carries the per-item split. A failed item "
-                "is a bank DECLINE (`card declined: …`, nothing collected for "
-                "that group), a definitive NON-COLLECTION (`not collected: …` "
-                "— nobody refused, the charge needs authentication the member "
-                "must complete; nothing collected, nothing booked) or, once "
-                "this request's one-time charge already collected, a SYSTEM "
-                "failure on the rest (`system failure: …`). Branch on the "
-                "item, never on the status."
+                "is a CARD failure (`card declined: …` — refused, or returned "
+                "without collecting; nothing collected for that group and "
+                "nothing booked) or, once this request's one-time charge "
+                "already collected, a SYSTEM failure on the rest "
+                "(`system failure: …`). Branch on the item, never on the "
+                "status."
             ),
         },
         401: {"description": "Not authenticated"},
@@ -1386,10 +1388,8 @@ async def retry_membership_card(
     description=(
         "Creates and pays a one-off Stripe invoice for amount_cents. "
         "paid_cash marks it out-of-band; payment_method_id bills a one-off "
-        "card. A collected charge is 204; a DEFINITIVE answer about the money "
-        "(the bank refused, or the payment needs authentication the member "
-        "must complete) is a result, not a server failure — 207 with "
-        "status=declined or status=not_collected."
+        "card. A collected charge is 204; a card that did not collect is a "
+        "result, not a server failure — 207 with status=declined."
     ),
     responses={
         204: {"description": "Card charged successfully"},
@@ -1398,11 +1398,8 @@ async def retry_membership_card(
         207: {
             "model": MemberMembershipsChargeCardResponse,
             "description": (
-                "Nothing collected. status=declined (the bank refused — offer "
-                "another card) or status=not_collected (nobody refused, but "
-                "the payment needs extra authorization the member has to "
-                "complete — collect another way); ``decline_reason`` carries "
-                "the reason on both."
+                "Nothing collected: status=declined, with the reason in "
+                "``decline_reason``. Offer another card."
             ),
         },
         400: {"description": "Invalid request or gym mismatch"},
@@ -1464,12 +1461,16 @@ async def charge_member_card(
                 decline_reason=(exc.user_message or str(exc)),
             ).model_dump(mode="json"),
         )
-    except PaymentsNotCollectedError as exc:
-        # Nobody refused and nothing arrived (SCA) — a DEFINITIVE outcome, so a
-        # 207 RESULT; only success stays 204/no body. MUST sit above the
-        # PaymentsStripeError arm — it is a subclass, so the base arm would win.
+    except PaymentsNotCollectedError:
+        # The pay RETURNED without collecting (SCA). Nobody refused, but nothing
+        # arrived either, so this route reports it as the ordinary card failure
+        # it is — same ``declined`` result a refusal gets. Never 204: a
+        # non-collection must never read as a charge. MUST sit above the
+        # PaymentsStripeError arm — it is a subclass, so the base arm would win
+        # and 500 a card failure. (retry-card is the one path that still tells
+        # the two apart, because there staff are deliberately repairing a card.)
         logger.warning(
-            "Charge card not collected (needs authentication): member_id=%s, "
+            "Charge card not collected (no decline raised): member_id=%s, "
             "paid_by_member_id=%s, amount_cents=%s",
             request.member_id,
             request.paid_by_member_id,
@@ -1480,8 +1481,8 @@ async def charge_member_card(
             content=MemberMembershipsChargeCardResponse(
                 member_id=request.member_id,
                 paid_by_member_id=request.paid_by_member_id,
-                status=MemberMembershipsRetryCardStatus.not_collected,
-                decline_reason=str(exc),
+                status=MemberMembershipsRetryCardStatus.declined,
+                decline_reason=CARD_NOT_CHARGED_REASON,
             ).model_dump(mode="json"),
         )
     except PaymentsStripeError as exc:

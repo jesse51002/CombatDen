@@ -49,19 +49,17 @@ void main() {
     await expectLater(charge(), completes);
   });
 
-  test('207: a non-collection throws, never reads as charged', () async {
-    // Nobody refused this card — the payment needs authorization only the
-    // member can complete. It is a 2xx, so nothing throws on its own; without
-    // the guard the dialog shows a green "charged" for an uncollected charge.
-    const reason =
-        'The card on file could not be charged automatically — the payment '
-        'needs extra authorization the member has to complete. Collect '
-        'payment another way.';
+  test('207: a card failure throws, never reads as charged', () async {
+    // A 207 is a 2xx, so nothing throws on its own; without the guard the
+    // dialog shows a green "charged" over money that never moved. The repo
+    // never reads `status` — any non-204 is a failure — so this holds for
+    // every reason the backend reports.
+    const reason = 'Your card has insufficient funds.';
     stubPost(
       {
         'member_id': 'member-1',
         'paid_by_member_id': 'payer-1',
-        'status': 'not_collected',
+        'status': 'declined',
         'decline_reason': reason,
       },
       statusCode: 207,

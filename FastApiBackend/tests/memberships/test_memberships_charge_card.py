@@ -23,13 +23,15 @@ Five scenarios:
    the invoice is paid, the one-off card is detached afterward, and the
    customer's saved default payment method is left unchanged.
 
-Plus the ROUTER contract (unit, no DB / Stripe / network), pinning the three
+Plus the ROUTER contract (unit, no DB / Stripe / network), pinning the two
 outcomes this endpoint can answer with:
 
-6. ``test_endpoint_returns_not_collected_as_207_result`` — a definitive
+6. ``test_endpoint_reports_a_non_collection_as_a_decline`` — a definitive
    NOT-COLLECTED (``PaymentsNotCollectedError``: nothing refused, nothing
-   collected — SCA) is a 207 RESULT carrying its own reason, never the 500 it
-   used to get by falling through to the base ``PaymentsStripeError`` arm.
+   collected — SCA) is a 207 ``declined`` RESULT, the same one a refusal gets:
+   the card did not work and the desk offers another. Never a 204, and never
+   the 500 it used to get by falling through to the base
+   ``PaymentsStripeError`` arm.
 7. ``test_endpoint_returns_card_decline_as_207_result`` — a bank DECLINE is
    likewise a 207 RESULT carrying Stripe's own end-user wording. ``CardError``
    subclasses none of the typed arms, so without its own arm it lands on the
@@ -366,27 +368,33 @@ def _charge_router_doubles(*, side_effect=None):
     return auth, service
 
 
-async def test_endpoint_returns_not_collected_as_207_result() -> None:
-    """A definitive NOT-COLLECTED is a 207 RESULT, not a 500.
+async def test_endpoint_reports_a_non_collection_as_a_decline() -> None:
+    """A definitive NOT-COLLECTED is a 207 ``declined`` RESULT — never a 204.
 
     ``invoices.pay`` returned without raising, but the invoice never reached
     ``paid`` because the off-session PaymentIntent needs authentication (SCA /
     3-D Secure). Nobody refused and nothing malfunctioned — the money simply
-    was not collected and staff must act. A 500 there reports an outage, buries
-    real outages in monitoring, and tells the front desk nothing.
+    was not collected. This route reports it as the ordinary card failure it
+    is (founder decision): the desk's answer is "that card did not work, try
+    another" either way, so a separate status bought nothing here. A 500 would
+    be worse still — it reports an outage and tells the front desk nothing.
 
-    ``PaymentsNotCollectedError`` subclasses ``PaymentsStripeError``, so before
-    the dedicated arm this fell through to the base arm and answered 500.
+    What must NOT change is that it is not a success: the guard raises so this
+    can never come back 204. ``PaymentsNotCollectedError`` subclasses
+    ``PaymentsStripeError``, so without the dedicated arm it falls through to
+    the base arm and answers 500.
     """
     from src.memberships.memberships_router import charge_member_card
-
-    reason = (
-        "The card on file could not be charged automatically — the payment "
-        "needs extra authorization the member has to complete. Collect payment "
-        "another way."
+    from src.memberships.service.memberships_start import (
+        CARD_NOT_CHARGED_REASON,
     )
+
     auth, service = _charge_router_doubles(
-        side_effect=PaymentsNotCollectedError(reason),
+        side_effect=PaymentsNotCollectedError(
+            "The card on file could not be charged automatically — the "
+            "payment needs extra authorization the member has to complete. "
+            "Collect payment another way."
+        ),
     )
     request = _charge_request()
 
@@ -397,14 +405,15 @@ async def test_endpoint_returns_not_collected_as_207_result() -> None:
         memberships_service=service,
     )
 
+    # Not a success, and not an outage: the same result a refusal gets.
     assert result.status_code == 207
     body = json.loads(result.body)
-    assert body["status"] == MemberMembershipsRetryCardStatus.not_collected
-    # Distinguishable from a decline: its own status AND a reason that never
-    # tells staff the card was refused (nobody refused).
-    assert body["status"] != MemberMembershipsRetryCardStatus.declined
-    assert body["decline_reason"] == reason
-    assert "declin" not in body["decline_reason"].lower()
+    assert body["status"] == MemberMembershipsRetryCardStatus.declined
+    assert body["status"] != MemberMembershipsRetryCardStatus.not_collected
+    # Its own short wording, not the SCA sentence the exception carries — that
+    # advice belongs to retry-card, the one path that still tells them apart.
+    assert body["decline_reason"] == CARD_NOT_CHARGED_REASON
+    assert "extra authorization" not in body["decline_reason"]
     # The identity echo staff need: whose charge, and whose card went uncharged.
     assert body["member_id"] == str(request.member_id)
     assert body["paid_by_member_id"] == str(request.paid_by_member_id)

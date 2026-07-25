@@ -2,11 +2,11 @@
 
 At most two charges per request. Billed charges are never un-billed.
 
-The response never claims less — or more — than what actually happened. A
-DEFINITIVE answer about the money is per-item DATA on the router's 207, either
-way it went: the bank refused (``card declined: …``) or nobody refused and the
-money still did not arrive (``not collected: …`` — SCA / 3-D Secure). Neither is
-an outage, and each carries different advice, so they never share a prefix.
+The response never claims less — or more — than what actually happened. A card
+that did not collect is per-item DATA on the router's 207 (``card declined: …``)
+— whether the bank refused it or the pay returned without collecting (SCA /
+3-D Secure). Neither is an outage and both leave the desk with the same answer,
+so a start has exactly TWO failure reasons: the card, or our side.
 
 A system failure raises → 500 only *while nothing has been collected*; once the
 one-time leg has charged it becomes per-item DATA too (``system failure: …`` →
@@ -65,13 +65,19 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# The reason prefix on a ``failed`` item's ``error``: the BANK said no, NOBODY
-# collected, or OUR side broke. Staff act on each differently and clients switch
-# on "starts with", so none may be a prefix of another or phrased as another.
+# The reason prefix on a ``failed`` item's ``error``: the CARD failed, or OUR
+# side broke. Staff act on each differently and clients switch on "starts with",
+# so neither may be a prefix of the other or phrased as the other.
 # Contract — test-locked in ``tests/memberships/test_start_207_contract.py``.
 CARD_DECLINED_PREFIX = "card declined: "
-NOT_COLLECTED_PREFIX = "not collected: "
 SYSTEM_FAILURE_PREFIX = "system failure: "
+
+# What a definitive NON-collection says. Stripe raises ``CardError`` with its
+# own end-user wording on a refusal, but a pay that RETURNED without collecting
+# carries only the SCA explanation retry-card uses, which is the wrong advice on
+# a path that reports it as an ordinary card failure. Shared with charge-card so
+# both spell it the same way.
+CARD_NOT_CHARGED_REASON = "The card could not be charged."
 
 
 class MemberMembershipsStart(MemberMembershipsBase):
@@ -271,9 +277,9 @@ class MemberMembershipsStart(MemberMembershipsBase):
 
         Returns whether the charge COMMITTED: ``True`` keeps the rows (billed
         lines are never un-billed, so a kept-but-unconfirmed row counts),
-        ``False`` on either definitive non-collection (decline / SCA), whose
-        rows were cleaned. A system failure raises. The recurring arm needs this
-        to know whether a later failure can still claim "nothing created".
+        ``False`` when the card did not collect, whose rows were cleaned. A
+        system failure raises. The recurring arm needs this to know whether a
+        later failure can still claim "nothing created".
         """
         payment = request.payment
         one_off_pm = (
@@ -297,22 +303,25 @@ class MemberMembershipsStart(MemberMembershipsBase):
                 group, f"{CARD_DECLINED_PREFIX}{exc}", cleanup=True,
             )
             return False
-        except PaymentsNotCollectedError as exc:
-            # Nobody refused and the money still did not arrive (SCA) — as
-            # DEFINITIVE as a decline, same 2xx contract, but its OWN prefix
-            # because "try another card" is the wrong advice. `cleanup=True` is
-            # safe ONLY because the raise beat `PaymentSyncOneTime._writeback`:
+        except PaymentsNotCollectedError:
+            # The pay RETURNED without collecting (SCA / 3-D Secure). Nobody
+            # refused, but nothing arrived either, so it is reported as the
+            # ordinary card failure it is — same prefix, same 207. `cleanup=True`
+            # is safe ONLY because the raise beat `PaymentSyncOneTime._writeback`:
             # the rows are still NULL `stripe_item_id` + `not_added`, provably
-            # un-billed. MUST stay above the blanket arm — it subclasses it.
+            # un-billed. MUST stay above the blanket arm — it subclasses it, and
+            # a 500 here would report a card failure as an outage.
             await self._fail_group(
-                group, f"{NOT_COLLECTED_PREFIX}{exc}", cleanup=True,
+                group,
+                f"{CARD_DECLINED_PREFIX}{CARD_NOT_CHARGED_REASON}",
+                cleanup=True,
             )
             return False
         except Exception:
-            # A SYSTEM failure — never dressed up as a decline or a
-            # non-collection, both answered above. Clean THIS group and
-            # propagate to a non-retryable 500. The request's RECURRING rows are
-            # swept by the matching arm in ``start`` (this group may be billed).
+            # A SYSTEM failure — never dressed up as a card failure, which both
+            # arms above answer. Clean THIS group and propagate to a
+            # non-retryable 500. The request's RECURRING rows are swept by the
+            # matching arm in ``start`` (this group may be billed).
             await self._cleanup_states(group)
             raise
         await self._verify_group(group, keep_unverified=True)

@@ -40,12 +40,15 @@ class PaymentsNotCollectedError(PaymentsStripeError):
     Secure) comes back with the invoice still ``open`` and no exception. That is
     a definitive business OUTCOME — "we could not collect on this card, staff
     must act" — the same KIND of thing as a decline, so it belongs on the same
-    side of the contract: a 2xx RESULT carrying the reason (retry-card's **207**
-    ``not_collected``), never a 500 that would bury real outages in monitoring.
+    side of the contract: a 2xx RESULT carrying the reason, never a 500 that
+    would bury real outages in monitoring.
 
-    It is NOT a decline, though, and must never be reported as one: the bank
-    never said no, so "try another card" is the wrong advice — the member has to
-    complete the authentication, or staff collect another way.
+    **What it must NEVER be is success** — that is the whole reason it is
+    raised. How a caller REPORTS it is the caller's call: start and charge-card
+    fold it into their ordinary card-failure result, because at a kiosk or a
+    front desk the answer is the same either way (the card did not work, use
+    another); retry-card keeps its own ``not_collected`` outcome, because there
+    staff are deliberately repairing one card and the distinction is actionable.
 
     Deliberately a ``PaymentsStripeError`` subclass: any caller that has NOT
     been taught the distinction keeps mapping it to the safe, non-retryable

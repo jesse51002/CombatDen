@@ -217,22 +217,19 @@ class MemberMembershipsStartResultItem(BaseModel):
     ``error`` is prefixed so a client (and the front desk reading the receipt)
     can tell the kinds of failure apart without parsing prose:
 
-    * ``card declined: …`` — the BANK refused. Nothing was collected for this
-      group; offering another card is the right next step.
-    * ``not collected: …`` — nobody refused, and the money still did not
-      arrive: the charge needs authentication (SCA / 3-D Secure) the member has
-      to complete. Nothing was collected and nothing was booked. Deliberately
-      NOT ``declined`` — no bank said no, so "try another card" is the wrong
-      advice; staff collect another way.
+    * ``card declined: …`` — the CARD did not collect: the bank refused it, or
+      the charge came back needing authentication (SCA / 3-D Secure) nobody
+      completed. Nothing was collected for this group and nothing was booked;
+      offering another card is the right next step either way.
     * ``system failure: …`` — OUR side broke. Only reachable when an earlier
       charge in the SAME request already collected, which is why the response is
       a 207 rather than a 500 (see ``MemberMembershipsStart``): another card
       will not help, staff have to finish the job.
 
-    The first two are DEFINITIVE answers about the money and never imply an
-    outage; the third is the outage. The prefixes are a stable part of the
+    The first is a DEFINITIVE answer about the money and never implies an
+    outage; the second is the outage. The prefixes are a stable part of the
     contract — reword the text after them freely, never the prefix itself, and
-    never let one become a prefix of another.
+    never let one become a prefix of the other.
     """
 
     member_id: UUID
@@ -320,6 +317,10 @@ class MemberMembershipsRetryCardStatus(StrEnum):
     Three outcomes, all of them DATA: the bank collected, the bank refused, or
     nobody refused but the money did not arrive either. Only ``paid`` means
     money moved — see :class:`MemberMembershipsRetryCardResponse`.
+
+    Retry-card is the ONE path that still tells ``not_collected`` apart, because
+    there staff are deliberately repairing a card. Start and charge-card report
+    a non-collection as the ordinary card failure it is.
     """
 
     paid = "paid"
@@ -409,9 +410,11 @@ class MemberMembershipsChargeCardResponse(BaseModel):
     A collected charge is still 204 with no body — the success contract is
     unchanged. This reuses retry-card's status vocabulary (``decline_reason``
     is the same "why nothing was collected" slot), so a client branches on
-    ``status``, never on the 2xx class. Both non-collecting outcomes are
-    reachable here: ``declined`` (the bank refused) and ``not_collected``
-    (SCA). ``paid`` never is — a collected charge has no body at all.
+    ``status``, never on the 2xx class. Only ``declined`` is reachable here: a
+    card that did not collect is ONE outcome on this route, whether the bank
+    refused it or the pay returned without collecting (SCA). ``not_collected``
+    belongs to retry-card alone; ``paid`` never appears, because a collected
+    charge has no body at all.
     """
 
     member_id: UUID

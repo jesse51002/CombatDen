@@ -2,19 +2,19 @@
 
 Two things are pinned here.
 
-**1. What a ``failed`` result item MEANS.** A start can fail in three ways once
-it has begun, and they demand different responses from the front desk, so the
+**1. What a ``failed`` result item MEANS.** A start can fail in two ways once it
+has begun, and they demand different responses from the front desk, so the
 reason prefix distinguishes them:
 
-* ``card declined: …`` — the BANK refused. Nothing was collected for that
-  group; offering another card is the fix.
-* ``not collected: …`` — nobody refused and the money still did not arrive:
-  ``invoices.pay`` RETURNED with the invoice open because the off-session
-  PaymentIntent needs SCA / 3-D Secure. Nothing collected, nothing booked.
-  Deliberately NOT ``declined`` — "try another card" is wrong advice when no
-  bank said no. This is the outcome the kiosk path had NO answer for: the
-  charge reported ``status="open"``, the writeback stamped the rows
-  ``applied``, and a membership nobody paid for was booked on a 201.
+* ``card declined: …`` — the CARD did not collect. The bank refused it, or
+  ``invoices.pay`` RETURNED with the invoice still open because the off-session
+  PaymentIntent needs SCA / 3-D Secure. Nothing collected, nothing booked;
+  offering another card is the fix either way. A non-collection is folded in
+  here on purpose (founder decision) — the desk's answer is the same, so a
+  separate outcome bought nothing. What still may NOT happen is it reading as
+  success: that is the bug the collection guard exists for (the charge reported
+  ``status="open"``, the writeback stamped the rows ``applied``, and a
+  membership nobody paid for was booked on a 201).
 * ``system failure: …`` — OUR side broke. Another card cannot help.
 
 The change these tests lock in: a NON-card failure in the recurring converge
@@ -52,7 +52,7 @@ from src.memberships.memberships_schema import (
 )
 from src.memberships.service.memberships_start import (
     CARD_DECLINED_PREFIX,
-    NOT_COLLECTED_PREFIX,
+    CARD_NOT_CHARGED_REASON,
     SYSTEM_FAILURE_PREFIX,
     MemberMembershipsStart,
 )
@@ -127,34 +127,29 @@ def _decline() -> stripe.CardError:
     )
 
 
-# ── The three reason prefixes must stay tellable apart ──────────────
+# ── The two reason prefixes must stay tellable apart ────────────────
 
 
 @pytest.mark.parametrize(
     ("left", "right"),
     [
         (CARD_DECLINED_PREFIX, SYSTEM_FAILURE_PREFIX),
-        (CARD_DECLINED_PREFIX, NOT_COLLECTED_PREFIX),
-        (NOT_COLLECTED_PREFIX, SYSTEM_FAILURE_PREFIX),
     ],
 )
 def test_reason_prefixes_are_mutually_exclusive(left: str, right: str) -> None:
-    """No prefix may be a prefix of another, or a client that switches on
-    "starts with" would classify one outcome as a different one — sending the
-    member off to find another card for an outage, or telling staff a bank
-    refused when none did."""
+    """Neither prefix may be a prefix of the other, or a client that switches on
+    "starts with" would classify one outcome as the other — sending the member
+    off to find another card for an outage, or telling staff the card failed
+    when it never did."""
     assert left != right
     assert not left.startswith(right)
     assert not right.startswith(left)
 
 
-@pytest.mark.parametrize(
-    "prefix", [SYSTEM_FAILURE_PREFIX, NOT_COLLECTED_PREFIX]
-)
-def test_only_a_real_decline_says_declined(prefix: str) -> None:
-    """Staff skim these reasons, so the word must not leak into the two
-    outcomes where no bank refused."""
-    assert "declin" not in prefix
+def test_only_a_card_failure_says_declined() -> None:
+    """Staff skim these reasons, so the word must not leak into the one outcome
+    the card had nothing to do with."""
+    assert "declin" not in SYSTEM_FAILURE_PREFIX
 
 
 # ── The recurring arm: NON-card failure after money moved → data ────
@@ -290,18 +285,18 @@ async def test_one_time_non_card_failure_still_raises() -> None:
         await start._charge_one_time_group(_request([uuid4()]), group)
 
 
-# ── The third outcome: nobody refused, nothing was collected ────────
+# ── A non-collection is reported as an ordinary card failure ────────
 
 
 @pytest.mark.asyncio
-async def test_one_time_not_collected_is_data_with_its_own_reason() -> None:
+async def test_one_time_not_collected_is_reported_as_a_card_failure() -> None:
     """A ``PaymentsNotCollectedError`` is a DEFINITIVE outcome, not an outage.
 
-    It must not raise (that would be a 500 for an ordinary business result),
-    must not wear the decline prefix (no bank refused, so "try another card" is
-    wrong advice), and must not wear the system-failure prefix (our side is
-    fine). It reports ``False``, so a later recurring failure can still honestly
-    claim nothing was collected.
+    It must not raise (that would be a 500 for an ordinary business result) and
+    must not wear the system-failure prefix (our side is fine). It wears the
+    CARD prefix, because the desk's answer is the same as for a refusal: try
+    another card. It reports ``False``, so a later recurring failure can still
+    honestly claim nothing was collected.
     """
     start = _build_start(charge_error=PaymentsNotCollectedError("needs auth"))
     group = [_state(PlanType.one_time)]
@@ -312,10 +307,13 @@ async def test_one_time_not_collected_is_data_with_its_own_reason() -> None:
     state = group[0]
     assert state.status == MemberMembershipsStartStatus.failed
     assert state.error is not None
-    assert state.error.startswith(NOT_COLLECTED_PREFIX)
-    assert not state.error.startswith(CARD_DECLINED_PREFIX)
+    assert state.error.startswith(CARD_DECLINED_PREFIX)
     assert not state.error.startswith(SYSTEM_FAILURE_PREFIX)
-    assert "declin" not in state.error.lower()
+    # Its OWN short wording, not the SCA sentence the exception carries — that
+    # advice ("collect another way") belongs to retry-card, the one path that
+    # still tells a non-collection apart.
+    assert state.error == f"{CARD_DECLINED_PREFIX}{CARD_NOT_CHARGED_REASON}"
+    assert "needs auth" not in state.error
 
 
 @pytest.mark.asyncio
@@ -379,7 +377,7 @@ async def test_start_returns_207_for_a_non_collecting_charge() -> None:
     assert item.status == MemberMembershipsStartStatus.failed
     # No membership id is handed back — nothing was created.
     assert item.item_id is None
-    assert item.error is not None and item.error.startswith(NOT_COLLECTED_PREFIX)
+    assert item.error is not None and item.error.startswith(CARD_DECLINED_PREFIX)
 
 
 # ── start() threads the answer from one arm to the other ────────────

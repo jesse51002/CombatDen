@@ -776,14 +776,15 @@ class PaymentsStripePaymentService:
         invoice whose PaymentIntent needs SCA can come back still ``open``
         instead. Booking that as success clears the member off every overdue
         surface while no money moved. So a non-``paid`` return is a definitive
-        ``PaymentsNotCollectedError`` — an OUTCOME, not a malfunction — whose
-        message reaches the front desk verbatim. Still NOT a decline: nobody
-        refused, so it says collect another way, not try another card.
+        ``PaymentsNotCollectedError`` — an OUTCOME, not a malfunction.
 
-        **BOTH pay paths need it**, which is why it is not card-retry-specific:
-        the retry answers it with a **207** ``not_collected``, the itemized
-        charge (``create_invoice_payment``, the kiosk / one-time signup) with a
-        per-item ``failed`` entry on its own 207.
+        **BOTH pay paths need it**, which is why it is not card-retry-specific.
+        How each CALLER reports it differs: retry-card, the staff card-repair
+        path, keeps a distinct **207** ``not_collected`` carrying this message
+        verbatim; start and charge-card report an ordinary card failure
+        instead (a per-item ``card declined: `` entry / ``status=declined``,
+        each on its own 207) and substitute their own short wording. What no
+        caller may do is read it as success — that is why this raises.
 
         **Only a POSITIVELY-READ non-paid status counts.** An absent or
         non-string ``status`` means we do not KNOW, and "we do not know" must
