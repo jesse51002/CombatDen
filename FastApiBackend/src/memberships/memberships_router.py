@@ -25,6 +25,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsCancelRequest,
     MemberMembershipsCancelResponse,
     MemberMembershipsChargeCardRequest,
+    MemberMembershipsChargeCardResponse,
     MemberMembershipsFreezeRequest,
     MemberMembershipsMarkPaidCashRequest,
     MemberMembershipsRefundRequest,
@@ -1406,10 +1407,24 @@ async def retry_membership_card(
     summary="Charge a member's card for an ad-hoc amount",
     description=(
         "Creates and pays a one-off Stripe invoice for amount_cents. "
-        "paid_cash marks it out-of-band; payment_method_id bills a one-off card."
+        "paid_cash marks it out-of-band; payment_method_id bills a one-off "
+        "card. A collected charge is 204; a DEFINITIVE non-collection (the "
+        "payment needs authentication the member must complete) is a result, "
+        "not a server failure — 207 with status=not_collected."
     ),
     responses={
         204: {"description": "Card charged successfully"},
+        # Same shape retry-card's 207 declares, so a generated client sees the
+        # body rather than just a description.
+        207: {
+            "model": MemberMembershipsChargeCardResponse,
+            "description": (
+                "Nothing collected. status=not_collected (nobody refused, but "
+                "the payment needs extra authorization the member has to "
+                "complete — collect another way); ``decline_reason`` carries "
+                "the reason."
+            ),
+        },
         400: {"description": "Invalid request or gym mismatch"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized to update this member"},
@@ -1426,7 +1441,7 @@ async def charge_member_card(
     memberships_service: MemberMembershipsService = Depends(
         Provide[DependencyInjector.member_memberships_service]
     ),
-) -> None:
+) -> Response:
     """Charge a member's card (or mark as cash) for an ad-hoc amount."""
     user_payload = auth.get_current_user(credentials)
     await auth.verify_gym_employee_for_member(
@@ -1450,6 +1465,29 @@ async def charge_member_card(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=error_msg,
         ) from None
+    except PaymentsNotCollectedError as exc:
+        # Nobody refused and nothing arrived (SCA) — a DEFINITIVE outcome, so a
+        # 207 RESULT carrying the reason, not the 500 a malfunction gets. Only
+        # the success path stays 204/no body. MUST sit above the
+        # PaymentsStripeError arm — this is a subclass, so the base arm would
+        # otherwise win. Contract: CLAUDE.md "Billing / Stripe error status
+        # codes".
+        logger.warning(
+            "Charge card not collected (needs authentication): member_id=%s, "
+            "paid_by_member_id=%s, amount_cents=%s",
+            request.member_id,
+            request.paid_by_member_id,
+            request.amount_cents,
+        )
+        return JSONResponse(
+            status_code=status.HTTP_207_MULTI_STATUS,
+            content=MemberMembershipsChargeCardResponse(
+                member_id=request.member_id,
+                paid_by_member_id=request.paid_by_member_id,
+                status=MemberMembershipsRetryCardStatus.not_collected,
+                decline_reason=str(exc),
+            ).model_dump(mode="json"),
+        )
     except PaymentsStripeError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1467,6 +1505,8 @@ async def charge_member_card(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to charge member card",
         ) from None
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @member_memberships_router.post(

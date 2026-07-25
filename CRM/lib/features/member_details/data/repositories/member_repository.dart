@@ -926,6 +926,14 @@ class MemberRepository {
   /// card is billed (attached, charged once, detached)
   /// instead of the payer's saved default. [idempotencyKey]
   /// dedupes retries.
+  ///
+  /// Only a 204 means the money was collected. A DEFINITIVE
+  /// non-collection is the backend's 207 result (nobody
+  /// refused; the payment needs authorization the member must
+  /// complete) — still a 2xx, so `dio` never throws and a bare
+  /// `await` would render a green success over money that never
+  /// moved. Anything but 204 therefore throws with the
+  /// backend's staff-facing reason as `detail`.
   Future<void> chargeCard({
     required String memberId,
     required String paidByMemberId,
@@ -936,7 +944,7 @@ class MemberRepository {
     bool paidCash = false,
     String? paymentMethodId,
   }) async {
-    await _apiClient.post(
+    final response = await _apiClient.post(
       '/api/v1/member_memberships/charge-card',
       data: {
         'member_id': memberId,
@@ -949,6 +957,17 @@ class MemberRepository {
         'idempotency_key': idempotencyKey,
       },
     );
+    // Fail closed: never infer "charged" from the 2xx class.
+    if (response.statusCode != 204) {
+      final body = response.data;
+      throw ServerException(
+        'The charge was not collected.',
+        statusCode: response.statusCode,
+        detail: body is Map && body['decline_reason'] is String
+            ? body['decline_reason'] as String
+            : null,
+      );
+    }
   }
 
   /// Issues a refund for a prior charge — full or partial.

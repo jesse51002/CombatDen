@@ -22,15 +22,36 @@ Five scenarios:
    ``payment_method_id`` bills a one-off card (attach → pay → detach):
    the invoice is paid, the one-off card is detached afterward, and the
    customer's saved default payment method is left unchanged.
+
+Plus the ROUTER contract (unit, no DB / Stripe / network), pinning the three
+outcomes this endpoint can answer with:
+
+6. ``test_endpoint_returns_not_collected_as_207_result`` — a definitive
+   NOT-COLLECTED (``PaymentsNotCollectedError``: nothing refused, nothing
+   collected — SCA) is a 207 RESULT carrying its own reason, never the 500 it
+   used to get by falling through to the base ``PaymentsStripeError`` arm.
+7. ``test_endpoint_success_is_still_204_with_no_body`` — the SUCCESS contract
+   is untouched: a collected charge stays 204 with an empty body, so every
+   existing caller keeps working.
+8. ``test_endpoint_unrecognised_stripe_failure_is_still_500`` — the base
+   ``PaymentsStripeError`` is STILL a 500. This is the ORDERING guard: the
+   not-collected arm must sit ABOVE it (subclass), and this test is what fails
+   if the two are ever swapped.
 """
 
 import json
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
 from src.memberships.memberships_schema import (
     MemberMembershipsChargeCardRequest,
+    MemberMembershipsRetryCardStatus,
+)
+from src.payments.payments_exceptions import (
+    PaymentsNotCollectedError,
+    PaymentsStripeError,
 )
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.stripe_assertions import snapshot_billing_state
@@ -312,3 +333,122 @@ async def test_charge_card_gym_mismatch_raises(
         assert new_invoices == [], "No invoice should have been created"
     finally:
         await delete_member_data(db_pool, member.member_id)
+
+
+# ── Router contract (unit — no DB, no Stripe, no network) ────────────────
+
+
+def _charge_request() -> MemberMembershipsChargeCardRequest:
+    """A real charge-card body (the 207 echoes its ids, so no MagicMock)."""
+    return MemberMembershipsChargeCardRequest(
+        member_id=uuid4(),
+        paid_by_member_id=uuid4(),
+        gym_id=uuid4(),
+        amount_cents=2500,
+        reason="Pro-shop gloves",
+        idempotency_key=uuid4(),
+    )
+
+
+def _charge_router_doubles(*, side_effect=None):
+    """``(auth, service)`` doubles for the charge-card handler."""
+    auth = MagicMock()
+    auth.get_current_user = MagicMock(return_value={})
+    auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+
+    service = MagicMock()
+    service.charge_card = AsyncMock(side_effect=side_effect, return_value=None)
+    return auth, service
+
+
+async def test_endpoint_returns_not_collected_as_207_result() -> None:
+    """A definitive NOT-COLLECTED is a 207 RESULT, not a 500.
+
+    ``invoices.pay`` returned without raising, but the invoice never reached
+    ``paid`` because the off-session PaymentIntent needs authentication (SCA /
+    3-D Secure). Nobody refused and nothing malfunctioned — the money simply
+    was not collected and staff must act. A 500 there reports an outage, buries
+    real outages in monitoring, and tells the front desk nothing.
+
+    ``PaymentsNotCollectedError`` subclasses ``PaymentsStripeError``, so before
+    the dedicated arm this fell through to the base arm and answered 500.
+    """
+    from src.memberships.memberships_router import charge_member_card
+
+    reason = (
+        "The card on file could not be charged automatically — the payment "
+        "needs extra authorization the member has to complete. Collect payment "
+        "another way."
+    )
+    auth, service = _charge_router_doubles(
+        side_effect=PaymentsNotCollectedError(reason),
+    )
+    request = _charge_request()
+
+    result = await charge_member_card(
+        request=request,
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    assert result.status_code == 207
+    body = json.loads(result.body)
+    assert body["status"] == MemberMembershipsRetryCardStatus.not_collected
+    # Distinguishable from a decline: its own status AND a reason that never
+    # tells staff the card was refused (nobody refused).
+    assert body["status"] != MemberMembershipsRetryCardStatus.declined
+    assert body["decline_reason"] == reason
+    assert "declin" not in body["decline_reason"].lower()
+    # The identity echo staff need: whose charge, and whose card went uncharged.
+    assert body["member_id"] == str(request.member_id)
+    assert body["paid_by_member_id"] == str(request.paid_by_member_id)
+
+
+async def test_endpoint_success_is_still_204_with_no_body() -> None:
+    """The SUCCESS contract is untouched — a collected charge is a bare 204.
+
+    Adding the 207 must not make success start carrying a body: every existing
+    caller reads this endpoint as "204 means charged".
+    """
+    from src.memberships.memberships_router import charge_member_card
+
+    auth, service = _charge_router_doubles()
+
+    result = await charge_member_card(
+        request=_charge_request(),
+        credentials=MagicMock(),
+        auth=auth,
+        memberships_service=service,
+    )
+
+    assert result.status_code == 204
+    assert result.body == b""
+
+
+async def test_endpoint_unrecognised_stripe_failure_is_still_500() -> None:
+    """An UNRECOGNISED Stripe failure is STILL a 500 — the ordering guard.
+
+    Only a DEFINITIVE answer about the money is a result; a malfunction must
+    never read as one. Because ``PaymentsNotCollectedError`` subclasses
+    ``PaymentsStripeError``, this test is what fails if the two arms are ever
+    swapped — the base arm would then swallow the non-collection and 500 it.
+    """
+    from fastapi import HTTPException
+
+    from src.memberships.memberships_router import charge_member_card
+
+    auth, service = _charge_router_doubles(
+        side_effect=PaymentsStripeError("Stripe is having a bad day"),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        await charge_member_card(
+            request=_charge_request(),
+            credentials=MagicMock(),
+            auth=auth,
+            memberships_service=service,
+        )
+
+    assert caught.value.status_code == 500
+    assert caught.value.detail == "Stripe is having a bad day"

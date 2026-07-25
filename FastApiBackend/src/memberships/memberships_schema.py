@@ -403,6 +403,22 @@ class MemberMembershipsChargeCardRequest(BaseModel):
         return self
 
 
+class MemberMembershipsChargeCardResponse(BaseModel):
+    """The **207** body when an ad-hoc charge collected NOTHING.
+
+    A collected charge is still 204 with no body — the success contract is
+    unchanged. This reuses retry-card's status vocabulary (``decline_reason``
+    is the same "why nothing was collected" slot), so a client branches on
+    ``status``, never on the 2xx class. Only ``not_collected`` is reachable
+    here today; a decline on this route is still a 500 — see the router.
+    """
+
+    member_id: UUID
+    paid_by_member_id: UUID
+    status: MemberMembershipsRetryCardStatus
+    decline_reason: str | None = None
+
+
 class MemberMembershipsRefundRequest(BaseModel):
     """Refund a prior charge on a member's payment history.
 

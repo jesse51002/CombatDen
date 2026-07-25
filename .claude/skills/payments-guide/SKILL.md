@@ -362,7 +362,12 @@ back to active because the DB says it's current.
 - **`_require_collected(invoice)` — the ONE non-collection detector, shared by
   BOTH pay paths**: `pay_open_subscription_invoice_on_card` (the retry) and
   `create_invoice_payment` (the itemized one-time / kiosk charge; see its entry
-  above). It raises `PaymentsNotCollectedError` **only on a
+  above). **All THREE of its callers now answer it as a 207 result, never a
+  500** — start (per-item `failed` + the `not collected: ` prefix), retry-card
+  and charge-card (both `status=not_collected` + the same reason wording).
+  Charge-card keeps its **204/no-body success** contract and adds the 207 body
+  only for this outcome (`memberships-guide`). It raises
+  `PaymentsNotCollectedError` **only on a
   positively-read non-`paid` status** — `isinstance(status, str) and status !=
   "paid"`. That narrowing is load-bearing: on the charge path the answer is
   DESTRUCTIVE (the start op deletes the membership rows), so an absent or
