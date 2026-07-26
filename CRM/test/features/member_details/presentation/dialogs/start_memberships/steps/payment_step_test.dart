@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/bloc/membership_wizard/membership_wi
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_step.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/steps/payment/payment_one_off_group.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/steps/payment/payment_saved_card_group.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/steps/payment_step.dart';
@@ -22,7 +23,12 @@ import 'wizard_step_harness.dart';
 /// The catalogued defect it exists to fix is the one-off card: the old wizard
 /// silently IGNORED a card staff had typed in the moment the cart turned
 /// recurring, so a chip sat on screen beside a charge that never touched it.
-/// Here the group is blocked rather than hidden, and it states the reason.
+///
+/// The line the two one-off tests below draw is between a card that is AT
+/// STAKE and a control nobody has touched. A held card that stops being able
+/// to pay is never hidden — that is the defect. An EMPTY section on a cart it
+/// could never pay for is not shown at all: explaining why an untouched
+/// control is greyed out teaches nothing and reads as an accusation.
 void main() {
   late MockMemberRepository member;
   late MockMembershipsRepository memberships;
@@ -97,7 +103,8 @@ void main() {
         ),
       );
 
-  testWidgets('cash, the saved card and the one-off card all render',
+  testWidgets('cash and the saved card render; the one-off does not on a '
+      'cart it cannot pay for',
       (tester) async {
     final cubit = await atPayment(card: savedCard);
     await pumpStep(tester, cubit);
@@ -105,8 +112,9 @@ void main() {
     expect(find.text(WizardPaymentCopy.cashLabel), findsOneWidget);
     expect(find.byType(WizardPaymentSavedCardGroup), findsOneWidget);
     expect(find.text(WizardPaymentCopy.cardOnFileEyebrow), findsOneWidget);
-    expect(find.byType(WizardPaymentOneOffGroup), findsOneWidget);
-    expect(find.text(WizardPaymentCopy.oneOffEyebrow), findsOneWidget);
+    // This cart is recurring, so the one-off card cannot pay for it and its
+    // section is not offered at all — see the two tests below.
+    expect(find.byType(WizardPaymentOneOffGroup), findsNothing);
     expect(
       find.text(WizardPaymentCopy.whatPayWillDoEyebrow),
       findsOneWidget,
@@ -120,25 +128,46 @@ void main() {
     await cubit.close();
   });
 
-  testWidgets('on a RECURRING cart the one-off card is blocked, not hidden — '
-      'and states its reason', (tester) async {
+  testWidgets('an EMPTY one-off section is not offered on a cart it cannot '
+      'pay for', (tester) async {
     final cubit = await atPayment(card: savedCard);
     await pumpStep(tester, cubit);
 
     expect(cubit.state.oneOffCardBlock, OneOffCardBlock.cartHasRecurring);
-    expect(
-      find.byType(WizardPaymentOneOffGroup),
-      findsOneWidget,
-      reason: 'a control that vanishes teaches nobody why',
+    // Nothing is at stake — no card has been typed — so a dimmed section
+    // explaining why an untouched control is greyed out is pure noise, and
+    // reads as a mistake the person made.
+    expect(find.byType(WizardPaymentOneOffGroup), findsNothing);
+    expect(find.text(WizardPaymentCopy.oneOffEyebrow), findsNothing);
+    expect(find.text(WizardPaymentCopy.notUsableTag), findsNothing);
+    await cubit.close();
+  });
+
+  testWidgets('a HELD one-off card that stops being able to pay is never '
+      'hidden — it says so', (tester) async {
+    final cubit = await atPayment(card: savedCard);
+    // Staff typed a card, and only then does the cart make it unusable. This
+    // is the defect the group exists for: the old wizard dropped such a card
+    // in silence, leaving a chip on screen beside a charge it never touched.
+    cubit.setCustomCard(
+      const CustomCardCapture(
+        pmId: 'pm_typed',
+        brand: 'visa',
+        lastFour: '4242',
+      ),
     );
+    await pumpStep(tester, cubit);
+
+    expect(cubit.state.oneOffCardBlock, OneOffCardBlock.cartHasRecurring);
+    expect(find.byType(WizardPaymentOneOffGroup), findsOneWidget);
     expect(find.text(WizardPaymentCopy.notUsableTag), findsOneWidget);
     expect(
       find.text(WizardPaymentCopy.oneOffBlockedByRecurring),
       findsOneWidget,
       reason: 'the old wizard ignored the captured card in silence',
     );
-    // Still reachable, so the card already typed in can be seen and removed.
-    expect(find.text(WizardPaymentCopy.useOneOffCard), findsOneWidget);
+    // Reachable, so the card already typed in can be seen and removed.
+    expect(find.text(WizardPaymentCopy.removeCard), findsOneWidget);
     await cubit.close();
   });
 

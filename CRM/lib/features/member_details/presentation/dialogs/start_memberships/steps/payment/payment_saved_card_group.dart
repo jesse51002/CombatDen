@@ -83,6 +83,10 @@ class WizardPaymentSavedCardGroup extends StatelessWidget {
         if (saved != null)
           FlowInlineNotice(
             message: WizardPaymentCopy.updateCardWarning(payerFirstName),
+            // Info, not warm: nothing is wrong and nothing needs deciding
+            // here. It states the blast radius of editing a default card, and
+            // the warm treatment read as an accusation beside a card form.
+            tone: FlowNoticeTone.info,
           ),
       ],
     );

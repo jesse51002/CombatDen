@@ -14,12 +14,16 @@ import 'package:crm/shared/widgets/app_outline_button.dart';
 /// A card entered at the desk for today's one-time invoice only — never saved
 /// to a profile, never made the default.
 ///
-/// **Blocked, not hidden.** The old wizard silently ignored a captured
-/// one-off card the moment the cart turned recurring or cash went on: staff
-/// saw a card chip they had typed in and a charge that never touched it. Here
-/// the group always renders, its controls dim, and a warm notice names the
-/// reason AND both ways out — because a control that vanishes teaches nobody
-/// why, and one that lies about paying is worse.
+/// **Offered when it can pay; kept when it holds a card that cannot.** The old
+/// wizard silently ignored a captured one-off card the moment the cart turned
+/// recurring or cash went on: staff saw a card chip they had typed in and a
+/// charge that never touched it. So a HELD card is never hidden — the controls
+/// dim and a warm notice names the reason and both ways out.
+///
+/// An EMPTY blocked group is a different thing, and it is not rendered at all
+/// (the caller decides — see `payment_step.dart`). Explaining why a control
+/// nobody has touched is greyed out teaches nothing and reads as a mistake the
+/// reader made; there is no card at stake, so there is nothing to warn about.
 class WizardPaymentOneOffGroup extends StatelessWidget {
   /// How far the blocked controls are pulled back. Enough to read as inactive
   /// beside the live groups above, not so far that the card staff typed in

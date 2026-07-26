@@ -136,12 +136,17 @@ class _Body extends StatelessWidget {
               card: state.savedCard,
               onUpdateCard: actions.updateSavedCard,
             ),
-          WizardPaymentOneOffGroup(
-            card: state.customCard,
-            block: state.oneOffCardBlock,
-            onCapture: actions.captureOneOffCard,
-            onRemove: cubit.clearCustomCard,
-          ),
+          // Offered when it can pay, and kept ONLY while it still holds a card
+          // that cannot — a section explaining why an empty control is dim is
+          // noise, but a card staff typed that silently stops paying is the
+          // defect this group was built for.
+          if (state.oneOffCardBlock == null || state.customCard != null)
+            WizardPaymentOneOffGroup(
+              card: state.customCard,
+              block: state.oneOffCardBlock,
+              onCapture: actions.captureOneOffCard,
+              onRemove: cubit.clearCustomCard,
+            ),
         ],
         WizardPaymentTotalsGroup(
           state: state,

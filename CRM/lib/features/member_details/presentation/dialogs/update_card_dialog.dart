@@ -151,7 +151,13 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
       subtitle: 'The new card becomes $_first\'s default straight away.',
       body: TaskPanel(
         children: [
-          FlowInlineNotice(message: _blastRadius(card)),
+          // Info, not warm. This is the blast radius of a default card, stated
+          // before it is typed — nothing has gone wrong, and a yellow panel
+          // over a card form reads as an accusation rather than a fact.
+          FlowInlineNotice(
+            message: _blastRadius(card),
+            tone: FlowNoticeTone.info,
+          ),
           const TaskFieldLabel(label: 'Card details', note: _kStripeNote),
           CardFieldBox(
             onComplete: (isComplete) {
