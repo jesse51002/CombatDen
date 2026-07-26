@@ -3,9 +3,9 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/profile/data/models/billing_rank.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/next_rank/next_rank_badge.dart';
 
-// Bundled fallback next-rank belt. There is no next-rank image in the profile
-// payload, so this belt is decorative (the themed slot overrides it) — the
-// progress ring is the real data.
+// Bundled fallback next-rank belt, shown (under the themed slot) when the
+// payload carries no next-rank image — the top of the ladder, or a rank whose
+// belt art isn't set.
 const String _kNextRankBeltAsset = 'profile_next_rank_belt.png';
 
 /// "Next Rank — X / Y classes" with a circular progress-ring belt badge. The
@@ -48,7 +48,11 @@ class NextRankSection extends StatelessWidget {
               ],
             ),
           ),
-          NextRankBadge(badgeAsset: _kNextRankBeltAsset, progress: progress),
+          NextRankBadge(
+            badgeAsset: _kNextRankBeltAsset,
+            progress: progress,
+            imageUrl: rank.nextRankImageUrl,
+          ),
         ],
       ),
     );

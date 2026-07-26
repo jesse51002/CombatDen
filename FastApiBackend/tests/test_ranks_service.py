@@ -1681,3 +1681,138 @@ async def test_count_members_by_sub_index_none_gym_single_null_row():
     assert len(response.counts) == 1
     assert response.counts[0].sub_index is None
     assert response.counts[0].count == 7
+
+
+# ---------------------------------------------------------------------------
+# next_leaf_image_url — the NEXT rank's belt art (member-facing rank payload)
+# ---------------------------------------------------------------------------
+
+
+def _three_belt_ladder(gym_id, *, sub_rank_count: int) -> list[dict]:
+    """White / Blue / Purple, each with the same leaf count + belt art."""
+    return [
+        make_rank_row(
+            rank_id=str(uuid4()),
+            gym_id=str(gym_id),
+            main_rank_num_order=order,
+            name=name,
+            image_url=f"https://cdn.combatden.net/rank/{name.lower()}.png",
+            sub_rank_count=sub_rank_count,
+        )
+        for order, name in enumerate(["White", "Blue", "Purple"])
+    ]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_advances_within_main_rank():
+    """A member below the top sub-position gets the SAME main rank's art —
+    the next leaf is the next sub-position, not the next belt."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=1,
+    )
+
+    assert url == ladder[0]["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_rolls_over_to_next_main_rank():
+    """At the TOP sub-position the next leaf is the next MAIN rank's base
+    leaf, so the image is that belt's art."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=4,
+    )
+
+    assert url == ladder[1]["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_prefers_sub_rank_override():
+    """The per-sub override for the TARGET leaf wins over the main image —
+    the same COALESCE precedence the current leaf's image uses."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    override = "https://cdn.combatden.net/rank/white-2-stripes.png"
+    ladder[0]["sub_rank_image_overrides"] = {"2": override}
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=1,
+    )
+
+    assert url == override
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_is_none_at_top_of_ladder():
+    """Top main + top sub has no next leaf → None (the client falls back)."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[-1]["rank_id"],
+        sub_index=4,
+    )
+
+    assert url is None
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_none_gym_is_main_to_main():
+    """On a 'none' gym every rank is its own leaf: the next image is the
+    next MAIN belt, and the top main has none."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result("none"), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=None,
+    )
+
+    assert url == ladder[1]["image_url"]
+
+    top_session = _make_session_mock(
+        [_sub_type_result("none"), _result(ladder, many=True)],
+    )
+    top_reads = RanksReads(_make_pool_mock(top_session))
+
+    assert (
+        await top_reads.next_leaf_image_url(
+            gym_id,
+            ladder[-1]["rank_id"],
+            sub_index=None,
+        )
+        is None
+    )

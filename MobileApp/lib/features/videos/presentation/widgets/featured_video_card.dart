@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
+import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
 /// Big featured video — `VideoReccCard` wrapped in a card surface with a
@@ -30,7 +31,7 @@ class FeaturedVideoCard extends StatelessWidget {
             title: card.title,
             metaLabel: card.metaLabel,
             thumbnail: CachedNetworkImageProvider(card.thumbnailUrl),
-            creatorPfp: CachedNetworkImageProvider(card.channelAvatarUrl),
+            creatorPfp: creatorAvatarProvider(card.channelAvatarUrl),
             roundThumbnail: false,
             onTap: onTap,
           ),

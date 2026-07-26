@@ -206,6 +206,11 @@ class BillingRank(BaseModel):
     # Classes attended since the member's last promotion — the real
     # numerator for "classes_since_rank / classes_till_next_step" progress.
     classes_since_rank: int = 0
+    # Belt image of the NEXT leaf up the ladder, resolved with the same
+    # per-sub-override-over-main precedence as ``image_url``. ``None`` at the
+    # top of the ladder (there is no next leaf) or when that leaf carries no
+    # image — clients fall back to their own art.
+    next_rank_image_url: str | None = None
 
 
 class BillingRewardCard(BaseModel):

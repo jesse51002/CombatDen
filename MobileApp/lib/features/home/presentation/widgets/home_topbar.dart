@@ -15,7 +15,7 @@ const String _kDefaultRankBadgeAsset = 'icon_rank_belt.png';
 
 /// The home screen's topbar: the gym name/logo from the selected member, and
 /// the streak / points read LIVE from the shared [MemberProfileBloc]. The
-/// gym-name chevron / logo double-tap switches profile.
+/// identity block (gym name over the member pill) opens the profile picker.
 class HomeTopbar extends StatelessWidget {
   const HomeTopbar({super.key});
 
@@ -28,6 +28,10 @@ class HomeTopbar extends StatelessWidget {
           mode: AppTopbarMode.bigLogo,
           showBackButton: false,
           gymName: selectedMember.gymName ?? '',
+          memberName: selectedMember.fullName,
+          memberPhotoUrl: selectedMember.photoUrl,
+          memberFirstName: selectedMember.firstName,
+          memberLastName: selectedMember.lastName,
           logoAsset: _kDefaultLogoAsset,
           streakDays: retention?.classStreakWeeks ?? 0,
           pointsLabel:

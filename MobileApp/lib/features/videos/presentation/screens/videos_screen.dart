@@ -216,6 +216,10 @@ class _Topbar extends StatelessWidget {
           mode: AppTopbarMode.nameOnly,
           showBackButton: false,
           gymName: selectedMember.gymName ?? '',
+          memberName: selectedMember.fullName,
+          memberPhotoUrl: selectedMember.photoUrl,
+          memberFirstName: selectedMember.firstName,
+          memberLastName: selectedMember.lastName,
           logoAsset: _kDefaultLogoAsset,
           streakDays: retention?.classStreakWeeks ?? 0,
           pointsLabel:

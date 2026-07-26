@@ -11,6 +11,7 @@ import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
+import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
 /// The "view all" destination for a genre carousel: a scrollable vertical list
@@ -85,9 +86,8 @@ class _TagBody extends StatelessWidget {
                             metaLabel: card.metaLabel,
                             thumbnail:
                                 CachedNetworkImageProvider(card.thumbnailUrl),
-                            creatorPfp: CachedNetworkImageProvider(
-                              card.channelAvatarUrl,
-                            ),
+                            creatorPfp:
+                                creatorAvatarProvider(card.channelAvatarUrl),
                             // Real playback is a follow-up; no-op for now.
                             onTap: () => debugPrint('TODO: play ${card.url}'),
                           ),

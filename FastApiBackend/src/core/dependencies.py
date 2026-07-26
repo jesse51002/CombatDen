@@ -868,6 +868,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         streak_service=streak_service,
         cycle_counts_service=cycle_counts_service,
+        ranks_reads=ranks_reads,
     )
     members_payments_service = providers.Factory(
         MembersPaymentsService,

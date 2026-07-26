@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 
+/// The big-logo topbar variant's brand block: the gym's logo over its name.
+/// Brand only — the member's identity control lives in the topbar's trailing
+/// flank, not inside the title.
 class GymHeader extends StatelessWidget {
   const GymHeader({
     super.key,
@@ -34,14 +36,14 @@ class GymHeader extends StatelessWidget {
         Row(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingSmall,
           children: [
-            Text(gymName, style: DesignConstants.h1),
-            Icon(
-              Symbols.expand_more_sharp,
-              weight: DesignConstants.iconWeight,
-              color: DesignConstants.text,
-              size: DesignConstants.iconSizeSm,
+            Flexible(
+              child: Text(
+                gymName,
+                style: DesignConstants.h1,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

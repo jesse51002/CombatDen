@@ -8,6 +8,7 @@ import 'package:crm/features/settings/bloc/settings_state.dart';
 import 'package:crm/features/settings/data/repositories/settings_repository.dart';
 import 'package:crm/features/settings/presentation/sections/gym_profile_section.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
+import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 
 /// Width cap for the dialog — the editor is a single stacked column
 /// (name + address fields above the logo picker), so it reads best narrow.
@@ -15,9 +16,17 @@ const double _kDialogMaxWidth = 560;
 
 /// The shared Gym profile editor ([GymProfileSection]) hosted in a dialog —
 /// opened from the Theme tab's "Edit gym name / logo" button under the phone
-/// preview (the dialog also edits the gym's address). Owns its own [SettingsBloc] (the Theme tab has none) and, like
-/// the Settings screen, surfaces save FAILURES via a SnackBar; the section
-/// itself surfaces the SUCCESS SnackBar and the dialog closes on it.
+/// preview (the dialog also edits the gym's address). Owns its own
+/// [SettingsBloc] (the Theme tab has none) and, like the Settings screen,
+/// surfaces save FAILURES via a SnackBar.
+///
+/// **The dialog does NOT close on a save.** The section auto-saves — the logo
+/// on pick, each text field on blur — so closing on the first committed save
+/// would slam the dialog shut mid-edit, before the owner had touched the
+/// other fields. The section owns its own inline "Saved." confirmation, and
+/// this dialog is dismissed deliberately: the title's close button, or the
+/// explicit **Done** action. Nothing is left unsaved on close, because there
+/// is nothing left to save.
 ///
 /// Only constructed in the admin context (the button never renders in the
 /// public standalone theme browser), so no Supabase-backed bloc is ever
@@ -52,9 +61,10 @@ class GymProfileDialog extends StatelessWidget {
             builder: (context) => AppDialog(
               title: 'Gym profile',
               maxWidth: _kDialogMaxWidth,
-              body: GymProfileSection(
-                showHeader: false,
-                onSaved: () => Navigator.of(context).pop(),
+              body: const GymProfileSection(showHeader: false),
+              actions: AppDialogActions(
+                primaryLabel: 'Done',
+                primaryOnPressed: () => Navigator.of(context).pop(),
               ),
             ),
           ),

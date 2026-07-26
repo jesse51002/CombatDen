@@ -26,6 +26,13 @@ class BillingRank {
   @JsonKey(defaultValue: 0)
   final int classesSinceRank;
 
+  /// Belt art of the NEXT leaf up the gym's ladder — the next sub-position
+  /// within this rank, or the next main rank's base leaf when this is the top
+  /// sub-position. Resolved server-side with the same per-sub-override-over-
+  /// main precedence as [imageUrl]. Null at the top of the ladder (there is no
+  /// next rank) or when that leaf carries no image.
+  final String? nextRankImageUrl;
+
   const BillingRank({
     required this.rankId,
     required this.name,
@@ -35,6 +42,7 @@ class BillingRank {
     this.subLabel,
     this.imageUrl,
     this.classesSinceRank = 0,
+    this.nextRankImageUrl,
   });
 
   factory BillingRank.fromJson(Map<String, dynamic> json) =>

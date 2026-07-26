@@ -747,6 +747,13 @@ how-to-work-here facts belong here:
   `CAST(:x AS T)` never `:x::t` (`update_rank` builds a dynamic SET of
   per-column casts). The `gyms → ranks_members` edge: `GymsService.update_gym`
   reconciles members on a `sub_rank_type` change (mirrored by `from_preset`).
+  The `members → ranks_reads` edge: `MembersBillingDetailService` is injected
+  with `ranks_reads` and calls `next_leaf_image_url(gym_id, rank_id,
+  sub_index)` to fill `BillingRank.next_rank_image_url` — the belt art of the
+  NEXT leaf, for the member app's next-rank badge. It reuses the domain's one
+  leaf-advance rule (`RanksBase._next_leaf`) and the same override-over-main
+  image precedence as the current leaf; `None` at the top of the ladder, and
+  no query at all for an unranked member.
 - **Reads.** `GET /ready-to-promote`, `GET /{rank_id}/members`, and
   `GET /{rank_id}/sub-rank-counts` — the two `/{rank_id}/...` reads **derive
   the gym from the rank** (`get_rank` first → 404 if missing → verify the

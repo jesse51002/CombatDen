@@ -15,4 +15,5 @@ BillingRank _$BillingRankFromJson(Map<String, dynamic> json) => BillingRank(
   subLabel: json['sub_label'] as String?,
   imageUrl: json['image_url'] as String?,
   classesSinceRank: (json['classes_since_rank'] as num?)?.toInt() ?? 0,
+  nextRankImageUrl: json['next_rank_image_url'] as String?,
 );

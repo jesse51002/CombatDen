@@ -198,9 +198,70 @@ note is deleted.
   **offline** identity fetch boots read-degraded from the cached `SelectedMember`
   (+ an offline banner + retry), or shows the offline screen when nothing is
   cached.
-- **Sign-out teardown.** Any sign-out path unmounts `MemberGate`, which resets
-  `SelectedMember` and the theme to default so a re-login never shows the previous
-  member's brand.
+- **The topbar is the identity surface — as an avatar in the trailing flank.**
+  The topbar's grammar is a **centred brand block between single-glyph
+  controls** (the back chevron on the leading edge), so identity is a glyph
+  too: `TopbarIdentityAvatar`
+  (`shared/widgets/topbar/topbar_identity_avatar.dart`) renders the member's
+  avatar at `iconSizeXl` with a hairline `divider` ring in a 48pt tap target,
+  aligned `centerRight` in `nameOnly` mode and `topRight` in `bigLogo` (so it
+  doesn't float against the 100pt logo). **No chevron on it** — an avatar is
+  already the learned tap target. The gym title stays **pure, uninterrupted
+  brand**: no second line, no glyph inside it. Every topbar wrapper passes
+  `memberName` / `memberPhotoUrl` / `memberFirstName` / `memberLastName` from
+  `selectedMember`; a missing name or photo falls back to initials and then to
+  the person glyph, so the avatar **never disappears** (sign-out lives behind
+  it). Tapping it opens the **identity sheet** (below); the gym title's own tap
+  (`AppRoutes.memberSelect` → `SwitchProfileScreen`) and `onTitleDoubleTap`
+  stay wired as the secondary path.
+- **The identity sheet is the account surface** (`features/member_select/
+  presentation/widgets/identity_sheet.dart`, the app's first modal bottom sheet
+  — every sheet goes through `shared/widgets/sheets/app_bottom_sheet.dart`,
+  which borrows `SignOutDialog`'s surface tokens). One surface answers all
+  three account questions: the **current member** (avatar + name + gym line +
+  the signed-in Supabase email, because one email legitimately maps to several
+  profiles), the **other profiles** as `MemberRow`s under a "Switch profile"
+  subtitle (the current member excluded; with exactly one profile the section
+  and its divider are omitted entirely — never an empty list or a disabled
+  row), and **sign out**. The sheet opens INSTANTLY off the cached
+  `selectedMember` — only the list area loads (placeholder blocks, not a
+  spinner), and a failed re-fetch replaces **only** that area with a retry, so
+  the header, the email and sign-out stay usable offline.
+- **The picker row identifies the gym, not just the person**
+  (`features/member_select/presentation/widgets/member_row.dart`): the member's
+  avatar + name over a gym line of logo tile + gym name. The same row is the
+  switch row inside the identity sheet. Both halves are shared, single
+  implementations — `shared/widgets/member_avatar.dart` (`MemberAvatar`, sized
+  by the caller: 48 in a row, `iconSizeXl` in the topbar; photo → initials on
+  `primaryCard` → person glyph) and `shared/widgets/gym_line.dart` (`GymLine`).
+  **Never fork a second avatar or gym line** — the identity mark has to read as
+  the same object everywhere. A null/empty/failing `gym_logo_url` **omits the
+  tile entirely** — no placeholder square (identical placeholders on every row
+  add noise and disambiguate nothing).
+- **One in-app switch path.** `applyMemberSelection(...)`
+  (`features/member_select/logic/apply_member_selection.dart`) is the ONE
+  in-app switch: select → `GymThemeHydration().applyForGym` → reset to a fresh
+  home. Both `SwitchProfileScreen._onSelected` and the identity sheet call it,
+  so they can never drift. It takes the `NavigatorState` (captured BEFORE the
+  first await) rather than a `BuildContext`, because `AppShell` re-keys on the
+  new member id and the caller is often already gone. `MemberGate.
+  _selectAndHydrate` is the boot-time counterpart and must stay field-for-field
+  identical: every field on `MemberIdentity` (including `gymAddress`, which
+  feeds class-detail "Open in Maps") goes through both, or an in-app switch
+  silently drops data a boot-time selection keeps.
+- **Sign-out lives in the identity sheet, and NOWHERE else.** The profile /
+  rank screen is the **retention** surface (rank, streak, progress) — an
+  account-exit action has no business sitting beside a member's streak, so it
+  belongs on the account surface behind the avatar. In the sheet it is a single
+  full-width **row**, not a button: no fill, no border, **no red**, the only
+  unfilled uncarded item, isolated below a divider at the extreme bottom —
+  subordinate by isolation and position rather than alarm colour. The sequence
+  is **dismiss the sheet FIRST**, then the shared `SignOutDialog` (bound to the
+  HOST context, with the `LoginBloc` captured before the await); red appears
+  only on that confirmation. Confirming dispatches `LoginSignOutRequested`,
+  unmounting `MemberGate`, which resets `SelectedMember` and the theme to
+  default so a re-login never shows the previous member's brand. Don't
+  duplicate that teardown at the call site.
 
 ## Theme hydration
 
@@ -247,6 +308,16 @@ them as mandatory:
 - **Refresh, no polling.** Pull-to-refresh (home / rewards / videos / profile) +
   refetch-on-tab-focus; a foreground return drives the profile refetch and the
   celebration check. No timers.
+- **No placeholder creator avatars.** The served video feed carries no
+  `channel_avatar_url` today — the field arrives as an **empty string**, not
+  null. Every video card therefore resolves it through the one shared rule,
+  `creatorAvatarProvider` (`shared/widgets/video_recc_card/creator_avatar.dart`),
+  which returns null for a null/empty/whitespace URL; the card then **omits the
+  `CreatorAvatar` entirely** — no placeholder circle, no ring, no reserved gap
+  (the avatar-to-text gap lives on the parent `Row`'s `spacing:`, so it
+  disappears with the avatar). When a real URL is present the avatar renders as
+  before. Same law as the picker's missing gym logo above; never re-express the
+  emptiness check at a call site.
 - **Reset on switch.** Changing `SelectedMember` resets and reloads every
   feature bloc (via the `app_shell` re-key) — no stale data bleeds across profiles.
 

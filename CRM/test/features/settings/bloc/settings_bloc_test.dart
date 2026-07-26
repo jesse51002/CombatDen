@@ -273,6 +273,63 @@ void main() {
     );
 
     blocTest<SettingsBloc, SettingsState>(
+      'serializes two back-to-back auto-saves (blur name, then blur '
+      'address) instead of running them concurrently',
+      setUp: () {
+        // The name save is slow; the address save is dispatched while it is
+        // still in flight. With the sequential transformer the second waits,
+        // so the states never interleave and the second handler sees the
+        // committed name.
+        when(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'New Name',
+            address: null,
+            logoUrl: null,
+          ),
+        ).thenAnswer((_) async {
+          await Future<void>.delayed(const Duration(milliseconds: 50));
+        });
+        when(
+          () => repository.updateGymProfile(
+            gymId: 'gym-1',
+            gymName: 'New Name',
+            address: '1200 W 6th St',
+            logoUrl: null,
+          ),
+        ).thenAnswer((_) async {});
+      },
+      build: () => SettingsBloc(repository: repository),
+      act: (bloc) {
+        bloc.add(
+          const GymProfileSaveRequested(
+            gymName: 'New Name',
+            address: null,
+            logoUrl: null,
+          ),
+        );
+        bloc.add(
+          const GymProfileSaveRequested(
+            gymName: 'New Name',
+            address: '1200 W 6th St',
+            logoUrl: null,
+          ),
+        );
+      },
+      wait: const Duration(milliseconds: 150),
+      expect: () => const [
+        SettingsState(savingGymProfile: true),
+        SettingsState(savingGymProfile: false, gymProfileSavedCount: 1),
+        SettingsState(savingGymProfile: true, gymProfileSavedCount: 1),
+        SettingsState(savingGymProfile: false, gymProfileSavedCount: 2),
+      ],
+      verify: (_) {
+        expect(selectedGym.gymName, 'New Name');
+        expect(selectedGym.address, '1200 W 6th St');
+      },
+    );
+
+    blocTest<SettingsBloc, SettingsState>(
       'clears the address (empty -> null) when only the address changed',
       setUp: () {
         // The gym starts WITH an address; the save clears it.

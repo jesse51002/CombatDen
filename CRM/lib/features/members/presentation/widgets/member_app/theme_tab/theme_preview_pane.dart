@@ -5,8 +5,10 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/data/showcase_defaults.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/set_app_theme_button.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_state.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/info_row.dart';
 import 'package:crm/shared/widgets/phone_frame.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:crm/showcase/showcase_content.dart';
@@ -43,6 +45,7 @@ class ThemePreviewPane extends StatelessWidget {
     required this.onPrev,
     required this.onNext,
     required this.onSelect,
+    required this.onBackToLibrary,
     this.onEditBranding,
   });
 
@@ -54,6 +57,10 @@ class ThemePreviewPane extends StatelessWidget {
   final VoidCallback onPrev;
   final VoidCallback onNext;
   final ValueChanged<int> onSelect;
+
+  /// Where "Leave without setting" lands — back on the themes library, having
+  /// dropped the preview back onto the gym's saved theme.
+  final VoidCallback onBackToLibrary;
   final VoidCallback? onEditBranding;
 
   @override
@@ -82,10 +89,11 @@ class ThemePreviewPane extends StatelessWidget {
           onNext: onNext,
           onSelect: onSelect,
         ),
-        // Admin-only primary action: persist the previewed theme as the gym's
-        // app branding. Self-hides in the public browser (guarded here too so
-        // no spurious column gap is left where it would sit).
-        if (selectedGym.gymId != null) const SetAppThemeButton(),
+        // Admin-only: what members actually see, the previewing reassurance,
+        // the save action, and the explicit way out. Guarded here as one
+        // block so no spurious column gap is left in the public browser.
+        if (selectedGym.gymId != null)
+          _SaveThemeSection(onLeave: onBackToLibrary),
         if (onEditBranding != null)
           AppOutlineButton(
             text: 'Edit gym name / logo',
@@ -97,6 +105,73 @@ class ThemePreviewPane extends StatelessWidget {
             onPressed: onEditBranding,
           ),
       ],
+    );
+  }
+}
+
+/// Admin-only block under the phone: the always-on "Members see …" line, the
+/// previewing reassurance, the save action, and the explicit exit.
+///
+/// The status line is **always** present, not just while previewing — it is
+/// the standing answer to "did my change go live?", so it must not be a
+/// warning that only appears when something looks wrong. For the same reason
+/// the previewing line is plain secondary text and deliberately NOT a
+/// `WarningMessage`: `okYellow` would imply a problem, and there isn't one.
+/// The primary "Set as app theme" stays first so committing remains the
+/// obvious path; leaving is the quieter, secondary option beneath it.
+class _SaveThemeSection extends StatelessWidget {
+  const _SaveThemeSection({required this.onLeave});
+
+  final VoidCallback onLeave;
+
+  Future<void> _leave(BuildContext context) async {
+    final proceed = await confirmLeaveThemePreview(context);
+    if (proceed) onLeave();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      // The status line follows a save (selectedGym) and the previewing line
+      // follows the live theme (ThemeRuntime), so both must drive a repaint.
+      listenable: ThemeRuntime.isReady
+          ? Listenable.merge([selectedGym, ThemeRuntime.changes])
+          : selectedGym,
+      builder: (context, _) {
+        final unsaved = hasUnsavedThemePreview();
+        return Column(
+          // Centered like the rest of the pane, so the save action keeps the
+          // compact intrinsic width it has always had under the phone.
+          crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              spacing: DesignConstants.spacingSmall,
+              children: [
+                InfoRow(
+                  label: 'Members see',
+                  value: savedThemeLabel() ?? 'No app theme set yet',
+                ),
+                if (unsaved)
+                  Text(
+                    "Previewing only. Leaving this page won't change "
+                    'your app.',
+                    style: DesignConstants.pSmall.copyWith(
+                      color: DesignConstants.text2nd,
+                    ),
+                  ),
+              ],
+            ),
+            const SetAppThemeButton(),
+            if (unsaved)
+              AppOutlineButton(
+                text: 'Leave without setting',
+                onPressed: () => _leave(context),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -15,7 +15,7 @@ const String _kDefaultRankBadgeAsset = 'icon_rank_belt.png';
 
 /// The rewards screens' topbar (name-only variant): the gym name from the
 /// selected member, and the streak / points read LIVE from the shared
-/// [MemberProfileBloc]. The gym-name double-tap switches profile — the same
+/// [MemberProfileBloc]. Tapping the identity block switches profile — the same
 /// per-member chrome the home topbar renders, never mock.
 class RewardsTopbar extends StatelessWidget {
   const RewardsTopbar({super.key});
@@ -29,6 +29,10 @@ class RewardsTopbar extends StatelessWidget {
           mode: AppTopbarMode.nameOnly,
           showBackButton: false,
           gymName: selectedMember.gymName ?? '',
+          memberName: selectedMember.fullName,
+          memberPhotoUrl: selectedMember.photoUrl,
+          memberFirstName: selectedMember.firstName,
+          memberLastName: selectedMember.lastName,
           logoAsset: _kDefaultLogoAsset,
           streakDays: retention?.classStreakWeeks ?? 0,
           pointsLabel:

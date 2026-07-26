@@ -62,7 +62,9 @@ class _ProfileScaffold extends StatelessWidget {
   }
 }
 
-/// The rank block (only when the member holds a rank) over the level-up videos.
+/// The rank block (only when the member holds a rank) over the level-up
+/// videos. NO account actions live here: this is the retention surface (rank,
+/// streak, progress) — sign-out lives behind the topbar's identity avatar.
 /// A rank of `null` — ranks disabled or none assigned — hides the rank summary,
 /// the next-rank card, and their dividers, leaving the level-up carousel.
 class _ProfileBody extends StatelessWidget {

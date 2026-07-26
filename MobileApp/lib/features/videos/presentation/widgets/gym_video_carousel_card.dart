@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/gym_video_helpers.dart';
 import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
+import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 
 /// Compact video card in the horizontally-scrolling genre carousels — the
 /// portal-model (`GymVideoCard`) twin of the retired `VideoCarouselCard` (which
@@ -69,27 +70,21 @@ class _Info extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final views = formatViewCount(card.viewCount);
+    final pfp = creatorAvatarProvider(card.channelAvatarUrl);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
+      // Carries the avatar-to-text gap; with no avatar the text is the only
+      // child, so it starts flush against the card's own inset.
+      spacing: DesignConstants.spacingMedium,
       children: [
-        ClipOval(
-          child: Image(
-            image: CachedNetworkImageProvider(card.channelAvatarUrl),
-            width: GymVideoCarouselCard._kPfpSize,
-            height: GymVideoCarouselCard._kPfpSize,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => SizedBox(
-              width: GymVideoCarouselCard._kPfpSize,
-              height: GymVideoCarouselCard._kPfpSize,
-              child: ColoredBox(color: DesignConstants.card),
-            ),
+        if (pfp != null)
+          CreatorAvatar(
+            image: pfp,
+            size: GymVideoCarouselCard._kPfpSize,
           ),
-        ),
         Expanded(
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: DesignConstants.spacingMedium,
-            ),
+            padding: EdgeInsets.only(right: DesignConstants.spacingMedium),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               spacing: DesignConstants.spacingMedium,

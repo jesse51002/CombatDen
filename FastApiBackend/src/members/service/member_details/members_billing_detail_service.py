@@ -38,6 +38,7 @@ from src.members.service.member_details.members_billing_grouper import (
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
 )
+from src.ranks.service.ranks_reads import RanksReads
 from src.shared.database import DirectDatabasePool
 from src.shared.membership_status import (
     is_membership_overdue,
@@ -57,6 +58,9 @@ class MembersBillingDetailService:
         db_pool: Injected database connection pool.
         streak_service: Injected streak calculation service.
         cycle_counts_service: Injected per-cycle class-usage service.
+        ranks_reads: Injected ranks read concern — the ONE owner of the
+            leaf-advance rule, used here for the next leaf's belt image so
+            "next rank" is never derived a second time.
     """
 
     def __init__(
@@ -64,8 +68,10 @@ class MembersBillingDetailService:
         db_pool: DirectDatabasePool,
         streak_service: StreakService,
         cycle_counts_service: CycleCountsService,
+        ranks_reads: RanksReads,
     ) -> None:
         self._db_pool = db_pool
+        self._ranks_reads = ranks_reads
         self._grouper = MembersBillingGrouper()
         self._streak_service = streak_service
         self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
@@ -136,6 +142,7 @@ class MembersBillingDetailService:
         overview = self._grouper.build_membership_overview(overview_ctx)
 
         pays_for = self._build_pays_for(member_id, all_membership_rows)
+        next_rank_image_url = await self._fetch_next_rank_image(target_row)
 
         return self._build_response(
             member_id=member_id,
@@ -157,6 +164,32 @@ class MembersBillingDetailService:
                 target_row["total_monthly_recurring_price"] or 0
             ),
             today=today,
+            next_rank_image_url=next_rank_image_url,
+        )
+
+    async def _fetch_next_rank_image(self, target_row: dict) -> str | None:
+        """Belt image of the leaf ABOVE the member's current leaf.
+
+        Delegates to ``RanksReads.next_leaf_image_url`` — the ranks domain
+        owns the leaf-advance rule (next sub-position within the main rank,
+        else the base leaf of the next main rank), so the member's "next
+        rank" art can never disagree with what a promotion would actually
+        award. Skipped entirely for an unranked member (their rank block is
+        ``None`` anyway), so it costs nothing there.
+
+        Args:
+            target_row: The queried member's profile row.
+
+        Returns:
+            The next leaf's belt image URL, or None at the top of the
+            ladder / when the member holds no rank.
+        """
+        if target_row["rank_id"] is None:
+            return None
+        return await self._ranks_reads.next_leaf_image_url(
+            target_row["gym_id"],
+            target_row["rank_id"],
+            target_row["rank_sub_index"],
         )
 
     async def _fetch_family_rows(
@@ -194,6 +227,7 @@ class MembersBillingDetailService:
         streak_weeks: int,
         total_monthly_recurring_price: int,
         today: date,
+        next_rank_image_url: str | None,
     ) -> MemberBillingDetailResponse:
         """Assemble the final MemberBillingDetailResponse."""
         return MemberBillingDetailResponse(
@@ -229,7 +263,7 @@ class MembersBillingDetailService:
                 points_balance=(target_row["points_balance"] or 0),
                 videos_watched=0,
             ),
-            rank=self._build_rank(target_row),
+            rank=self._build_rank(target_row, next_rank_image_url),
             recently_redeemed_rewards=redeemed_rewards,
             pending_redemptions=pending_redemptions,
             card_on_file=self._build_card_on_file(target_row),
@@ -459,7 +493,11 @@ class MembersBillingDetailService:
             exp_year=exp_year,
         )
 
-    def _build_rank(self, target_row: dict) -> BillingRank | None:
+    def _build_rank(
+        self,
+        target_row: dict,
+        next_rank_image_url: str | None,
+    ) -> BillingRank | None:
         """Build the BillingRank leaf for the queried member.
 
         The member's leaf = their main rank (``rank_name``) + sub-index;
@@ -476,6 +514,8 @@ class MembersBillingDetailService:
 
         Args:
             target_row: The queried member's profile row.
+            next_rank_image_url: Belt image of the NEXT leaf (resolved by
+                the ranks domain), or None at the top of the ladder.
 
         Returns:
             BillingRank when the member has a current rank, else None.
@@ -504,6 +544,7 @@ class MembersBillingDetailService:
             classes_to_next_major=classes_to_next_major,
             classes_till_next_step=classes_till_next_step,
             classes_since_rank=target_row["rank_classes_since"],
+            next_rank_image_url=next_rank_image_url,
         )
 
     def _derive_account_status(

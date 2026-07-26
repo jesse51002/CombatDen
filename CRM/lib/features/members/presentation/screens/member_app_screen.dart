@@ -5,6 +5,7 @@ import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/url_sync.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/loyalty_tab/loyalty_tab.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/live_theme_preview_tab.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_state.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/videos_tab/videos_tab.dart';
 import 'package:crm/shared/widgets/app_shell.dart';
 import 'package:crm/shared/widgets/view_switcher.dart';
@@ -43,7 +44,21 @@ class _MemberAppScreenState extends State<MemberAppScreen> {
   // ThemeRuntime catalog isn't torn down and re-fetched on every tab tap. The
   // nested navigator's observer can't see a `setState`, so reflect the open tab
   // into the URL here instead.
-  void _onTabSelected(int index) {
+  //
+  // Leaving the Theme tab with an UNSAVED preview asks first — this is the one
+  // exit that can be intercepted in-file (the nav rail's
+  // `pushReplacementNamed` and browser back/refresh cannot be, which is why
+  // the preview pane's permanently-present "Members see …" line — not this
+  // prompt — is the real guarantee that nothing changed silently).
+  // [confirmLeaveThemePreview] is a no-op that returns true when there is
+  // nothing unsaved, or in the public browser, so this is safe to gate on
+  // unconditionally.
+  Future<void> _onTabSelected(int index) async {
+    final themeIndex = MemberAppTab.theme.index;
+    if (_tabIndex == themeIndex && index != themeIndex) {
+      final proceed = await confirmLeaveThemePreview(context);
+      if (!proceed || !mounted) return;
+    }
     setState(() => _tabIndex = index);
     syncBrowserUrl(_routeForTab(MemberAppTab.values[index]));
   }

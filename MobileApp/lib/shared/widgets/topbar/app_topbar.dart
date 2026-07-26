@@ -7,10 +7,12 @@ import 'package:mobile_app/shared/widgets/topbar/topbar_header_section.dart';
 /// Visual mode for [AppTopbar], matching the two variants in the
 /// `topbar` master component.
 ///
-/// * [bigLogo] — large square gym logo above the gym name and chevron-down.
-///   Used on the home screen.
-/// * [nameOnly] — just the centered gym name + chevron-down. Used on every
-///   other screen that shows the topbar.
+/// * [bigLogo] — large square gym logo above the gym name. Used on the home
+///   screen.
+/// * [nameOnly] — just the centered gym name. Used on every other screen that
+///   shows the topbar.
+///
+/// Both variants carry the member's avatar in the trailing flank.
 enum AppTopbarMode { bigLogo, nameOnly }
 
 /// Shared page topbar used across the app. Mirrors the `topbar`
@@ -26,6 +28,10 @@ class AppTopbar extends StatelessWidget {
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
+    this.memberName,
+    this.memberPhotoUrl,
+    this.memberFirstName,
+    this.memberLastName,
     this.onTitleTap,
     this.onTitleDoubleTap,
     this.onQrTap,
@@ -38,6 +44,16 @@ class AppTopbar extends StatelessWidget {
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
+
+  /// The selected member's display name — the accessibility label on the
+  /// trailing identity avatar. The avatar renders either way.
+  final String? memberName;
+
+  /// The selected member's photo + name parts, driving the trailing identity
+  /// avatar (photo, else initials, else a person glyph).
+  final String? memberPhotoUrl;
+  final String? memberFirstName;
+  final String? memberLastName;
   final VoidCallback? onTitleTap;
   final VoidCallback? onTitleDoubleTap;
 
@@ -74,6 +90,10 @@ class AppTopbar extends StatelessWidget {
             showBackButton: showBackButton,
             gymName: gymName,
             logoAsset: logoAsset,
+            memberName: memberName,
+            memberPhotoUrl: memberPhotoUrl,
+            memberFirstName: memberFirstName,
+            memberLastName: memberLastName,
             onTitleTap: () => _handleTitleTap(context),
             onTitleDoubleTap: onTitleDoubleTap,
           ),
@@ -93,9 +113,6 @@ class AppTopbar extends StatelessWidget {
       onTitleTap!();
       return;
     }
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.home,
-      (r) => false,
-    );
+    Navigator.of(context).pushNamed(AppRoutes.memberSelect);
   }
 }

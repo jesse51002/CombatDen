@@ -8,6 +8,7 @@ import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
 import 'package:mobile_app/shared/widgets/animation/staggered_reveal.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
+import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
 
 // The video card scale-pops in a touch slower so it lands as the focal point
@@ -58,8 +59,7 @@ class RecVideoLayout extends StatelessWidget {
                     title: card.title,
                     metaLabel: card.metaLabel,
                     thumbnail: CachedNetworkImageProvider(card.thumbnailUrl),
-                    creatorPfp:
-                        CachedNetworkImageProvider(card.channelAvatarUrl),
+                    creatorPfp: creatorAvatarProvider(card.channelAvatarUrl),
                   ),
                 ),
               ),

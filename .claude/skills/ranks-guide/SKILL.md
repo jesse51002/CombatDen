@@ -172,7 +172,9 @@ Per-sub images live in `sub_rank_image_overrides`, a sparse `{sub_index: url}` m
 
 - **Effective sub image** = `overrides[sub_index]` if present, else the main
   `image_url`. In SQL: `COALESCE(sub_rank_image_overrides ->> CAST(idx AS TEXT),
-  image_url)` (member_details resolves the leaf image this way).
+  image_url)` (member_details resolves the leaf image this way). The **next**
+  leaf's image resolves with the identical precedence in
+  `RanksReads.next_leaf_image_url` (§7) — one rule, two leaves.
 - **The override map is PERSIST-ONLY.** Shrinking `sub_rank_count`, switching the
   gym's `sub_rank_type`, or any other "revert" **never prunes the map** — overrides
   for now-hidden indices go dormant and reactivate if the count grows back.
@@ -276,7 +278,17 @@ demo/showcase `PresetsService` (that importer never touches ranks).
   `sub_rank_count`) returned as `RankSubRankCountsResponse
   { total_count, counts: [{sub_index, count}] }` with the total summed in
   Python. On a `'none'` gym members carry a NULL sub-index → one `{null,
-  total}` row.
+  total}` row. `next_leaf_image_url(gym_id, rank_id, sub_index)` is the
+  **cross-domain** read (no route of its own): the belt art of the leaf ABOVE a
+  member's current leaf, for the member-facing "next rank" badge. It reuses
+  `_next_leaf` rather than deriving "next rank" a second time — so the art can
+  never disagree with what a promotion would actually award — and resolves the
+  image with the same override-over-main precedence as the current leaf
+  (`sub_rank_image_overrides[target_index]` else `image_url`). Returns `None`
+  when `_next_leaf` raises (top of the ladder / no ladder) or the target leaf
+  carries no image. Its one caller is `MembersBillingDetailService`, DI-injected
+  with `ranks_reads`, which fills `BillingRank.next_rank_image_url` (skipped
+  entirely for an unranked member, so it costs no query there).
 - **`RanksPresets`** — `from_preset` (also sets the gym `sub_rank_type`), plus the
   preset list/grouped reads.
 
