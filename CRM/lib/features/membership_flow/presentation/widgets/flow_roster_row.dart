@@ -44,15 +44,9 @@ class FlowRosterRow extends StatelessWidget {
     required this.onTrainingChanged,
   });
 
-  /// The founder's line, with "as well" earned rather than assumed: it only
-  /// means something beside somebody else, so a roster of one drops it.
-  String get _checkLabel => isGroup
-      ? '${person.firstName.trim().isEmpty ? 'This person' : person.firstName}'
-          ' is getting a membership as well'
-      : 'I\'m getting a membership';
-
   @override
   Widget build(BuildContext context) {
+    final copy = MembershipFlowTheme.copyOf(context);
     final name = person.fullName;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -68,24 +62,30 @@ class FlowRosterRow extends StatelessWidget {
             // nobody's business at a glance on a shared iPad.
             if (person.editable)
               FlowRowAction(
-                semanticLabel: 'Edit $name',
+                semanticLabel: copy.editSemantic(name),
                 icon: Symbols.edit_sharp,
-                label: 'Edit',
+                label: copy.editAction,
                 onTap: onDetails,
               ),
             _Pill(role: person.role),
             if (person.removable)
               FlowRowAction(
-                semanticLabel: 'Remove $name',
+                semanticLabel: copy.removeSemantic(name),
                 icon: Symbols.delete_sharp,
                 onTap: onRemove,
               ),
           ],
         ),
+        // The line that decides whether this person is charged, in the
+        // surface's own voice: "as well" only means something beside somebody
+        // else, which is what `isGroup` tells the copy.
         FlowConsentCheck(
           value: person.training,
           onChanged: onTrainingChanged,
-          label: _checkLabel,
+          label: copy.rosterTrainingCheck(
+            firstName: person.firstName,
+            isGroup: isGroup,
+          ),
         ),
       ],
     );
@@ -107,7 +107,9 @@ class _Identity extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    // Null before their details step has run — hence "Added just now".
+    final copy = MembershipFlowTheme.copyOf(context);
+    // Null before their details step has run, which is what the copy's
+    // pending line answers.
     final line = person.identityLine;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,7 +123,7 @@ class _Identity extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          line ?? 'Added just now',
+          line ?? copy.rosterPendingLine,
           style: scale.caption.copyWith(
             color: DesignConstants.text2nd,
           ),
@@ -144,6 +146,7 @@ class _Pill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final loud = role == FlowPersonRole.paying;
     return Container(
       padding: const EdgeInsets.symmetric(
@@ -157,9 +160,9 @@ class _Pill extends StatelessWidget {
       ),
       child: Text(
         switch (role) {
-          FlowPersonRole.paying => 'Paying',
-          FlowPersonRole.member => 'Member',
-          FlowPersonRole.newcomer => 'New',
+          FlowPersonRole.paying => copy.payingPill,
+          FlowPersonRole.member => copy.memberPill,
+          FlowPersonRole.newcomer => copy.newcomerPill,
         },
         style: scale.tag.copyWith(
           color: loud ? DesignConstants.onAccent : DesignConstants.text2nd,

@@ -14,11 +14,26 @@ import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 class FlowPlanPickedBanner extends StatelessWidget {
   final String planName;
 
-  const FlowPlanPickedBanner({super.key, required this.planName});
+  /// WHICH of the person's picked memberships this is, and how many there are.
+  ///
+  /// A surface that sells one membership per person has nothing to count and
+  /// leaves both at 1; a surface that sells several needs each banner to say
+  /// which one it is, or the discounts hanging off two of them are ambiguous.
+  /// The [MembershipFlowCopy] in force decides whether the count is spoken.
+  final int index;
+  final int total;
+
+  const FlowPlanPickedBanner({
+    super.key,
+    required this.planName,
+    this.index = 1,
+    this.total = 1,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: DesignConstants.paddingBig,
@@ -39,7 +54,7 @@ class FlowPlanPickedBanner extends StatelessWidget {
               spacing: DesignConstants.spacingTiny,
               children: [
                 Text(
-                  'YOU\'VE PICKED',
+                  copy.pickedEyebrow(index: index, total: total),
                   style: scale.eyebrow.copyWith(
                     color: DesignConstants.primaryColor,
                   ),

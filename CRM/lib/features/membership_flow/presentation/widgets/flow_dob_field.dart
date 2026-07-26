@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
@@ -24,30 +23,28 @@ final DateTime kFlowDobMinDate = DateTime(1900);
 class FlowDobField extends StatelessWidget {
   final DateTime? value;
   final ValueChanged<DateTime?> onChanged;
-  final String label;
+
+  /// The label over the box. Null takes the surface's own wording.
+  final String? label;
 
   const FlowDobField({
     super.key,
     required this.value,
     required this.onChanged,
-    this.label = 'Date of birth',
+    this.label,
   });
-
-  /// The member-facing form of a chosen date, matching the box's
-  /// `MM / DD / YYYY` placeholder so it reads the same empty or full.
-  static String display(DateTime date) =>
-      DateFormat('MM / dd / yyyy').format(date);
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final chosen = value;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(label, style: scale.label),
+        Text(label ?? copy.dobLabel, style: scale.label),
         InkWell(
           onTap: () => _open(context),
           borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
@@ -75,7 +72,9 @@ class FlowDobField extends StatelessWidget {
                 ),
                 Expanded(
                   child: Text(
-                    chosen == null ? 'MM / DD / YYYY' : display(chosen),
+                    chosen == null
+                        ? copy.dobPlaceholder
+                        : copy.dobDisplay(chosen),
                     style: scale.fieldText.copyWith(
                       fontWeight:
                           chosen == null ? FontWeight.w400 : FontWeight.w500,
@@ -173,6 +172,7 @@ class _DobSheetState extends State<_DobSheet> {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final picked = _picked;
     return SafeArea(
       child: Padding(
@@ -183,7 +183,7 @@ class _DobSheetState extends State<_DobSheet> {
           spacing: DesignConstants.spacingLarge,
           children: [
             Text(
-              'Date of birth',
+              copy.dobLabel,
               style: scale.panelTitle,
               textAlign: TextAlign.center,
             ),
@@ -196,9 +196,12 @@ class _DobSheetState extends State<_DobSheet> {
               mainAxisAlignment: MainAxisAlignment.center,
               spacing: DesignConstants.spacingLarge,
               children: [
-                FlowOutlineButton(text: 'Clear', onPressed: widget.onClear),
+                FlowOutlineButton(
+                  text: copy.clearAction,
+                  onPressed: widget.onClear,
+                ),
                 FlowPrimaryButton(
-                  text: 'Done',
+                  text: copy.doneAction,
                   onPressed:
                       picked == null ? null : () => widget.onDone(picked),
                 ),

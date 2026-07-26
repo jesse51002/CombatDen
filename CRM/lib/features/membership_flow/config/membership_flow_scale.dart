@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/membership_flow/config/admin_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_scale.dart';
 
 /// The TYPE and MEASURE ramp one membership-flow surface renders at.
 ///
@@ -11,9 +12,10 @@ import 'package:crm/core/constants/design_constants.dart';
 /// which [DesignConstants] token that resolves to.
 ///
 /// It SELECTS between existing tokens and restates none: no literal size,
-/// colour, weight or padding may appear in this file. A role that wants a
+/// colour, weight or padding may appear in any scale. A role that wants a
 /// value the design system does not have is a missing token, not a number to
-/// inline here.
+/// inline — which is why the desk's own roles were added to
+/// `design_constants.dart` (the `flow*` set) rather than written here.
 ///
 /// Every member is a **getter, never a field**, so the token resolves at
 /// build time — which is what keeps light/dark live. `DesignConstants`' text
@@ -28,10 +30,19 @@ abstract class MembershipFlowScale {
   const MembershipFlowScale();
 
   /// The kiosk's standing-distance ramp — `DesignConstants`' `kiosk*` set.
-  const factory MembershipFlowScale.kiosk() = _KioskFlowScale;
+  const factory MembershipFlowScale.kiosk() = KioskFlowScale;
+
+  /// The staff dialog's desk ramp — the ADMIN set, plus the handful of `flow*`
+  /// roles the admin ramp had no rung for.
+  const factory MembershipFlowScale.admin() = AdminFlowScale;
 
   /// A screen's one anchoring title.
   TextStyle get display;
+
+  /// The one MONEY figure a step is about — the due-today total. Its own role
+  /// rather than [display]'s: on the kiosk the amount IS the screen, while at
+  /// the desk it sits inside a panel beside a title that out-ranks it.
+  TextStyle get total;
 
   /// The muted line answering a [display] title.
   TextStyle get subtitle;
@@ -103,82 +114,4 @@ abstract class MembershipFlowScale {
   /// shell (a full-screen kiosk stage, the desk's dialog), which the scaffold
   /// is handed rather than owning.
   double get formMeasure;
-}
-
-/// The kiosk's ramp: every role resolves to its `kiosk*` token, and the two
-/// eyebrow/tag roles to the unprefixed shared ones (they measure the same at
-/// both distances, so there is nothing for the kiosk to step up to).
-class _KioskFlowScale extends MembershipFlowScale {
-  const _KioskFlowScale();
-
-  @override
-  TextStyle get display => DesignConstants.kioskDisplay;
-
-  @override
-  TextStyle get subtitle => DesignConstants.kioskSubtitle;
-
-  @override
-  TextStyle get metric => DesignConstants.kioskMetric;
-
-  @override
-  TextStyle get panelTitle => DesignConstants.kioskPanelTitle;
-
-  @override
-  TextStyle get statement => DesignConstants.kioskStatement;
-
-  @override
-  TextStyle get fieldText => DesignConstants.kioskFieldText;
-
-  @override
-  TextStyle get title => DesignConstants.kioskTitle;
-
-  @override
-  TextStyle get name => DesignConstants.kioskName;
-
-  @override
-  TextStyle get body => DesignConstants.kioskBody;
-
-  @override
-  TextStyle get label => DesignConstants.kioskLabel;
-
-  @override
-  TextStyle get sectionText => DesignConstants.kioskSectionText;
-
-  @override
-  TextStyle get caption => DesignConstants.kioskCaption;
-
-  @override
-  TextStyle get micro => DesignConstants.kioskMicro;
-
-  @override
-  TextStyle get monoValue => DesignConstants.kioskMonoValue;
-
-  @override
-  TextStyle get eyebrow => DesignConstants.eyebrow;
-
-  @override
-  TextStyle get tag => DesignConstants.tag;
-
-  @override
-  TextStyle get buttonPrimaryLabel => DesignConstants.kioskButtonPrimaryLabel;
-
-  @override
-  TextStyle get buttonOutlineLabel => DesignConstants.kioskButtonOutlineLabel;
-
-  @override
-  TextStyle get buttonGhostLabel => DesignConstants.kioskButtonGhostLabel;
-
-  @override
-  EdgeInsets get buttonPrimaryPadding =>
-      DesignConstants.kioskButtonPrimaryPadding;
-
-  @override
-  EdgeInsets get buttonOutlinePadding =>
-      DesignConstants.kioskButtonOutlinePadding;
-
-  @override
-  EdgeInsets get buttonGhostPadding => DesignConstants.kioskButtonGhostPadding;
-
-  @override
-  double get formMeasure => DesignConstants.kioskFormMeasure;
 }

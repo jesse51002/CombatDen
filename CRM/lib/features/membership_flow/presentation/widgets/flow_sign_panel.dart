@@ -24,15 +24,15 @@ class FlowSignPanel extends StatelessWidget {
   /// Whose signature this is — the person the waiver binds.
   final String memberName;
 
-  /// The banner's mono eyebrow.
-  final String eyebrow;
+  /// The banner's mono eyebrow. Null takes the surface's own wording.
+  final String? eyebrow;
 
   /// The quiet line under the name in the banner.
-  final String bannerNote;
+  final String? bannerNote;
 
   /// The consent tick's line, and its own quieter second line.
-  final String consentLabel;
-  final String consentNote;
+  final String? consentLabel;
+  final String? consentNote;
 
   final TextEditingController signerName;
   final ValueChanged<String> onSignerNameChanged;
@@ -47,17 +47,15 @@ class FlowSignPanel extends StatelessWidget {
     required this.onSignerNameChanged,
     required this.consent,
     required this.onConsentChanged,
-    this.eyebrow = 'SIGNING FOR',
-    this.bannerNote =
-        'Signed by you, or by a parent / legal guardian on your behalf.',
-    this.consentLabel = 'I have read this waiver and agree to it. Typing my '
-        'name counts as my signature.',
-    this.consentNote = 'Your name appears in the document as you type it. A '
-        'copy goes to your email.',
+    this.eyebrow,
+    this.bannerNote,
+    this.consentLabel,
+    this.consentNote,
   });
 
   @override
   Widget build(BuildContext context) {
+    final copy = MembershipFlowTheme.copyOf(context);
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -73,12 +71,12 @@ class FlowSignPanel extends StatelessWidget {
         children: [
           _SigningFor(
             memberName: memberName,
-            eyebrow: eyebrow,
-            note: bannerNote,
+            eyebrow: eyebrow ?? copy.signingForEyebrow,
+            note: bannerNote ?? copy.signingBannerNote,
           ),
           FlowFieldBox(
             controller: signerName,
-            label: 'Type your full legal name',
+            label: copy.signerNameLabel,
             hintText: memberName,
             icon: Symbols.edit_sharp,
             onChanged: onSignerNameChanged,
@@ -86,8 +84,8 @@ class FlowSignPanel extends StatelessWidget {
           FlowConsentCheck(
             value: consent,
             onChanged: onConsentChanged,
-            label: consentLabel,
-            note: consentNote,
+            label: consentLabel ?? copy.signingConsentLabel,
+            note: consentNote ?? copy.signingConsentNote,
           ),
         ],
       ),

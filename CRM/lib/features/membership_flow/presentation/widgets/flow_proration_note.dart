@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
@@ -20,19 +19,12 @@ class FlowProrationNote extends StatelessWidget {
 
   const FlowProrationNote({super.key, this.until});
 
-  static final DateFormat _day = DateFormat('d MMMM y');
-
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    final at = until;
-    final when = at == null ? null : _day.format(at.toLocal());
+    final copy = MembershipFlowTheme.copyOf(context);
     return Text(
-      when == null
-          ? 'Today is a part-period charge — it covers the rest of this '
-              'billing period only.'
-          : 'Today is a part-period charge — it covers you up to $when. The '
-              'full amount starts then.',
+      copy.prorationNote(until),
       style: scale.caption.copyWith(
         color: DesignConstants.text2nd,
       ),

@@ -18,9 +18,9 @@ class FlowTwoChargesNote extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Text(
-      'This shows up as two separate charges today — one for the one-off '
-      'purchase and one for the membership.',
+      copy.twoChargesNote,
       style: scale.caption.copyWith(
         color: DesignConstants.text,
         fontWeight: FontWeight.w500,

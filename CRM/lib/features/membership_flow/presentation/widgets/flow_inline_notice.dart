@@ -27,6 +27,7 @@ class FlowInlineNotice extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final retry = onRetry;
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
@@ -47,7 +48,7 @@ class FlowInlineNotice extends StatelessWidget {
             child: Text(message, style: scale.body),
           ),
           if (retry != null)
-            FlowOutlineButton(text: 'Try again', onPressed: retry),
+            FlowOutlineButton(text: copy.retryAction, onPressed: retry),
         ],
       ),
     );

@@ -34,6 +34,7 @@ class FlowReviewSidePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final plan = person.plan;
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
@@ -48,9 +49,9 @@ class FlowReviewSidePanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Text('YOU', style: scale.eyebrow),
+          Text(copy.reviewPersonEyebrow, style: scale.eyebrow),
           _WhoRow(name: person.fullName, line: person.identityLine),
-          Text('YOUR MEMBERSHIP', style: scale.eyebrow),
+          Text(copy.reviewMembershipEyebrow, style: scale.eyebrow),
           if (plan != null)
             FlowBuyRow(
               name: plan.name,
@@ -61,7 +62,7 @@ class FlowReviewSidePanel extends StatelessWidget {
           for (final waiver in signed)
             FlowBuyRow(
               name: waiver.name,
-              rule: 'Signed today by ${waiver.signerName}',
+              rule: copy.waiverSignedRule(waiver.signerName),
             ),
         ],
       ),

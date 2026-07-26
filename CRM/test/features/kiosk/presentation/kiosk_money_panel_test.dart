@@ -5,6 +5,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_money_panel.dart';
@@ -33,6 +34,7 @@ void main() {
         // does: the shared flow components carry no size of their own.
         builder: (context, child) => MembershipFlowTheme(
           scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
           child: child!,
         ),
         home: Scaffold(

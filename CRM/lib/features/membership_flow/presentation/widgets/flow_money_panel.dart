@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
-import 'package:crm/features/membership_flow/domain/name_labels.dart';
 import 'package:crm/features/membership_flow/presentation/models/flow_money_view.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_proration_note.dart';
@@ -36,6 +34,7 @@ class FlowMoneyPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final contact = contactEmail.trim();
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
@@ -50,13 +49,13 @@ class FlowMoneyPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Text('DUE TODAY', style: scale.eyebrow),
+          Text(copy.dueTodayEyebrow, style: scale.eyebrow),
           Text(
             formatMinorUnits(
               money.dueTodayMinorUnits,
               currency: money.currency,
             ),
-            style: scale.display,
+            style: scale.total,
           ),
           _Lines(money: money),
           if (money.prorated) FlowProrationNote(until: money.prorationUntil),
@@ -67,7 +66,7 @@ class FlowMoneyPanel extends StatelessWidget {
           // rather than printed with a trailing empty address.
           if (contact.isNotEmpty)
             Text(
-              'If a payment ever fails, we\'ll email you at $contact.',
+              copy.failedPaymentNotice(contact),
               style: scale.caption.copyWith(
                 color: DesignConstants.text2nd,
               ),
@@ -135,11 +134,10 @@ class _Then extends StatelessWidget {
 
   const _Then({required this.money});
 
-  static final DateFormat _next = DateFormat('d MMMM y');
-
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final recurring = money.recurring;
     if (recurring == null) return const SizedBox.shrink();
     return Column(
@@ -148,36 +146,23 @@ class _Then extends StatelessWidget {
       spacing: DesignConstants.spacingSmall,
       children: [
         Text(
-          'Then ${formatMinorUnits(
-            recurring.totalMinorUnits,
+          copy.recurringHeadline(
+            totalMinorUnits: recurring.totalMinorUnits,
             currency: money.currency,
-          )} each ${recurring.cycleWord}',
+            cycleWord: recurring.cycleWord,
+          ),
           style: scale.label,
         ),
         Text(
-          _detail(recurring),
+          copy.recurringDetail(
+            names: recurring.names,
+            nextPaymentAt: recurring.nextPaymentAt,
+          ),
           style: scale.caption.copyWith(
             color: DesignConstants.text2nd,
           ),
         ),
       ],
     );
-  }
-
-  /// Who recurs and from when. In a group the names matter: a one-off pack
-  /// does not recur for the child who got it.
-  String _detail(FlowRecurringView recurring) {
-    const tail = 'On the same card. Cancel any time at the front desk — no '
-        'notice period.';
-    final at = recurring.nextPaymentAt;
-    final when = at == null ? null : _next.format(at.toLocal());
-    final who =
-        recurring.names.isEmpty ? null : flowNameList(recurring.names);
-    if (who != null && when != null) {
-      return '$who, from $when. $tail';
-    }
-    if (who != null) return '$who. $tail';
-    if (when != null) return 'Next charge $when. $tail';
-    return tail;
   }
 }

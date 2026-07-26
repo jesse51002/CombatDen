@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
@@ -33,6 +34,7 @@ void main() {
         // does: the shared flow components carry no size of their own.
         builder: (context, child) => MembershipFlowTheme(
           scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
           child: child!,
         ),
         home: Scaffold(
@@ -101,7 +103,7 @@ void main() {
     expect(picked, isNotNull);
     // The wheel's reported date, never the opening position it was seeded with.
     expect(picked!.year, lessThan(today.year));
-    expect(find.text(FlowDobField.display(picked)), findsOneWidget);
+    expect(find.text(const KioskFlowCopy().dobDisplay(picked)), findsOneWidget);
   });
 
   testWidgets('a date already held is what Done re-commits, no turn needed',

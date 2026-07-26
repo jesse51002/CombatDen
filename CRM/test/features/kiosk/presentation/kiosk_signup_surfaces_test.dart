@@ -49,6 +49,7 @@ import 'package:crm/features/members_list/data/models/members_list_filters.dart'
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
@@ -198,6 +199,7 @@ void main() {
         // does: the shared flow components carry no size of their own.
         builder: (context, child) => MembershipFlowTheme(
           scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
           child: child!,
         ),
         home: Scaffold(

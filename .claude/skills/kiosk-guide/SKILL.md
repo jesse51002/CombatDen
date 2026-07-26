@@ -875,12 +875,19 @@ modules is legitimately renamed, rename it in both lists in the same change.
 the kiosk renders every file in it: without that, moving a widget out of
 `lib/features/kiosk/` would be enough to escape the ban. The shared set
 carries the kiosk's list PLUS two of its own — no `membership_flow/discounts/`
-import (the staff-only discount UI + math, guarded before it exists) and no
+import (the staff-only discount UI + math) and no
 `features/member_details/presentation/dialogs/` import (staff tooling OVER the
 flow, which a member-facing surface can never open). A staff-only capability
-is INJECTED by the host that owns it; the kiosk's factory cannot construct
-one, which is what keeps the no-discounts rule structural rather than a
-`showDiscounts: false` default.
+is INJECTED by the host that owns it as an OBJECT: `MembershipFlowConfig` (
+`membership_flow/config/`) carries a `DiscountsCapability?`, and
+`MembershipFlowConfig.kiosk()` **has no discounts parameter to pass**, so the
+discount code is unreachable rather than switched off — which is what keeps
+the no-discounts rule structural rather than a `showDiscounts: false` default.
+The same config names the surface's other capability differences in that one
+place: its scale, its copy, its plan gates and notes, its `CartPolicy` (one
+membership at one unit on the kiosk) and its `IdentityPolicy` (masked on the
+kiosk, full at the desk — `kioskMaskedEmail` is now that policy's masked
+reading, so the two cannot drift).
 
 Those bans are on the **CRM's own** payer-selection and saved-card surfaces,
 which offer a card the kiosk did not take. The kiosk's own payer picker is not
@@ -1340,18 +1347,32 @@ SURFACE's scale decides which token that resolves to.
 - **`MembershipFlowScale.kiosk()` is this ramp, one hop away.** It maps every
   role onto the `kiosk*` token above (plus the unprefixed `eyebrow` / `tag`,
   which measure the same at both distances) and the two measures the stage and
-  the form panel are capped at (`navMaxWidth`, `kioskFormMeasure`). It
-  **selects** between existing tokens and restates no value, so this ramp stays
-  the single source of the numbers and §8.1's "moves as a SET" rule is
-  unaffected.
+  the form panel are capped at (`navMaxWidth`, `flowFormMeasure` — ONE 860px
+  token now, unprefixed, because the kiosk stage's content width and the desk
+  dialog's land on the same measure). It **selects** between existing tokens
+  and restates no value, so this ramp stays the single source of the numbers
+  and §8.1's "moves as a SET" rule is unaffected. Its desk counterpart
+  `MembershipFlowScale.admin()` resolves to the ADMIN ladder plus the few
+  `flow*` roles that ladder lacks (`flowStatement`, `flowName`, the three
+  button tiers) — it exists, and nothing mounts it yet.
 - **Every member is a GETTER.** The tokens resolve `themeController.isDark` on
   each read, so a scale that snapshotted them would freeze the lane in one
   theme.
-- **`KioskSignupScreen` mounts exactly one `MembershipFlowTheme`**, above the
-  step switcher and every overlay. A widget test that pumps a shared component
-  on its own must wrap it the same way, or `MembershipFlowTheme.of` asserts —
-  deliberately, since a silent default would let a host render a whole surface
-  at the wrong size.
+- **The lane's WORDS travel the same way.** A shared widget holds no sentence
+  either: it asks `MembershipFlowTheme.copyOf(context)` for a line, and
+  `KioskFlowCopy` (`membership_flow/config/`) supplies the member voice — byte
+  for byte what those widgets used to hold, which
+  `test/features/membership_flow/config/flow_copy_test.dart` pins.
+  `StaffFlowCopy` is the desk's.
+  `test/features/membership_flow/presentation_copy_guard_test.dart` fails on
+  any sentence-like literal left under `presentation/`, so a wording change
+  cannot land on one surface only.
+- **`KioskSignupScreen` mounts exactly one `MembershipFlowTheme`**, carrying
+  the scale AND the copy, above the step switcher and every overlay. A widget
+  test that pumps a shared component on its own must wrap it the same way, or
+  `MembershipFlowTheme.of` / `.copyOf` asserts — deliberately, since a silent
+  default would let a host render a whole surface at the wrong size, or in the
+  wrong voice.
 - **It is a TYPE + measure ramp only.** Colours, radii, spacing, icon sizes and
   shadows still come straight from `DesignConstants` at the call site: none of
   them changes with the reading distance.

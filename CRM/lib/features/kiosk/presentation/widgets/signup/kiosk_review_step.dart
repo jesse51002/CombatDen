@@ -106,7 +106,7 @@ class _Panels extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth: DesignConstants.kioskFormMeasure,
+          maxWidth: DesignConstants.flowFormMeasure,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,

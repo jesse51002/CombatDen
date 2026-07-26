@@ -28,24 +28,10 @@ class FlowResultRow extends StatelessWidget {
     required this.status,
   });
 
-  /// The consequence, in the kiosk's own words.
-  ///
-  /// `unknown` (the enum's forward-compatible fallback) claims nothing about
-  /// money in either direction: "nothing was charged" about a row the backend
-  /// would not confirm is a guess this line refuses to make.
-  String get _rule {
-    return switch (status) {
-      MemberMembershipsStartStatus.created => 'Started today',
-      MemberMembershipsStartStatus.failed =>
-        'Not started — nothing was charged for this one.',
-      MemberMembershipsStartStatus.unknown =>
-        'We couldn\'t confirm this one — the desk can check it for you.',
-    };
-  }
-
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -62,8 +48,11 @@ class FlowResultRow extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              // The CONSEQUENCE, never the backend's error: a raw message is
+              // right at a staff desk and wrong in a lobby, so the surface's
+              // own copy states what it means for this one membership.
               Text(
-                _rule,
+                copy.resultConsequence(status),
                 style: scale.caption.copyWith(
                   color: DesignConstants.text2nd,
                 ),

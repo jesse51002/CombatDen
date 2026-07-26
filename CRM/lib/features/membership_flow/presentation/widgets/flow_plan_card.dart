@@ -29,10 +29,11 @@ class FlowPlanCard extends StatelessWidget {
   /// explains rather than selects.
   final bool blocked;
 
-  /// The tag pinned over a blocked card's hero. It comes from
-  /// `kiosk_plan_block_copy.dart` at the call site, so the tag and the popup
-  /// behind it can never disagree about why.
-  final String blockedLabel;
+  /// The tag pinned over a blocked card's hero. The caller passes the GATE's
+  /// own reason (`domain/plan_rules.dart`), so the tag and whatever the tap
+  /// opens can never disagree about why; null falls back to the surface's own
+  /// wording.
+  final String? blockedLabel;
 
   final VoidCallback onTap;
 
@@ -42,11 +43,12 @@ class FlowPlanCard extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.blocked = false,
-    this.blockedLabel = 'Already used',
+    this.blockedLabel,
   });
 
   @override
   Widget build(BuildContext context) {
+    final copy = MembershipFlowTheme.copyOf(context);
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
@@ -86,7 +88,9 @@ class FlowPlanCard extends StatelessWidget {
               Positioned(
                 top: DesignConstants.spacingMedium,
                 left: DesignConstants.spacingMedium,
-                child: _BlockedTag(label: blockedLabel),
+                child: _BlockedTag(
+                  label: blockedLabel ?? copy.planBlockedTag,
+                ),
               )
             else
               Positioned(

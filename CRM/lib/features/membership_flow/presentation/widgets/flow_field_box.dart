@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
@@ -35,6 +36,11 @@ class FlowFieldBox extends StatefulWidget {
   final IconData? icon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+
+  /// What the field will ACCEPT, rejected at the keystroke — a numeric count
+  /// that cannot hold a letter never has to say "digits only" afterwards.
+  final List<TextInputFormatter>? inputFormatters;
+
   final ValueChanged<String>? onChanged;
   final VoidCallback? onSubmitted;
 
@@ -49,6 +55,7 @@ class FlowFieldBox extends StatefulWidget {
     this.icon,
     this.keyboardType,
     this.textInputAction,
+    this.inputFormatters,
     this.onChanged,
     this.onSubmitted,
   });
@@ -93,6 +100,7 @@ class _FlowFieldBoxState extends State<FlowFieldBox> {
           icon: widget.icon,
           keyboardType: widget.keyboardType,
           textInputAction: widget.textInputAction,
+          inputFormatters: widget.inputFormatters,
           onChanged: widget.onChanged,
           onSubmitted: widget.onSubmitted,
           focused: _focus.hasFocus,
@@ -157,6 +165,7 @@ class _Box extends StatelessWidget {
   final IconData? icon;
   final TextInputType? keyboardType;
   final TextInputAction? textInputAction;
+  final List<TextInputFormatter>? inputFormatters;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onSubmitted;
   final bool focused;
@@ -171,6 +180,7 @@ class _Box extends StatelessWidget {
     this.icon,
     this.keyboardType,
     this.textInputAction,
+    this.inputFormatters,
     this.onChanged,
     this.onSubmitted,
   });
@@ -211,6 +221,7 @@ class _Box extends StatelessWidget {
               focusNode: focusNode,
               keyboardType: keyboardType,
               textInputAction: textInputAction,
+              inputFormatters: inputFormatters,
               onChanged: onChanged,
               onSubmitted: (_) => onSubmitted?.call(),
               style: scale.fieldText,

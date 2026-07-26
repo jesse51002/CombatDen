@@ -31,6 +31,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
@@ -48,10 +49,11 @@ import 'package:crm/features/memberships/data/repositories/memberships_repositor
 /// `Listener` reads `KioskFlowCubit`, provided ABOVE this subtree, so a signup
 /// tap must answer the guard actually running down here.
 ///
-/// It is also the SURFACE that names its own scale: the shared flow components
-/// carry no size of their own and read [MembershipFlowTheme] instead, so the
-/// host mounts `MembershipFlowScale.kiosk()` once, above the step switcher and
-/// every overlay. Nothing below names a surface again.
+/// It is also the SURFACE that names its own scale and its own voice: the
+/// shared flow components carry neither a size nor a sentence of their own and
+/// read [MembershipFlowTheme] instead, so the host mounts
+/// `MembershipFlowScale.kiosk()` + `KioskFlowCopy` once, above the step
+/// switcher and every overlay. Nothing below names a surface again.
 class KioskSignupScreen extends StatelessWidget {
   const KioskSignupScreen({super.key});
 
@@ -69,6 +71,7 @@ class KioskSignupScreen extends StatelessWidget {
       ),
       child: const MembershipFlowTheme(
         scale: MembershipFlowScale.kiosk(),
+        copy: KioskFlowCopy(),
         child: _KioskSignupBody(),
       ),
     );

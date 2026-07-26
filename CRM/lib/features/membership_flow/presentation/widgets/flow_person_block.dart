@@ -53,6 +53,7 @@ class _NameLine extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -66,9 +67,9 @@ class _NameLine extends StatelessWidget {
         ),
         Text(
           switch (person.role) {
-            FlowPersonRole.paying => 'PAYING',
-            FlowPersonRole.member => 'MEMBER',
-            FlowPersonRole.newcomer => 'NEW',
+            FlowPersonRole.paying => copy.payingEyebrow,
+            FlowPersonRole.member => copy.memberEyebrow,
+            FlowPersonRole.newcomer => copy.newcomerEyebrow,
           },
           style: scale.eyebrow.copyWith(
             color: person.role == FlowPersonRole.paying
@@ -78,7 +79,7 @@ class _NameLine extends StatelessWidget {
         ),
         if (person.started)
           Text(
-            'STARTED',
+            copy.startedEyebrow,
             style: scale.eyebrow.copyWith(
               color: DesignConstants.goodGreen,
             ),

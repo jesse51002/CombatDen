@@ -63,11 +63,17 @@ void main() {
   /// to arrive from outside it — a shared widget that reaches for a
   /// staff-only module is the drift this whole module exists to prevent.
   const bannedShared = <String>[
-    // The staff-only discount UI + math. It does not exist yet; the guard is
-    // in place FIRST so the surface that adds it lands into a rule rather
-    // than being trusted to remember one.
+    // The staff-only discount UI + math. The shared set may never reach for
+    // it: a discount capability is INJECTED by the host that has one, and
+    // `MembershipFlowConfig.kiosk()` has no parameter to inject it through —
+    // which is what makes the kiosk's no-discounts rule structural instead of
+    // a `showDiscounts: false` one wrong default away from failing.
     'membership_flow/discounts/',
   ];
+
+  /// The staff-only modules `bannedShared` stands for. Same rule as
+  /// [guardedFiles]: a ban on a path nothing lives at is theatre.
+  const guardedSharedDirs = <String>['lib/features/membership_flow/discounts'];
 
   /// The roots the shared component set lives under. Both are listed even
   /// though one currently nests inside the other: `chrome/` is the set's own
@@ -202,6 +208,24 @@ void main() {
           'comment that invites one. Offending lines:\n'
           '${offences.join('\n')}',
     );
+  });
+
+  test('every guarded staff-only module still exists (the ban is not stale)',
+      () {
+    for (final path in guardedSharedDirs) {
+      final dir = Directory(path);
+      expect(
+        dir.existsSync() &&
+            dir
+                .listSync(recursive: true)
+                .whereType<File>()
+                .any((f) => f.path.endsWith('.dart')),
+        isTrue,
+        reason: 'guarded staff-only module $path is gone or empty — the '
+            'matching entry in `bannedShared` no longer protects anything. '
+            'Update BOTH lists.',
+      );
+    }
   });
 
   test('the shared component set is non-empty', () {

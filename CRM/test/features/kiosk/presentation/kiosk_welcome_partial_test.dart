@@ -11,6 +11,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
@@ -84,6 +85,7 @@ void main() {
         // does: the shared flow components carry no size of their own.
         builder: (context, child) => MembershipFlowTheme(
           scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
           child: child!,
         ),
         home: Scaffold(

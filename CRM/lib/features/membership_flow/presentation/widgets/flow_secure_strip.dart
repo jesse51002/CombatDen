@@ -21,16 +21,10 @@ class FlowSecureStrip extends StatelessWidget {
 
   const FlowSecureStrip({super.key, this.gymName});
 
-  /// "Iron Den never sees your card number, and neither does this iPad."
-  String get _detail {
-    final gym = gymName?.trim() ?? '';
-    final who = gym.isEmpty ? 'This gym' : gym;
-    return '$who never sees your card number, and neither does this iPad.';
-  }
-
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -48,11 +42,11 @@ class FlowSecureStrip extends StatelessWidget {
               spacing: DesignConstants.spacingSmall,
               children: [
                 Text(
-                  'Encrypted and sent straight to Stripe',
+                  copy.secureStripTitle,
                   style: scale.label,
                 ),
                 Text(
-                  _detail,
+                  copy.secureStripDetail(gymName),
                   style: scale.caption.copyWith(
                     color: DesignConstants.text2nd,
                   ),

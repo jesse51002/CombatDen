@@ -19,7 +19,9 @@ import 'package:crm/shared/widgets/hairline.dart';
 class FlowFoot extends StatelessWidget {
   /// The middle column's primary. Null disables it (an incomplete form).
   final VoidCallback? onPrimary;
-  final String primaryLabel;
+
+  /// The primary's words. Null takes the surface's own forward action.
+  final String? primaryLabel;
 
   /// The middle column's Back. Omitted on step 1 — home is where they came
   /// from, and the escape already answers that.
@@ -27,7 +29,7 @@ class FlowFoot extends StatelessWidget {
 
   /// The right gutter's Skip. Omitted where the step has nothing to skip.
   final VoidCallback? onSkip;
-  final String skipLabel;
+  final String? skipLabel;
 
   /// Leave the flow. REQUIRED and non-null on every step: a step that could
   /// omit its way out is a step that eventually does.
@@ -40,22 +42,23 @@ class FlowFoot extends StatelessWidget {
 
   /// The escape's wording, which answers the SCREEN rather than the
   /// navigation: beside a `Sign Membership · $149.00` button "Cancel" would
-  /// read as *cancel the payment*.
-  final String escapeLabel;
+  /// read as *cancel the payment*. Null takes the surface's own escape word.
+  final String? escapeLabel;
 
   const FlowFoot({
     super.key,
     required this.onPrimary,
     required this.onEscape,
-    this.primaryLabel = 'Continue',
+    this.primaryLabel,
     this.onBack,
     this.onSkip,
-    this.skipLabel = 'Skip for now',
-    this.escapeLabel = 'Start over',
+    this.skipLabel,
+    this.escapeLabel,
   });
 
   @override
   Widget build(BuildContext context) {
+    final copy = MembershipFlowTheme.copyOf(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
@@ -73,7 +76,7 @@ class FlowFoot extends StatelessWidget {
               child: Align(
                 alignment: Alignment.centerLeft,
                 child: _EscapeGutter(
-                  label: escapeLabel,
+                  label: escapeLabel ?? copy.escapeAction,
                   onEscape: onEscape,
                 ),
               ),
@@ -81,12 +84,15 @@ class FlowFoot extends StatelessWidget {
             Positioned.fill(
               child: Align(
                 alignment: Alignment.centerRight,
-                child: _SkipGutter(onSkip: onSkip, label: skipLabel),
+                child: _SkipGutter(
+                  onSkip: onSkip,
+                  label: skipLabel ?? copy.skipAction,
+                ),
               ),
             ),
             _Decisions(
               onPrimary: onPrimary,
-              primaryLabel: primaryLabel,
+              primaryLabel: primaryLabel ?? copy.continueAction,
               onBack: onBack,
             ),
           ],
@@ -129,12 +135,14 @@ class _Decisions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final copy = MembershipFlowTheme.copyOf(context);
     final back = onBack;
     return Row(
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingLarge,
       children: [
-        if (back != null) FlowOutlineButton(text: 'Back', onPressed: back),
+        if (back != null)
+          FlowOutlineButton(text: copy.backAction, onPressed: back),
         FlowPrimaryButton(text: primaryLabel, onPressed: onPrimary),
       ],
     );

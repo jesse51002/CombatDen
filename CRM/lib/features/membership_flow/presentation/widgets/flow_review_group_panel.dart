@@ -26,6 +26,7 @@ class FlowReviewGroupPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -39,7 +40,7 @@ class FlowReviewGroupPanel extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingLarge,
         children: [
-          Text('WHO\'S JOINING', style: scale.eyebrow),
+          Text(copy.reviewGroupEyebrow, style: scale.eyebrow),
           for (var i = 0; i < people.length; i++) ...[
             if (i > 0) const Hairline(),
             FlowPersonBlock(person: people[i]),

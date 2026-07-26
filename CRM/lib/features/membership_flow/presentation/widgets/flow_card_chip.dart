@@ -19,6 +19,7 @@ class FlowCardChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     final label = brand?.trim();
     final digits = last4?.trim();
     return Container(
@@ -49,8 +50,8 @@ class FlowCardChip extends StatelessWidget {
             ),
           Text(
             digits == null || digits.isEmpty
-                ? 'Card on file'
-                : 'Card ending $digits',
+                ? copy.cardOnFile
+                : copy.cardEnding(digits),
             style: scale.caption.copyWith(
               color: DesignConstants.text2nd,
             ),

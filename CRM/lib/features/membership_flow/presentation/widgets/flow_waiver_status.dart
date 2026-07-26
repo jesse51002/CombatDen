@@ -25,6 +25,7 @@ class FlowWaiverStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
+    final copy = MembershipFlowTheme.copyOf(context);
     return Padding(
       padding: const EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
@@ -35,13 +36,16 @@ class FlowWaiverStatus extends StatelessWidget {
                 spacing: DesignConstants.spacingLarge,
                 children: [
                   Text(
-                    'We couldn\'t load the waiver just now.',
+                    copy.waiverLoadFailed,
                     style: scale.subtitle.copyWith(
                       color: DesignConstants.text2nd,
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  FlowPrimaryButton(text: 'Try again', onPressed: onRetry),
+                  FlowPrimaryButton(
+                    text: copy.retryAction,
+                    onPressed: onRetry,
+                  ),
                 ],
               ),
       ),
