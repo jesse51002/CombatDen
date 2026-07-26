@@ -9,6 +9,7 @@ import 'package:mobile_app/features/videos/bloc/videos_event.dart';
 import 'package:mobile_app/features/videos/bloc/videos_state.dart';
 import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
@@ -88,8 +89,8 @@ class _TagBody extends StatelessWidget {
                                 CachedNetworkImageProvider(card.thumbnailUrl),
                             creatorPfp:
                                 creatorAvatarProvider(card.channelAvatarUrl),
-                            // Real playback is a follow-up; no-op for now.
-                            onTap: () => debugPrint('TODO: play ${card.url}'),
+                            // Plays on YouTube, outside the app.
+                            onTap: () => openVideoFor(context, card),
                           ),
                       ],
                     ),

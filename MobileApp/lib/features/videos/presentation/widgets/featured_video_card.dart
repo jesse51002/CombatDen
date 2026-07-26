@@ -32,7 +32,6 @@ class FeaturedVideoCard extends StatelessWidget {
             metaLabel: card.metaLabel,
             thumbnail: CachedNetworkImageProvider(card.thumbnailUrl),
             creatorPfp: creatorAvatarProvider(card.channelAvatarUrl),
-            roundThumbnail: false,
             onTap: onTap,
           ),
           Padding(

@@ -332,6 +332,35 @@ is the **seam for kiosk Phase G**: the real backend `src/kiosk/` nonce contract
 (scan → staff-gated check-in → streak + points in the response) will flow through
 these same screens once it lands. Don't wire a real member check-in here.
 
+## Videos open on YouTube (there is no in-app player)
+
+Every video surface — the videos tab's hero + carousels, a genre's full list,
+the profile's "Videos to level up" carousel, and the post-booking
+recommendation's "Watch" — hands the video to the OS through the one shared
+helper `features/videos/presentation/widgets/video_link_helpers.dart`
+(`videoUriFor` → `launchVideoFor` → `openVideoFor`). Never build a second
+launch path or an in-app player.
+
+- **The URI**: the card's own `url` when it's present and has a scheme,
+  otherwise `https://www.youtube.com/watch?v=<video_id>` built from the
+  card's `videoId`. A card with neither never launches (and never crashes).
+- **The mode is always `LaunchMode.externalApplication`** so the YouTube app
+  takes it when installed. This needs the manifest `<queries>` `https` VIEW
+  intent (see `url_launcher` under *Dependencies*).
+- **A failed launch is visible**: `openVideoFor` captures the
+  `ScaffoldMessenger` **before** the await and shows a SnackBar when nothing
+  handled the intent — never a dead tap.
+- **The rec screen records, then launches, then closes.** "Watch" dispatches
+  `VideoRecOpened` first (the bloc fire-and-forgets the click, so it can't
+  delay the launch), then launches, and pops **only on success** — a failed
+  launch keeps the recommendation on screen to retry instead of dropping the
+  member out of the flow with nothing.
+- **Video thumbnails are square.** `VideoReccCard`'s `roundThumbnail`
+  defaults to **false**: YouTube burns caption text to the thumbnail edge and
+  a `radiusBig` corner clips it. The compact carousel card is the deliberate
+  exception — its thumbnail has no radius of its own; it inherits the card
+  frame's `radiusSmall` clip, which is the card surface, not the thumbnail.
+
 ## Search the web for conventions before designing
 
 When the UX question is "how do good apps usually present X?" — login flows, empty states, error states, onboarding, pull-to-refresh, list/detail patterns, settings screens, paywalls, billing screens, permission prompts, password reset, account deletion, etc. — **search the web first.** Look at what proven mobile apps actually ship (Stripe, Linear, Notion, Cash App, Robinhood, Airbnb, etc.). Don't guess.
@@ -690,14 +719,28 @@ Scoped / significant dependencies:
 - `mobile_scanner` — the QR check-in camera scanner (`features/qr_checkin/`). Only there.
 - `shared_preferences` — persists the `SelectedMember` identity + the celebration watermark.
 - `google_fonts` — Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
-- `url_launcher` — hands a URI to the OS. Used **only** by the class-detail
-  Location section's "Open in Maps" deep link
-  (`features/class_booking/presentation/widgets/class_location_helpers.dart`:
-  `geo:0,0?q=<encoded>` on Android, `https://maps.apple.com/?q=<encoded>` on
-  iOS). Android 11+ package visibility means the `geo:` intent silently fails
-  unless `android/app/src/main/AndroidManifest.xml`'s `<queries>` block
-  declares a `VIEW` intent for the `geo` (and `https`) schemes — that block is
+- `url_launcher` — hands a URI to the OS. Two call sites, each behind its own
+  helper file (a URI builder + a launcher returning bool, so no `BuildContext`
+  crosses an async gap and a failure surfaces as a `ScaffoldMessenger`
+  SnackBar):
+  - the class-detail Location section's "Open in Maps" deep link
+    (`features/class_booking/presentation/widgets/class_location_helpers.dart`:
+    `geo:0,0?q=<encoded>` on Android, `https://maps.apple.com/?q=<encoded>` on
+    iOS);
+  - **video playback** — there is no in-app player, so every video tap opens
+    YouTube externally
+    (`features/videos/presentation/widgets/video_link_helpers.dart`:
+    `videoUriFor` / `launchVideoFor` / `openVideoFor`, always
+    `LaunchMode.externalApplication` so the YouTube app takes it when
+    installed and the browser otherwise). See *Videos open on YouTube*.
+
+  Android 11+ package visibility means these intents silently fail unless
+  `android/app/src/main/AndroidManifest.xml`'s `<queries>` block declares a
+  `VIEW` intent for the `geo` and `https` schemes — that block is
   load-bearing, don't drop it.
+- `url_launcher_platform_interface` + `plugin_platform_interface` — **dev
+  deps only** (both already transitive; declared so tests may import them).
+  They exist for `test/helpers/fake_url_launcher.dart` — see *Testing*.
 - `material_symbols_icons` — `Symbols.*_sharp` icons.
 - `lottie` — backs **only** the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself (the engine no longer renders Lottie).
 - `path_provider` — used **only** by the dev-only capture harness (`tools/capture/`) to write exported frames. Not part of any shipping screen.
@@ -706,6 +749,11 @@ Scoped / significant dependencies:
 ## Testing
 
 - **Use `bloc_test` + `mocktail`.** Blocs hold the logic, so they get the coverage: build the bloc with a mocked repository, `act` an event, assert the emitted state sequence (loading → loaded/error). Mock repositories and `ApiClient`; never hit a live backend in a test.
+- **`url_launcher` is asserted through the platform interface, not a code
+  seam.** `test/helpers/fake_url_launcher.dart` (`FakeUrlLauncher`) records
+  what the app asked the OS to open; install it with
+  `UrlLauncherPlatform.instance = FakeUrlLauncher()` (pass `succeeds: false`
+  for the "nothing handled it" path). App code stays free of test hooks.
 - `flutter test` before committing.
 
 ## Configuration (dotenv + dart-defines)

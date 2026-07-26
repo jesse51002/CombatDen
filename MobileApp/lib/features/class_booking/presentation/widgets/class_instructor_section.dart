@@ -69,11 +69,11 @@ class _InstructorRow extends StatelessWidget {
               width: _kPfpSize,
               height: _kPfpSize,
               fit: BoxFit.cover,
-              errorBuilder: (_, _, _) => SizedBox(
-                width: _kPfpSize,
-                height: _kPfpSize,
-                child: ColoredBox(color: DesignConstants.card),
-              ),
+              // A headshot that fails to load collapses to nothing, exactly
+              // like an absent one — the same rule the creator avatar uses.
+              // A filled disc where a face should be reads as a broken
+              // profile, which is worse than the bio simply taking the width.
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
             ),
           ),
       ],

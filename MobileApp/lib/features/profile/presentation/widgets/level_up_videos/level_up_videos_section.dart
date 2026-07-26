@@ -8,6 +8,7 @@ import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
 import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/gym_video_carousel_card.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
 
 // A small page of educational videos is plenty for the profile carousel.
 const int _kLevelUpLimit = 10;
@@ -17,7 +18,8 @@ const int _kLevelUpLimit = 10;
 /// supplementary: hidden until the feed loads and when the tenant has no
 /// educational videos, so it never shows a spinner or an error here. Reuses the
 /// videos feature's `GymVideoCard` model + `GymVideoCarouselCard`; tapping a
-/// card is a debugPrint no-op (real playback is a `url_launcher` follow-up).
+/// card opens it on YouTube through the same `openVideoFor` path as the videos
+/// tab.
 class LevelUpVideosSection extends StatefulWidget {
   const LevelUpVideosSection({super.key});
 
@@ -40,8 +42,6 @@ class _LevelUpVideosSectionState extends State<LevelUpVideosSection> {
     );
     return feed.videos;
   }
-
-  void _onTap(GymVideoCard card) => debugPrint('TODO: play ${card.url}');
 
   @override
   Widget build(BuildContext context) {
@@ -84,7 +84,7 @@ class _LevelUpVideosSectionState extends State<LevelUpVideosSection> {
                   for (final video in videos)
                     GymVideoCarouselCard(
                       card: video,
-                      onTap: () => _onTap(video),
+                      onTap: () => openVideoFor(context, video),
                     ),
                 ],
               ),

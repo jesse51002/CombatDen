@@ -5,10 +5,10 @@ import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 /// Full-width video recommendation card.
 ///
 /// Used on `VideosScreen` (via the featured hero wrapper) and on the
-/// recommendation surfaces. Layout: 16:9 thumbnail with rounded
-/// corners, then a row with the creator's avatar, the video title, and a
-/// meta line. Images are [ImageProvider]s so the caller chooses the source
-/// (live network thumbnails go through `cached_network_image`).
+/// recommendation surfaces. Layout: a square-cornered 16:9 thumbnail, then a
+/// row with the creator's avatar, the video title, and a meta line. Images are
+/// [ImageProvider]s so the caller chooses the source (live network thumbnails
+/// go through `cached_network_image`).
 ///
 /// [creatorPfp] is nullable: pass null (via `creatorAvatarProvider`) when the
 /// video carries no avatar and the row renders the text alone, with no
@@ -20,7 +20,7 @@ class VideoReccCard extends StatelessWidget {
     required this.metaLabel,
     required this.thumbnail,
     required this.creatorPfp,
-    this.roundThumbnail = true,
+    this.roundThumbnail = false,
     this.onTap,
   });
 
@@ -31,9 +31,12 @@ class VideoReccCard extends StatelessWidget {
   /// The creator's avatar, or null when the video has none.
   final ImageProvider? creatorPfp;
 
-  /// Rounds the thumbnail's corners. Standalone cards want this; the
-  /// featured card sets it false because its outer surface already rounds
-  /// the top and a rounded thumbnail bottom reads as a notch mid-card.
+  /// Opt-in corner rounding for the thumbnail. Off by default: a YouTube
+  /// thumbnail carries burnt-in text right to its edges, and a `radiusBig`
+  /// corner on a full-width image clips that text. (The featured card's outer
+  /// surface rounds the top anyway, and a rounded thumbnail bottom would read
+  /// as a notch mid-card.) Only turn it on where the design frames the
+  /// thumbnail with enough inset that nothing is lost.
   final bool roundThumbnail;
   final VoidCallback? onTap;
 
