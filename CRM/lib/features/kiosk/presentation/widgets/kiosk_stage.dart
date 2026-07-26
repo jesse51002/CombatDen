@@ -10,6 +10,12 @@ import 'package:crm/core/constants/design_constants.dart';
 /// beneath it — a way out a tall class grid can push below the fold is not a
 /// way out. A [header] pins to the TOP for the same reason: whose plan /
 /// waiver / card this is must not scroll away mid-step.
+///
+/// It is the kiosk's ONE stage, and both lanes sit in it: the check-in
+/// screens mount it directly, and the signup's shared `FlowStepScaffold` is
+/// handed it as its SHELL (see `KioskStepScaffold`). The shared component set
+/// carries no stage of its own — a full-screen kiosk and a staff dialog are
+/// exactly where the two surfaces part company.
 class KioskStage extends StatelessWidget {
   final Widget child;
   final bool center;

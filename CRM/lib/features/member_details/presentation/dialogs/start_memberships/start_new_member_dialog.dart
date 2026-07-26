@@ -17,10 +17,14 @@ import 'package:crm/features/member_details/presentation/dialogs/add_member/dupl
 import 'package:crm/features/member_details/presentation/dialogs/add_member/duplicate_member_panel.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/member_create_form.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/payer_waiver_sign_body.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
-import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_payer_pane.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_person_copy.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_foot.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_note.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_panel.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_terminal.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 
 enum _Phase { create, duplicate, sign, success, error }
 
@@ -51,6 +55,11 @@ class StartNewMemberResult {
 /// The PAYER signs the payee's authorized-payer waiver. On the duplicate
 /// branch, "use existing" either selects an already-related member directly or
 /// runs the same authorize chain for them.
+///
+/// Two things carry across every phase. The create form stays MOUNTED, so a
+/// duplicate warning mid-form costs nobody a retype; and nothing on it turns
+/// red until the primary has been pressed once, because a form that scolds
+/// while it is being filled in teaches staff to ignore it.
 ///
 /// Composes the SAME shared pieces as [StartLinkMemberDialog]
 /// ([PayerWaiverSignBody] + `LinkParentRequested` + the settle detection);
@@ -132,6 +141,7 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   String? _otherId;
   String _otherName = '';
   String _waiverBody = '';
+  String? _waiverName;
   String? _waiverVersionId;
   bool _fetchingWaiver = false;
   String? _waiverError;
@@ -155,6 +165,12 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
       otherName: _otherName,
     );
   }
+
+  String get _payerName =>
+      _parties?.payerName ?? StartPersonCopy.fallbackPayer;
+
+  String get _payeeName =>
+      _parties?.payeeName ?? StartPersonCopy.fallbackPayee;
 
   // ----- Create-bloc reactions -----
 
@@ -246,12 +262,13 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
         _fetchingWaiver = false;
         _waiverVersionId = waiver.versionId;
         _waiverBody = waiver.body;
+        _waiverName = waiver.name;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _fetchingWaiver = false;
-        _waiverError = "We couldn't load the waiver. Please try again.";
+        _waiverError = StartPersonCopy.waiverLoadFailed;
       });
     }
   }
@@ -321,15 +338,24 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
       child: BlocBuilder<MemberCreateBloc, MemberCreateState>(
         builder: (context, createState) {
           final creating = createState is MemberCreateSubmitting;
-          return AppDialog(
+          return TaskDialog(
+            what: StartPersonCopy.createWhat(widget.direction),
+            // Disabled only while the authorization is in flight — the one
+            // moment leaving would strand a commit nobody has read yet.
+            onClose:
+                _submitting ? null : () => Navigator.of(context).pop(),
+            closeTooltip: StartPersonCopy.closeSemantic,
             title: _title,
-            // The wide surface, hugging its content height: the create form
-            // was designed at the entry flow's 760 content measure (three
-            // fields to a row), and the width lets the three-button duplicate
-            // footer fit — 480 cramped both.
-            maxWidth: DesignConstants.dialogMaxWidthWide,
+            subtitle: _subtitle,
+            expanded: true,
+            // The signing phase hands its two panels the whole fold; every
+            // other phase scrolls.
+            fillBody: _phase == _Phase.sign,
+            // The form was designed at the entry flow's content measure
+            // (three fields to a row); 480 cramps it into unreadable columns.
+            maxWidth: DesignConstants.dialogContentMaxWidth,
             body: _body(),
-            actions: _actions(context, creating),
+            foot: _foot(context, creating),
           );
         },
       ),
@@ -339,99 +365,105 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   String get _title {
     switch (_phase) {
       case _Phase.create:
-        return 'New member';
+        return StartPersonCopy.createWhat(widget.direction);
       case _Phase.duplicate:
-        return 'Possible duplicate';
+        return StartPersonCopy.duplicateTitle;
       case _Phase.sign:
-        return 'Authorize payer';
+        return StartPersonCopy.signTitle(_payerName, _payeeName);
       case _Phase.success:
-        return 'Member added';
+        return _kSuccessTitle;
       case _Phase.error:
-        return 'Something went wrong';
+        return _kErrorTitle;
+    }
+  }
+
+  String? get _subtitle {
+    switch (_phase) {
+      case _Phase.create:
+        return StartPersonCopy.createSubtitle(
+          direction: widget.direction,
+          gymName: selectedGym.gymName ?? '',
+          anchorName: widget.anchorName,
+        );
+      case _Phase.duplicate:
+        return StartPersonCopy.duplicateSubtitle(_matches.length);
+      case _Phase.sign:
+        return StartPersonCopy.signSubtitle;
+      case _Phase.success:
+      case _Phase.error:
+        return null;
     }
   }
 
   Widget _body() {
-    final parties = _parties;
-    // Centered at the entry flow's content measure so the form reads
-    // identically to AddMemberChrome's create phase; the Center also pins
-    // the wide surface to a stable width across phases.
-    return Center(
-      child: SizedBox(
-        width: DesignConstants.dialogContentMaxWidth,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // The create form stays mounted so entered values survive a
-            // "back to edit" round-trip from the duplicate step.
-            Offstage(
-              offstage: _phase != _Phase.create,
-              child: MemberCreateForm(key: _formKey),
-            ),
-            if (_phase == _Phase.duplicate)
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // The create form stays mounted so entered values survive a
+        // "back to edit" round-trip from the duplicate step.
+        Offstage(
+          offstage: _phase != _Phase.create,
+          child: TaskPanel(
+            children: [
+              const TaskNote(StartPersonCopy.createFieldsNote),
+              MemberCreateForm(key: _formKey),
+            ],
+          ),
+        ),
+        if (_phase == _Phase.duplicate)
+          TaskPanel(
+            children: [
               DuplicateMemberPanel(
                 matches: _matches,
                 selectedMatchId: _selectedMatchId ?? '',
                 onSelect: (id) => setState(() => _selectedMatchId = id),
               ),
-            if (_phase == _Phase.sign) _signBody(),
-            if (_phase == _Phase.success)
-              _Terminal(
-                icon: Symbols.check_circle_sharp,
-                color: DesignConstants.goodGreen,
-                message: '${parties?.payerName ?? 'The payer'} is now '
-                    'authorized to pay for '
-                    '${parties?.payeeName ?? 'this member'}.',
-              ),
-            if (_phase == _Phase.error)
-              _Terminal(
-                icon: Symbols.error_sharp,
-                color: DesignConstants.badRed,
-                message: _errorMessage ?? 'An unexpected error occurred.',
-              ),
-          ],
-        ),
-      ),
+              const Hairline(),
+              const TaskNote(StartPersonCopy.duplicateConsequences),
+            ],
+          ),
+        if (_phase == _Phase.sign)
+          Expanded(
+            child: AuthorizePayerPane(
+              fetching: _fetchingWaiver,
+              error: _waiverError,
+              payerName: _payerName,
+              payeeName: _payeeName,
+              gymName: selectedGym.gymName ?? '',
+              waiverBody: _waiverBody,
+              waiverName: _waiverName,
+              submitting: _submitting,
+              onChanged: (name, consent) => setState(() {
+                _signerName = name;
+                _consent = consent;
+              }),
+            ),
+          ),
+        if (_phase == _Phase.success)
+          TaskTerminal(
+            icon: Symbols.check_circle_sharp,
+            color: DesignConstants.goodGreen,
+            message: StartPersonCopy.signSuccess(_payerName, _payeeName),
+          ),
+        if (_phase == _Phase.error)
+          TaskTerminal(
+            icon: Symbols.error_sharp,
+            color: DesignConstants.badRed,
+            message: _errorMessage ?? StartPersonCopy.unexpectedError,
+          ),
+      ],
     );
   }
 
-  Widget _signBody() {
-    if (_fetchingWaiver) {
-      return const SizedBox(
-        height: DesignConstants.dialogProcessingHeight,
-        child: Center(child: AppSpinner()),
-      );
-    }
-    if (_waiverError != null) {
-      return _Terminal(
-        icon: Symbols.error_sharp,
-        color: DesignConstants.badRed,
-        message: _waiverError!,
-      );
-    }
-    final parties = _parties;
-    return PayerWaiverSignBody(
-      payerName: parties?.payerName ?? 'The payer',
-      payeeName: parties?.payeeName ?? 'this member',
-      gymName: selectedGym.gymName ?? '',
-      waiverBody: _waiverBody,
-      enabled: !_submitting,
-      onChanged: (name, consent) => setState(() {
-        _signerName = name;
-        _consent = consent;
-      }),
-    );
-  }
-
-  Widget? _actions(BuildContext context, bool creating) {
+  Widget? _foot(BuildContext context, bool creating) {
     switch (_phase) {
       case _Phase.create:
-        return AppDialogActions(
-          primaryLabel: 'Create member',
-          isLoading: creating,
-          primaryOnPressed: creating ? null : _onCreate,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: () => Navigator.of(context).pop(),
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.createPrimary,
+          busy: creating,
+          onPrimary: creating ? null : _onCreate,
+          secondaryLabel: StartPersonCopy.cancel,
+          onSecondary: () => Navigator.of(context).pop(),
         );
       case _Phase.duplicate:
         return DuplicateFooter(
@@ -446,12 +478,12 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
           onUseExisting: _onUseExisting,
         );
       case _Phase.sign:
-        return AppDialogActions(
-          primaryLabel: 'Authorize payer',
-          isLoading: _submitting,
-          primaryOnPressed: _canSign ? _confirmSign : null,
-          secondaryLabel: 'Back',
-          secondaryOnPressed: _submitting
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.signPrimary,
+          busy: _submitting,
+          onPrimary: _canSign ? _confirmSign : null,
+          secondaryLabel: StartPersonCopy.back,
+          onSecondary: _submitting
               ? null
               : () {
                   context
@@ -463,43 +495,13 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
       case _Phase.success:
         return null;
       case _Phase.error:
-        return AppDialogActions(
-          primaryLabel: 'Close',
-          primaryOnPressed: () => Navigator.of(context).pop(),
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.close,
+          onPrimary: () => Navigator.of(context).pop(),
         );
     }
   }
 }
 
-/// A centered icon + message terminal (success / error).
-class _Terminal extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  final String message;
-
-  const _Terminal({
-    required this.icon,
-    required this.color,
-    required this.message,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Icon(
-          icon,
-          size: DesignConstants.iconSizeBig,
-          weight: DesignConstants.iconWeight,
-          color: color,
-        ),
-        Text(
-          message,
-          style: DesignConstants.p.copyWith(color: DesignConstants.text),
-        ),
-      ],
-    );
-  }
-}
+const String _kSuccessTitle = 'Member added';
+const String _kErrorTitle = 'Something went wrong';

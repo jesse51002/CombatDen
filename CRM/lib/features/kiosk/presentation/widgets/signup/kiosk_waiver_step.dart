@@ -8,13 +8,14 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_sign_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_doc_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_status.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
 /// D4 — read the waiver, type your name, sign. One waiver at a time in the
@@ -113,30 +114,40 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
       },
       builder: (context, state) {
         final controller = _controller;
-        return KioskSignupStepScaffold(
+        final copy = MembershipFlowTheme.copyOf(context);
+        return KioskStepScaffold(
           step: KioskSignupStep.waivers,
-          title: _title(state),
-          subtitle: _subtitle(state),
+          title: copy.waiverStepTitle(
+            firstName: state.activePerson.firstName,
+            isGroup: state.isGroup,
+          ),
+          subtitle: copy.waiverStepSubtitle(
+            index: state.waiverIndex,
+            total: state.waiverQueue.length,
+            planName: state.selectedPlan?.planName,
+            firstName: state.activePerson.firstName,
+          ),
           // Pinned: a parent signing four documents in a row must never lose
           // track of which child they are binding. "WAIVER FOR", not "SIGNING
           // FOR" — the panel beside the document already carries the latter.
           identity: state.isGroup
-              ? KioskWhoFor(
+              ? FlowWhoFor(
                   eyebrow: 'WAIVER FOR',
                   name: _memberName(state),
                 )
               : null,
           // The document takes the fold; it scrolls inside its own panel.
           fillBody: true,
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             primaryLabel: 'Sign and continue',
             onPrimary: _canSign(state)
                 ? () => cubit.signWaiver(signerName: _signerName.text)
                 : null,
             onBack: state.submitting ? null : cubit.back,
+            onEscape: cubit.abandon,
           ),
           child: controller == null
-              ? KioskWaiverStatus(
+              ? FlowWaiverStatus(
                   loading: state.waiverLoading,
                   failed: state.waiverFailed,
                   onRetry: cubit.retryWaiver,
@@ -157,25 +168,6 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
     );
   }
 
-  /// Whose signature this screen is collecting. In a group the title names them
-  /// on EVERY turn, the payer's own included — one unnamed screen in a run of
-  /// named ones is exactly where the wrong person gets bound.
-  String _title(KioskSignupState state) {
-    if (!state.isGroup) return 'One signature and you\'re in';
-    final first = state.activePerson.firstName.trim();
-    if (first.isEmpty) return 'One signature and you\'re in';
-    return '$first\'s waiver';
-  }
-
-  /// "Required for Unlimited · waiver 1 of 2" — the plan that asked for it and
-  /// where the member is in the run.
-  String _subtitle(KioskSignupState state) {
-    final total = state.waiverQueue.length;
-    final position = '${state.waiverIndex + 1} of $total';
-    final plan = state.selectedPlan?.planName;
-    if (plan == null || plan.trim().isEmpty) return 'Waiver $position';
-    return 'Required for ${plan.trim()} · waiver $position';
-  }
 }
 
 /// The document beside the signing panel — the document is the wider half
@@ -210,12 +202,12 @@ class _Body extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.waiverStale)
-          const KioskInlineNotice(
+          const FlowInlineNotice(
             message: 'The gym updated this waiver — please read and sign the '
                 'new version.',
           ),
         if (state.waiverFailed)
-          KioskInlineNotice(
+          FlowInlineNotice(
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),
@@ -229,7 +221,7 @@ class _Body extends StatelessWidget {
             children: [
               Expanded(
                 flex: 3,
-                child: KioskWaiverDocPanel(
+                child: FlowWaiverDocPanel(
                   title: waiver.name,
                   versionLabel: version == null ? null : 'Version $version',
                   controller: controller,
@@ -238,7 +230,7 @@ class _Body extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
-                  child: KioskSignPanel(
+                  child: FlowSignPanel(
                     memberName: memberName,
                     signerName: signerName,
                     onSignerNameChanged: onSignerNameChanged,

@@ -7,7 +7,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
 
 /// D8 — the card was refused, as a popup acknowledgement over the flow.
 ///
@@ -79,7 +79,7 @@ class KioskDeclinedScreen extends StatelessWidget {
                           ),
                           textAlign: TextAlign.center,
                         ),
-                        KioskCardChip(
+                        FlowCardChip(
                           brand: state.cardBrand,
                           last4: state.cardLast4,
                         ),

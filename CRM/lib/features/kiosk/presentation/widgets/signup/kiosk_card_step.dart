@@ -7,13 +7,14 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_facts.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_secure_strip.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_secure_strip.dart';
 
 /// D5 — the card, and the trust screen around it.
 ///
@@ -85,9 +86,10 @@ class _KioskCardStepState extends State<KioskCardStep> {
           prev.cardAttempt != cur.cardAttempt,
       builder: (context, state) {
         final payerName = _payerName(state);
-        return KioskSignupStepScaffold(
+        final copy = MembershipFlowTheme.copyOf(context);
+        return KioskStepScaffold(
           step: KioskSignupStep.card,
-          title: 'Your card',
+          title: copy.paymentStepTitle,
           // In a group the "active person" is whoever signed last, so a plan
           // name here would be a fact about somebody who may not be paying.
           subtitle: state.isGroup ? null : state.selectedPlan?.planName,
@@ -95,16 +97,18 @@ class _KioskCardStepState extends State<KioskCardStep> {
           // this is the profile the card lands on, so it has to be pinned.
           identity: payerName.isEmpty
               ? null
-              : KioskWhoFor(eyebrow: 'CARD FOR', name: payerName),
-          foot: KioskFlowFoot(
+              : FlowWhoFor(eyebrow: 'CARD FOR', name: payerName),
+          foot: FlowFoot(
             primaryLabel: 'Review',
             onPrimary: _complete && !_tokenizing ? _review : null,
             onBack: _tokenizing ? null : cubit.back,
-            confirmAbandon: true,
+            // Real work would die here, so leaving ASKS first — the card and
+            // the review are the only two steps that confirm.
+            onEscape: cubit.askAbandon,
           ),
-          child: KioskSignupFormPanel(
+          child: FlowFormPanel(
             children: [
-              KioskSecureStrip(gymName: gym),
+              FlowSecureStrip(gymName: gym),
               CardFieldBox(
                 // A fresh, empty Stripe iframe per attempt: `retryCard()` bumps
                 // `cardAttempt` so this re-keys, otherwise the cached field
@@ -120,7 +124,7 @@ class _KioskCardStepState extends State<KioskCardStep> {
               // Deliberately heavier than the ticked facts below it: what
               // happens to the card is something to REGISTER, not a
               // reassurance.
-              KioskInlineNotice(message: _savedCardNotice(payerName)),
+              FlowInlineNotice(message: _savedCardNotice(payerName)),
               KioskCardFacts(hasRecurring: state.cartHasRecurring),
             ],
           ),

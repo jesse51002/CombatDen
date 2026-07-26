@@ -31,6 +31,16 @@ class AppDialog extends StatelessWidget {
   final Widget? actions;
   final bool showCloseButton;
 
+  /// Replaces the default [AppDialogTitle] row.
+  ///
+  /// For the workflow surfaces whose top band carries more than a name — the
+  /// start-memberships wizard states WHOSE record it was opened from and how
+  /// far through the run it is, facts a title row has nowhere to put. It is a
+  /// slot rather than three more parameters, so no other dialog grows a
+  /// concept it does not have; [title] stays required either way, because a
+  /// dialog with no name is unreadable to a screen reader.
+  final Widget? titleBar;
+
   /// The dialog's width cap. Compact dialogs keep the
   /// default; workflow surfaces pass
   /// [DesignConstants.dialogMaxWidthWide].
@@ -50,6 +60,7 @@ class AppDialog extends StatelessWidget {
     required this.body,
     this.actions,
     this.showCloseButton = true,
+    this.titleBar,
     this.maxWidth = DesignConstants.dialogMaxWidth,
     this.expanded = false,
     this.contentPadding = const EdgeInsets.all(
@@ -113,10 +124,11 @@ class AppDialog extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         spacing: DesignConstants.spacingLarge,
         children: [
-          AppDialogTitle(
-            title: title,
-            showCloseButton: showCloseButton,
-          ),
+          titleBar ??
+              AppDialogTitle(
+                title: title,
+                showCloseButton: showCloseButton,
+              ),
           if (expanded)
             // Workflow surface: the body fills the fixed
             // height and owns its own scrolling.

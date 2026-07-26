@@ -5,8 +5,8 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/validators.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_field_box.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_field_pair.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_box.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_pair.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
@@ -88,9 +88,9 @@ class _KioskPersonAdderState extends State<KioskPersonAdder> {
       children: [
         const Hairline(),
         _Head(onFindExisting: cubit.openMatchSearch),
-        KioskSignupFieldPair(
+        FlowFieldPair(
           children: [
-            KioskFieldBox(
+            FlowFieldBox(
               controller: _firstName,
               label: 'First name',
               hintText: 'Theo',
@@ -98,7 +98,7 @@ class _KioskPersonAdderState extends State<KioskPersonAdder> {
               textInputAction: TextInputAction.next,
               onChanged: (_) => setState(() {}),
             ),
-            KioskFieldBox(
+            FlowFieldBox(
               controller: _lastName,
               label: 'Last name',
               hintText: 'Bell',
@@ -108,7 +108,7 @@ class _KioskPersonAdderState extends State<KioskPersonAdder> {
             ),
           ],
         ),
-        KioskFieldBox(
+        FlowFieldBox(
           controller: _email,
           label: 'Email',
           hintText: 'theo.bell@example.com',

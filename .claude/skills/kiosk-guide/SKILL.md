@@ -355,7 +355,7 @@ that matters most:
   signups" list in the CRM, so the front desk can finish or delete the shell —
   not a nightly sweep, which would destroy a signed waiver.)
 - **The results receipt**, on both branches. Money has moved by then, so there is
-  nothing to start over; it uses `KioskResultsFoot` rather than `KioskFlowFoot`
+  nothing to start over; it uses `KioskResultsFoot` rather than `FlowFoot`
   for exactly that reason (§11.6).
 
 `KioskEscapeFoot` (`widgets/kiosk_escape_foot.dart`) is the built instance: a
@@ -479,8 +479,11 @@ reasons, and they are different rules with different scopes:
 | `trialUsed` | per MEMBER — any prior trial closes EVERY trial plan | `Already used` | **no** |
 | `alreadyOnPlan` | per PLAN — this exact recurring plan is already held | `You have this` | **yes** |
 
-**One popup serves both** (`widgets/signup/kiosk_plan_block.dart`,
-`KioskPlanBlock`) and **one blocked visual serves both** (`KioskPlanCard`'s
+**One popup serves both**
+(`presentation/widgets/signup/kiosk_plan_block.dart`, `KioskPlanBlock` — the
+popup is KIOSK-ONLY, because it carries the auto-return countdown and the
+lane's member-voice wording; the desk has neither)
+and **one blocked visual serves both** (the SHARED `FlowPlanCard`'s
 `blocked` state: `Opacity(0.45)`, the tag pinned top-LEFT over the hero because
 the top-right belongs to the select mark, the select mark dropped entirely, and
 the card still **tappable** so the tap opens the answer instead of a silent
@@ -586,15 +589,23 @@ conflicts on `plan_id = ANY(:plan_ids)` with `status IN ('active','frozen')` AND
   `dormant` and `trial` are still excluded: neither can mask a raw
   `active`/`frozen` **recurring** row.
 
-**Both clients now derive this ONE rule from that ONE guard.** The CRM's own
-`start_plan_rules.dart` (`disabledPlanReasons`) was aligned to the same
-recurring + `{active, frozen, overdue}` shape, so a divergence in either
-direction is a bug rather than a deliberate asymmetry — the only difference that
-remains is the CONSEQUENCE: at a desk a false block is visible and staff reason
-about it, while at a kiosk it silently turns away a paying customer with no
-override. The kiosk still does not IMPORT `start_plan_rules.dart` (the kiosk is
-kiosk-native presentation over the shared data layer), so the two must be kept
-in step by hand: **change one, check the other, and both against the SQL.**
+**Both clients now derive this ONE rule from that ONE guard — through ONE
+module.** The rule lives in `lib/features/membership_flow/domain/plan_rules.dart`
+as `RecurringHeldGate` (recurring + `{active, frozen, overdue}`, carrying the
+display-vs-DB status comment), and BOTH surfaces import it: the CRM wizard
+through `disabledPlanReasons`, the kiosk through
+`KioskSignupState.planBlockReasonFor` and the `heldRecurringPlanIds` derivation
+in `KioskSignupCubit._readPlanHistory`. There is no longer a hand-kept copy to
+drift — **change the gate, and check it against the SQL.** The only difference
+that remains is the CONSEQUENCE: at a desk a false block is visible and staff
+reason about it, while at a kiosk it silently turns away a paying customer with
+no override.
+
+The kiosk's own trial rule sits in the same module as `TrialOnceGate`, and gates
+are a SEALED hierarchy — `planBlockReasonFor` switches exhaustively over it, so
+a new gate cannot ship without the kiosk saying what it means. Advisory rules
+are a separate type (`PlanNote`, e.g. `PastTrialNote`) precisely so an advisory
+can never quietly become a block.
 
 **Zero new requests, and the ids live on the PERSON.** The held set is derived
 from the SAME `getMemberDetail` response the trial rule already fetches, and is
@@ -611,7 +622,7 @@ failure the kiosk does not know WHICH plan somebody holds, so a fail-closed
 posture would have to block the whole grid — the worst outcome available. The
 cost of failing open is the dead end above; it is accepted, not airtight.
 
-**The membership is STATED, not only marked.** `KioskInlineNotice` at the top of
+**The membership is STATED, not only marked.** `FlowInlineNotice` at the top of
 the plan step's body says which plan they are on before they start picking, so
 the marked card has an answer above it and not only behind a tap. It is
 self-gating (nothing held → no notice), so a brand-new member never sees it. See
@@ -670,7 +681,7 @@ paying before"; a link or a signature is the ONE thing that pins the payer.
 `KioskSignupPerson.training` is the same control on **every** roster row —
 "{Name} is getting a membership as well", or "I'm getting a membership" on a
 roster of one, where the comparison has nobody to be against — rendered with
-the shipped `KioskConsentCheck` and **defaulting ON** for everybody: payer,
+the shipped `FlowConsentCheck` and **defaulting ON** for everybody: payer,
 payee, created here or adopted. A payer-only special case was one more thing
 to explain on a screen that has to explain itself.
 
@@ -696,7 +707,7 @@ exactly this, and so is a member who registers today and buys later.
 
 **Somebody halfway through a family signup may decide they don't want a
 membership after all** (founder ruling), so the plan step carries a
-**`Skip`** control in `KioskFlowFoot`'s right-hand Skip gutter —
+**`Skip`** control in `FlowFoot`'s right-hand Skip gutter —
 the same gutter the optional-details step's Skip uses, a full stage away from the
 escape and from the primary.
 
@@ -717,7 +728,7 @@ escape and from the primary.
 
 The label is the bare verb `Skip`: the pinned identity band already says who
 is being skipped ("PICKING FOR · Ella"), so repeating it in the gutter would say
-the same thing twice. It deliberately overrides `KioskFlowFoot`'s default
+the same thing twice. It deliberately overrides `FlowFoot`'s default
 `Skip for now`, which would promise a later that does not exist here.
 
 #### Removing somebody asks first — the payer included
@@ -827,19 +838,19 @@ optional `fieldKey` (null for every non-kiosk caller) for exactly this.
 — never off `activePersonIndex`.** In a family the active person is usually a
 child while the payer is the parent, so a name taken from the wrong place would
 be confidently wrong about which profile a card attaches to, which is worse
-than naming nobody. The `KioskWhoFor` strip carries it ("CARD FOR Marcus
+than naming nobody. The `FlowWhoFor` strip carries it ("CARD FOR Marcus
 Bell"), and the notice under the field attaches the same name to the promise, so
 *saved*, *to whom* and *what it displaces* are one sentence. With no name to
 hand it degrades to "your profile" rather than to a wrong one. The card step's
 subtitle is dropped in a group for the same reason: `selectedPlan` reads the
 active person's plan, which at that point is whoever signed last.
 
-**The body order is `[KioskSecureStrip] → [CardFieldBox] → [error?] →
-[KioskInlineNotice] → [KioskCardFacts]`, and each position is an argument.**
+**The body order is `[FlowSecureStrip] → [CardFieldBox] → [error?] →
+[FlowInlineNotice] → [KioskCardFacts]`, and each position is an argument.**
 The secure strip sits ABOVE the field because it answers "is it safe to type
 this here", which has to arrive before the box does. The replacement notice sits
 BELOW it because it is a what-happens-afterwards fact — and it rides
-`KioskInlineNotice` (17px `kioskBody` on the warm fill, 24px glyph) rather than
+`FlowInlineNotice` (17px `kioskBody` on the warm fill, 24px glyph) rather than
 joining `KioskCardFacts`, whose lines each sit behind a GREEN CHECK meaning
 *good news, don't worry*. Rendering "we are replacing your card" as a green tick
 would be actively misleading. What is left in the facts block is genuinely
@@ -850,13 +861,34 @@ you walk away…".
 **It is enforced in CI, not by convention.**
 `CRM/test/features/kiosk/kiosk_forbidden_imports_test.dart` walks every file
 under `CRM/lib/features/kiosk/` and fails on an import of `saved_card_section`
-· `one_time_card_dialog` · `update_card_dialog` · `discount_picker_dialog` ·
-`draft_discounts_card` · `added_discount_chip` · any `custom_discount_*` ·
-`live_discounted_price` · `start_payer_step` · `choose_payer_view` ·
+· `one_time_card_dialog` · `update_card_dialog` · anything under
+`membership_flow/discounts/` (the staff-only discount UI + math, banned as a
+DIRECTORY so the entry cannot go stale one renamed widget at a time) · any
+`custom_discount_*` · `change_payer_dialog` · `choose_payer_view` ·
 `payer_radio_tile`, and separately fails on the word "discount" appearing
 anywhere in the kiosk feature at all. It also asserts each guarded file still
 EXISTS, so a rename can't silently turn the ban into theatre — if one of those
 modules is legitimately renamed, rename it in both lists in the same change.
+
+**It walks the SHARED component set too**
+(`CRM/lib/features/membership_flow/presentation/`, plus a
+`membership_flow/chrome/` root in case the layer is ever hoisted), because
+the kiosk renders every file in it: without that, moving a widget out of
+`lib/features/kiosk/` would be enough to escape the ban. The shared set
+carries the kiosk's list PLUS two of its own — no `membership_flow/discounts/`
+import (the staff-only discount UI + math) and no
+`features/member_details/presentation/dialogs/` import (staff tooling OVER the
+flow, which a member-facing surface can never open). A staff-only capability
+is INJECTED by the host that owns it as an OBJECT: `MembershipFlowConfig` (
+`membership_flow/config/`) carries a `DiscountsCapability?`, and
+`MembershipFlowConfig.kiosk()` **has no discounts parameter to pass**, so the
+discount code is unreachable rather than switched off — which is what keeps
+the no-discounts rule structural rather than a `showDiscounts: false` default.
+The same config names the surface's other capability differences in that one
+place: its scale, its copy, its plan gates and notes, its `CartPolicy` (one
+membership at one unit on the kiosk) and its `IdentityPolicy` (masked on the
+kiosk, full at the desk — `kioskMaskedEmail` is now that policy's masked
+reading, so the two cannot drift).
 
 Those bans are on the **CRM's own** payer-selection and saved-card surfaces,
 which offer a card the kiosk did not take. The kiosk's own payer picker is not
@@ -874,10 +906,23 @@ membership.
 
 The invariant: **`grep -ri discount CRM/lib/features/kiosk/` returns
 nothing**, and the forbidden-imports test above is what keeps it that way.
-Phase D does not reuse the CRM's `start_memberships/` wizard at all — it is
-kiosk-native presentation over the existing data layer, precisely so the kiosk
-is never dragged through a future discount change; `add_member/` and
-`start_memberships/` are READ-ONLY pattern references.
+The kiosk reuses none of the CRM's `start_memberships/` widgets: what the two
+surfaces share is the module BELOW both of them (`features/membership_flow/` —
+the rulebook, the component set, the two configs), never the desk's own screens.
+`add_member/` and `start_memberships/` stay READ-ONLY pattern references, so
+the kiosk is never dragged through a future discount change.
+
+**The kiosk's step HEADS now come from copy too.** Every signup step's title
+and subtitle is a member of `KioskFlowCopy` rather than a literal (or a private
+`_title` / `_subtitle`) in the step widget — the six steps both surfaces walk
+answer the shared `MembershipFlowCopy` contract (`rosterStepTitle`,
+`planStepTitle`, `waiverStepTitle`, `reviewStepTitle`, `paymentStepTitle`,
+`resultsStepTitle` and their subtitles), and the eight kiosk-ONLY steps (entry
+choice, identify, details, optional, match, payer pick, payer match, payer
+waiver) carry their heads as non-override members of the same class, reached
+through the one `kioskStepCopy(context)` helper. A kiosk-only head must never
+be pushed up onto the abstract class: the desk would have to answer it with a
+lie. `KioskCardStep`'s subtitle stays the plan NAME — that is data, not copy.
 
 ---
 
@@ -1155,7 +1200,7 @@ kioskStatement 22 · kioskFieldText 22 · kioskTitle 21 ·
 kioskButtonPrimaryLabel 19 · kioskName 19 · kioskSubtitle 18 ·
 kioskButtonOutlineLabel 17 · kioskButtonGhostLabel 17 · kioskBody 17 ·
 kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 · kioskMicro 13 ·
-kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
+kioskMonoValue 13 · eyebrow 12 · tag 11
 ```
 
 **Never re-scale one kiosk role on its own.** A half-applied ramp is the same bug
@@ -1167,11 +1212,11 @@ kiosk call site ever restates a size**, and the admin ramp (`h1`/`h2`/`h3`/`p`,
 guard: it fails if the ladder stops descending, if a button label out-sizes a
 heading, or if the admin sizes drift.
 
-**Ghost is the ESCAPE tier and nothing else uses it** — `KioskEscapeFoot` and
-`KioskFlowFoot`'s left gutter are its only call sites, which is what makes the
-rule above true rather than aspirational.
+**Ghost is the ESCAPE tier and nothing else uses it** — `KioskEscapeFoot`
+(check-in lane) and `FlowFoot`'s left gutter (signup lane) are its only call
+sites, which is what makes the rule above true rather than aspirational.
 
-`KioskFlowFoot` lays those three slots out as a **Stack, not a three-way Row**,
+`FlowFoot` lays those three slots out as a **Stack, not a three-way Row**,
 and that is a robustness property rather than a style: the decision pair is
 centred on the WHOLE band, so its optical centre is identical on a step with a
 Skip and a step without — and the longest primary the foot ever carries
@@ -1181,28 +1226,35 @@ band simply gets tight. `kiosk_signup_chrome_test.dart` holds it at 1180×820 an
 1024×700. It renders a back-chevron, so putting
 a non-escape action on it read as a way *out* of the flow; every secondary
 action that is a way *in* ("Add someone new", "or find an existing member",
-"Change who is paying") rides `KioskOutlineButton` instead.
+"Change who is paying") rides the secondary tier instead.
 
 A shared widget the kiosk reuses gets an **opt-in, not a fork** — `ClassCard`
 takes a `kiosk` flag, `ClassMetaChip` a `textStyle`, `AppSearchBox` a
 `textStyle` + `hintColor` — so admin defaults stay exactly as they were.
 
-Every kiosk button goes through `KioskPrimaryButton` / `KioskOutlineButton` /
-`KioskGhostButton` (`widgets/kiosk_buttons.dart`), the only place the three
-button tokens and their paddings are applied. The ladder is loudest-first:
-primary (gradient) > outline (2px ink) > **ghost** — the *escape* tier, the only
-one used for LEAVING a flow, demoted by WEIGHT rather than size (it keeps 17px
-because a member still has to find it from 2m). `KioskPrimaryButton` also takes
-`compact: true`, which keeps the gradient (still the primary tier) but borrows
-the outline button's label + padding tokens rather than declaring a third size —
-for a filled button that must sit beside a secondary one without out-shouting it
-(the home adopt strip's *Get it* is its one user).
+Every kiosk button goes through ONE of two wrappers, and they are the only
+places the three button tokens and their paddings are applied:
+`KioskPrimaryButton` / `KioskOutlineButton` / `KioskGhostButton`
+(`widgets/kiosk_buttons.dart`) for the CHECK-IN lane, and
+`FlowPrimaryButton` / `FlowOutlineButton` / `FlowGhostButton`
+(`features/membership_flow/presentation/chrome/flow_buttons.dart`) for the
+SIGNUP lane. The flow pair reads its metrics off `MembershipFlowScale`
+(§8.1b) rather than naming a `kiosk*` token, which is what lets the same
+component render at the desk's scale later; at `MembershipFlowScale.kiosk()`
+the two sets resolve to identical values. The ladder is loudest-first in
+both: primary (gradient) > outline (2px ink) > **ghost** — the *escape* tier,
+the only one used for LEAVING a flow, demoted by WEIGHT rather than size (it
+keeps 17px because a member still has to find it from 2m). Both primaries
+take `compact: true`, which keeps the gradient (still the primary tier) but
+borrows the outline button's label + padding tokens rather than declaring a
+third size — for a filled button that must sit beside a secondary one without
+out-shouting it (the home adopt strip's *Get it* is its one user).
 
 The signup lane's own controls follow the same discipline. Its footer's Skip
-rides `KioskOutlineButton` exactly like Back rather than styling an
+rides `FlowOutlineButton` exactly like Back rather than styling an
 `AppOutlineButton` at the call site (the mockup's quieter "soft outline" rung
 does not exist as a token, and half-adding it is how a ramp desyncs); its
-input is `KioskFieldBox`, which reuses `KioskNameSearch`'s box geometry and
+input is `FlowFieldBox`, which reuses `KioskNameSearch`'s box geometry and
 `kioskFieldText` verbatim and only adds the focus/error border pair.
 
 **A kiosk surface built on the shared `AppDialog` keeps the DIALOG's own
@@ -1218,9 +1270,18 @@ composition instead — see the abandon confirm in §2.)
 ### 8.1a A signup step's TOP BAND is pinned, exactly like its footer
 
 `KioskStage` pins a `header` to the top of the fold the same way it pins a
-`footer` to the bottom, and `KioskSignupStepScaffold` puts the step rail, the
-screen head (title + one answering line) and an optional identity strip in it.
-The body scrolls beneath.
+`footer` to the bottom, and the shared `FlowStepScaffold` puts the step rail,
+the screen head (title + one answering line) and an optional identity strip in
+it. The body scrolls beneath.
+
+**The stage is the HOST's, not the shared set's.** `FlowStepScaffold` assembles
+those bands into a `FlowShellParts` and hands them to a `shell` builder;
+`KioskStepScaffold` (`presentation/widgets/signup/kiosk_step_scaffold.dart`) is
+the kiosk's binding of it — the shell is `KioskStage` and the rail is read off
+`KioskSignupCubit` through `kioskRailIndex`. The desk binds the same scaffold
+to its dialog body and its own step spine. A full-screen kiosk and a staff
+dialog are exactly where the two surfaces part company, so the shared module
+owns no stage at all.
 
 **The reason is correctness, not tidiness.** The plan step is walked once per
 training person and the waiver run once per person per document, so "who is
@@ -1229,7 +1290,8 @@ scrolling away the moment anyone touched the grid or the document. The cost of
 losing it is the wrong membership bought for the wrong child, or a card
 attached to the wrong profile.
 
-`widgets/signup/kiosk_who_for.dart` is the ONE identity element, `KioskSignPanel`'s
+`membership_flow/presentation/chrome/flow_who_for.dart` is the ONE identity
+element, `FlowSignPanel`'s
 "signing for" banner laid on its side (avatar + eyebrow + name). Three call
 sites, and **who they name is not the same question**:
 
@@ -1253,18 +1315,19 @@ ones is ambiguous exactly when it matters most.
 
 **The plan step's BODY has a fixed order: the notice, then the picked banner,
 then the grid.** Context before confirmation-of-the-action-just-taken. The
-`KioskInlineNotice` states the membership the active person already holds (§3's
-already-on-plan rule) and the `KioskPlanPickedBanner` confirms what they just
+`FlowInlineNotice` states the membership the active person already holds (§3's
+already-on-plan rule) and the `FlowPlanPickedBanner` confirms what they just
 tapped; reversed, the member reads a confirmation before the context that
 explains the marked card. Both **scroll with the body**, which is correct: they
-are read-once facts, not correctness controls like the pinned `KioskWhoFor`. The
+are read-once facts, not correctness controls like the pinned `FlowWhoFor`. The
 notice passes `onRetry: null` — its optional "Try again" has no meaning here.
 
 **The plan step confirms the pick, and returns to the top after one.** Tapping a
 card low in a tall grid otherwise gives no feedback and strands the member at
 the bottom, so on a pick `KioskPlanPickStep` scrolls its body back to the top
-(the scaffold threads a `bodyController` into `KioskStage`'s pinned scroll view)
-and surfaces `KioskPlanPickedBanner` there — a prominent "YOU'VE PICKED {plan}"
+(the scaffold threads a `bodyController` through `FlowShellParts` into
+`KioskStage`'s pinned scroll view)
+and surfaces `FlowPlanPickedBanner` there — a prominent "YOU'VE PICKED {plan}"
 confirmation that names the membership in words (the pinned identity strip
 already says WHO, so the banner never repeats the person). In a group each
 person's turn also starts at the top. The banner **names the plan, never a
@@ -1275,7 +1338,7 @@ derived from a plan row here; and the plan card keeps its own selected mark, so
 
 **The waiver's reading box fills the fold.** The waiver steps ask the scaffold
 for `fillBody: true`, which hands the body a bounded height instead of a
-scroll view; the doc/sign row stretches, `KioskWaiverDocPanel` takes all of it
+scroll view; the doc/sign row stretches, `FlowWaiverDocPanel` takes all of it
 with an `Expanded` editor, and the signing column carries its own
 `SingleChildScrollView` as the short-fold valve. A long agreement therefore
 scrolls INSIDE its panel rather than pushing the footer away, and a short one
@@ -1284,6 +1347,53 @@ dropped into a scrolling context. `DesignConstants.dialogWaiverEditorHeight`
 (240) stays exactly as it is for the admin dialog and the desk's
 `sign_waiver_panel.dart`; it was never a kiosk measure, and a full-screen legal
 document a member is being asked to sign does not borrow one.
+
+### 8.1b The SIGNUP lane reads the ramp through a SCALE, not by name
+
+Every widget the signup lane draws lives in the shared module
+(`CRM/lib/features/membership_flow/presentation/`, `Flow*`-named) because the
+staff start-memberships wizard renders the same set at a desk's reading
+distance. So those widgets name no size at all: they ask
+`MembershipFlowTheme.of(context)` for a **role** — `scale.display`,
+`scale.panelTitle`, `scale.caption`, `scale.buttonOutlinePadding` — and the
+SURFACE's scale decides which token that resolves to.
+
+- **`MembershipFlowScale.kiosk()` is this ramp, one hop away.** It maps every
+  role onto the `kiosk*` token above (plus the unprefixed `eyebrow` / `tag`,
+  which measure the same at both distances) and the two measures the stage and
+  the form panel are capped at (`navMaxWidth`, `flowFormMeasure` — ONE 860px
+  token now, unprefixed, because the kiosk stage's content width and the desk
+  dialog's land on the same measure). It **selects** between existing tokens
+  and restates no value, so this ramp stays the single source of the numbers
+  and §8.1's "moves as a SET" rule is unaffected. Its desk counterpart
+  `MembershipFlowScale.admin()` resolves to the ADMIN ladder plus the few
+  `flow*` roles that ladder lacks (`flowStatement`, `flowName`, the three
+  button tiers) — it exists, and nothing mounts it yet.
+- **Every member is a GETTER.** The tokens resolve `themeController.isDark` on
+  each read, so a scale that snapshotted them would freeze the lane in one
+  theme.
+- **The lane's WORDS travel the same way.** A shared widget holds no sentence
+  either: it asks `MembershipFlowTheme.copyOf(context)` for a line, and
+  `KioskFlowCopy` (`membership_flow/config/`) supplies the member voice — byte
+  for byte what those widgets used to hold, which
+  `test/features/membership_flow/config/flow_copy_test.dart` pins.
+  `StaffFlowCopy` is the desk's.
+  `test/features/membership_flow/presentation_copy_guard_test.dart` fails on
+  any sentence-like literal left under `presentation/`, so a wording change
+  cannot land on one surface only.
+- **`KioskSignupScreen` mounts exactly one `MembershipFlowTheme`**, carrying
+  the scale AND the copy, above the step switcher and every overlay. A widget
+  test that pumps a shared component on its own must wrap it the same way, or
+  `MembershipFlowTheme.of` / `.copyOf` asserts — deliberately, since a silent
+  default would let a host render a whole surface at the wrong size, or in the
+  wrong voice.
+- **It is a TYPE + measure ramp only.** Colours, radii, spacing, icon sizes and
+  shadows still come straight from `DesignConstants` at the call site: none of
+  them changes with the reading distance.
+- **The CHECK-IN lane does not use it.** Its widgets (`KioskStage`,
+  `kiosk_buttons.dart`, the home, glance, class pick and get-app sets) stay
+  kiosk-native and read the `kiosk*` tokens directly — a check-in is not a
+  membership purchase, so it never renders at a second scale.
 
 ### 8.2 Kiosk text meets the AA contrast floor
 
@@ -1542,7 +1652,7 @@ catalogue owns.
 that split is the rule.** An identification line exists so the member can tell
 "that's my account", which a masked address does — so the roster row, the payer
 picker, the match card **and the solo review's "YOU" row**
-(`kiosk_review_side_panel.dart`) all render `kioskMaskedEmail`, and a person with
+(`flow_review_side_panel.dart`) all render `kioskMaskedEmail`, and a person with
 no address gets no line at all rather than an empty one. The exceptions are the
 money panel's *"Your receipt goes to …"* and the results receipt's *"Your receipt
 is on its way to …"*: those exist so the payer can VERIFY where a receipt lands,
@@ -1627,23 +1737,23 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   here" goes to `details`; "Find my name" goes to `KioskSignupStep.identify`
   (`kiosk_identify_step.dart`, `KioskMatchSearch(forPayer: true)` with its own
   `noMatchMessage`), where an existing member taps their own name and confirms
-  it on the shipped `payerMatch` card. Neither step carries a `KioskWhoFor`
+  it on the shipped `payerMatch` card. Neither step carries a `FlowWhoFor`
   strip (nobody is seated yet) and **neither adds a rung** — both light rung 0,
   the same precedent `payerMatch` set on rung 1. See §3 for what the identify
   route seats.
 
 - **The per-person results receipt.** `KioskSignupStep.results`, between
   `paying` and `welcome`, drawn by `widgets/signup/kiosk_results_screen.dart`
-  over the new `kiosk_result_row.dart` and `kiosk_results_foot.dart` (and the
-  `kiosk_two_charges_note.dart` the review now shares). It answers BOTH a fully
+  over the new `flow_result_row.dart` and `kiosk_results_foot.dart` (and the
+  `flow_two_charges_note.dart` the review now shares). It answers BOTH a fully
   successful start (a receipt, one `Next` into `welcome`) and a **partial** one
   (the decline ladder at a narrower scope); an ALL-failed start still goes to the
   decline popup. See §11.6.
 
 - **The two plan-block reasons and their ONE popup.** `KioskPlanBlock` over the
   plan grid, `presentation/kiosk_plan_block_copy.dart` as the reason→words map,
-  `KioskPlanCard`'s `blocked` + `blockedLabel` state
-  (`Already used` / `You have this`), the plan step's `KioskInlineNotice`
+  `FlowPlanCard`'s `blocked` + `blockedLabel` state
+  (`Already used` / `You have this`), the plan step's `FlowInlineNotice`
   stating the membership already held, and
   `KioskSignupStopReason.trialAlreadyUsed` / `alreadyOnPlan` as the two desk
   handoffs. See §3.
@@ -1656,10 +1766,11 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   per-payee payer-auth link, per-person plans and waivers, and the group
   review. `KioskSignupPerson` grew `linked`; `KioskSignedWaiver` grew
   `memberId`. Screens under `presentation/widgets/signup/`: `kiosk_people_step`
-  + `kiosk_roster_row` + `kiosk_person_adder`,
+  + `flow_roster_row` + `kiosk_person_adder`,
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
-  `kiosk_payer_waiver_step`, and `kiosk_review_group_panel` +
-  `kiosk_person_block` + `kiosk_money_labels`. `kiosk_signup_optional_step`
+  `kiosk_payer_waiver_step`, and `flow_review_group_panel` +
+  `flow_person_block` over the `FlowPersonView`s `kiosk_flow_views.dart`
+  builds. `kiosk_signup_optional_step`
   serves BOTH the payer's D1a and every payee's E1a (one widget, parameterized
   by the active person; the fields live in `kiosk_optional_fields`). See §11.5
   for the group's own money rules.
@@ -1672,10 +1783,11 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   `KioskMatchSearch(forPayer: true)`), all seating through the one
   `_seatPayer`. See §3.
 
-- **The pinned step band.** `KioskStage`'s `header` + `fillBody` slots,
-  `KioskSignupStepScaffold`'s `identity`, and the one
-  `widgets/signup/kiosk_who_for.dart` element the plan, waiver and card steps
-  share. See §8.1a.
+- **The pinned step band.** `KioskStage`'s `header` + `fillBody` slots (handed
+  in as `FlowShellParts` by `KioskStepScaffold`),
+  `FlowStepScaffold`'s `identity`, and the one
+  `membership_flow/presentation/chrome/flow_who_for.dart` element the plan,
+  waiver and card steps share. See §8.1a.
 
 - **`date_of_birth`, end to end.** The optional-details step's DOB wheel
   writes through to a real column: `members.date_of_birth` (nullable `DATE`,
@@ -1880,7 +1992,7 @@ finally releases a declined screen nobody is standing at, through the ordinary
   (`start_preview_step.dart:276-278`). A $0 one-time line is a present invoice
   with nothing on it; calling that two charges lies about the member's own bank
   statement. **ONE widget carries the sentence on both screens** —
-  `KioskTwoChargesNote`, called by the review's money panel and by the results
+  `FlowTwoChargesNote`, called by the review's money panel and by the results
   receipt — so the member reads the identical string before and after the card is
   taken. **Never gate it on the start response's own `multiple_charges` flag**:
   the backend computes that from the request's plan TYPES without looking at
@@ -1933,7 +2045,7 @@ finally releases a declined screen nobody is standing at, through the ordinary
 - **A part-period charge SAYS it is one.** The kiosk pins `prorate_to_anchor`,
   so a mid-cycle joiner's due-today and per-cycle figures differ; the review
   explains that in one receipt-shaped line
-  (`KioskProrationNote`) — "Today is a part-period charge — it covers you up to
+  (`FlowProrationNote`) — "Today is a part-period charge — it covers you up to
   1 February 2026. The full amount starts then." It renders **only** when the
   preview's own lines carry `is_proration`, never because two figures happen to
   differ, and the date is the preview's `next_payment_date` rather than
@@ -2148,7 +2260,7 @@ Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
   only the un-created items, so nothing already created is re-charged (§11.6).
 - **The group review MARKS an already-started person; it never drops their row.**
   "Try another card" off a partial re-enters the review, and
-  `KioskReviewGroupPanel` lists the whole roster on purpose (the same rule that
+  `FlowReviewGroupPanel` lists the whole roster on purpose (the same rule that
   keeps a non-training payer on it: removing a row is indistinguishable from
   forgetting them). So `KioskSignupState.alreadyStarted(person)` — a landed
   response plus `!isBeingCharged`, i.e. the inverse face of the ONE
@@ -2186,7 +2298,7 @@ Guarded by `test/features/kiosk/bloc/kiosk_signup_waiver_skip_test.dart`.
   is or is not on file is nobody's business at a glance on a shared iPad, and
   "None yet" beside a name only ever read as a nag; Edit reuses
   `editPersonDetails` rather than adding a parallel path, and is absent for
-  `wasExisting` people per the rule above. Both ride the one `KioskRowAction`,
+  `wasExisting` people per the rule above. Both ride the one `FlowRowAction`,
   so the two cannot drift apart in size. **The trash is on the PAYER's row too**
   (group-only, while nothing has committed against them); deleting the payer
   clears the payer and asks who pays next (§3). See §3 for the membership check,
@@ -2232,7 +2344,7 @@ Rules the screen holds:
 - **No escape, on either branch.** Money has moved; there is nothing to start
   over. So the foot is **`KioskResultsFoot`**, built from
   `KioskWelcomeScreen._Foot`'s shape (hairline → the 60s `KioskReturnTimer` →
-  centred actions) and deliberately **not** `KioskFlowFoot`, whose left gutter is
+  centred actions) and deliberately **not** `FlowFoot`, whose left gutter is
   the ghost escape by construction.
 - **A partial's retry is still money-safe.** `retrySameCard` is gated on
   `canRetryStart` — a landed start with something un-created — and then on the
@@ -2275,7 +2387,7 @@ Rules the screen holds:
     advancing charges nothing: the money-safety gate lives on the RETRY
     (`canRetryStart`), which is false on an all-created receipt.
   - **The screen says where the rest goes**, in the partial's existing
-    `KioskInlineNotice`: *"The ones marked Started are paid for. Trying again only
+    `FlowInlineNotice`: *"The ones marked Started are paid for. Trying again only
     charges for the ones that didn't go through. Or tap Next and ask the front
     desk to finish the rest."* Without that third sentence a bare "Next" beside
     "Retry the rest" leaves the failed rows' fate to be guessed at.
@@ -2283,7 +2395,7 @@ Rules the screen holds:
     an unconditional green check over "Welcome to {gym}, {name}!", so
     `KioskSignupState.welcomeAfterPartial` (set by `_enterWelcome(afterPartial:)`
     from the branch that routed there — welcome CLEARS `startResult`, so nothing
-    else still knows) renders one `KioskInlineNotice` under it: *"Some memberships
+    else still knows) renders one `FlowInlineNotice` under it: *"Some memberships
     didn't go through — ask the front desk to finish them."* The greeting itself is
     unchanged and stays true; no second celebration idiom, no restyled disc. Every
     other route into welcome (all-created, the 409 replay, an empty itemisation)
@@ -2328,7 +2440,7 @@ Rules the screen holds:
   (`_buildStartRequest` / `_startItems` over
   `KioskSignupState.isBeingCharged` → `retryMemberIds` / `canRetryStart` —
   the ONE "who does the next request carry" predicate, shared with
-  `everyPayeeLinked`, the waiver run, `kiosk_money_labels` and (inverted)
+  `everyPayeeLinked`, the waiver run, `kiosk_money_view` and (inverted)
   `alreadyStarted`
   (§11.5) — / `pay`'s three-way split / `_enterResults` /
   `_mergeStartResults` / `nextFromResults` (live on BOTH branches, §11.6) /
@@ -2342,45 +2454,66 @@ Rules the screen holds:
 - `presentation/screens/kiosk_signup_screen.dart` — provides that cubit (so its
   lifetime is the flow's), hosts the signup's activity listener, and routes
   `abandoned` → `goHome()`.
-  `presentation/widgets/signup/` — the signup chrome (rail, three-slot foot,
-  field box, consent check, DOB wheel, stop screen, abandon confirm) and the
-  built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` + `kiosk_plan_labels`
-  (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import) +
-  `kiosk_plan_picked_banner` (the "YOU'VE PICKED" confirmation, §8.1a),
-  `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
-  `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
-  `kiosk_inline_notice` (the lane's ONE warm "important, not your fault, not a
+  The lane's widgets live in TWO places, and the prefix says which:
+  every `flow_*` name below is in the SHARED module
+  (`features/membership_flow/presentation/` — `chrome/` for the step
+  scaffold, shell contract, rail, foot, form panel, detail group, who-for and
+  buttons; `models/` for the view models a host fills; `widgets/` for the
+  rest), because the desk wizard renders the
+  same component at its own scale (§8.1b). **Every shared component is
+  data in, callbacks out** — none takes `KioskSignupState` or reads
+  `KioskSignupCubit` off the context, which is what makes it renderable by a
+  second surface at all (`kiosk_forbidden_imports_test.dart` bans the import
+  outright). Every `kiosk_*` name is
+  kiosk-only and stays under
+  `features/kiosk/presentation/widgets/signup/` — the steps, the screens,
+  the copy files and the confirms. The chrome (rail, three-slot foot,
+  field box, consent check, DOB wheel) and the built steps: `kiosk_plan_pick_step` + `flow_plan_card` (whose words come from
+  the SHARED `membership_flow/domain/plan_labels.dart`, the one plan vocabulary
+  both surfaces import — no longer a copy) +
+  `flow_plan_picked_banner` (the "YOU'VE PICKED" confirmation, §8.1a),
+  `kiosk_waiver_step` + `flow_waiver_doc_panel` (read-only
+  `WaiverMarkdownEditor`) + `flow_sign_panel` + `flow_waiver_status`,
+  `flow_inline_notice` (the lane's ONE warm "important, not your fault, not a
   dead end" strip — the waiver notices, the picker's redirect, the card step's
   replacement notice, the plan step's already-held-membership notice, and the
   partial receipt's "the ones marked Started are paid for"),
   `kiosk_entry_choice_step` + `kiosk_identify_step` (the front door),
-  `kiosk_plan_block` (the ONE blocked-plan popup, over
+  `kiosk_plan_block` (the ONE blocked-plan popup — kiosk-only, over
   `presentation/kiosk_plan_block_copy.dart`'s reason → title / body / glyph /
   card-tag map),
-  `kiosk_card_step` + `kiosk_secure_strip` + `kiosk_card_facts` (wrapping the
-  shared `CardFieldBox`), `kiosk_review_step` + `kiosk_review_side_panel` +
-  `kiosk_money_panel` + `kiosk_buy_row` + `kiosk_card_chip` +
-  `kiosk_two_charges_note` (the ONE two-charges sentence, shared with the
+  `kiosk_card_step` + `flow_secure_strip` + `kiosk_card_facts` (wrapping the
+  shared `CardFieldBox`), `kiosk_review_step` + `flow_review_side_panel` +
+  `flow_money_panel` + `flow_buy_row` + `flow_card_chip` +
+  `flow_two_charges_note` (the ONE two-charges sentence, shared with the
   receipt),
-  `kiosk_paying_screen`, `kiosk_results_screen` + `kiosk_result_row` +
+  `kiosk_paying_screen`, `kiosk_results_screen` + `flow_result_row` +
   `kiosk_results_foot` (the per-person receipt, §11.6),
   `kiosk_declined_screen`, and `kiosk_welcome_screen`
   (which COMPOSES the shipped `get_app/` set off the flow cubit's warmed
   catalogues — zero fetches, plus the `welcomeAfterPartial` front-desk notice,
   §11.6), plus the GROUP half: `kiosk_people_step` +
-  `kiosk_roster_row` + `kiosk_person_adder`,
+  `flow_roster_row` + `kiosk_person_adder`,
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
-  `kiosk_payer_waiver_step`, `kiosk_review_group_panel` + `kiosk_person_block`
+  `kiosk_payer_waiver_step`, `flow_review_group_panel` + `flow_person_block`
   (which marks an already-started person, §11.5),
-  and `kiosk_money_labels` (the by-person attribution of a preview line, via
-  its `stripe_price_id`); the payer gate's `kiosk_payer_match_step` +
+  and `presentation/kiosk_money_view.dart` (the by-person attribution of a
+  preview line, via its `stripe_price_id`); the payer gate's `kiosk_payer_match_step` +
   `kiosk_payer_pick_step` over the shared `kiosk_name_row`; the roster's
-  `kiosk_row_action` (Edit + trash) and `kiosk_remove_confirm`; the pinned
-  `kiosk_who_for`; and `kiosk_proration_note` (the part-period line, §11.4).
+  `flow_row_action` (Edit + trash) and `kiosk_remove_confirm`; the pinned
+  `flow_who_for`; and `flow_proration_note` (the part-period line, §11.4).
   `presentation/kiosk_signup_stop_copy.dart` — the ONE map from a stop reason to
   member copy, mirroring `kiosk_blocked_copy.dart`.
   `presentation/kiosk_name_format.dart` — `kioskFirstName` + `kioskMaskedEmail`,
   the two display transforms the kiosk shares.
+  The lane's four SEAM files onto the shared module, all kiosk-side:
+  `presentation/kiosk_rail_index.dart` (`kioskRailIndex` — which rung a
+  `KioskSignupStep` lights), `presentation/kiosk_flow_views.dart` and
+  `presentation/kiosk_money_view.dart` (`KioskSignupState` → the shared
+  `presentation/models/` view models, and the ONE place the masking and
+  "whose record is this" rules are applied), and
+  `presentation/widgets/signup/kiosk_step_scaffold.dart` (`KioskStage` as the
+  lane's shell).
 - `data/kiosk_session_store.dart` (fate-shared persistence),
   `data/kiosk_server_clock.dart` (the HTTP `Date` read).
 - `presentation/kiosk_screen.dart` — the mounted surface: header, the cross-faded
@@ -2396,6 +2529,36 @@ Rules the screen holds:
   `slides/kiosk_rank_slide.dart` is the illustrative one (§9).
 - `presentation/kiosk_locked_screen.dart` — the fail-closed terminal screen
   (mounted by the gate, not by `KioskScreen`).
+
+**CRM — the shared membership-flow module**
+(`CRM/lib/features/membership_flow/`), which the signup lane renders and the
+staff start-memberships wizard will:
+
+- `domain/` — the ONE rulebook both surfaces obey: `plan_rules.dart` (the
+  `RecurringHeldGate` / `TrialOnceGate` behind §3's two plan blocks),
+  `catalogue_policy.dart`, `waiver_queue.dart`, `plan_labels.dart`,
+  `money_readouts.dart`, `start_request_builder.dart`, `membership_history.dart`
+  — plus `discount_math.dart`, which is STAFF-ONLY and the kiosk may never
+  import (§3).
+- `config/membership_flow_scale.dart` + `membership_flow_theme.dart` — the
+  role→token ramp and the `InheritedWidget` that hands it down (§8.1b).
+- `presentation/chrome/` — `flow_step_scaffold`, `flow_shell` (the
+  `FlowShellParts` a host's shell places), `flow_rail`, `flow_foot`,
+  `flow_form_panel`, `flow_detail_group`, `flow_who_for`, `flow_buttons`.
+- `presentation/models/` — the plain data every shared component takes instead
+  of a surface's state: `flow_person_view` (+ `FlowPersonRole`),
+  `flow_plan_summary`, `flow_money_view`, `flow_signed_waiver_view`. Each host
+  builds them from its own state — the kiosk in
+  `presentation/kiosk_flow_views.dart` + `presentation/kiosk_money_view.dart`.
+- `presentation/widgets/` — everything a step composes: `flow_field_box`,
+  `flow_field_pair`, `flow_plan_card`, `flow_plan_picked_banner`,
+  `flow_money_panel`, `flow_buy_row`,
+  `flow_card_chip`, `flow_result_row`, `flow_inline_notice`,
+  `flow_secure_strip`, `flow_consent_check`, `flow_roster_row`,
+  `flow_row_action`, `flow_person_block`, `flow_review_side_panel`,
+  `flow_review_group_panel`, `flow_sign_panel`, `flow_waiver_doc_panel`,
+  `flow_waiver_status`, `flow_proration_note`, `flow_two_charges_note`,
+  `flow_dob_field`.
 
 **CRM — outside the feature:**
 

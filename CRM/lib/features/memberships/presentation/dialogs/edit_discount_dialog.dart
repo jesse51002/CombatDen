@@ -6,7 +6,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_discount_value_helpers.dart';
+import 'package:crm/features/memberships/presentation/dialogs/custom_discount_value_helpers.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_bloc.dart';
 import 'package:crm/features/memberships/bloc/discounts/discounts_event.dart';
 import 'package:crm/features/memberships/data/models/discount_create_request.dart';

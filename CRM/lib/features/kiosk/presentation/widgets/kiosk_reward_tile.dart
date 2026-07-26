@@ -165,7 +165,7 @@ class _PriceTag extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: DesignConstants.kioskTag.copyWith(
+        style: DesignConstants.tag.copyWith(
           color: DesignConstants.onAccent,
         ),
       ),
