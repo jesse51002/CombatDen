@@ -28,23 +28,24 @@ function AiHeroSection() {
         padding: isMobile ? '126px 20px 92px' : '168px 32px 116px',
         maxWidth: 1000, margin: '0 auto',
       }}>
-        <h1 style={{
+        <h1 data-reveal style={{
           margin: 0, fontFamily: GW.sans, fontWeight: 600,
           fontSize: 'clamp(40px, 6vw, 68px)', lineHeight: 1.0, letterSpacing: -2.4,
           color: GW.ink, textWrap: 'balance', maxWidth: isMobile ? 'none' : '15.5ch',
         }}>{c.headline}</h1>
 
-        <p style={{
+        <p data-reveal style={{
+          '--rd': '110ms',
           margin: isMobile ? '22px 0 0' : '26px 0 0', fontFamily: GW.sans, fontWeight: 450,
           fontSize: 'clamp(16px, 1.8vw, 20px)', lineHeight: 1.5, color: GW.inkSoft,
           maxWidth: isMobile ? '30ch' : '46ch',
         }}>{c.subline}</p>
 
-        <div style={{ marginTop: isMobile ? 30 : 36 }}>
+        <div data-reveal style={{ '--rd': '200ms', marginTop: isMobile ? 30 : 36 }}>
           <GWButton label={COPY.cta.demo} size="lg" href="#book" newTab={false} />
         </div>
 
-        <div style={{ marginTop: 22 }}>
+        <div data-reveal style={{ '--rd': '280ms', marginTop: 22 }}>
           <GWDisclaimer />
         </div>
       </div>

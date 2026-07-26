@@ -45,7 +45,7 @@
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
-            href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&family=Geist+Mono:wght@400;500&display=swap"
+            href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;450;500;600;650;700&family=DM+Mono:wght@400;500&display=swap"
             rel="stylesheet"
         />
 
@@ -68,8 +68,7 @@
             }
             body {
                 font-family:
-                    "Geist",
-                    "Inter",
+                    "Schibsted Grotesk",
                     system-ui,
                     -apple-system,
                     sans-serif;
@@ -80,6 +79,24 @@
                 min-height: 100vh;
                 position: relative;
                 z-index: 1;
+            }
+
+            /* ---------------------------------------------------------------
+               Scroll reveal. Driven by useReveal() in ds.jsx, which adds `.anim`
+               to <html> only when motion is allowed. Everything keys off that, so
+               under reduced motion the markup simply stays visible instead of
+               being animated into view. Stagger a group with --rd per element.
+               --------------------------------------------------------------- */
+            .anim [data-reveal] {
+                opacity: 0;
+                transform: translate3d(0, 20px, 0);
+                transition:
+                    opacity 0.72s var(--ease-deck) var(--rd, 0ms),
+                    transform 0.72s var(--ease-deck) var(--rd, 0ms);
+            }
+            .anim [data-reveal].is-in {
+                opacity: 1;
+                transform: none;
             }
 
             /* ---------------------------------------------------------------
@@ -144,7 +161,7 @@
                 gap: 14px;
             }
             .cd-log__time {
-                font-family: "Geist Mono", ui-monospace, monospace;
+                font-family: "DM Mono", ui-monospace, monospace;
                 font-size: 11px;
                 font-weight: 500;
                 letter-spacing: 0.1em;
@@ -154,7 +171,7 @@
                 white-space: nowrap;
             }
             .cd-log__tag {
-                font-family: "Geist Mono", ui-monospace, monospace;
+                font-family: "DM Mono", ui-monospace, monospace;
                 font-size: 11px;
                 font-weight: 500;
                 letter-spacing: 0.04em;
@@ -269,6 +286,616 @@
                     scale(0.935);
             }
 
+            /* ---------------------------------------------------------------
+               §3 cards and their live glyphs. Each step shows its own verb
+               working: Monitor reads a live signal, Plan drafts its lines in,
+               Execute runs a job to completion. Staggered across the row by --sd
+               so it never pulses in unison. Resting state is the finished shape.
+               --------------------------------------------------------------- */
+            .cd-step {
+                background: linear-gradient(180deg, #ffffff, #f5f7fb);
+                border: 1px solid rgba(20, 22, 40, 0.065);
+                border-radius: 22px;
+                box-shadow:
+                    0 1px 2px rgba(20, 22, 40, 0.03),
+                    0 22px 50px -30px rgba(20, 22, 50, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                padding: 30px 28px 32px;
+            }
+            .cd-step__top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 34px;
+            }
+            .cd-step__n {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 10.5px;
+                font-weight: 500;
+                letter-spacing: 0.12em;
+                color: #2a67bd;
+            }
+            .cd-step__live svg {
+                display: block;
+            }
+            .cd-step__rule {
+                height: 1px;
+                background: rgba(20, 22, 30, 0.06);
+                margin: 26px 0 24px;
+            }
+            .cd-step h3 {
+                margin: 0;
+                font-size: 25px;
+                font-weight: 600;
+                letter-spacing: -0.034em;
+                line-height: 1.1;
+                color: #16181d;
+            }
+            .cd-step p {
+                margin: 10px 0 0;
+                font-size: 16px;
+                line-height: 1.5;
+                font-weight: 450;
+                color: #565b66;
+                text-wrap: pretty;
+            }
+
+            .cd-glyph-faint {
+                fill: rgba(20, 22, 30, 0.09);
+            }
+            .cd-glyph-accent {
+                fill: #2a67bd;
+            }
+
+            .cd-sig {
+                transform-box: fill-box;
+                transform-origin: bottom;
+            }
+            .cd-how.is-live .cd-sig {
+                animation: cdSigWave 1.9s calc(var(--sd, 0s) + var(--gd, 0s))
+                    ease-in-out infinite;
+            }
+            @keyframes cdSigWave {
+                0%,
+                100% {
+                    transform: scaleY(0.34);
+                }
+                50% {
+                    transform: scaleY(1);
+                }
+            }
+
+            .cd-draft {
+                transform-box: fill-box;
+                transform-origin: left center;
+            }
+            .cd-how.is-live .cd-draft {
+                animation: cdDraftIn 3.4s calc(var(--sd, 0s) + var(--gd, 0s))
+                    ease-out infinite;
+            }
+            @keyframes cdDraftIn {
+                0%,
+                4% {
+                    transform: scaleX(0);
+                    opacity: 0;
+                }
+                18%,
+                88% {
+                    transform: none;
+                    opacity: 1;
+                }
+                100% {
+                    transform: none;
+                    opacity: 0;
+                }
+            }
+
+            .cd-run__arc {
+                fill: none;
+                stroke: #2a67bd;
+                stroke-width: 2.4;
+                stroke-linecap: round;
+                stroke-dasharray: 76;
+                stroke-dashoffset: 0;
+            }
+            .cd-how.is-live .cd-run__arc {
+                animation: cdRunArc 3.4s var(--sd, 0s) ease-in-out infinite;
+            }
+            @keyframes cdRunArc {
+                0%,
+                6% {
+                    stroke-dashoffset: 76;
+                }
+                62%,
+                88% {
+                    stroke-dashoffset: 0;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                    opacity: 0;
+                }
+            }
+            .cd-run__tick {
+                stroke: #1f5099;
+                stroke-width: 2.2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                fill: none;
+                stroke-dasharray: 14;
+                stroke-dashoffset: 0;
+            }
+            .cd-how.is-live .cd-run__tick {
+                animation: cdRunTick 3.4s var(--sd, 0s) ease-out infinite;
+            }
+            @keyframes cdRunTick {
+                0%,
+                62% {
+                    stroke-dashoffset: 14;
+                }
+                76%,
+                88% {
+                    stroke-dashoffset: 0;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                    opacity: 0;
+                }
+            }
+
+            /* ---------------------------------------------------------------
+               §4 cards. One 6s loop for the whole section, phase-shifted per
+               card by --cd so only one is ever mid-animation. Every resting
+               state below is the FINISHED picture; the .is-live variants are
+               the loop, so reduced motion and no-JS both land on something
+               whole rather than a half-drawn chart.
+               --------------------------------------------------------------- */
+            .cd-stat {
+                background: linear-gradient(180deg, #ffffff, #f5f7fb);
+                border: 1px solid rgba(20, 22, 40, 0.065);
+                border-radius: 22px;
+                box-shadow:
+                    0 1px 2px rgba(20, 22, 40, 0.03),
+                    0 22px 50px -30px rgba(20, 22, 50, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                padding: 30px 30px 28px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .cd-stat__cat {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 10.5px;
+                font-weight: 500;
+                letter-spacing: 0.06em;
+                text-transform: uppercase;
+                color: #2a67bd;
+            }
+            .cd-stat__row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 20px;
+            }
+            .cd-stat__num {
+                font-size: clamp(42px, 3.2vw + 20px, 76px);
+                font-weight: 700;
+                letter-spacing: -0.045em;
+                line-height: 0.9;
+                color: #1f5099;
+                font-variant-numeric: tabular-nums;
+                transition: color 0.5s ease;
+            }
+            /* mid-count the numeral sits on the live accent, then settles back.
+               The colour change is the "still working" tell. */
+            .cd-stat__num.is-counting {
+                color: #2a67bd;
+                transition: none;
+            }
+            .cd-stat__numlabel {
+                margin: -6px 0 0;
+                font-size: 14.5px;
+                font-weight: 450;
+                letter-spacing: -0.01em;
+                color: #565b66;
+            }
+            .cd-stat__viz {
+                flex: 0 0 auto;
+                width: 170px;
+                height: 62px;
+            }
+            .cd-stat__viz svg {
+                display: block;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+            }
+            .cd-stat__secondary {
+                margin: 0;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px 22px;
+                padding-top: 16px;
+                border-top: 1px solid rgba(20, 22, 30, 0.06);
+            }
+            .cd-stat__secondary > div {
+                display: flex;
+                align-items: baseline;
+                gap: 7px;
+            }
+            .cd-stat__secondary dt {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 10.5px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: #878d99;
+            }
+            .cd-stat__secondary dd {
+                margin: 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: #16181d;
+                font-variant-numeric: tabular-nums;
+            }
+            .cd-stat__status {
+                margin-top: auto;
+                padding-top: 4px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                letter-spacing: 0.03em;
+                color: #878d99;
+            }
+            .cd-proof__note {
+                margin: 40px 0 0;
+                text-align: center;
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                letter-spacing: 0.04em;
+                color: #878d99;
+            }
+
+            /* the two-beat "it saw X, so it did Y" list */
+            .cd-stat__steps {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                min-height: 62px;
+                display: flex;
+                flex-direction: column;
+                gap: 11px;
+            }
+            .cd-stat__step {
+                display: flex;
+                align-items: flex-start;
+                gap: 9px;
+                font-size: 14.5px;
+                line-height: 1.45;
+                color: #16181d;
+                opacity: 1;
+            }
+            .cd-stat__step svg {
+                flex: 0 0 auto;
+                margin-top: 3px;
+            }
+            .cd-proof.is-live .cd-stat__step {
+                animation: cdStepIn 6s calc(var(--cd) + var(--sd, 0s)) ease-out
+                    infinite;
+            }
+            @keyframes cdStepIn {
+                0%,
+                7% {
+                    opacity: 0;
+                    transform: translateY(5px);
+                }
+                17%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            /* Chat: the actual back and forth. Side and fill carry who is who,
+               the avatar reinforces which one is the agent. */
+            .cd-cx-wrap {
+                position: relative;
+                min-height: 62px;
+            }
+            .cd-cx {
+                position: absolute;
+                left: 0;
+                right: 0;
+                display: flex;
+                align-items: flex-end;
+                gap: 7px;
+                opacity: 1;
+            }
+            .cd-cx--you {
+                top: 0;
+                justify-content: flex-end;
+            }
+            .cd-cx--wait,
+            .cd-cx--ai {
+                bottom: 0;
+                justify-content: flex-start;
+            }
+            .cd-cx--wait {
+                opacity: 0;
+            }
+            .cd-cx__b {
+                font-size: 12.5px;
+                line-height: 1.35;
+                letter-spacing: -0.008em;
+                border-radius: 12px;
+                padding: 7px 10px;
+                max-width: 84%;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .cd-cx--you .cd-cx__b {
+                background: linear-gradient(180deg, #2a67bd, #1f5099);
+                color: #fff;
+                font-weight: 500;
+                border-bottom-right-radius: 3px;
+            }
+            .cd-cx--ai .cd-cx__b,
+            .cd-cx--wait .cd-cx__b {
+                background: #ffffff;
+                color: #16181d;
+                border: 1px solid rgba(20, 22, 30, 0.09);
+                font-weight: 450;
+                border-bottom-left-radius: 3px;
+            }
+            .cd-cx__av {
+                flex: 0 0 auto;
+                width: 19px;
+                height: 19px;
+                border-radius: 999px;
+                background: linear-gradient(180deg, #2a67bd, #1f5099);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .cd-cx__av::after {
+                content: "";
+                width: 6px;
+                height: 6px;
+                border-radius: 999px;
+                background: #fff;
+            }
+            .cd-cx__meta {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 9.5px;
+                letter-spacing: 0.06em;
+                color: #878d99;
+                margin-left: 3px;
+            }
+            .cd-cx__dots {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                padding: 10px;
+            }
+            .cd-cx__dots i {
+                width: 4px;
+                height: 4px;
+                border-radius: 999px;
+                background: #878d99;
+                display: block;
+            }
+            .cd-proof.is-live .cd-cx--you {
+                animation: cdCxYou 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx--wait {
+                animation: cdCxWait 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx--ai {
+                animation: cdCxAi 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx__dots i {
+                animation: cdCxDot 1.05s ease-in-out infinite;
+            }
+            .cd-proof.is-live .cd-cx__dots i:nth-child(2) {
+                animation-delay: 0.14s;
+            }
+            .cd-proof.is-live .cd-cx__dots i:nth-child(3) {
+                animation-delay: 0.28s;
+            }
+            @keyframes cdCxYou {
+                0%,
+                5% {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                13%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+            @keyframes cdCxWait {
+                0%,
+                23% {
+                    opacity: 0;
+                }
+                29%,
+                42% {
+                    opacity: 1;
+                }
+                48%,
+                100% {
+                    opacity: 0;
+                }
+            }
+            @keyframes cdCxAi {
+                0%,
+                48% {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                56%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+            @keyframes cdCxDot {
+                0%,
+                100% {
+                    opacity: 0.35;
+                    transform: translateY(0);
+                }
+                50% {
+                    opacity: 1;
+                    transform: translateY(-2px);
+                }
+            }
+
+            /* ---------------------------------------------------------------
+               The four diagrams. One drawing language: same 170x62 box, same
+               hairline weights, accent for the measured thing and faint ink for
+               context. Each encodes its own card's numbers; none is a shared
+               decorative sparkline.
+               --------------------------------------------------------------- */
+            .cd-viz-faint {
+                fill: rgba(20, 22, 30, 0.09);
+            }
+            .cd-viz-rule {
+                stroke: rgba(20, 22, 30, 0.09);
+                stroke-width: 1;
+            }
+            .cd-viz-accent {
+                fill: #2a67bd;
+            }
+            .cd-viz-accent-soft {
+                fill: #e8f0fb;
+            }
+
+            /* chat: you asked, it answered, it is waiting on the next one */
+            .cd-viz__caret {
+                fill: #2a67bd;
+            }
+            .cd-proof.is-live .cd-viz__caret {
+                animation: cdVizCaret 1.15s steps(1, end) infinite;
+            }
+            @keyframes cdVizCaret {
+                0%,
+                49% {
+                    opacity: 1;
+                }
+                50%,
+                100% {
+                    opacity: 0;
+                }
+            }
+
+            /* member: cumulative retention saved, climbing across the month */
+            .cd-viz__line {
+                fill: none;
+                stroke: #2a67bd;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                stroke-dasharray: 220;
+                stroke-dashoffset: 0;
+            }
+            .cd-viz__area {
+                opacity: 1;
+            }
+            .cd-viz__halo {
+                fill: #2a67bd;
+                transform-box: fill-box;
+                transform-origin: center;
+                opacity: 0;
+            }
+            .cd-proof.is-live .cd-viz__line {
+                animation: cdVizDraw 6s var(--cd) linear infinite;
+            }
+            .cd-proof.is-live .cd-viz__area {
+                animation: cdVizFade 6s var(--cd) linear infinite;
+            }
+            .cd-proof.is-live .cd-viz__halo {
+                animation: cdVizHalo 2.9s var(--cd) ease-out infinite;
+            }
+            @keyframes cdVizDraw {
+                0% {
+                    stroke-dashoffset: 220;
+                }
+                24%,
+                100% {
+                    stroke-dashoffset: 0;
+                }
+            }
+            @keyframes cdVizFade {
+                0%,
+                6% {
+                    opacity: 0;
+                }
+                30%,
+                100% {
+                    opacity: 1;
+                }
+            }
+            @keyframes cdVizHalo {
+                0% {
+                    transform: scale(0.5);
+                    opacity: 0.4;
+                }
+                60%,
+                100% {
+                    transform: scale(2.6);
+                    opacity: 0;
+                }
+            }
+
+            /* competition: 18 posts read, 4 of them flagged; the scan never stops */
+            .cd-viz__sweep {
+                opacity: 0;
+            }
+            .cd-proof.is-live .cd-viz__sweep {
+                animation: cdVizSweep 4.4s var(--cd) linear infinite;
+            }
+            @keyframes cdVizSweep {
+                0% {
+                    transform: translateX(0);
+                    opacity: 0;
+                }
+                8%,
+                84% {
+                    opacity: 1;
+                }
+                100% {
+                    transform: translateX(206px);
+                    opacity: 0;
+                }
+            }
+
+            /* growth: a year of demand with the slow month picked out */
+            .cd-viz__mark {
+                fill: #2a67bd;
+                transform-box: fill-box;
+                transform-origin: center;
+                opacity: 1;
+            }
+            .cd-proof.is-live .cd-viz__mark {
+                animation: cdVizPop 6s calc(var(--cd) + var(--md, 0s)) ease-out
+                    infinite;
+            }
+            @keyframes cdVizPop {
+                0%,
+                5% {
+                    opacity: 0;
+                    transform: translateY(3px) scale(0.4);
+                }
+                18%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
             /* live-status dot on the §4 cards */
             .cd-pulse {
                 animation: cd-pulse 2.4s ease-in-out infinite;
@@ -294,6 +921,19 @@
                 }
                 .cd-employee.is-deck .cd-log-trail {
                     margin-top: 40px;
+                }
+                .cd-step {
+                    padding: 24px 22px 26px;
+                }
+                .cd-step h3 {
+                    font-size: 22px;
+                }
+                .cd-stat {
+                    padding: 24px 22px 24px;
+                }
+                .cd-stat__viz {
+                    width: 124px;
+                    height: 46px;
                 }
             }
 
@@ -424,6 +1064,10 @@
                 // The motif measures real section geometry, so it can only start
                 // after the first paint. motif.js is a module and may still be
                 // loading when React mounts, so wait for it rather than assuming.
+                // Scroll reveal for the whole page, one observer for every
+                // [data-reveal] element across all five sections.
+                useReveal();
+
                 React.useEffect(() => {
                     let raf = 0;
                     const tryInit = () => {

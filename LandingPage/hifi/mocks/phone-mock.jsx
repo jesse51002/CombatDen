@@ -10,8 +10,8 @@ const phoneBase = {
   line: 'rgba(20,22,28,0.08)',
   surface: '#ffffff',
   surfaceAlt: '#f4f5f8',
-  mono: '"Geist Mono", ui-monospace, "SF Mono", Menlo, monospace',
-  sans: '"Geist", "Inter", system-ui, -apple-system, sans-serif',
+  mono: '"DM Mono", ui-monospace, "SF Mono", Menlo, monospace',
+  sans: '"Schibsted Grotesk", system-ui, -apple-system, sans-serif',
 };
 
 // Striped media placeholder with a centered mono caption (fallback / thumbs).

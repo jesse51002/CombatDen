@@ -18,7 +18,7 @@ both `copy.jsx` (what renders) and this doc (the record + rationale) in the same
 
 No FAQ. The load-bearing "no migration / works alongside your software" objection is folded into the Hero (the small disclaimer under the CTA) instead.
 
-The page is built modularly under `hifi/` (tokens, theme store, copy, shared chrome, mocks, per-section files), light/blue/Geist system. See `DESIGN.md` and `CLAUDE.md`.
+The page is built modularly under `hifi/` (tokens, theme store, copy, shared chrome, mocks, per-section files), light/blue/Schibsted Grotesk system. See `DESIGN.md` and `CLAUDE.md`.
 
 ---
 

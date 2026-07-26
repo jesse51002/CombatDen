@@ -82,8 +82,8 @@ function AiEmployeeSection() {
           {/* display:contents keeps this one <h2> for semantics while letting the
               two halves sit in different grid rows */}
           <h2 style={{ display: 'contents', margin: 0 }}>
-            <span style={{ ...half, gridRow: 1, justifySelf: 'start' }}>{c.lede}</span>
-            <span className="cd-log-trail" style={{ ...half, gridRow: 4, justifySelf: 'end' }}>{c.trail}</span>
+            <span data-reveal style={{ ...half, gridRow: 1, justifySelf: 'start' }}>{c.lede}</span>
+            <span className="cd-log-trail" data-reveal style={{ '--rd': '90ms', ...half, gridRow: 4, justifySelf: 'end' }}>{c.trail}</span>
           </h2>
 
           <ol className="cd-log" style={{ gridRow: 2, listStyle: 'none', margin: '34px auto', padding: 0, maxWidth: 720, width: '100%' }}>

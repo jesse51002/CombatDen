@@ -59,7 +59,7 @@ The page was rebuilt section by section (see `contents.md` for the locked copy a
 - **Direct** — founder voice, not marketing-team voice. Real numbers, specific pain, no hedging.
 - **Premium** — the design signals that this company has taste. If the page looks like any other SaaS landing page, it has failed the most important test: proving that the product looks different.
 
-**Visual personality:** light and product-grade, not brochure-flashy. A cool off-white ground, one confident blue (with a subtle gradient on actions), Geist + Geist Mono, soft layered shadows, and live device mockups that look like the real app. See `DESIGN.md` for the full system. The page is itself the proof of the design thesis: if it doesn't look like a company with taste built it, the design bet has failed at the first gate.
+**Visual personality:** light and product-grade, not brochure-flashy. A cool off-white ground, one confident blue (with a subtle gradient on actions), Schibsted Grotesk + DM Mono, soft layered shadows, and live device mockups that look like the real app. See `DESIGN.md` for the full system. The page is itself the proof of the design thesis: if it doesn't look like a company with taste built it, the design bet has failed at the first gate.
 
 **Voice generalizes to class-based gyms:** copy speaks to "members" and "your gym," not "fighters," and imagery is class-agnostic. The product has no sport-specific functionality, so the copy shouldn't either, except where a pitch is explicitly to a fighting gym. The mockups can wear any gym's brand via the theme switcher, reinforcing "the app is actually yours."
 

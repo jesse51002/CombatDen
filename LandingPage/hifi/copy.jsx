@@ -145,20 +145,21 @@ const COPY = {
     proof: {
       heading: 'Four things it never stops working on.',
       cards: [
+        // The Chat card shows the exchange itself instead of a steps pair, so it
+        // has no `steps`; its dialogue is mock furniture and lives in the component.
         { key: 'chat', tag: 'Chat', num: '9', numLabel: 'requests handled this week',
-          action: "Asked for last month's revenue by plan, answered in 12 seconds",
           secondary: [['Avg response', '8s'], ['Actions taken', '6'], ['Reports pulled', '3']],
           status: 'Waiting on your next question' },
         { key: 'member', tag: 'Member', num: '$400', numLabel: 'in retention saved this month',
-          action: 'Found 5 at-risk members, messaged each, 3 came back',
+          steps: ['Found 5 at-risk members', 'Messaged each, 3 came back'],
           secondary: [['Members flagged', '12'], ['Check-ins sent', '8'], ['Win-backs', '3']],
           status: "Reviewing this week's attendance" },
         { key: 'competition', tag: 'Competition', num: '4', numLabel: 'competitor signals caught this week',
-          action: 'Nearby gym posted a fall program launch, flagged as a seasonal trend',
+          steps: ['Nearby gym posted a fall program launch on Instagram', 'Flagged as a seasonal trend'],
           secondary: [['Promos tracked', '2'], ['Posts reviewed', '18'], ['Events flagged', '1']],
           status: "Reading this week's posts" },
         { key: 'growth', tag: 'Growth', num: '3', numLabel: 'campaign ideas drafted',
-          action: 'Slow week detected in August, drafted a "bring a friend" promo',
+          steps: ['Slow week detected in August', 'Drafted a "bring a friend" promo'],
           secondary: [['Ideas drafted', '3'], ['Trends found', '5'], ['Seasons planned', '2']],
           status: "Drafting next month's promo" },
       ],

@@ -10,6 +10,7 @@ colors:
   ink-faint: "#878d99"
   line: "rgba(20,22,30,0.09)"
   line-soft: "rgba(20,22,30,0.06)"
+  card-border: "rgba(20,22,40,0.065)"
   accent: "#2A67BD"
   accent-dark: "#1F5099"
   accent-soft: "#E8F0FB"
@@ -17,37 +18,37 @@ colors:
   cyan-glow: "oklch(0.72 0.15 215 / 0.13)"
 typography:
   hero:
-    fontFamily: "'Geist', sans-serif"
+    fontFamily: "'Schibsted Grotesk', sans-serif"
     fontSize: "clamp(40px, 6vw, 68px)"
     fontWeight: 600
     lineHeight: 1.0
     letterSpacing: "-2.4px"
   title:
-    fontFamily: "'Geist', sans-serif"
+    fontFamily: "'Schibsted Grotesk', sans-serif"
     fontSize: "clamp(30px, 3.4vw, 44px)"
     fontWeight: 600
     lineHeight: 1.08
     letterSpacing: "-1.5px"
   statement:
-    fontFamily: "'Geist', sans-serif"
+    fontFamily: "'Schibsted Grotesk', sans-serif"
     fontSize: "clamp(28px, 3.6vw, 46px)"
     fontWeight: 550
     lineHeight: 1.18
     letterSpacing: "-1.4px"
   numeral:
-    fontFamily: "'Geist', sans-serif"
+    fontFamily: "'Schibsted Grotesk', sans-serif"
     fontSize: "clamp(52px, 8vw, 104px)"
     fontWeight: 700
     lineHeight: 1
     letterSpacing: "-4px"
   body:
-    fontFamily: "'Geist', sans-serif"
+    fontFamily: "'Schibsted Grotesk', sans-serif"
     fontSize: "clamp(16px, 1.8vw, 20px)"
     fontWeight: 450
     lineHeight: 1.5
     letterSpacing: "normal"
   label:
-    fontFamily: "'Geist Mono', ui-monospace, monospace"
+    fontFamily: "'DM Mono', ui-monospace, monospace"
     fontSize: "9–12px"
     fontWeight: 500
     lineHeight: 1
@@ -108,7 +109,7 @@ components:
 **Creative North Star: "Product-grade calm."**
 
 The page should read like a beautifully built product, not a marketing brochure. Light, airy, and
-precise (Raycast / Linear lineage): a cool off-white ground, one confident blue, Geist's clean
+precise (Raycast / Linear lineage): a cool off-white ground, one confident blue, Schibsted Grotesk's clean
 geometry, soft layered shadows, and real device mockups that look like the actual app. The whole
 page is itself the proof of the design thesis. If a prospect isn't impressed by how it looks, the
 design bet has failed at the first gate.
@@ -127,7 +128,7 @@ re-skin to a gym's brand.
 **Key Characteristics:**
 - One blue accent, carried by a subtle vertical gradient on primary actions.
 - Light, tinted ground (`#f3f5f8`), white surfaces that lift off it with soft shadow.
-- Geist everywhere readable; Geist Mono for small tracked labels and captions.
+- Schibsted Grotesk everywhere readable; DM Mono for small tracked labels and captions.
 - Soft, layered, diffuse shadows convey lift. Used deliberately, never harsh.
 - Frosted glass (backdrop-blur) on the nav, the pricing panel, and the in-app notification, purposefully.
 - Atmosphere from radial accent glows and faint dot-grids behind hero / pricing / recs / loyalty / why.
@@ -173,33 +174,38 @@ elevated.
 
 ## 3. Typography
 
-**Sans:** Geist (with Inter, system-ui fallback) — clean, slightly geometric, product-grade. Carries
-every readable word and every headline.
-**Mono:** Geist Mono — small uppercase tracked labels, eyebrows, captions, prices' "PTS"/cadence,
-timestamps. The mono is the texture signal that this is a built product.
+**Sans:** Schibsted Grotesk (system-ui fallback) — a Scandinavian grotesque, warmer and slightly
+narrower than the usual UI sans, with a distinctive single-storey `g` and open terminals. Carries
+every readable word and every headline. Chosen deliberately over Inter, Geist, Instrument Sans and
+Plus Jakarta: those are so widely used that they read as the default of an AI-generated page rather
+than as a decision. Its 400–700 variable range covers the 450 body and 650 wordmark weights the site
+uses.
+**Mono:** DM Mono — small uppercase tracked labels, eyebrows, captions, prices' "PTS"/cadence,
+timestamps. Lighter and more editorial than a coding mono; it is the texture signal that this is a
+built product, not a terminal.
 
-**Character:** A one-family-plus-mono system. Geist does display and body (weight + size carry
-hierarchy); Geist Mono does the small technical labels. Headlines run tight (negative letter-spacing
+**Character:** A one-family-plus-mono system. Schibsted Grotesk does display and body (weight + size carry
+hierarchy); DM Mono does the small technical labels. Headlines run tight (negative letter-spacing
 down to about −2.4px at hero scale) — the tightening is part of the look.
 
 ### Hierarchy
 
-- **Hero** (Geist 600, clamp(40–68px), line-height 1.0, tracking −2.4px): the single H1.
-- **Title** (Geist 600, clamp(30–44px), tracking −1.5px): section H2s.
-- **Statement** (Geist 550, clamp(28–46px), tracking −1.4px): the §2 two-tone one-liner.
-- **Numeral** (Geist 700, clamp(52–104px), tracking −4px, tabular): ROI stats and prices, in
+- **Hero** (Schibsted Grotesk 600, clamp(40–68px), line-height 1.0, tracking −2.4px): the single H1.
+- **Title** (Schibsted Grotesk 600, clamp(30–44px), tracking −1.5px): section H2s.
+- **Statement** (Schibsted Grotesk 550, clamp(28–46px), tracking −1.4px): the §2 two-tone one-liner.
+- **Numeral** (Schibsted Grotesk 700, clamp(52–104px), tracking −4px, tabular): ROI stats and prices, in
   `accent-dark`.
-- **Body** (Geist 450, clamp(16–20px), line-height 1.5): sublines and descriptions. Cap at 65–75ch.
-- **Label** (Geist Mono 500, 9–12px, tracked 0.4–0.6px, UPPERCASE): eyebrows, captions, chips,
+- **Body** (Schibsted Grotesk 450, clamp(16–20px), line-height 1.5): sublines and descriptions. Cap at 65–75ch.
+- **Label** (DM Mono 500, 9–12px, tracked 0.4–0.6px, UPPERCASE): eyebrows, captions, chips,
   "Owner view", timestamps, "PTS".
 
 ### Named Rules
 
-**The Numerals-Are-Geist-Bold Rule.** Prices, points, and ROI stats are Geist 700 with tabular
+**The Numerals-Are-Bold-Sans Rule.** Prices, points, and ROI stats are Schibsted Grotesk 700 with tabular
 figures in `accent-dark`, animated with a count-up where they anchor a section.
 
 **The Mono-For-Furniture Rule.** Small technical labels (eyebrows, captions, timestamps, status
-text) are Geist Mono, uppercase, tracked. Body copy is never mono.
+text) are DM Mono, uppercase, tracked. Body copy is never mono.
 
 **The No-Gradient-Text Rule.** `background-clip: text` with a gradient is forbidden. Emphasis comes
 from weight, size, color (ink ramp), and the two-tone accent period in §2.
@@ -266,7 +272,7 @@ surfaces are the soft white gradient, not glass.
   side by side. Clickable: selecting one sets the global theme.
 
 ### Stat numeral (`why.jsx`)
-- Large Geist 700 tabular numeral in `accent-dark`, count-up on scroll-into-view, with a body line
+- Large Schibsted Grotesk 700 tabular numeral in `accent-dark`, count-up on scroll-into-view, with a body line
   below and an optional mono math annotation.
 
 ## 6. Do's and Don'ts
@@ -275,8 +281,8 @@ surfaces are the soft white gradient, not glass.
 - **Do** use one blue (`#2A67BD`) and its gradient partner (`#1F5099`) / soft tint (`#E8F0FB`).
 - **Do** put the `accent → accent-dark` gradient on primary actions and brand marks.
 - **Do** use `#f3f5f8` ground with white (`#ffffff`) cards lifted by soft layered shadow.
-- **Do** set Geist for everything readable, Geist Mono for small tracked uppercase labels.
-- **Do** set prices/points/stats in Geist 700 tabular, in `accent-dark`.
+- **Do** set Schibsted Grotesk for everything readable, DM Mono for small tracked uppercase labels.
+- **Do** set prices/points/stats in Schibsted Grotesk 700 tabular, in `accent-dark`.
 - **Do** convey lift with layered diffuse shadows (contact + soft drop + inset highlight).
 - **Do** reserve frosted glass for the nav, pricing panel, and floating notification.
 - **Do** drive the mock imagery + accent from the global theme store; let the §3 rail show many brands.
