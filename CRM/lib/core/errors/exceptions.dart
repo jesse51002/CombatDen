@@ -174,6 +174,21 @@ class WaiverGateException implements Exception {
   String toString() => message;
 }
 
+/// Thrown when `POST /api/v1/emails/send` returns HTTP 429 — the same person
+/// has already been sent three of that kind within the trailing hour.
+///
+/// A distinct type so the resend affordances can say what actually happened
+/// (a cap, not a failure) instead of surfacing a generic server error: the
+/// cap protects CombatDen's sending reputation, and the send that already
+/// went out is still on its way.
+class InviteRateLimitedException implements Exception {
+  const InviteRateLimitedException();
+
+  @override
+  String toString() =>
+      'Too many invites sent to this person — try again later.';
+}
+
 /// Thrown when an approve/reject on a redemption returns HTTP 409,
 /// meaning another staff member has already decided it.
 class RedemptionAlreadyDecidedException implements Exception {

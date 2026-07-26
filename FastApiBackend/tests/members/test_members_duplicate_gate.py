@@ -29,6 +29,7 @@ def test_allow_duplicate_defaults_false():
         first_name="Ada",
         last_name="Lovelace",
         email="ada@example.com",
+        send_invite=False,
     )
     assert request.allow_duplicate is False
 
@@ -46,6 +47,7 @@ async def test_check_duplicate_noop_when_email_none():
         first_name="Ada",
         last_name="Lovelace",
         email=None,
+        send_invite=False,
     )
     await svc._check_duplicate(request)  # no raise
     svc._find_duplicates.assert_not_awaited()
@@ -62,6 +64,7 @@ async def test_check_duplicate_noop_when_allow_duplicate():
         last_name="Lovelace",
         email="ada@example.com",
         allow_duplicate=True,
+        send_invite=False,
     )
     await svc._check_duplicate(request)  # no raise
     svc._find_duplicates.assert_not_awaited()
@@ -76,6 +79,7 @@ async def test_check_duplicate_passes_when_no_match():
         first_name="Ada",
         last_name="Lovelace",
         email="ada@example.com",
+        send_invite=False,
     )
     await svc._check_duplicate(request)  # no raise
     svc._find_duplicates.assert_awaited_once()
@@ -97,6 +101,7 @@ async def test_check_duplicate_raises_409_with_matches():
         first_name="Ada",
         last_name="Lovelace",
         email="ada@example.com",
+        send_invite=False,
     )
     with pytest.raises(HTTPException) as exc_info:
         await svc._check_duplicate(request)
@@ -137,8 +142,9 @@ async def test_duplicate_gate_409_then_allow_duplicate(
             first_name="DupGate",
             last_name="Tester",
             email=email,
+            send_invite=False,
         ),
-    )
+    ).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
@@ -151,8 +157,9 @@ async def test_duplicate_gate_409_then_allow_duplicate(
                 first_name="DupGate",
                 last_name="Tester",
                 email=email,
+                send_invite=False,
             ),
-        )
+        ).member
     assert exc_info.value.status_code == 409
     detail = exc_info.value.detail
     assert detail["code"] == "duplicate_member"
@@ -169,8 +176,9 @@ async def test_duplicate_gate_409_then_allow_duplicate(
             last_name="Tester",
             email=email,
             allow_duplicate=True,
+            send_invite=False,
         ),
-    )
+    ).member
     created.track_member(second.member_id)
     created.track_customer(second.stripe_customer_id)
 
@@ -203,8 +211,9 @@ async def test_duplicate_gate_normalizes_case_and_whitespace(
             first_name=f"Ada{suffix}",
             last_name="Lovelace",
             email=f"ada.{suffix}@example.com",
+            send_invite=False,
         ),
-    )
+    ).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
@@ -218,6 +227,7 @@ async def test_duplicate_gate_normalizes_case_and_whitespace(
                 first_name=f"  ADA{suffix.upper()}  ",
                 last_name="  lovelace ",
                 email=f"ADA.{suffix.upper()}@EXAMPLE.COM",
+                send_invite=False,
             ),
         )
 
@@ -243,8 +253,9 @@ async def test_null_email_create_never_gated(
             first_name="Casey",
             last_name=last_name,
             email=None,
+            send_invite=False,
         ),
-    )
+    ).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
@@ -255,8 +266,9 @@ async def test_null_email_create_never_gated(
             first_name="Casey",
             last_name=last_name,
             email=None,
+            send_invite=False,
         ),
-    )
+    ).member
     created.track_member(second.member_id)
     created.track_customer(second.stripe_customer_id)
 

@@ -22,14 +22,22 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import text
 
-from src.members import SQL_DIR
-from src.members.schema.members_billing_schema import (
-    MembersBillingProfileResponse,
+# db_schema_path registers Database/python_data on sys.path; it MUST run
+# before `from schema.*` (isort: skip keeps that order).
+import src.shared.db_schema_path  # noqa: F401  # isort: skip
+from schema.email import EmailKind  # isort: skip
+
+from src.emails.schema.emails_schema import (
+    InviteOutcome,
+    MemberAppInviteEmail,
 )
+from src.emails.service.emails_service import EmailsService
+from src.members import SQL_DIR
 from src.members.schema.members_schema import (
     DuplicateMemberConflict,
     DuplicateMemberMatch,
     MemberCreateRequest,
+    MemberCreateResult,
     MemberResponse,
 )
 from src.members.service.management.members_management_base import (
@@ -42,6 +50,10 @@ from src.payments.schema.payments_members_schema import (
     PaymentsCustomerCreateRequest,
     PaymentsCustomerResponse,
 )
+from src.payments.service.payments_stripe_members_service import (
+    PaymentsStripeMembersService,
+)
+from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
@@ -52,10 +64,19 @@ _MANAGEMENT_SQL = SQL_DIR / "management"
 class MembersManagementCreate(MembersManagementBase):
     """Create a member and provision its Stripe customer atomically."""
 
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        payments_members_service: PaymentsStripeMembersService,
+        emails_service: EmailsService,
+    ) -> None:
+        super().__init__(db_pool, payments_members_service)
+        self._emails = emails_service
+
     async def create_member(
         self,
         request: MemberCreateRequest,
-    ) -> MembersBillingProfileResponse:
+    ) -> MemberCreateResult:
         """Insert the member shell, create its Stripe customer, write it back.
 
         Args:
@@ -107,7 +128,30 @@ class MembersManagementCreate(MembersManagementBase):
         # 4. Persist the Stripe customer (+ card details if a PM was attached).
         await self._write_stripe_customer(member.member_id, stripe_resp)
 
-        return await self._get_member(member.member_id)
+        created = await self._get_member(member.member_id)
+        if not request.send_invite:
+            return MemberCreateResult(
+                member=created,
+                invite=InviteOutcome.not_requested,
+            )
+        # 5. Claim the app invite — LAST, and only once the member is fully
+        #    created (row + Stripe customer). Everything above can still
+        #    unwind and delete the shell row; an invite claimed before that
+        #    could outlive a member who was never created. A mail failure
+        #    from here on is recorded on the email_log row and retried by the
+        #    reconciler, and never fails this create.
+        email_id, outcome = await self._emails.request_send(
+            MemberAppInviteEmail(
+                kind=EmailKind.member_app_invite,
+                gym_id=request.gym_id,
+                member_id=member.member_id,
+            )
+        )
+        return MemberCreateResult(
+            member=created,
+            invite=outcome,
+            email_id=email_id,
+        )
 
     # ── Helpers ────────────────────────────────────────────────
 

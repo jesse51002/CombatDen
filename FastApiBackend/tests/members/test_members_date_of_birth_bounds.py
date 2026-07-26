@@ -42,6 +42,7 @@ def _create(**overrides) -> MemberCreateRequest:
         first_name="Ada",
         last_name="Lovelace",
         **overrides,
+        send_invite=False,
     )
 
 

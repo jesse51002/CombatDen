@@ -279,6 +279,52 @@ class DependencyInjector(containers.DeclarativeContainer):
         timeout_seconds=settings.auth_settings_check_timeout_seconds,
     )
 
+    # Defined EARLY, right after db_pool/auth: the employees and members
+    # create paths both depend on emails_service, and a DeclarativeContainer
+    # resolves provider references at class-body evaluation time — a
+    # provider referenced before it is defined is a NameError at import.
+    # ── Outbound email ───────────────────────────────────────────
+    # CombatDen's OWN mail only. Supabase Auth's login mail and Stripe's
+    # card-declined mail are separate channels that never touch this domain.
+    # Every dependency arrives by constructor, so no service here imports
+    # `settings` or the container.
+    emails_log = providers.Factory(EmailsLog, db_pool=db_pool)
+    emails_recipients = providers.Factory(EmailsRecipients, db_pool=db_pool)
+    emails_renderer = providers.Factory(EmailsRenderer)
+    emails_suppression = providers.Factory(
+        EmailsSuppression,
+        db_pool=db_pool,
+        unsubscribe_secret=settings.email_unsubscribe_secret,
+    )
+    emails_resend_client = providers.Factory(
+        EmailsResendClient,
+        api_key=settings.resend_api_key,
+        from_address=settings.email_from_address,
+        from_name=settings.email_from_name,
+        reply_to=settings.email_reply_to,
+        # Empty string means "no redirect" — normalize to None so the client
+        # never treats "" as an address.
+        sandbox_redirect=settings.email_sandbox_redirect or None,
+    )
+    emails_service = providers.Factory(
+        EmailsService,
+        db_pool=db_pool,
+        log=emails_log,
+        recipients=emails_recipients,
+        renderer=emails_renderer,
+        suppression=emails_suppression,
+        client=emails_resend_client,
+        # A kind absent from this set is claimed as 'held' and never sent.
+        enabled_kinds=frozenset(settings.email_enabled_kinds),
+        unsubscribe_base_url=settings.email_unsubscribe_base_url,
+    )
+    # Singleton so the ClassVar task set has one owner per process and the
+    # lifespan's drain() sees every in-flight send.
+    emails_runner = providers.Singleton(
+        EmailsRunner,
+        emails_service=emails_service,
+    )
+
     # The canonical single-shape recurrence + exception engine is pure (no
     # I/O); a single shared instance is reused everywhere.
     classes_expander = providers.Singleton(ClassesExpander)
@@ -472,7 +518,13 @@ class DependencyInjector(containers.DeclarativeContainer):
     # Employees: plain gym config (live staff-roster CRUD), no Stripe.
     # Identity is the lowercase email column matched to a verified auth account
     # (no user_id); archiving is a soft-delete, no auth-system interaction.
-    employees_service = providers.Factory(EmployeesService, db_pool=db_pool)
+    employees_service = providers.Factory(
+        EmployeesService,
+        db_pool=db_pool,
+        # Create claims the staff onboarding invite when asked to. One-way
+        # edge: emails imports nothing back from employees.
+        emails_service=emails_service,
+    )
 
     # Videos: the slug-keyed template catalog + a real gym's live
     # feed/spec/showcase from the gym_video_* tables, plus the owner's feed
@@ -744,6 +796,9 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         payments_members_service=payments_members_service,
         subscription_service=payments_subscription_service,
+        # Create claims the member's app invite. One-way edge: emails
+        # imports nothing back from members.
+        emails_service=emails_service,
     )
 
     # ── Reprice operation (memberships — task-agnostic) ──────────
@@ -998,47 +1053,6 @@ class DependencyInjector(containers.DeclarativeContainer):
         lock_ttl_seconds=settings.growth_compute_lock_ttl_seconds,
     )
 
-    # ── Outbound email ───────────────────────────────────────────
-    # CombatDen's OWN mail only. Supabase Auth's login mail and Stripe's
-    # card-declined mail are separate channels that never touch this domain.
-    # Every dependency arrives by constructor, so no service here imports
-    # `settings` or the container.
-    emails_log = providers.Factory(EmailsLog, db_pool=db_pool)
-    emails_recipients = providers.Factory(EmailsRecipients, db_pool=db_pool)
-    emails_renderer = providers.Factory(EmailsRenderer)
-    emails_suppression = providers.Factory(
-        EmailsSuppression,
-        db_pool=db_pool,
-        unsubscribe_secret=settings.email_unsubscribe_secret,
-    )
-    emails_resend_client = providers.Factory(
-        EmailsResendClient,
-        api_key=settings.resend_api_key,
-        from_address=settings.email_from_address,
-        from_name=settings.email_from_name,
-        reply_to=settings.email_reply_to,
-        # Empty string means "no redirect" — normalize to None so the client
-        # never treats "" as an address.
-        sandbox_redirect=settings.email_sandbox_redirect or None,
-    )
-    emails_service = providers.Factory(
-        EmailsService,
-        db_pool=db_pool,
-        log=emails_log,
-        recipients=emails_recipients,
-        renderer=emails_renderer,
-        suppression=emails_suppression,
-        client=emails_resend_client,
-        # A kind absent from this set is claimed as 'held' and never sent.
-        enabled_kinds=frozenset(settings.email_enabled_kinds),
-        unsubscribe_base_url=settings.email_unsubscribe_base_url,
-    )
-    # Singleton so the ClassVar task set has one owner per process and the
-    # lifespan's drain() sees every in-flight send.
-    emails_runner = providers.Singleton(
-        EmailsRunner,
-        emails_service=emails_service,
-    )
     # Turns a provider outage into a delay rather than a staff member who can
     # never log in. Skips 'held' rows — see the sweep's own docstring.
     reconciler_email_retry_sweep = providers.Factory(

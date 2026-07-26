@@ -8,12 +8,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from src.emails.service.emails_service import EmailsService
 from src.members.schema.members_billing_schema import (
     MembersBillingProfileResponse,
     MembersBillingUpdateCardRequest,
 )
 from src.members.schema.members_schema import (
     MemberCreateRequest,
+    MemberCreateResult,
     MemberResponse,
     MemberUpdateData,
 )
@@ -58,9 +60,12 @@ class MembersManagementService:
         db_pool: DirectDatabasePool,
         payments_members_service: PaymentsStripeMembersService,
         subscription_service: PaymentsStripeSubscriptionService,
+        emails_service: EmailsService,
     ) -> None:
         deps = (db_pool, payments_members_service)
-        self._create = MembersManagementCreate(*deps)
+        # Create also claims the member's app invite. One-way edge:
+        # emails imports nothing back from members.
+        self._create = MembersManagementCreate(*deps, emails_service)
         self._update = MembersManagementUpdate(*deps)
         self._payment_methods = MembersManagementPaymentMethods(*deps)
         self._invoices = MembersManagementInvoices(
@@ -74,8 +79,8 @@ class MembersManagementService:
     async def create_member(
         self,
         request: MemberCreateRequest,
-    ) -> MembersBillingProfileResponse:
-        """Create a member and provision its Stripe customer atomically."""
+    ) -> MemberCreateResult:
+        """Create a member, its Stripe customer, and its app invite."""
         return await self._create.create_member(request)
 
     async def update_member(

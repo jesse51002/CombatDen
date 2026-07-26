@@ -181,6 +181,7 @@ async def test_has_payment_method_raises_when_stripe_fails(
         db_pool,
         failing_payments,
         MagicMock(),
+        MagicMock(),
     )
 
     with pytest.raises(PaymentsStripeError):
