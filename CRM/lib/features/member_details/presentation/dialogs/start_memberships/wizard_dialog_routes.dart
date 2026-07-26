@@ -4,6 +4,7 @@ import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_cubit.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_derived.dart';
+import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_person.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/presentation/dialogs/member_detail_bloc_settle.dart';
@@ -13,6 +14,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_link_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_new_member_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/update_card_dialog.dart';
+import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 /// The staff dialogs that open OVER the run, and the sequencing each needs.
 ///
@@ -79,16 +81,17 @@ class WizardDialogRoutes {
     await cubit.loadPayerDetail(alsoTrain: linkedId);
   }
 
-  /// Change who pays — including creating or linking a NEW payer, which is
-  /// the same two adders pointed the other way.
+  /// Change who pays — including authorizing somebody already on the roster,
+  /// or creating or linking a NEW payer, which is the same two adders pointed
+  /// the other way.
   Future<void> changePayer(BuildContext context) async {
     final chosen = await ChangePayerDialog.show(
       context: context,
+      cubit: cubit,
       launchMember: launchMember,
-      currentPayerId: cubit.state.payer.memberId,
-      candidates: cubit.state.payerCandidates,
       onCreatePayer: () => _authorizeNewPayer(context),
       onLinkPayer: () => _authorizeLinkedPayer(context),
+      onAuthorizeInRun: (person) => _authorizeRosterPayer(context, person),
     );
     if (chosen == null) return;
     cubit.selectPayer(chosen);
@@ -141,15 +144,43 @@ class WizardDialogRoutes {
   }
 
   /// Pick an existing member and authorize THEM as a payer.
-  Future<String?> _authorizeLinkedPayer(BuildContext context) async {
-    final exclude = _payerIds();
+  Future<String?> _authorizeLinkedPayer(BuildContext context) =>
+      _authorizePayer(context, candidates: _roster(_payerIds()));
+
+  /// Authorize somebody ALREADY on the run's roster as a payer.
+  ///
+  /// It is the search route with the search skipped, not a second way to
+  /// authorize: the same dialog, the same waiver, the same commit. Anything
+  /// else would be a signature collected by code the other route never runs.
+  Future<String?> _authorizeRosterPayer(
+    BuildContext context,
+    MembershipWizardPerson person,
+  ) =>
+      _authorizePayer(
+        context,
+        preselected: MemberPickerEntry(
+          id: person.memberId,
+          name: person.name,
+          avatarUrl: person.photoUrl,
+        ),
+      );
+
+  /// The ONE payer-side authorization: the picked member signs the launch
+  /// member's authorized-payer agreement, and the candidates are re-read off
+  /// the settled record afterwards so the switch can offer them.
+  Future<String?> _authorizePayer(
+    BuildContext context, {
+    List<MemberSummary> candidates = const [],
+    MemberPickerEntry? preselected,
+  }) async {
     final token = _refreshToken();
     final linkedId = await StartLinkMemberDialog.show(
       context: context,
       direction: AuthorizeDirection.addPayer,
       anchorMemberId: launchMember.memberId,
       anchorName: launchMember.fullName,
-      candidates: _roster(exclude),
+      candidates: candidates,
+      preselected: preselected,
     );
     if (linkedId == null) return null;
     await awaitMemberDetailSettle(detailBloc, token);

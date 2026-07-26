@@ -55,6 +55,25 @@ extension MembershipWizardDerived on MembershipWizardState {
   List<MembershipWizardPerson> get trainingPeople =>
       [for (final person in people) if (person.training) person];
 
+  /// The roster rows that could pay for this run but are not authorized to
+  /// yet — offered as payers at the price of one signature.
+  ///
+  /// The launch member is left out (they are the self-pay option) and so is
+  /// anybody already among [payerCandidates] (they are already offered, and a
+  /// pair the gym holds an agreement for is never asked to sign a second one),
+  /// so the payer choices name each person exactly once.
+  List<MembershipWizardPerson> get unauthorizedRosterPayers {
+    final authorized = <String>{
+      for (final account in payerCandidates) account.memberId,
+    };
+    return [
+      for (final person in people)
+        if (person.memberId != launchMemberId &&
+            !authorized.contains(person.memberId))
+          person,
+    ];
+  }
+
   /// The person whose plans step is open, clamped into the training roster.
   MembershipWizardPerson? get currentPerson {
     final list = trainingPeople;

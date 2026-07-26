@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -12,13 +14,11 @@ import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_payer_pane.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/link_select_panel.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_person_copy.dart';
 import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_foot.dart';
-import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_note.dart';
-import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_panel.dart';
 import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_terminal.dart';
-import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 enum _LinkStep { select, sign, success, error }
@@ -38,6 +38,13 @@ enum _LinkStep { select, sign, success, error }
 /// that can never appear is the one thing a search box cannot explain by
 /// itself, and staff otherwise spell it three ways before giving up.
 ///
+/// [preselected] skips the search entirely: the payer switch can offer a
+/// person already on the run's roster, and making staff search for a name
+/// that is on screen is the annoyance that route exists to end. The
+/// authorization itself is unchanged — the same waiver, the same signature,
+/// the same commit — which is why it is this dialog opened on its sign step
+/// rather than a second authorization path.
+///
 /// On confirm it dispatches [LinkParentRequested] (`memberId` = payee,
 /// `payerMemberId` = payer, who signs) and pops with the PICKED member's id so
 /// the wizard refreshes and auto-selects them.
@@ -54,15 +61,20 @@ class StartLinkMemberDialog extends StatefulWidget {
   final String anchorName;
 
   /// Roster to choose from; rows already related to the anchor
-  /// are excluded by the caller.
+  /// are excluded by the caller. Unread when [preselected] is given.
   final List<MemberSummary> candidates;
+
+  /// The person the authorization is FOR, when the caller already knows them.
+  /// The dialog opens on the sign step for them and never shows the search.
+  final MemberPickerEntry? preselected;
 
   const StartLinkMemberDialog({
     super.key,
     required this.direction,
     required this.anchorMemberId,
     required this.anchorName,
-    required this.candidates,
+    this.candidates = const [],
+    this.preselected,
   });
 
   static Future<String?> show({
@@ -70,7 +82,8 @@ class StartLinkMemberDialog extends StatefulWidget {
     required AuthorizeDirection direction,
     required String anchorMemberId,
     required String anchorName,
-    required List<MemberSummary> candidates,
+    List<MemberSummary> candidates = const [],
+    MemberPickerEntry? preselected,
   }) {
     return showDialog<String>(
       context: context,
@@ -81,6 +94,7 @@ class StartLinkMemberDialog extends StatefulWidget {
           anchorMemberId: anchorMemberId,
           anchorName: anchorName,
           candidates: candidates,
+          preselected: preselected,
         ),
       ),
     );
@@ -100,9 +114,17 @@ class _StartLinkMemberDialogState
 
   _LinkStep _step = _LinkStep.select;
 
-  MemberSummary? _selected;
+  MemberPickerEntry? _selected;
+
+  /// The select step's Continue is reading the waiver.
   bool _checking = false;
-  String? _checkError;
+
+  /// The sign step is reading the waiver — the preselected route only, which
+  /// enters the step before the read rather than after it.
+  bool _fetching = false;
+
+  /// The waiver read that failed, shown by whichever step is on screen.
+  String? _waiverError;
 
   String? _waiverVersionId;
   String _waiverBody = ''; // raw template body; rendered by the sign body
@@ -115,6 +137,17 @@ class _StartLinkMemberDialogState
   /// so we can detect a successful commit.
   int _tokenBefore = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    final known = widget.preselected;
+    if (known == null) return;
+    _selected = known;
+    _step = _LinkStep.sign;
+    _fetching = true;
+    unawaited(_openSignStep());
+  }
+
   /// The resolved (payer, payee) pair for the currently-picked member — null
   /// until one is picked.
   AuthorizeParties? get _parties {
@@ -124,8 +157,8 @@ class _StartLinkMemberDialogState
       direction: widget.direction,
       anchorId: widget.anchorMemberId,
       anchorName: widget.anchorName,
-      otherId: other.memberId,
-      otherName: other.fullName,
+      otherId: other.id,
+      otherName: other.name,
     );
   }
 
@@ -163,35 +196,59 @@ class _StartLinkMemberDialogState
         .toList();
   }
 
-  /// Select step → fetch the payee's gym default waiver and advance
-  /// to the sign step. No eligibility check — adding is unconditional;
-  /// the signed waiver is the only gate.
-  Future<void> _continueToSign() async {
+  /// Read the payee's gym default authorized-payer waiver into the sign step.
+  /// Both routes in run this ONE read; they differ only in where they wait.
+  /// No eligibility check — adding is unconditional; the signed waiver is the
+  /// only gate.
+  Future<bool> _readWaiver() async {
     final parties = _parties;
-    if (parties == null || _checking) return;
-    setState(() {
-      _checking = true;
-      _checkError = null;
-    });
+    if (parties == null) return false;
     try {
       final waiver = await _repository.getAuthorizedPayerWaiver(
         parties.payeeId,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
-        _checking = false;
         _waiverVersionId = waiver.versionId;
         _waiverBody = waiver.body;
         _waiverName = waiver.name;
-        _step = _LinkStep.sign;
       });
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _checking = false;
-        _checkError = StartPersonCopy.waiverLoadFailed;
-      });
+      return false;
     }
+  }
+
+  /// Select step → read the waiver, then advance. The step is left only once
+  /// the agreement is in hand, so the sign step it lands on is never a
+  /// spinner.
+  Future<void> _continueToSign() async {
+    if (_parties == null || _checking) return;
+    setState(() {
+      _checking = true;
+      _waiverError = null;
+    });
+    final landed = await _readWaiver();
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      if (landed) {
+        _step = _LinkStep.sign;
+      } else {
+        _waiverError = StartPersonCopy.waiverLoadFailed;
+      }
+    });
+  }
+
+  /// The preselected route: the sign step is already on screen, so the read
+  /// resolves INTO it — its spinner, then its agreement or its failure.
+  Future<void> _openSignStep() async {
+    final landed = await _readWaiver();
+    if (!mounted) return;
+    setState(() {
+      _fetching = false;
+      if (!landed) _waiverError = StartPersonCopy.waiverLoadFailed;
+    });
   }
 
   bool get _canSign =>
@@ -232,7 +289,7 @@ class _StartLinkMemberDialogState
             !state.isMutating) {
           // Committed — pop with the PICKED member's id so the
           // wizard can add/select them.
-          final pickedId = _selected?.memberId;
+          final pickedId = _selected?.id;
           setState(() {
             _submitting = false;
             _step = _LinkStep.success;
@@ -300,10 +357,11 @@ class _StartLinkMemberDialogState
         return _selectBody();
       case _LinkStep.sign:
         return AuthorizePayerPane(
-          // The waiver is fetched before this step is entered, so it is
-          // never loading or failed once here.
-          fetching: false,
-          error: null,
+          // Both are false on the search route — it reads the waiver BEFORE
+          // entering this step. The preselected route enters first, so it is
+          // the one that can be seen loading or failing here.
+          fetching: _fetching,
+          error: _waiverError,
           payerName: _payerName,
           payeeName: _payeeName,
           gymName: selectedGym.gymName ?? '',
@@ -333,46 +391,17 @@ class _StartLinkMemberDialogState
   }
 
   Widget _selectBody() {
-    final error = _checkError;
-    return TaskPanel(
-      fill: true,
-      children: [
-        Expanded(
-          child: PaginatedMemberPicker(
-            fetchPage: _fetchPage,
-            pageSize: _pageSize,
-            selectedId: _selected?.memberId,
-            expand: true,
-            onSelected: (entry) {
-              final match = widget.candidates.where(
-                (m) => m.memberId == entry.id,
-              );
-              setState(() {
-                _selected = match.isEmpty ? null : match.first;
-                _checkError = null;
-              });
-            },
-          ),
-        ),
-        if (error != null)
-          Text(
-            error,
-            style: DesignConstants.pSemibold.copyWith(
-              color: DesignConstants.badRed,
-            ),
-          ),
-        const TaskNote(
-          StartPersonCopy.findPaging,
-          textAlign: TextAlign.center,
-        ),
-        const Hairline(),
-        TaskNote(
-          StartPersonCopy.findNotListed(
-            direction: widget.direction,
-            anchorName: widget.anchorName,
-          ),
-        ),
-      ],
+    return LinkSelectPanel(
+      direction: widget.direction,
+      anchorName: widget.anchorName,
+      fetchPage: _fetchPage,
+      pageSize: _pageSize,
+      selectedId: _selected?.id,
+      error: _waiverError,
+      onSelected: (entry) => setState(() {
+        _selected = entry;
+        _waiverError = null;
+      }),
     );
   }
 
@@ -394,9 +423,14 @@ class _StartLinkMemberDialogState
           busy: _submitting,
           onPrimary: _canSign ? _confirmSign : null,
           secondaryLabel: StartPersonCopy.back,
+          // There is no search to go back TO when the person was handed in,
+          // so Back leaves — onto the surface that named them, which is where
+          // picking them again (and so re-reading a waiver that failed) is.
           onSecondary: _submitting
               ? null
-              : () => setState(() => _step = _LinkStep.select),
+              : widget.preselected != null
+                  ? () => Navigator.of(context).pop()
+                  : () => setState(() => _step = _LinkStep.select),
         );
       case _LinkStep.success:
       case _LinkStep.error:
