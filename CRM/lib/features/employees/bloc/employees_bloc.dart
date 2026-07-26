@@ -8,7 +8,10 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
+import 'package:crm/features/emails/data/models/email_kind.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/employees/data/models/employee_create_result.dart';
 import 'package:crm/features/employees/data/models/employee_taught_class.dart';
 import 'package:crm/features/employees/data/repositories/employees_repository.dart';
 import 'package:crm/features/schedule/data/models/gym_class_response.dart';
@@ -24,15 +27,22 @@ EventTransformer<E> _debounce<E>(Duration duration) =>
 /// client-side against the loaded roster. Every mutation rides a dedicated
 /// monotonic success token so the Add/Edit/Remove dialogs confirm against
 /// committed state (the charge-card terminal pattern), never fire-and-pop.
+///
+/// Resending a staff onboarding email goes through the `emails` domain
+/// ([EmailsRepository]) rather than the employees one, and deliberately does
+/// NOT reload the roster: a resend changes no row.
 class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
   final EmployeesRepository _employeesRepository;
   final ScheduleRepository _scheduleRepository;
+  final EmailsRepository _emailsRepository;
 
   EmployeesBloc({
     required EmployeesRepository employeesRepository,
     required ScheduleRepository scheduleRepository,
+    required EmailsRepository emailsRepository,
   })  : _employeesRepository = employeesRepository,
         _scheduleRepository = scheduleRepository,
+        _emailsRepository = emailsRepository,
         super(const EmployeesInitial()) {
     on<EmployeesInitRequested>(_onInitRequested);
     on<EmployeesSearchChanged>(
@@ -43,6 +53,8 @@ class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
     on<EmployeeInviteSubmitted>(_onInviteSubmitted);
     on<EmployeeUpdateSubmitted>(_onUpdateSubmitted);
     on<EmployeeRemoveRequested>(_onRemoveRequested);
+    on<EmployeeInviteResendRequested>(_onInviteResendRequested);
+    on<EmployeesResendOutcomeCleared>(_onResendOutcomeCleared);
     on<EmployeesMutationOutcomeCleared>(_onMutationOutcomeCleared);
   }
 
@@ -102,14 +114,17 @@ class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
     EmployeeInviteSubmitted event,
     Emitter<EmployeesState> emit,
   ) =>
-      _runMutation(
+      _runMutation<EmployeeCreateResult>(
         emit: emit,
         label: 'Invite employee',
         action: (gymId) =>
             _employeesRepository.createEmployee(gymId, event.request),
         onSuccess: (reloaded, created) => reloaded.copyWith(
           inviteSuccess: reloaded.inviteSuccess + 1,
-          lastInvitedEmployee: created,
+          lastInvitedEmployee: created.employee,
+          // The server's answer, not the request's ask: staff were asked
+          // whether to invite, so the dialog reports what actually happened.
+          lastInviteOutcome: created.invite,
         ),
       );
 
@@ -117,7 +132,7 @@ class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
     EmployeeUpdateSubmitted event,
     Emitter<EmployeesState> emit,
   ) =>
-      _runMutation(
+      _runMutation<Employee>(
         emit: emit,
         label: 'Update employee',
         action: (gymId) => _employeesRepository.updateEmployee(
@@ -133,16 +148,67 @@ class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
     EmployeeRemoveRequested event,
     Emitter<EmployeesState> emit,
   ) =>
-      _runMutation(
+      _runMutation<void>(
         emit: emit,
         label: 'Remove employee',
-        action: (gymId) async {
-          await _employeesRepository.deleteEmployee(gymId, event.employeeId);
-          return null;
-        },
+        action: (gymId) =>
+            _employeesRepository.deleteEmployee(gymId, event.employeeId),
         onSuccess: (reloaded, _) =>
             reloaded.copyWith(removeSuccess: reloaded.removeSuccess + 1),
       );
+
+  /// Re-send the staff onboarding email to one roster row.
+  ///
+  /// Off the [_runMutation] path on purpose: a resend writes nothing to
+  /// `gym_employees`, so reloading the roster (and flipping the shared
+  /// `isMutating` flag the Add/Edit dialogs watch) would be noise. The row's
+  /// own [EmployeesLoaded.resendingEmployeeId] drives its inline busy state,
+  /// and the outcome lands on a dedicated channel the list surfaces as a
+  /// snackbar.
+  Future<void> _onInviteResendRequested(
+    EmployeeInviteResendRequested event,
+    Emitter<EmployeesState> emit,
+  ) async {
+    final s = state;
+    if (s is! EmployeesLoaded) return;
+    if (s.resendingEmployeeId != null) return;
+    emit(s.copyWith(
+      resendingEmployeeId: event.employeeId,
+      clearResendOutcome: true,
+    ));
+    try {
+      final outcome = await _emailsRepository.sendEmail(
+        gymId: s.gymId,
+        kind: EmailKind.staffOnboarding,
+        employeeId: event.employeeId,
+      );
+      final current = state;
+      if (current is! EmployeesLoaded) return;
+      emit(current.copyWith(
+        clearResendingEmployeeId: true,
+        resendOutcome: outcome,
+        resendToken: current.resendToken + 1,
+      ));
+    } catch (e, stackTrace) {
+      log('Resend employee invite failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! EmployeesLoaded) return;
+      emit(current.copyWith(
+        clearResendingEmployeeId: true,
+        resendError: e,
+        resendToken: current.resendToken + 1,
+      ));
+    }
+  }
+
+  void _onResendOutcomeCleared(
+    EmployeesResendOutcomeCleared event,
+    Emitter<EmployeesState> emit,
+  ) {
+    final s = state;
+    if (s is! EmployeesLoaded) return;
+    emit(s.copyWith(clearResendOutcome: true));
+  }
 
   void _onMutationOutcomeCleared(
     EmployeesMutationOutcomeCleared event,
@@ -156,11 +222,11 @@ class EmployeesBloc extends Bloc<EmployeesEvent, EmployeesState> {
   /// Shared mutation flow: mark `isMutating`, run [action], reload the roster,
   /// then apply the per-action success token via [onSuccess]. A failure lands
   /// on `mutationError` (the offending dialog reads it) and never bumps a token.
-  Future<void> _runMutation({
+  Future<void> _runMutation<T>({
     required Emitter<EmployeesState> emit,
     required String label,
-    required Future<Employee?> Function(String gymId) action,
-    required EmployeesLoaded Function(EmployeesLoaded reloaded, Employee? result)
+    required Future<T> Function(String gymId) action,
+    required EmployeesLoaded Function(EmployeesLoaded reloaded, T result)
         onSuccess,
   }) async {
     final s = state;

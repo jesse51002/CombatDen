@@ -6,6 +6,8 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/member_details/bloc/member_create_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_create_event.dart';
 import 'package:crm/features/member_details/bloc/member_create_state.dart';
@@ -34,6 +36,7 @@ import 'package:crm/features/memberships/data/repositories/ranks_repository.dart
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/shared/widgets/app_dialog/create_invite_actions.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/confirmation_modal.dart';
@@ -100,6 +103,10 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
 
   // The group being assembled — append-only, no per-row removal.
   final List<GroupMember> _group = [];
+
+  // Create step — whether the form currently holds an email, which decides
+  // whether the footer asks the invite question at all.
+  bool _hasEmail = false;
 
   // Duplicate step.
   List<DuplicateMemberMatch> _matches = const [];
@@ -180,10 +187,10 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
 
   // ----- Create step -----
 
-  void _onCreate() {
+  void _onCreate({required bool sendInvite}) {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
-    final req = form.buildRequest(_gymId);
+    final req = form.buildRequest(_gymId, sendInvite: sendInvite);
     _pendingRequest = req;
     _wasExisting = false;
     _createBloc.add(MemberCreateSubmitted(req));
@@ -231,7 +238,7 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
           _phase = _Phase.duplicate;
         });
       case MemberCreated():
-        _resolveMember(state.memberId);
+        _resolveMember(state.memberId, state.invite);
       case MemberCreateFailure():
         setState(() {
           _failureMessage = state.message;
@@ -246,15 +253,15 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
 
   /// Append the resolved member to the group (skipping an exact duplicate id —
   /// a re-picked existing member) and return to the roster hub.
-  void _resolveMember(String memberId) {
+  void _resolveMember(String memberId, InviteOutcome invite) {
     if (!_group.any((g) => g.memberId == memberId)) {
-      _group.add(_buildGroupMember(memberId));
+      _group.add(_buildGroupMember(memberId, invite));
       _updateOutcome();
     }
     setState(() => _phase = _Phase.roster);
   }
 
-  GroupMember _buildGroupMember(String memberId) {
+  GroupMember _buildGroupMember(String memberId, InviteOutcome invite) {
     if (_wasExisting) {
       final m = _matches.firstWhere((e) => e.memberId == memberId);
       return GroupMember(
@@ -263,6 +270,7 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
         email: m.email,
         photoUrl: m.photoUrl,
         wasExisting: true,
+        invite: invite,
       );
     }
     final r = _pendingRequest;
@@ -272,6 +280,7 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
       email: r?.email,
       photoUrl: r?.photoUrl,
       wasExisting: false,
+      invite: invite,
     );
   }
 
@@ -311,6 +320,7 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
       scheduleRepository: ScheduleRepository(apiClient: ApiClient()),
       ranksRepository: RanksRepository(apiClient: ApiClient()),
       rewardsRepository: RewardsRepository(apiClient: ApiClient()),
+      emailsRepository: EmailsRepository(apiClient: ApiClient()),
     )..add(MemberDetailRequested(memberId, gymId: _gymId));
   }
 
@@ -592,7 +602,11 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
         // "Add another person" clears it explicitly for a fresh person.
         Offstage(
           offstage: _phase != _Phase.create,
-          child: MemberCreateForm(key: _formKey),
+          child: MemberCreateForm(
+            key: _formKey,
+            onEmailPresenceChanged: (has) =>
+                setState(() => _hasEmail = has),
+          ),
         ),
         _phaseContent(),
       ],
@@ -691,12 +705,12 @@ class _AddMemberFlowState extends State<AddMemberFlow> {
   Widget _chromeFooter(bool creating) {
     switch (_phase) {
       case _Phase.create:
-        return AppDialogActions(
-          primaryLabel: 'Create member',
-          isLoading: creating,
-          primaryOnPressed: creating ? null : _onCreate,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: _close,
+        return CreateInviteActions(
+          createLabel: 'Create',
+          canInvite: _hasEmail,
+          busy: creating,
+          onCreate: (sendInvite) => _onCreate(sendInvite: sendInvite),
+          onCancel: _close,
         );
       case _Phase.duplicate:
         return DuplicateFooter(

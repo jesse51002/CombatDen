@@ -57,19 +57,27 @@ async def test_run_executes_the_five_billing_sweeps_in_order():
         invoice_fetch_sweep=_sweep("invoice_fetch"),
         stale_task_sweep=_sweep("stale_task"),
         subscription_orphan_sweep=_sweep("subscription_orphan"),
+        email_retry_sweep=_sweep("email_retry"),
     )
 
     result = await service.run()
 
-    assert order == [
+    billing_order = [
         "invoice_fetch",
         "stale_task",
         "orphan_cleanup",
         "payment_push",
         "subscription_orphan",
     ]
+    # The five BILLING steps keep their documented order, unchanged.
+    assert order[:5] == billing_order
+    # Outbound email is not billing state, so its retry runs LAST and outside
+    # that chain: a mail-provider outage must never delay or abort a billing
+    # sweep. Asserted as position, not membership — moving it back into the
+    # chain is exactly the regression this guards.
+    assert order[5] == "email_retry"
     assert [sweep.name for sweep in result.sweeps] == order
-    assert len(result.sweeps) == 5
+    assert len(result.sweeps) == 6
 
 
 

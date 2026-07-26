@@ -28,6 +28,7 @@ def test_create_rejects_owner_type() -> None:
             first_name="Ada",
             last_name="Lovelace",
             email="ada@example.com",
+            send_invite=False,
         )
 
 
@@ -39,6 +40,7 @@ def test_create_rejects_blank_first_name() -> None:
             first_name="   ",
             last_name="Lovelace",
             email="ada@example.com",
+            send_invite=False,
         )
 
 
@@ -49,6 +51,7 @@ def test_create_rejects_blank_last_name() -> None:
             first_name="Ada",
             last_name="",
             email="ada@example.com",
+            send_invite=False,
         )
 
 
@@ -60,6 +63,7 @@ def test_create_lowercases_email_and_strips_names() -> None:
         first_name="  Ada  ",
         last_name="  Lovelace ",
         email="Ada.Lovelace@Example.COM",
+        send_invite=False,
     )
     assert req.email == "ada.lovelace@example.com"
     assert req.first_name == "Ada"

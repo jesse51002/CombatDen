@@ -24,6 +24,8 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
+import 'package:crm/features/member_details/data/models/member_create_result.dart';
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -50,6 +52,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(
       const MembersManagementCreateRequest(
+        sendInvite: true,
         gymId: 'gym-1',
         firstName: 'a',
         lastName: 'b',
@@ -72,7 +75,10 @@ void main() {
     member = _MockMemberRepository();
     var seq = 0;
     when(() => member.createMember(any()))
-        .thenAnswer((_) async => 'mem-${++seq}');
+        .thenAnswer((_) async => MemberCreateResult(
+          memberId: 'mem-${++seq}',
+          invite: InviteOutcome.queued,
+        ));
     when(() => member.updateMember(any(), any()))
         .thenAnswer((_) async => _MockManagementResponse());
     cubit = KioskSignupCubit(

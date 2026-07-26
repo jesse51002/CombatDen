@@ -3,6 +3,7 @@ import 'package:equatable/equatable.dart';
 import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/signup_response.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
@@ -176,6 +177,22 @@ class MemberDetailLoaded extends MemberDetailState {
   /// while the dialog is open (mirrors [checkInError]).
   final String? reserveError;
 
+  /// True while the manual app-invite send is in flight. Its own channel
+  /// (mirroring [isReserving]) because it changes no member data: it must not
+  /// trip [isMutating] and pull up the screen-level overlay.
+  final bool isSendingAppInvite;
+
+  /// Monotonic token bumped once an app-invite send settles, either way. The
+  /// profile header watches it so one send shows exactly one snackbar.
+  final int appInviteToken;
+
+  /// What the last app-invite send actually did, or the error it failed with.
+  /// Exactly one is non-null after a settled send; both are cleared via
+  /// [SendAppInviteCleared]. Kept off [actionError] so the screen-level error
+  /// dialog doesn't swallow the rate-limit message.
+  final InviteOutcome? appInviteOutcome;
+  final Object? appInviteError;
+
   /// Monotonic counter bumped on every successful mutation
   /// refresh so BlocBuilder rebuilds even when the
   /// refreshed [MemberDetailResponse] is deep-equal to the
@@ -222,6 +239,10 @@ class MemberDetailLoaded extends MemberDetailState {
     this.isReserving = false,
     this.reserveResult,
     this.reserveError,
+    this.isSendingAppInvite = false,
+    this.appInviteToken = 0,
+    this.appInviteOutcome,
+    this.appInviteError,
     this.refreshToken = 0,
     this.rankChangeSuccessCount = 0,
   });
@@ -279,6 +300,11 @@ class MemberDetailLoaded extends MemberDetailState {
     SignupResponse? reserveResult,
     String? reserveError,
     bool clearReserveOutcome = false,
+    bool? isSendingAppInvite,
+    int? appInviteToken,
+    InviteOutcome? appInviteOutcome,
+    Object? appInviteError,
+    bool clearAppInviteOutcome = false,
     int? refreshToken,
     int? rankChangeSuccessCount,
   }) {
@@ -353,6 +379,14 @@ class MemberDetailLoaded extends MemberDetailState {
       reserveError: clearReserveOutcome
           ? null
           : (reserveError ?? this.reserveError),
+      isSendingAppInvite: isSendingAppInvite ?? this.isSendingAppInvite,
+      appInviteToken: appInviteToken ?? this.appInviteToken,
+      appInviteOutcome: clearAppInviteOutcome
+          ? null
+          : (appInviteOutcome ?? this.appInviteOutcome),
+      appInviteError: clearAppInviteOutcome
+          ? null
+          : (appInviteError ?? this.appInviteError),
       refreshToken: refreshToken ?? this.refreshToken,
       rankChangeSuccessCount:
           rankChangeSuccessCount ?? this.rankChangeSuccessCount,
@@ -394,6 +428,10 @@ class MemberDetailLoaded extends MemberDetailState {
         isReserving,
         reserveResult,
         reserveError,
+        isSendingAppInvite,
+        appInviteToken,
+        appInviteOutcome,
+        appInviteError,
         refreshToken,
         rankChangeSuccessCount,
       ];

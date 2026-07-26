@@ -12,6 +12,8 @@ from src.classes.classes_router import classes_router
 from src.core.config import settings
 from src.core.dependencies import DependencyInjector
 from src.discounts.discounts_router import discounts_router
+from src.emails.emails_router import emails_router
+from src.emails.service.emails_runner import EmailsRunner
 from src.employees.employees_router import employees_router
 from src.growth.growth_router import growth_router
 from src.growth.growth_scheduler import build_growth_scheduler
@@ -78,6 +80,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await MembershipsInvoiceFetchRunner.drain()
         await MemberVideoProfileRefreshRunner.drain()
         await VideoFeedRefineRunner.drain()
+        # Detached sends finish (or are cancelled and left recoverable as
+        # 'pending' rows for the reconciler) before the pool goes away.
+        await EmailsRunner.drain()
         await app.container.db_pool().engine.dispose()
 
 
@@ -185,6 +190,7 @@ def create_app() -> FastAPI:
 
     # Uploads: multipart image proxy → S3 + CloudFront CDN.
     application.include_router(uploads_router)
+    application.include_router(emails_router)
 
     # Videos: a real gym's live feed + the LLM authoring surface for a gym's
     # append-only spec.

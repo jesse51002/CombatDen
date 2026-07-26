@@ -74,6 +74,24 @@ class EmployeeRemoveRequested extends EmployeesEvent {
   List<Object?> get props => [employeeId];
 }
 
+/// Re-send the staff onboarding email to a roster row whose invite is still
+/// pending. Writes nothing to the row — the backend caps it at three sends per
+/// person per hour.
+class EmployeeInviteResendRequested extends EmployeesEvent {
+  final String employeeId;
+
+  const EmployeeInviteResendRequested(this.employeeId);
+
+  @override
+  List<Object?> get props => [employeeId];
+}
+
+/// Clears the last resend outcome / error once the list has shown it, so the
+/// same snackbar never fires twice.
+class EmployeesResendOutcomeCleared extends EmployeesEvent {
+  const EmployeesResendOutcomeCleared();
+}
+
 /// Clears any lingering `mutationError` — dispatched by a dialog on open so a
 /// stale failure never flashes (mirrors the charge dialog's outcome-clear).
 class EmployeesMutationOutcomeCleared extends EmployeesEvent {

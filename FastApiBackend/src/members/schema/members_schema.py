@@ -10,6 +10,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
+from src.emails.schema.emails_schema import InviteOutcome
+from src.members.schema.members_billing_schema import (
+    MembersBillingProfileResponse,
+)
+
 # Floor for a plausible date of birth. Wide enough that it can never reject a
 # real member, tight enough to catch the realistic typo class from the kiosk's
 # free-form date entry (a truncated or mistyped year: 0202-06-01, 1066). A
@@ -42,6 +47,32 @@ def _validate_date_of_birth(value: date | None) -> date | None:
     return value
 
 
+class MemberCreateResult(BaseModel):
+    """Internal create outcome — the member plus its claimed invite.
+
+    ``email_id`` never reaches a client: the router fires the detached send
+    with it and returns ``MemberCreateResponse``. Splitting the two keeps the
+    claim next to the row it belongs to while the send happens only after
+    that write is committed.
+    """
+
+    member: MembersBillingProfileResponse
+    invite: InviteOutcome
+    email_id: UUID | None = None
+
+
+class MemberCreateResponse(BaseModel):
+    """The created member plus what actually happened to their app invite.
+
+    Staff are asked whether to invite, so they are told the truth: a member
+    with no email on file reports ``skipped_no_email``, and a kind that is
+    not enabled yet reports ``held`` — never an unqualified success.
+    """
+
+    member: MembersBillingProfileResponse
+    invite: InviteOutcome
+
+
 class MemberCreateRequest(BaseModel):
     """Body for POST /api/v1/members/."""
 
@@ -71,6 +102,14 @@ class MemberCreateRequest(BaseModel):
     # BEFORE any row is written. The client re-sends True to confirm and
     # create anyway. A null-email create is never gated (no reliable identity).
     allow_duplicate: bool = False
+    # REQUIRED, no default. The CRM's create dialog answers it with
+    # "Create & invite" vs "Create without inviting"; the kiosk's
+    # self-signup passes True without prompting, since someone joining on
+    # the gym's own iPad has already expressed the intent the prompt
+    # would ask about. No default, so an older client cannot silently
+    # stop inviting anyone — it fails at the schema boundary instead.
+    # A member with no email always resolves to skipped_no_email.
+    send_invite: bool
 
     @field_validator("email")
     @classmethod
@@ -187,3 +226,4 @@ class DuplicateMemberConflict(BaseModel):
 
     code: Literal["duplicate_member"] = "duplicate_member"
     matches: list[DuplicateMemberMatch]
+

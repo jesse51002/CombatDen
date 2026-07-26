@@ -20,6 +20,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.emails.service.emails_runner import EmailsRunner
 from src.employees.employees_exceptions import (
     DuplicateEmployeeError,
     EmployeeNotFoundError,
@@ -27,6 +28,7 @@ from src.employees.employees_exceptions import (
 )
 from src.employees.schema.employees_schema import (
     EmployeeCreateRequest,
+    EmployeeCreateResponse,
     EmployeeListResponse,
     EmployeeResponse,
     EmployeeUpdateRequest,
@@ -94,16 +96,24 @@ async def list_employees(
 
 @employees_router.post(
     "/{gym_id}",
-    response_model=EmployeeResponse,
+    response_model=EmployeeCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create an employee",
     description=(
         "Creates a gym staff member (owner/admin only). A plain INSERT — no "
         "auth-system interaction; a verified auth account whose email matches "
-        "becomes the person's login. The type may not be 'owner'."
+        "becomes the person's login. The type may not be 'owner'. "
+        "`send_invite` is REQUIRED: it answers whether to email the person "
+        "their sign-up instructions, and the response's `invite` field "
+        "reports what actually happened to that email."
     ),
     responses={
-        201: {"description": "Employee created successfully"},
+        201: {
+            "description": (
+                "Employee created. `invite` is queued / held / "
+                "skipped_suppressed / not_requested."
+            )
+        },
         400: {"description": "Invalid request data"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
@@ -119,8 +129,17 @@ async def create_employee(
     employees_service: EmployeesService = Depends(
         Provide[DependencyInjector.employees_service]
     ),
-) -> EmployeeResponse:
-    """Create an employee.
+    emails_runner: EmailsRunner = Depends(
+        Provide[DependencyInjector.emails_runner]
+    ),
+) -> EmployeeCreateResponse:
+    """Create an employee, and invite them when asked to.
+
+    ``send_invite`` is required on the request — the create dialog asks
+    it explicitly rather than defaulting, so a new staff member is never
+    left stranded by inattention. The response reports what actually
+    happened to that invite, so the UI never claims a send that a
+    disabled kind or a suppressed address prevented.
 
     Raises:
         HTTPException: 400/401/403/409/500 on respective errors.
@@ -129,7 +148,16 @@ async def create_employee(
     await auth.verify_roles(gym_id, user_payload, OWNER_ADMIN)
 
     try:
-        return await employees_service.create_employee(gym_id, request)
+        result = await employees_service.create_employee(gym_id, request)
+        # Fired AFTER the create committed, detached: delivery must never
+        # delay or fail the response. Router-level composition keeps the
+        # employees service unaware of the runner.
+        if result.email_id is not None:
+            emails_runner.start(result.email_id)
+        return EmployeeCreateResponse(
+            employee=result.employee,
+            invite=result.invite,
+        )
     except DuplicateEmployeeError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,

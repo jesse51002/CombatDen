@@ -5,19 +5,28 @@ import 'package:flutter/services.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 
 /// The Add-employee **success** state — the point of the surface. Access is
-/// email-based (no invite to send), so this tells staff exactly how the new
-/// hire gets in, with a one-tap copy of the literal steps (email substituted
-/// live). Rendered once the invite has committed.
+/// email-based, so this tells staff exactly how the new hire gets in, with a
+/// one-tap copy of the literal steps (email substituted live). Rendered once
+/// the create has committed.
+///
+/// [invite] is what the backend actually did about the onboarding email, and
+/// it is reported verbatim: a held or suppressed send says so, and a create
+/// made without inviting says the steps have to be passed on by hand. The
+/// instructions are shown either way — an invite that WAS sent contains them,
+/// but staff often walk the person through it at the desk anyway.
 class AddEmployeeSuccessView extends StatefulWidget {
   final String firstName;
   final String email;
+  final InviteOutcome invite;
 
   const AddEmployeeSuccessView({
     super.key,
     required this.firstName,
     required this.email,
+    required this.invite,
   });
 
   @override
@@ -33,6 +42,32 @@ class _AddEmployeeSuccessViewState extends State<AddEmployeeSuccessView> {
         '2. Create an account (or log in) with ${widget.email}',
         '3. Verify the email — the gym appears automatically',
       ];
+
+  /// The honest sentence between the name and the instructions. Only
+  /// [InviteOutcome.queued] may say the email went out; every other outcome
+  /// says the steps have to reach the person some other way.
+  String get _inviteLine => switch (widget.invite) {
+        InviteOutcome.queued =>
+          'Their sign-in instructions are on the way by email. Share these '
+              'steps too if you want to walk them through it:',
+        InviteOutcome.notRequested =>
+          'No invite was sent. Share these steps so they can get in:',
+        InviteOutcome.held =>
+          'Invites are off right now, so nothing was emailed. Share these '
+              'steps so they can get in:',
+        InviteOutcome.skippedNoEmail =>
+          'There was no email on file to send to. Share these steps so they '
+              'can get in:',
+        // A staff nudge is TRANSACTIONAL, so an unsubscribe can never
+        // suppress it — reaching here means the address hard-bounced.
+        // Saying "unsubscribed" would send staff chasing the wrong fix.
+        InviteOutcome.skippedSuppressed =>
+          "That address isn't accepting mail, so nothing was emailed. "
+              'Share these steps so they can get in:',
+        InviteOutcome.unknown =>
+          "We couldn't confirm the invite was sent. Share these steps so "
+              'they can get in:',
+      };
 
   @override
   void dispose() {
@@ -74,8 +109,7 @@ class _AddEmployeeSuccessViewState extends State<AddEmployeeSuccessView> {
               style: DesignConstants.h2,
             ),
             Text(
-              'Access works by email — no invite to send. Share these steps '
-              'so they can get in:',
+              _inviteLine,
               textAlign: TextAlign.center,
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,

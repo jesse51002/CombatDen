@@ -10,11 +10,13 @@ Standalone module — no pytest imports, no fixture dependencies.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID
 
 from schema.task import ProrationBehavior, TaskType
 
 from src.discounts.service.discounts_service import DiscountsService
+from src.emails.schema.emails_schema import InviteOutcome
 from src.members.service.management.members_management_service import (
     MembersManagementService,
 )
@@ -190,7 +192,18 @@ def build_member_management_service(
         price_svc,
         discount_svc,
     )
-    return MembersManagementService(db_pool, members_svc, subscription_svc)
+    # Mail is mocked, never live: an integration test must not send real
+    # email, and the create path only needs the claim to be attempted.
+    emails_svc = MagicMock()
+    emails_svc.request_send = AsyncMock(
+        return_value=(None, InviteOutcome.not_requested)
+    )
+    return MembersManagementService(
+        db_pool,
+        members_svc,
+        subscription_svc,
+        emails_svc,
+    )
 
 
 def build_invoice_fetch(

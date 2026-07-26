@@ -14,6 +14,7 @@ import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -75,7 +76,9 @@ void main() {
       });
       Future<void>.delayed(const Duration(milliseconds: 20))
           .then((_) => gate.complete());
-      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
+      return MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),
@@ -96,3 +99,10 @@ void main() {
     },
   );
 }
+
+
+/// Stub for the emails repository the bloc now takes. No test here exercises
+/// the manual app-invite send, so it is never stubbed — only supplied.
+class _StubEmailsRepository extends Mock implements EmailsRepository {}
+
+final _stubEmailsRepository = _StubEmailsRepository();

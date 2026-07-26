@@ -8,6 +8,7 @@ from pydantic_settings import BaseSettings
 # run before `from schema.*`. config.py is an early importer, so keep this first
 # (isort: skip stops import-sorting from reordering `schema` ahead of it).
 import src.shared.db_schema_path  # noqa: F401  # isort: skip
+from schema.email import EmailKind  # isort: skip
 from schema.video import VideoGenre  # isort: skip
 
 
@@ -198,6 +199,52 @@ class Settings(BaseSettings):
     assets_bucket: str = "combatden-assets"
     aws_region: str = "us-east-1"
     assets_cdn_base_url: str = "https://cdn.combatden.net"
+
+    # Outbound email (the emails domain, src/emails/). This covers ONLY
+    # CombatDen's own mail. Supabase Auth's confirmation / password-reset mail
+    # is configured in the Supabase Dashboard, and Stripe's card-declined mail
+    # is sent from each gym's own connected account — neither reads anything
+    # here.
+    resend_api_key: str = ""
+    email_from_address: str = "hello@mail.combatden.net"
+    email_from_name: str = "CombatDen"
+    # Replies go to a CombatDen inbox: `gyms` carries no contact-email column,
+    # so there is no per-gym address to route to.
+    email_reply_to: str = "hello@combatden.net"
+    # Which kinds may actually be DELIVERED. A kind absent from this set is
+    # still claimed and logged (status 'held') but never sent, and the retry
+    # sweep skips held rows forever — so enabling a kind later cannot drain a
+    # backlog of stale mail at people who joined months ago.
+    #
+    # Defaults to EMPTY on purpose: a fresh environment sends nothing until
+    # someone opts in. Production sets this to the kinds that are live
+    # (staff_onboarding at launch; member_app_invite once the member app is
+    # actually installable).
+    email_enabled_kinds: list[EmailKind] = []
+    # Dev safety valve: when set, EVERY recipient is replaced by this address.
+    # Local mail does NOT land in Inbucket — Inbucket only catches GoTrue's
+    # mail; our client talks to Resend over HTTPS regardless of the local
+    # stack, so without this (or an empty enabled-kinds set) a dev box would
+    # mail real members.
+    email_sandbox_redirect: str = ""
+    email_max_attempts: int = 5
+    email_retry_batch_limit: int = 200
+    # Per-subject, per-kind resend ceiling over a trailing hour. A deliberate
+    # resend is genuinely a new send (the idempotency key carries a counter),
+    # so this cap — not the key — is what protects the sending domain when the
+    # real problem is that the mail is sitting in someone's spam folder.
+    email_resend_max_per_hour: int = 3
+    # HMAC secret for unsubscribe links. An EMPTY value is not a weak key,
+    # it is no key: HMAC accepts b"" happily, so minting anyway would
+    # produce tokens anyone could forge from the public algorithm — one
+    # forged link could unsubscribe any address at any gym. So
+    # EmailsSuppression fails CLOSED in both directions when this is
+    # empty: mint_token raises (the send is recorded failed and retried
+    # once configured) and verify_token rejects everything. Set this
+    # before any marketing kind goes live.
+    email_unsubscribe_secret: str = ""
+    # Public base URL the unsubscribe link points at (this backend).
+    email_unsubscribe_base_url: str = "https://api.combatden.net"
 
     # Logging Configuration
     log_level: str = "DEBUG"

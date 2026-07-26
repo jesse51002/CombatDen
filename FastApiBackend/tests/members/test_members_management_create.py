@@ -24,13 +24,14 @@ async def test_create_member_without_card(
     connect_opts,
     created,
 ):
-    resp = await management_service.create_member(
+    resp = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Alice",
             last_name="NoCard",
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(resp.stripe_customer_id)
 
     try:
@@ -82,14 +83,15 @@ async def test_create_member_with_card(
 ):
     pm_id = await created.payment_method()
 
-    resp = await management_service.create_member(
+    resp = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Bob",
             last_name="HasCard",
             payment_method_id=pm_id,
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(resp.stripe_customer_id)
 
     try:
@@ -155,6 +157,7 @@ async def test_create_member_stripe_failure_cleans_pending(
                 first_name="Fail",
                 last_name="Cleanup",
                 payment_method_id="pm_invalid_does_not_exist",
+                send_invite=False,
             ),
         )
 

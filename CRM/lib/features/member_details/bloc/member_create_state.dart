@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
 
@@ -40,15 +41,23 @@ class MemberCreateDuplicate extends MemberCreateState {
 }
 
 /// A member is ready — either just created, or an existing duplicate the
-/// host chose to continue with. Carries only the member id; the host holds
-/// the identity it needs for its confirmation.
+/// host chose to continue with. Carries the member id plus what the backend
+/// actually did about their app invite; the host holds the identity it needs
+/// for its confirmation.
+///
+/// [invite] is the server's answer, never the request's ask — a create that
+/// asked for an invite still reports `held` or `skipped_suppressed` when
+/// nothing left, so a host must not claim a send from `send_invite: true`
+/// alone. Picking an existing duplicate reports
+/// [InviteOutcome.notRequested]: nothing was created and nothing was mailed.
 class MemberCreated extends MemberCreateState {
   final String memberId;
+  final InviteOutcome invite;
 
-  const MemberCreated(this.memberId);
+  const MemberCreated(this.memberId, {required this.invite});
 
   @override
-  List<Object?> get props => [memberId];
+  List<Object?> get props => [memberId, invite];
 }
 
 /// The create failed. [needsStripeSetup] is true for the 400 the backend

@@ -5,6 +5,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/employees/bloc/employees_bloc.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
+import 'package:crm/features/emails/presentation/invite_outcome_snackbar.dart';
 import 'package:crm/features/employees/presentation/dialogs/add_employee_dialog.dart';
 import 'package:crm/features/employees/presentation/widgets/controls/employees_controls.dart';
 import 'package:crm/features/employees/presentation/widgets/header/employees_header.dart';
@@ -21,22 +22,43 @@ class EmployeesListBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return BlocBuilder<EmployeesBloc, EmployeesState>(
-      builder: (context, state) {
-        return switch (state) {
-          EmployeesInitial() ||
-          EmployeesLoading() =>
-            const Center(child: AppSpinner()),
-          EmployeesLoaded() => state.employees.isEmpty
-              ? const _EmptyBody()
-              : _LoadedBody(state: state),
-          EmployeesError() => _ErrorBody(
-              message: state.message,
-              gymId: state.gymId,
-            ),
-        };
-      },
+    return BlocListener<EmployeesBloc, EmployeesState>(
+      // The resend's dedicated channel: one settled resend, one snackbar.
+      // Keyed on the monotonic token so re-emitting the same outcome (a
+      // filter change mid-flight) can't fire it twice.
+      listenWhen: (prev, curr) =>
+          curr is EmployeesLoaded &&
+          curr.resendToken > (prev is EmployeesLoaded ? prev.resendToken : 0),
+      listener: _onResendSettled,
+      child: BlocBuilder<EmployeesBloc, EmployeesState>(
+        builder: (context, state) {
+          return switch (state) {
+            EmployeesInitial() ||
+            EmployeesLoading() =>
+              const Center(child: AppSpinner()),
+            EmployeesLoaded() => state.employees.isEmpty
+                ? const _EmptyBody()
+                : _LoadedBody(state: state),
+            EmployeesError() => _ErrorBody(
+                message: state.message,
+                gymId: state.gymId,
+              ),
+          };
+        },
+      ),
     );
+  }
+
+  void _onResendSettled(BuildContext context, EmployeesState state) {
+    if (state is! EmployeesLoaded) return;
+    final error = state.resendError;
+    final outcome = state.resendOutcome;
+    if (error != null) {
+      showInviteErrorSnackBar(context, error);
+    } else if (outcome != null) {
+      showInviteOutcomeSnackBar(context, outcome);
+    }
+    context.read<EmployeesBloc>().add(const EmployeesResendOutcomeCleared());
   }
 }
 
@@ -75,6 +97,7 @@ class _LoadedBody extends StatelessWidget {
               employees: state.visibleEmployees,
               taughtByEmployeeId: state.taughtByEmployeeId,
               classesLoadFailed: state.classesLoadFailed,
+              resendingEmployeeId: state.resendingEmployeeId,
             ),
           ),
         ],

@@ -10,26 +10,41 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from schema.email import EmailKind
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from src.emails.schema.emails_schema import (
+    InviteOutcome,
+    StaffOnboardingEmail,
+)
+from src.emails.service.emails_service import EmailsService
 from src.employees import SQL_DIR
 from src.employees.schema.employees_schema import (
     EmployeeCreateRequest,
-    EmployeeResponse,
+    EmployeeCreateResult,
 )
 from src.employees.service.employees_base import EmployeesBase
+from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 
 
 class EmployeesCreate(EmployeesBase):
     """Insert a gym staff member and return the created row."""
 
+    def __init__(
+        self,
+        db_pool: DirectDatabasePool,
+        emails_service: EmailsService,
+    ) -> None:
+        super().__init__(db_pool)
+        self._emails = emails_service
+
     async def create_employee(
         self,
         gym_id: UUID,
         request: EmployeeCreateRequest,
-    ) -> EmployeeResponse:
+    ) -> EmployeeCreateResult:
         """Insert the employee and return it with its invite status.
 
         Email is already lowercased by the schema validator. Re-reads the
@@ -59,4 +74,26 @@ class EmployeesCreate(EmployeesBase):
         except IntegrityError as exc:
             self._raise_for_integrity_error(exc)
 
-        return await self._get_employee(gym_id, UUID(str(employee_id)))
+        employee = await self._get_employee(gym_id, UUID(str(employee_id)))
+        if not request.send_invite:
+            return EmployeeCreateResult(
+                employee=employee,
+                invite=InviteOutcome.not_requested,
+            )
+        # Claimed only AFTER the row is committed, never before: an invite
+        # about a person who does not exist is worse than a missing one. The
+        # inverse risk — a crash between the two — leaves the roster row
+        # badged `pending` with a Resend action beside it, which is exactly
+        # the affordance that repairs it.
+        email_id, outcome = await self._emails.request_send(
+            StaffOnboardingEmail(
+                kind=EmailKind.staff_onboarding,
+                gym_id=gym_id,
+                employee_id=employee.employee_id,
+            )
+        )
+        return EmployeeCreateResult(
+            employee=employee,
+            invite=outcome,
+            email_id=email_id,
+        )

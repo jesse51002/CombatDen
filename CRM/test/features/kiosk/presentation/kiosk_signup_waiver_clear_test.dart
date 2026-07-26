@@ -25,6 +25,8 @@ import 'package:crm/features/memberships/data/models/waiver_signature_response.d
 import 'package:crm/features/memberships/data/models/waiver_type.dart';
 import 'package:crm/features/memberships/data/models/waiver_version_response.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
+import 'package:crm/features/member_details/data/models/member_create_result.dart';
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -57,6 +59,7 @@ void main() {
   setUpAll(() {
     registerFallbackValue(
       const MembersManagementCreateRequest(
+        sendInvite: true,
         gymId: 'gym-1',
         firstName: 'a',
         lastName: 'b',
@@ -100,7 +103,10 @@ void main() {
     ).thenAnswer((_) async => _MockSignatureResponse());
     member = _MockMemberRepository();
     when(() => member.createMember(any()))
-        .thenAnswer((_) async => 'mem-${++createSeq}');
+        .thenAnswer((_) async => MemberCreateResult(
+          memberId: 'mem-${++createSeq}',
+          invite: InviteOutcome.queued,
+        ));
     when(() => member.updateMember(any(), any()))
         .thenAnswer((_) async => _MockManagementResponse());
     when(() => member.getAuthorizedPayerWaiver(any())).thenAnswer(

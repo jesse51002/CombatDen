@@ -32,14 +32,15 @@ async def test_list_invoices_returns_real_invoice(
     ``_extract_subscription_id``, and this locks that in.
     """
     pm_id = await created.payment_method()
-    member = await management_service.create_member(
+    member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="RealInvoice",
             last_name="Tester",
             payment_method_id=pm_id,
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:

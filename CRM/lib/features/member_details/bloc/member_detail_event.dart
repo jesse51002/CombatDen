@@ -477,6 +477,21 @@ class MemberReserveCleared extends MemberDetailEvent {
   const MemberReserveCleared();
 }
 
+// ----- App invite -----
+
+/// (Re)send this member's app invite by hand — the "Send app invite" action
+/// on the profile header. Changes no member data; the backend caps it at
+/// three sends per person per hour.
+class SendAppInviteRequested extends MemberDetailEvent {
+  const SendAppInviteRequested();
+}
+
+/// Clears the last app-invite outcome / error once the header has shown it,
+/// so the same snackbar never fires twice.
+class SendAppInviteCleared extends MemberDetailEvent {
+  const SendAppInviteCleared();
+}
+
 // ----- Rewards / redemptions -----
 
 /// Approve a pending reward redemption.

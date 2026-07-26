@@ -101,7 +101,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Plan set-price (mint a new plan price version — a config write) | ✅ | ✅ | ❌ | ❌ |
 | Payer-link **remove** | ✅ | ✅ | ❌ | ❌ |
 | View members | ✅ | ✅ | ✅ | ❌ |
-| Create members (API; CRM "Add Member" UI still deferred — see §6) | ✅ | ✅ | ✅ | ❌ |
+| Create members (`POST /members`, the CRM's Add-Member flow, and the kiosk's self-serve signup lane) | ✅ | ✅ | ✅ | ❌ |
 | Edit member contact / photo upload | ✅ | ✅ | ✅ | ❌ |
 | Member money mgmt (invoices, payment history, card add/update/remove, charge, mark-paid-cash, retry-card, refund, membership start/preview/freeze/unfreeze/cancel/upgrade/cancel-one-time, apply/remove discounts) | ✅ | ✅ | ✅ (full) | ❌ |
 | Rewards redeem + approve/reject | ✅ | ✅ | ✅ | ❌ |
@@ -200,7 +200,7 @@ owner/admin-only:
 | Route | Gate | What it does |
 |---|---|---|
 | `GET /api/v1/employees/{gym_id}` | `STAFF` | List all non-archived employees (every type), each with derived `invite_status` — front desk reads the roster to fill the schedule's instructor picker |
-| `POST /api/v1/employees/{gym_id}` | `OWNER_ADMIN` | Create a staff member — plain INSERT, no auth-system interaction. `employee_type` may not be `owner` |
+| `POST /api/v1/employees/{gym_id}` | `OWNER_ADMIN` | Create a staff member (a plain INSERT — no auth account is provisioned; `employee_type` may not be `owner`) and, when asked to, claim their onboarding invite. Returns `EmployeeCreateResponse{employee, invite}` — see *The invite* below |
 | `PUT /api/v1/employees/{gym_id}/{employee_id}` | `OWNER_ADMIN` | Partial update of mutable fields (name/phone/email/pic/description/`employee_type`) |
 | `DELETE /api/v1/employees/{gym_id}/{employee_id}` | `OWNER_ADMIN` | Soft-archive (see §4) |
 
@@ -244,8 +244,52 @@ carry that reason as a comment; it is the same rule every identity-resolving que
 - **`active`** — `has_verified_account` is true: a confirmed Supabase account exists for that email.
 
 There is no stored invite/status column and no invite-token flow — `invite_status` is purely a read-time
-reflection of "does a verified auth account currently exist for this email." Sending an actual
-notification/invite email is deferred (see §6).
+reflection of "does a verified auth account currently exist for this email." It is **not** a record of
+whether an invite was emailed; that lives on `email_log` (see below).
+
+### The invite — `send_invite` is REQUIRED, and the response says what actually happened
+
+Creating an employee row grants nothing on its own: the person still has to sign up at
+`app.combatden.net` with that exact address (§7). The onboarding email is what tells them to, so the
+create asks whether to send it.
+
+- **`EmployeeCreateRequest.send_invite: bool` has NO default.** An older client that omits it fails at
+  the schema boundary with a **422** rather than silently not inviting anyone — the silent-onboarding
+  gap the field exists to close. The CRM answers it with a shared footer widget
+  (`shared/widgets/app_dialog/create_invite_actions.dart`, used by Add-Employee and both Add-Member
+  surfaces): **two equally-weighted commits — "Create & invite" and "Create without inviting" — with no
+  pre-selected default and no checkbox**, because a default is what gets clicked through and not
+  inviting is an ordinary choice (a hire told in person). With no email entered there is nobody to
+  invite, so the footer collapses to a single plain "Create".
+- **`POST /employees/{gym_id}` returns `EmployeeCreateResponse{employee, invite}`**, where `invite` is an
+  `InviteOutcome`: `queued` | `held` | `skipped_no_email` | `skipped_suppressed` | `not_requested`.
+  Asking staff whether to invite obliges an honest answer, so the outcome comes from what the send path
+  actually did — never assumed from the request. `held` means the `staff_onboarding` kind is not in the
+  backend's `EMAIL_ENABLED_KINDS` (which defaults to EMPTY), so the row is logged but nothing is sent;
+  `skipped_no_email` is an email-less trainer row; `skipped_suppressed` is an address that opted out.
+  The CRM's success dialog (`add_employee_success_view.dart`) renders one honest sentence per outcome —
+  only `queued` may say the email went out — above the literal three sign-up steps, which are shown
+  **either way** (with a one-tap copy, the address substituted live) so staff can walk the person
+  through it at the desk regardless.
+- **The claim happens after the row is committed, and the SEND is fired by the router.**
+  `EmployeesCreate` calls `EmailsService.request_send(...)` once the insert has landed, and returns the
+  claimed `email_id` on the internal `EmployeeCreateResult`; `employees_router.py` calls
+  `emails_runner.start(email_id)` after the service returns, detached. `email_id` never reaches a client.
+  A mail failure is recorded on the `email_log` row and retried by the reconciler — it can never fail a
+  create.
+- **Resend is a first-class affordance on the roster.** Any row badged `pending` carries a
+  "Resend invite" link (`employee_invite_cell.dart`), which posts
+  `POST /api/v1/emails/send {kind: staff_onboarding, employee_id}` through `EmailsRepository` and shows
+  the returned outcome in a snackbar. A resend changes no row, so the roster is not reloaded. The
+  backend caps it at **3 per employee per kind per trailing hour** (429 → the CRM's
+  `InviteRateLimitedException` renders the real reason); a deliberate resend bumps `resend_seq` inside
+  the `email_log` idempotency key so it is genuinely a new send rather than a no-op.
+- **The onboarding email is `transactional`** (`emails_registry.py`), so a `marketing` unsubscribe never
+  blocks it — opting out of a pitch must not cost someone the link that gets them into the CRM. Only a
+  hard bounce (`scope='all'`) stops it. It carries no unsubscribe link, by design.
+- **`emails` imports nothing from `employees`** — the edge is one-way, and `EmailsRecipients` runs its
+  own small SELECT over `gym_employees` for the address. Full model:
+  `FastApiBackend/CLAUDE.md` under *Emails domain*.
 
 ### Owner-row rules
 
@@ -360,22 +404,30 @@ Supabase signup that requires **email confirmation** before the account is usabl
 marks the address confirmed. This is the mechanism `invite_status` reads (§5) — a freshly-created employee
 row stays `pending` until the person completes this confirmation flow, then flips to `active`.
 
+**Two different emails, two different senders, and only one of them is ours.** The onboarding invite
+(§5) is CombatDen's own mail, sent by the backend's `emails` domain through Resend, and it only *tells*
+the person to do this signup. The confirmation link itself is sent by **Supabase Auth (GoTrue)**,
+configured in the Supabase Dashboard, and never touches `email_log`. So a `pending` row means the
+person has not completed the GoTrue confirmation — never that our invite failed, and never the reverse.
+
 ---
 
 ## 8. Deferred — not built yet
 
 Recorded so a future read of this skill doesn't assume these exist:
 
-- **Notification / invite email + resend.** Creating an employee row does not send the person anything —
-  no email, no magic link, no "you've been invited" notice. They must separately sign up with the matching
-  email through the normal Supabase signup flow (§7) to activate. There's no resend-invite affordance
-  either.
-- **The Add-New-Member CRM UI bridge.** Front desk (and owner/admin) can create members via the backend
-  API (`POST /members`, §2), but the CRM's "Add Member" button is still a stub (see `TODO.md`) — the UI
-  flow that would call this endpoint hasn't been wired.
-- **Kiosk mode.** No kiosk UI exists in CRM or MobileApp yet; front-desk/trainer distinctions for a kiosk
-  flow are not applicable until it's built.
-- **A MobileApp client for the member portal.** The backend surface exists (§9); nothing calls it yet.
+- **A magic-link / token invite.** The onboarding email exists (§5), but it is a *nudge*, not a
+  credential: it tells the person to sign up at `app.combatden.net` with that exact address, and the
+  Supabase signup + email confirmation (§7) is still what activates them. There is deliberately no
+  invite token, no stored invite state, and therefore no "accept invite" endpoint — the email is
+  informational and losing it costs nothing but a resend.
+- **Delivery is only as good as the deploy.** Nothing is sent at all until `EMAIL_ENABLED_KINDS`
+  includes `staff_onboarding` (it defaults to EMPTY) and Resend is configured with a verified sending
+  domain — until then every claim is logged `held`, which the retry sweep skips forever. The remaining
+  human/ops steps are tracked in `TODO.md`.
+- **A MobileApp client for the member portal.** The backend surface exists (§9); the MobileApp is being
+  wired to it, so treat any claim about which screens are live as needing a check rather than trusting
+  this line.
 - **Member self check-in.** Deliberately NOT built — see §9 for why.
 - **Un-archive / restore.** Re-hiring an archived person is a brand-new employee row, not a reactivation
   of the old one (§4). There is no restore endpoint.
@@ -443,7 +495,15 @@ Deep detail (the route/gate table, the cross-gym reward guard on redeem) lives i
   `service/` (`employees_base.py`, `employees_list.py`, `employees_create.py`, `employees_update.py`,
   `employees_archive.py`, `employees_service.py`), `sql/` (`employees_get.sql`, `employees_list.sql`,
   `employees_insert.sql`, `employees_update.sql`, `employees_archive.sql`), `employees_exceptions.py`
-  (`EmployeeNotFoundError`, `DuplicateEmployeeError`, `OwnerRowProtectedError`).
+  (`EmployeeNotFoundError`, `DuplicateEmployeeError`, `OwnerRowProtectedError`). The create's invite
+  half: `EmployeeCreateRequest.send_invite` / `EmployeeCreateResult` / `EmployeeCreateResponse` in
+  `schema/employees_schema.py`, the `EmailsService.request_send` call in `service/employees_create.py`,
+  and the detached `emails_runner.start(...)` in `employees_router.py`.
+- **Emails:** `FastApiBackend/src/emails/` — `emails_registry.py` (`SPECS`, `EmailCategory`),
+  `emails_router.py` (`POST /send`, the public `GET /unsubscribe`), `service/emails_service.py`,
+  `templates/staff_onboarding.{subject.txt,html,txt}`; `Database/supabase/schemas/email_log.sql` +
+  `email_suppressions.sql`; `Database/python_data/schema/email.py`. Model:
+  `FastApiBackend/CLAUDE.md` under *Emails domain*.
 - **Auth:** `FastApiBackend/src/shared/auth.py` — the `Auth` class, role-set constants, `verify_roles` and
   every variant.
 - **Member portal:** `FastApiBackend/src/member_portal/` — `member_portal_router.py`,
@@ -452,8 +512,16 @@ Deep detail (the route/gate table, the cross-gym reward guard on redeem) lives i
   `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units) and
   `FastApiBackend/tests/integration/test_member_portal_integration.py` (the live gate proof).
 - **CRM:** `CRM/lib/core/auth/employee_role.dart`, `role_policy.dart`, `CRM/lib/core/navigation/
-  route_guard.dart`, `CRM/lib/core/errors/exceptions.dart` (`ForbiddenException`),
+  route_guard.dart`, `CRM/lib/core/errors/exceptions.dart` (`ForbiddenException`,
+  `InviteRateLimitedException`),
   `CRM/lib/features/login/presentation/widgets/register_form.dart` (email-confirmation signup).
+  The invite surfaces: `CRM/lib/features/emails/` (`EmailsRepository`, `InviteOutcome`, `EmailKind`,
+  `invite_outcome_snackbar.dart`),
+  `CRM/lib/features/employees/presentation/dialogs/add_employee_dialog.dart` +
+  `add_employee_success_view.dart` (the two-action footer and the per-outcome sentence),
+  `presentation/widgets/table/cells/employee_invite_cell.dart` (the `pending`-row "Resend invite" link),
+  and the `EmployeeInviteResendRequested` / `EmployeesResendOutcomeCleared` handlers in
+  `bloc/employees_bloc.dart` (a resend reloads no row).
 
 ---
 

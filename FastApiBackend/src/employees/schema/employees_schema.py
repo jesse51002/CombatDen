@@ -19,6 +19,7 @@ from pydantic import BaseModel, EmailStr, field_validator
 from schema.gym_employee import EmployeeType
 
 import src.shared.db_schema_path  # noqa: F401
+from src.emails.schema.emails_schema import InviteOutcome
 
 
 class InviteStatus(StrEnum):
@@ -50,6 +51,14 @@ class EmployeeCreateRequest(BaseModel):
     email: EmailStr
     phone: str | None = None
     employee_public_description: str | None = None
+    # REQUIRED, no default — the create dialog asks "Create & invite" vs
+    # "Create without inviting" and must answer it. Creating a staff row
+    # provisions nothing: the person still has to register at the CRM with
+    # this exact address, and until someone tells them, they cannot. A
+    # default here would let that reminder be skipped by inattention, which
+    # is the silent-onboarding gap this field exists to close — so an older
+    # client that omits it fails loudly at the schema boundary instead.
+    send_invite: bool
 
     @field_validator("employee_type")
     @classmethod
@@ -135,6 +144,34 @@ class EmployeeResponse(BaseModel):
     employee_public_description: str | None
     created_at: datetime
     invite_status: InviteStatus
+
+
+class EmployeeCreateResult(BaseModel):
+    """Internal create outcome — carries the claimed email id.
+
+    ``email_id`` never reaches a client: the router fires the detached send
+    with it and returns ``EmployeeCreateResponse``. It exists so the claim
+    (which happens in the service, next to the row it belongs to) and the
+    send (which must happen AFTER that write is committed) stay separate.
+    """
+
+    employee: EmployeeResponse
+    invite: InviteOutcome
+    email_id: UUID | None = None
+
+
+class EmployeeCreateResponse(BaseModel):
+    """The created employee plus what actually happened to their invite.
+
+    Asking staff whether to invite someone obliges an honest answer, so the
+    outcome is part of the response rather than assumed from the request:
+    a disabled kind reports ``held`` and a suppressed address reports
+    ``skipped_suppressed``, and the CRM's confirmation toast renders that
+    instead of an unqualified success.
+    """
+
+    employee: EmployeeResponse
+    invite: InviteOutcome
 
 
 class EmployeeListResponse(BaseModel):

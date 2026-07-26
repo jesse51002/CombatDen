@@ -8,6 +8,8 @@ import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/check_in/data/models/check_in_request.dart';
 import 'package:crm/features/check_in/data/models/check_in_response.dart';
 import 'package:crm/features/check_in/data/models/signup_response.dart';
+import 'package:crm/features/emails/data/models/email_kind.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/member_details/bloc/invoice_poller.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
@@ -52,6 +54,10 @@ class MemberDetailBloc
   /// the Loyalty tab drives, so there is a single redemption client.
   final RewardsRepository _rewardsRepository;
 
+  /// The manual app-invite (re)send goes through the `emails` domain — this
+  /// screen is the only place staff can trigger one for a member.
+  final EmailsRepository _emailsRepository;
+
   /// Drives the post-charge invoice poll (5/10/15/30/60s). Each
   /// charge / start / refund / mark-paid-cash restarts it, so a new
   /// charge mid-window resets the schedule — only one sequence runs.
@@ -69,17 +75,21 @@ class MemberDetailBloc
     required ScheduleRepository scheduleRepository,
     required RanksRepository ranksRepository,
     required RewardsRepository rewardsRepository,
+    required EmailsRepository emailsRepository,
     InvoicePoller? poller,
   })  : _repository = repository,
         _scheduleRepository = scheduleRepository,
         _ranksRepository = ranksRepository,
         _rewardsRepository = rewardsRepository,
+        _emailsRepository = emailsRepository,
         _poller = poller ?? InvoicePoller(),
         super(const MemberDetailInitial()) {
     on<MemberDetailRequested>(_onDetailRequested);
     on<MemberSearchChanged>(_onSearchChanged);
     on<MembershipPageChanged>(_onPageChanged);
     on<MemberActionErrorCleared>(_onActionErrorCleared);
+    on<SendAppInviteRequested>(_onSendAppInvite);
+    on<SendAppInviteCleared>(_onSendAppInviteCleared);
 
     on<EditMemberRequested>(_onEditMember);
     on<MemberRankChangeRequested>(_onRankChange);
@@ -1201,6 +1211,64 @@ class MemberDetailBloc
     final s = state;
     if (s is! MemberDetailLoaded) return;
     emit(s.copyWith(clearReserveOutcome: true));
+  }
+
+  // ----- App invite -----
+
+  /// Manually (re)send the member's app invite.
+  ///
+  /// Rides its own DEDICATED channel ([MemberDetailLoaded.isSendingAppInvite]
+  /// / `appInviteOutcome` / `appInviteError`) mirroring [_onReserve]: the send
+  /// writes nothing to the member, so there is no re-fetch and no
+  /// `refreshToken` bump, and it must not trip `isMutating` (which would raise
+  /// the screen-level overlay + error dialog over a snackbar-sized action).
+  ///
+  /// The outcome is whatever the backend reports — `queued`, `held`,
+  /// `skipped_no_email`, `skipped_suppressed` — so the confirmation never
+  /// claims a send that didn't happen.
+  Future<void> _onSendAppInvite(
+    SendAppInviteRequested event,
+    Emitter<MemberDetailState> emit,
+  ) async {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    if (s.isSendingAppInvite) return;
+    emit(s.copyWith(
+      isSendingAppInvite: true,
+      clearAppInviteOutcome: true,
+    ));
+    try {
+      final outcome = await _emailsRepository.sendEmail(
+        gymId: s.member.gymId,
+        kind: EmailKind.memberAppInvite,
+        memberId: s.member.memberId,
+      );
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isSendingAppInvite: false,
+        appInviteOutcome: outcome,
+        appInviteToken: current.appInviteToken + 1,
+      ));
+    } catch (e, stackTrace) {
+      log('Send app invite failed', error: e, stackTrace: stackTrace);
+      final current = state;
+      if (current is! MemberDetailLoaded) return;
+      emit(current.copyWith(
+        isSendingAppInvite: false,
+        appInviteError: e,
+        appInviteToken: current.appInviteToken + 1,
+      ));
+    }
+  }
+
+  void _onSendAppInviteCleared(
+    SendAppInviteCleared event,
+    Emitter<MemberDetailState> emit,
+  ) {
+    final s = state;
+    if (s is! MemberDetailLoaded) return;
+    emit(s.copyWith(clearAppInviteOutcome: true));
   }
 
   // ----- Rewards / redemptions -----

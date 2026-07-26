@@ -40,8 +40,8 @@ flowchart TB
   %% ---------- BACKEND + DATABASE ----------
   subgraph FastApiBackend["⚙️ FastApiBackend — CRM / billing + video content API (not deployed)"]
     direction TB
-    FB_r["routers<br/>members · gyms (incl. gym profile + gym theme-design PUT) · classes · checkin<br/>ranks · rewards (approval flow + points) · waivers · memberships · plans<br/>discounts · payments · webhooks · tasks<br/>employees (4-role staff roster · soft-archive · derived invite_status)<br/>videos (ONE unified feed [owner+latest-run merge · enriched+accepted gate · σ-boost + decayed-watch ranking] + ungated /videos/owner listing + spec/agent authoring + single rotating RAG rec)<br/>presets (template catalog + import, Settings-only)<br/>theme (gym showcase + public showcase-defaults) · uploads (S3 image proxy) · reports (read-only CSV/zip exports, owner/admin only)<br/>growth (cached per-gym analytics; registry-owned display metadata)<br/>member_portal (the MEMBER-facing surface · /api/v1/member · 13 routes · verify_member_self gated · the MobileApp's backend surface:<br/>own profile/rank/points/streak/history · gym schedule board · own reservations · active rewards + pending redeem · personalized video feed/rec/click)"]
-    FB_s["services<br/>payments/Stripe · memberships · management · discounts · employees<br/>CheckinClassResolver · CheckinMemberGate · CheckinReverser<br/>LiteLLMClient (shared) · VideosService (facade) · VideoFeedService (unified feed + owner listing)<br/>VideoSpecService · VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner · VideoFeedRefineRunner (coalesced feed_update auto-refine)<br/>VideoRecsService (single rotating-category pure-cosine rec, thin feed wrapper) · MemberVideoProfileService<br/>VideoRecClickService · MemberVideoProfileRefreshRunner (no semantic search)<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService<br/>ThemeShowcaseService · ThemeShowcaseDefaultsService · UploadsService · ReportsPeriodService · ReportsFullExportService<br/>GrowthService (read) · GrowthComputeService (at-launch + hourly sweep, ResourceLock-guarded)<br/>MemberPortalService (the two member-facing reads no staff service answers: verified email → member rows across gyms · profile projection; every other route delegates to the CRM's own services)"]
+    FB_r["routers<br/>members · gyms (incl. gym profile + gym theme-design PUT) · classes · checkin<br/>ranks · rewards (approval flow + points) · waivers · memberships · plans<br/>discounts · payments · webhooks · tasks<br/>employees (4-role staff roster · soft-archive · derived invite_status)<br/>videos (ONE unified feed [owner+latest-run merge · enriched+accepted gate · σ-boost + decayed-watch ranking] + ungated /videos/owner listing + spec/agent authoring + single rotating RAG rec)<br/>presets (template catalog + import, Settings-only)<br/>theme (gym showcase + public showcase-defaults) · uploads (S3 image proxy) · reports (read-only CSV/zip exports, owner/admin only)<br/>emails (CombatDen's OWN mail ONLY — registry-driven kinds · email_log claim + detached send · public signed unsubscribe;<br/>NOT GoTrue's login mail, NOT Stripe's connected-account billing mail)<br/>growth (cached per-gym analytics; registry-owned display metadata)<br/>member_portal (the MEMBER-facing surface · /api/v1/member · 13 routes · verify_member_self gated · the MobileApp's backend surface:<br/>own profile/rank/points/streak/history · gym schedule board · own reservations · active rewards + pending redeem · personalized video feed/rec/click)"]
+    FB_s["services<br/>payments/Stripe · memberships · management · discounts · employees<br/>CheckinClassResolver · CheckinMemberGate · CheckinReverser<br/>LiteLLMClient (shared) · VideosService (facade) · VideoFeedService (unified feed + owner listing)<br/>VideoSpecService · VideoQueryGenerator (2-call) · VideoSpecAuthoring · VideoFeedRefiner · VideoFeedRefineRunner (coalesced feed_update auto-refine)<br/>VideoRecsService (single rotating-category pure-cosine rec, thin feed wrapper) · MemberVideoProfileService<br/>VideoRecClickService · MemberVideoProfileRefreshRunner (no semantic search)<br/>VideoAgentService (thin Pydantic AI agent wrapper)<br/>PresetsService · PresetsTemplateService<br/>ThemeShowcaseService · ThemeShowcaseDefaultsService · UploadsService · ReportsPeriodService · ReportsFullExportService<br/>GrowthService (read) · GrowthComputeService (at-launch + hourly sweep, ResourceLock-guarded)<br/>MemberPortalService (the two member-facing reads no staff service answers: verified email → member rows across gyms · profile projection; every other route delegates to the CRM's own services)<br/>EmailsService + Log/Recipients/Renderer/Suppression/ResendClient/Runner (claim inside the caller's txn, deliver detached after it commits;<br/>imports nothing from another domain, so employees · members · reconciler all depend on it cycle-free)<br/>EmailRetrySweep (the reconciler's 6th step — LAST and outside the billing chain)"]
     FB_q["per-domain SQL"]
     FB_core["core · config · DI · auth (4 roles matched by verified JWT email) · pydantic schemas"]
     FB_r --> FB_s --> FB_q
@@ -59,6 +59,7 @@ flowchart TB
   Recraft["Recraft"]
   CDN["S3 + CloudFront CDN<br/>cdn.combatden.net"]
   LLMProvider["🤖 Anthropic / LLM<br/>agent: Pydantic AI (AnthropicModel)<br/>regular calls: litellm (LiteLLMClient)<br/>default claude-sonnet-4-6"]
+  Resend["✉️ Resend<br/>CombatDen's OWN outbound mail (staff onboarding · member app invite)<br/>NOT GoTrue's login/confirmation mail · NOT Stripe's connected-account billing mail"]
 
   %% ---------- CROSS-SYSTEM (root siblings only) ----------
   MobileApp -->|"GET /apps/{id}/styles"| TS_api
@@ -86,11 +87,12 @@ flowchart TB
   FastApiBackend -.->|"packaged into"| Deploy
   VS_create -.->|"worker → combined image"| Deploy
   FastApiBackend -->|"image uploads (uploads domain)"| CDN
+  FastApiBackend -->|"emails: CombatDen's own mail (detached send + retry sweep)"| Resend
 
   classDef client fill:#e3f0ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   class MobileApp,CRM,LandingPage client;
-  class Stripe,LiteLLM,Gemini,Apify,YouTube,GoogleFonts,Recraft,CDN,LLMProvider ext;
+  class Stripe,LiteLLM,Gemini,Apify,YouTube,GoogleFonts,Recraft,CDN,LLMProvider,Resend ext;
   style TS_create fill:#dff0e6,stroke:#2f8f53;
   style TS_api fill:#eafff2,stroke:#2f8f53;
   style VS_create fill:#dff0e6,stroke:#2f8f53;

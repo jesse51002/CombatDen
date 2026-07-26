@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/authorized_payer_waiver.
 import 'package:crm/features/member_details/data/models/cancel_outcome.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
+import 'package:crm/features/member_details/data/models/member_create_result.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_freeze_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_mark_paid_cash_request.dart';
@@ -118,16 +119,20 @@ class MemberRepository {
   // ----- Member profile / billing management -----
 
   /// `POST /api/v1/members/` — create a member shell (and its Stripe
-  /// customer). Returns the new member's id (from the 201
-  /// `MembersBillingProfileResponse`).
+  /// customer). Returns the new member's id plus what actually happened to
+  /// their app invite (the 201 `MemberCreateResponse` wraps the
+  /// `MembersBillingProfileResponse` under `member` alongside `invite`).
   ///
   /// Throws [DuplicateMemberException] on a 409 whose
   /// `detail.code == "duplicate_member"` — a same-identity member already
   /// exists and [MembersManagementCreateRequest.allowDuplicate] is false;
   /// nothing was written, so the caller offers create-anyway / use-existing.
+  /// That conflict body is UNCHANGED by the invite work — it is still
+  /// `{"detail": {"code": ..., "matches": [...]}}`, parsed by
+  /// [_parseDuplicateMember] below.
   /// A 400 (the gym has no Stripe Connect account) rethrows as a
   /// [ServerException] the caller surfaces.
-  Future<String> createMember(
+  Future<MemberCreateResult> createMember(
     MembersManagementCreateRequest req,
   ) async {
     try {
@@ -135,8 +140,9 @@ class MemberRepository {
         '/api/v1/members/',
         data: req.toJson(),
       );
-      final data = response.data as Map<String, dynamic>;
-      return data['member_id'] as String;
+      return MemberCreateResult.fromJson(
+        response.data as Map<String, dynamic>,
+      );
     } on ServerException catch (e) {
       if (e.statusCode == 409) {
         final dup = _parseDuplicateMember(e.data);

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/add_member_roster_view.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/choose_payer_view.dart';
 import 'package:crm/features/member_details/presentation/dialogs/add_member/group_member.dart';
@@ -15,17 +16,21 @@ void main() {
     fullName: 'Alice Ray',
     email: 'alice@example.com',
     wasExisting: false,
+    invite: InviteOutcome.queued,
   );
+  // A kept duplicate is never invited — nothing was created.
   const bob = GroupMember(
     memberId: 'b',
     fullName: 'Bob Kim',
     email: 'bob@example.com',
     wasExisting: true,
+    invite: InviteOutcome.notRequested,
   );
   const cara = GroupMember(
     memberId: 'c',
     fullName: 'Cara Ng',
     wasExisting: false,
+    invite: InviteOutcome.notRequested,
   );
 
   group('AddMemberRosterView', () {

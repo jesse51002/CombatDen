@@ -16,6 +16,9 @@ did, like the bulk fan-out does.
 
 import logging
 
+from src.reconciler.service.reconciler.reconciler_email_retry_sweep import (
+    EmailRetrySweep,
+)
 from src.reconciler.service.reconciler.reconciler_invoice_fetch_sweep import (
     InvoiceFetchSweep,
 )
@@ -49,12 +52,14 @@ class ReconcilerService:
         invoice_fetch_sweep: InvoiceFetchSweep,
         stale_task_sweep: StaleTaskSweep,
         subscription_orphan_sweep: SubscriptionOrphanSweep,
+        email_retry_sweep: EmailRetrySweep,
     ) -> None:
         self._orphan_cleanup_sweep = orphan_cleanup_sweep
         self._payment_push_sweep = payment_push_sweep
         self._invoice_fetch_sweep = invoice_fetch_sweep
         self._stale_task_sweep = stale_task_sweep
         self._subscription_orphan_sweep = subscription_orphan_sweep
+        self._email_retry_sweep = email_retry_sweep
 
     async def run(self) -> ReconcilerRunResult:
         """Run every step-service in order and return each one's ``SweepResult``."""
@@ -72,6 +77,12 @@ class ReconcilerService:
         sweeps.append(await self._orphan_cleanup_sweep.run())
         sweeps.append(await self._payment_push_sweep.run())
         sweeps.append(await self._subscription_orphan_sweep.run())
+        # Step 6, deliberately LAST and outside the billing chain: outbound
+        # email is not billing state, and a mail-provider outage must never
+        # delay or abort the five steps above. Re-attempts unsent mail so a
+        # dropped staff invite becomes a delay, not a person who can never
+        # log in.
+        sweeps.append(await self._email_retry_sweep.run())
         logger.info(
             "Reconciler sweep complete (%d step(s))",
             len(sweeps),

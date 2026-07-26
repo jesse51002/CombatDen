@@ -1,6 +1,7 @@
 import 'package:equatable/equatable.dart';
 
 import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/features/employees/data/models/employee_taught_class.dart';
 
@@ -34,7 +35,14 @@ class EmployeesLoading extends EmployeesState {
 /// pattern, so the dialog's own success step fires against committed state, not
 /// "request sent". A failure sets [mutationError] instead. [lastInvitedEmployee]
 /// is the row the most recent invite created (its stored, lowercased email
-/// backs the Add dialog's copyable sign-in instructions).
+/// backs the Add dialog's copyable sign-in instructions) and
+/// [lastInviteOutcome] is what the backend actually did about that person's
+/// invite, so the success step never claims a send that didn't happen.
+///
+/// Resending an invite rides its OWN channel ([resendingEmployeeId] /
+/// [resendToken] / [resendOutcome] / [resendError]) rather than the mutation
+/// one: it changes no row, so it must not reload the roster or trip the
+/// dialogs' shared [isMutating] flag.
 class EmployeesLoaded extends EmployeesState {
   final String gymId;
   final List<Employee> employees;
@@ -48,6 +56,20 @@ class EmployeesLoaded extends EmployeesState {
   final int updateSuccess;
   final int removeSuccess;
   final Employee? lastInvitedEmployee;
+  final InviteOutcome? lastInviteOutcome;
+
+  /// The row whose invite resend is in flight — drives that row's inline busy
+  /// state, and keeps a second resend from stacking on the first.
+  final String? resendingEmployeeId;
+
+  /// Monotonic token bumped once a resend settles (either way). The list
+  /// watches it so the same outcome never fires two snackbars.
+  final int resendToken;
+
+  /// What the last resend actually did, or the error it failed with. Exactly
+  /// one is non-null after a settled resend.
+  final InviteOutcome? resendOutcome;
+  final Object? resendError;
 
   final bool isMutating;
   final String? mutationError;
@@ -64,6 +86,11 @@ class EmployeesLoaded extends EmployeesState {
     this.updateSuccess = 0,
     this.removeSuccess = 0,
     this.lastInvitedEmployee,
+    this.lastInviteOutcome,
+    this.resendingEmployeeId,
+    this.resendToken = 0,
+    this.resendOutcome,
+    this.resendError,
     this.isMutating = false,
     this.mutationError,
   });
@@ -81,6 +108,13 @@ class EmployeesLoaded extends EmployeesState {
     int? updateSuccess,
     int? removeSuccess,
     Employee? lastInvitedEmployee,
+    InviteOutcome? lastInviteOutcome,
+    String? resendingEmployeeId,
+    bool clearResendingEmployeeId = false,
+    int? resendToken,
+    InviteOutcome? resendOutcome,
+    Object? resendError,
+    bool clearResendOutcome = false,
     bool? isMutating,
     String? mutationError,
     bool clearMutationError = false,
@@ -97,6 +131,15 @@ class EmployeesLoaded extends EmployeesState {
       updateSuccess: updateSuccess ?? this.updateSuccess,
       removeSuccess: removeSuccess ?? this.removeSuccess,
       lastInvitedEmployee: lastInvitedEmployee ?? this.lastInvitedEmployee,
+      lastInviteOutcome: lastInviteOutcome ?? this.lastInviteOutcome,
+      resendingEmployeeId: clearResendingEmployeeId
+          ? null
+          : (resendingEmployeeId ?? this.resendingEmployeeId),
+      resendToken: resendToken ?? this.resendToken,
+      resendOutcome:
+          clearResendOutcome ? null : (resendOutcome ?? this.resendOutcome),
+      resendError:
+          clearResendOutcome ? null : (resendError ?? this.resendError),
       isMutating: isMutating ?? this.isMutating,
       mutationError:
           clearMutationError ? null : (mutationError ?? this.mutationError),
@@ -116,6 +159,11 @@ class EmployeesLoaded extends EmployeesState {
         updateSuccess,
         removeSuccess,
         lastInvitedEmployee,
+        lastInviteOutcome,
+        resendingEmployeeId,
+        resendToken,
+        resendOutcome,
+        resendError,
         isMutating,
         mutationError,
       ];

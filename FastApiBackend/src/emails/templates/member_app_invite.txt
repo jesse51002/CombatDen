@@ -1,0 +1,13 @@
+Hi {{ first_name }},
+
+{{ gym_name }} is on the CombatDen app. Track your attendance, watch your
+rank progress, and see what you've earned — all from your phone.
+
+Get the app: https://app.combatden.net
+
+Sign in with this email address and your {{ gym_name }} profile is already
+waiting for you.
+
+Sent by {{ gym_name }} via CombatDen.
+Unsubscribe from these emails: {{ unsubscribe_url }}
+You'll still receive account and access email.

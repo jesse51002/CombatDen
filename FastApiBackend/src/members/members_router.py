@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
+from src.emails.service.emails_runner import EmailsRunner
 from src.members.members_exceptions import MembersError
 from src.members.schema.members_billing_schema import (
     BillingPaymentRecord,
@@ -28,6 +29,7 @@ from src.members.schema.members_crm_members_list_schema import (
 from src.members.schema.members_schema import (
     DuplicateMemberConflict,
     MemberCreateRequest,
+    MemberCreateResponse,
     MemberResponse,
     MemberUpdateRequest,
 )
@@ -89,11 +91,17 @@ members_router = APIRouter(
 
 @members_router.post(
     "/",
-    response_model=MembersBillingProfileResponse,
+    response_model=MemberCreateResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a member (provisions a Stripe customer)",
     responses={
-        201: {"description": "Member created with a Stripe customer"},
+        201: {
+            "description": (
+                "Member created with a Stripe customer. `invite` reports "
+                "what happened to the app invite: queued / held / "
+                "skipped_no_email / skipped_suppressed / not_requested."
+            )
+        },
         400: {"description": "Invalid request, or gym has no Stripe account"},
         401: {"description": "Not authenticated"},
         403: {"description": "Not authorized for this gym"},
@@ -117,7 +125,10 @@ async def create_member(
     management_service: MembersManagementService = Depends(
         Provide[DependencyInjector.members_management_service]
     ),
-) -> MembersBillingProfileResponse:
+    emails_runner: EmailsRunner = Depends(
+        Provide[DependencyInjector.emails_runner]
+    ),
+) -> MemberCreateResponse:
     """Create a member and provision its Stripe customer. Gym staff only.
 
     Every member is created with a Stripe customer. The gym must have a
@@ -133,7 +144,15 @@ async def create_member(
     await auth.verify_roles(request.gym_id, user_payload, STAFF)
 
     try:
-        return await management_service.create_member(request)
+        result = await management_service.create_member(request)
+        # Fired AFTER the member + its Stripe customer are committed,
+        # detached: mail delivery must never delay or fail a create.
+        if result.email_id is not None:
+            emails_runner.start(result.email_id)
+        return MemberCreateResponse(
+            member=result.member,
+            invite=result.invite,
+        )
     except HTTPException:
         # The duplicate gate raises HTTPException(409) directly — re-raise it
         # as-is instead of letting the generic handler mask it as a 500.

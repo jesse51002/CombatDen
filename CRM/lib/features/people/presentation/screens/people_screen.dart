@@ -7,6 +7,7 @@ import 'package:crm/core/navigation/app_routes.dart';
 import 'package:crm/core/navigation/url_sync.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/employees/bloc/employees_bloc.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/data/repositories/employees_repository.dart';
@@ -72,6 +73,10 @@ class PeopleScreen extends StatelessWidget {
           RepositoryProvider<ScheduleRepository>(
             create: (_) => ScheduleRepository(apiClient: ApiClient()),
           ),
+        if (canManageStaff)
+          RepositoryProvider<EmailsRepository>(
+            create: (_) => EmailsRepository(apiClient: ApiClient()),
+          ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -87,6 +92,7 @@ class PeopleScreen extends StatelessWidget {
               create: (ctx) => EmployeesBloc(
                 employeesRepository: ctx.read<EmployeesRepository>(),
                 scheduleRepository: ctx.read<ScheduleRepository>(),
+                emailsRepository: ctx.read<EmailsRepository>(),
               )..add(EmployeesInitRequested(selectedGym.gymId ?? '')),
             ),
         ],

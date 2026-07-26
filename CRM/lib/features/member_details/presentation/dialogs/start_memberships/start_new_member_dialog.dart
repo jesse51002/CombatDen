@@ -5,6 +5,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/core/state/selected_gym.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/member_details/bloc/member_create_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_create_event.dart';
 import 'package:crm/features/member_details/bloc/member_create_state.dart';
@@ -20,6 +21,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/payer_waiver_sign_body.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/shared/widgets/app_dialog/create_invite_actions.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 enum _Phase { create, duplicate, sign, success, error }
@@ -127,6 +129,10 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   List<DuplicateMemberMatch> _matches = const [];
   String? _selectedMatchId;
 
+  /// Whether the create form currently holds an email — no email means nobody
+  /// to invite, so the footer collapses to a single plain "Create".
+  bool _hasEmail = false;
+
   // Sign phase — the created/picked "other" person (their side of the
   // relationship is resolved from [widget.direction]).
   String? _otherId;
@@ -168,7 +174,10 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
           _phase = _Phase.duplicate;
         });
       case MemberCreated():
-        // A freshly created member — always authorize the relationship.
+        // A freshly created member — always authorize the relationship. The
+        // create's invite outcome rides along so the terminal step can report
+        // it honestly alongside the authorization.
+        _createInvite = state.invite;
         _enterSign(state.memberId, _pendingName);
       case MemberCreateFailure():
         setState(() {
@@ -186,10 +195,15 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
 
   String _pendingName = '';
 
-  void _onCreate() {
+  /// What the create did about the new member's app invite. Stays
+  /// [InviteOutcome.notRequested] on the "use existing" branch — nothing was
+  /// created and nothing was mailed.
+  InviteOutcome _createInvite = InviteOutcome.notRequested;
+
+  void _onCreate({required bool sendInvite}) {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
-    final req = form.buildRequest(widget.gymId);
+    final req = form.buildRequest(widget.gymId, sendInvite: sendInvite);
     _pendingName = '${req.firstName} ${req.lastName}';
     context.read<MemberCreateBloc>().add(MemberCreateSubmitted(req));
   }
@@ -199,6 +213,7 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   void _onUseExisting() {
     final matchId = _selectedMatchId;
     if (matchId == null) return;
+    _createInvite = InviteOutcome.notRequested;
     if (isAlreadyRelated(
       anchorId: widget.anchorMemberId,
       relatedIds: widget.relatedIds,
@@ -254,6 +269,13 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
         _waiverError = "We couldn't load the waiver. Please try again.";
       });
     }
+  }
+
+  /// The invite sentence appended to the terminal confirmation — empty when
+  /// nobody asked for one (a kept duplicate, or a create-without-inviting).
+  String get _inviteSuffix {
+    final line = _createInvite.confirmation;
+    return line == null ? '' : ' $line.';
   }
 
   bool get _canSign =>
@@ -366,7 +388,11 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
             // "back to edit" round-trip from the duplicate step.
             Offstage(
               offstage: _phase != _Phase.create,
-              child: MemberCreateForm(key: _formKey),
+              child: MemberCreateForm(
+                key: _formKey,
+                onEmailPresenceChanged: (has) =>
+                    setState(() => _hasEmail = has),
+              ),
             ),
             if (_phase == _Phase.duplicate)
               DuplicateMemberPanel(
@@ -381,7 +407,8 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
                 color: DesignConstants.goodGreen,
                 message: '${parties?.payerName ?? 'The payer'} is now '
                     'authorized to pay for '
-                    '${parties?.payeeName ?? 'this member'}.',
+                    '${parties?.payeeName ?? 'this member'}.'
+                    '$_inviteSuffix',
               ),
             if (_phase == _Phase.error)
               _Terminal(
@@ -426,12 +453,12 @@ class _StartNewMemberDialogState extends State<StartNewMemberDialog> {
   Widget? _actions(BuildContext context, bool creating) {
     switch (_phase) {
       case _Phase.create:
-        return AppDialogActions(
-          primaryLabel: 'Create member',
-          isLoading: creating,
-          primaryOnPressed: creating ? null : _onCreate,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: () => Navigator.of(context).pop(),
+        return CreateInviteActions(
+          createLabel: 'Create',
+          canInvite: _hasEmail,
+          busy: creating,
+          onCreate: (sendInvite) => _onCreate(sendInvite: sendInvite),
+          onCancel: () => Navigator.of(context).pop(),
         );
       case _Phase.duplicate:
         return DuplicateFooter(

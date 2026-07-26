@@ -1,6 +1,7 @@
 import 'package:crm/core/network/api_client.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/features/employees/data/models/employee_create_request.dart';
+import 'package:crm/features/employees/data/models/employee_create_result.dart';
 import 'package:crm/features/employees/data/models/employee_update_request.dart';
 
 /// Repository for the gym staff roster over the FastAPI `employees` domain via
@@ -8,7 +9,9 @@ import 'package:crm/features/employees/data/models/employee_update_request.dart'
 /// `../FastApiBackend/src/employees/schema/employees_schema.py`.
 ///
 /// The list endpoint wraps its rows in a `{ "employees": [...] }` envelope
-/// (`EmployeeListResponse`); create/update return a bare `EmployeeResponse`.
+/// (`EmployeeListResponse`); create returns
+/// `{ "employee": {...}, "invite": "<outcome>" }`
+/// (`EmployeeCreateResponse`) and update a bare `EmployeeResponse`.
 /// Errors surface as the typed exceptions [ApiClient] throws — a 409/422 keeps
 /// the backend `detail` on [ServerException.detail], which the Add dialog shows
 /// verbatim (e.g. a duplicate-email conflict).
@@ -28,8 +31,9 @@ class EmployeesRepository {
   }
 
   /// `POST /api/v1/employees/{gym_id}` — create a staff member. Returns the
-  /// created row (its server id + derived `invite_status`).
-  Future<Employee> createEmployee(
+  /// created row (its server id + derived `invite_status`) alongside what
+  /// actually happened to the invite the request asked for.
+  Future<EmployeeCreateResult> createEmployee(
     String gymId,
     EmployeeCreateRequest request,
   ) async {
@@ -37,7 +41,9 @@ class EmployeesRepository {
       '/api/v1/employees/$gymId',
       data: request.toJson(),
     );
-    return Employee.fromJson(response.data as Map<String, dynamic>);
+    return EmployeeCreateResult.fromJson(
+      response.data as Map<String, dynamic>,
+    );
   }
 
   /// `PUT /api/v1/employees/{gym_id}/{employee_id}` — update the mutable fields.

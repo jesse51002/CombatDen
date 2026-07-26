@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from uuid import UUID
 
+from src.emails.service.emails_service import EmailsService
 from src.employees.schema.employees_schema import (
     EmployeeCreateRequest,
+    EmployeeCreateResult,
     EmployeeListResponse,
     EmployeeResponse,
     EmployeeUpdateData,
@@ -34,9 +36,10 @@ class EmployeesService:
     def __init__(
         self,
         db_pool: DirectDatabasePool,
+        emails_service: EmailsService,
     ) -> None:
         self._list = EmployeesList(db_pool)
-        self._create = EmployeesCreate(db_pool)
+        self._create = EmployeesCreate(db_pool, emails_service)
         self._update = EmployeesUpdate(db_pool)
         self._archive = EmployeesArchive(db_pool)
 
@@ -52,8 +55,8 @@ class EmployeesService:
         self,
         gym_id: UUID,
         request: EmployeeCreateRequest,
-    ) -> EmployeeResponse:
-        """Create a gym staff member (plain INSERT, no auth provisioning)."""
+    ) -> EmployeeCreateResult:
+        """Create a staff member; claim their invite when asked to."""
         return await self._create.create_employee(gym_id, request)
 
     async def update_employee(

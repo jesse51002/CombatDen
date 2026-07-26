@@ -41,13 +41,14 @@ async def test_update_personal_info(
     connect_opts,
     created,
 ):
-    member = await management_service.create_member(
+    member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Original",
             last_name="Name",
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:
@@ -101,14 +102,15 @@ async def test_date_of_birth_round_trips_and_survives_partial_update(
     silently keeps a member's data.
     """
     dob = date(1990, 5, 17)
-    member = await management_service.create_member(
+    member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Dob",
             last_name="RoundTrip",
             date_of_birth=dob,
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:
@@ -151,14 +153,15 @@ async def test_update_card_existing_customer(
     created,
 ):
     pm1 = await created.payment_method()
-    created_member = await management_service.create_member(
+    created_member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Card",
             last_name="Swap",
             payment_method_id=pm1,
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:
@@ -211,13 +214,14 @@ async def test_update_card_on_cardless_customer(
     ever attaches the payment method to the existing customer.
     """
     # Member is created with a Stripe customer but no card.
-    created_member = await management_service.create_member(
+    created_member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="NoCustomer",
             last_name="NeedsOne",
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:
@@ -261,14 +265,15 @@ async def test_unlink_payment(
     created,
 ):
     pm_id = await created.payment_method()
-    created_member = await management_service.create_member(
+    created_member = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Unlink",
             last_name="Card",
             payment_method_id=pm_id,
+            send_invite=False,
         ),
-    )
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:

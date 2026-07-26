@@ -12,6 +12,7 @@ import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -68,7 +69,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization passes the exact (payee, payer) pair through',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -88,7 +91,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization refetches member detail after the mutation',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -110,7 +115,9 @@ void main() {
   blocTest<MemberDetailBloc, MemberDetailState>(
     'remove_authorization surfaces the cancel outcome + in-flight flag '
     '(Feature B completion screen)',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -143,7 +150,9 @@ void main() {
     build: () {
       when(() => repo.removeAuthorization(any(), any(), any()))
           .thenThrow(Exception('stripe down'));
-      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
+      return MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),
@@ -166,3 +175,10 @@ void main() {
     ],
   );
 }
+
+
+/// Stub for the emails repository the bloc now takes. No test here exercises
+/// the manual app-invite send, so it is never stubbed — only supplied.
+class _StubEmailsRepository extends Mock implements EmailsRepository {}
+
+final _stubEmailsRepository = _StubEmailsRepository();
