@@ -68,6 +68,114 @@ class StaffFlowCopy extends MembershipFlowCopy {
   @override
   String removeSemantic(String name) => 'Remove $name from this run';
 
+  // ── Step heads ────────────────────────────────────────────────────────────
+
+  /// Position, then name, then state — the order a reader needs them in to
+  /// skip the rail once they have heard where they are.
+  @override
+  String railStepSemantic({
+    required int index,
+    required int total,
+    required String label,
+    required bool done,
+    required bool current,
+  }) {
+    final state = current
+        ? 'current step'
+        : done
+            ? 'completed'
+            : 'upcoming';
+    return 'Step ${index + 1} of $total, $label, $state';
+  }
+
+  @override
+  String get rosterStepTitle => 'Who\'s joining?';
+
+  /// The fact that explains the whole screen, then the one control on it.
+  @override
+  String get rosterStepSubtitle =>
+      'Everything here bills to one card. Tick whoever\'s getting a '
+      'membership.';
+
+  @override
+  String planStepTitle({required String firstName, required bool isGroup}) {
+    final first = firstName.trim();
+    return first.isEmpty ? 'Pick their plans' : 'Pick $first\'s plans';
+  }
+
+  /// Plural where the kiosk is singular: the desk sells several memberships
+  /// to one person, and the line has to say so before the second card
+  /// appears.
+  @override
+  String planStepSubtitle({
+    required int personIndex,
+    required int personCount,
+  }) {
+    const rule = 'add as many as they need — one-time packs stack';
+    if (personCount < 2) return 'Pick a plan · $rule';
+    return 'Person ${personIndex + 1} of $personCount · $rule';
+  }
+
+  /// The desk signs on somebody's behalf, so the title names the RUN's job
+  /// rather than the person — the identity strip beside it names them.
+  @override
+  String waiverStepTitle({
+    required String firstName,
+    required bool isGroup,
+  }) =>
+      'Signatures needed';
+
+  @override
+  String waiverStepSubtitle({
+    required int index,
+    required int total,
+    required String? planName,
+    required String firstName,
+  }) {
+    final position = 'Waiver ${index + 1} of $total';
+    final plan = planName?.trim() ?? '';
+    final first = firstName.trim();
+    if (plan.isEmpty) return position;
+    if (first.isEmpty) return '$position · required for $plan';
+    return '$position · required for $first\'s $plan';
+  }
+
+  @override
+  String get reviewStepTitle => 'Review & charges';
+
+  /// Staff are about to read a number back to somebody, so the line says
+  /// exactly when the money moves — which is not on this screen.
+  @override
+  String reviewStepSubtitle({required bool isGroup}) =>
+      'Nothing is charged until payment is taken on the next step.';
+
+  @override
+  String get paymentStepTitle => 'How is this paid?';
+
+  @override
+  String resultsStepTitle({required bool allCreated, required int count}) {
+    if (!allCreated) return 'Some of these didn\'t go through';
+    return count == 1
+        ? 'The membership started'
+        : 'All $count memberships started';
+  }
+
+  @override
+  String resultsStepSubtitle({
+    required bool allCreated,
+    required bool isGroup,
+    required String? amountLabel,
+    required String? cardLast4,
+  }) {
+    if (!allCreated) return 'Have a look — the rest can go on the same card.';
+    final amount = amountLabel?.trim() ?? '';
+    if (amount.isEmpty) return 'Nothing was charged for this run.';
+    final last4 = cardLast4?.trim() ?? '';
+    return last4.isEmpty
+        ? '$amount charged.'
+        : '$amount charged to the card ending $last4.';
+  }
+
   /// One line either way. Staff read a column of rows and compare them, so a
   /// row whose wording changes with the roster's size is harder to scan, not
   /// friendlier — the comparative phrasing is the member's, addressed to one

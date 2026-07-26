@@ -7,6 +7,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
@@ -78,10 +79,20 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
         builder: (context, state) {
           final picked = state.activePerson.selectedPlanId;
           final pickedPlan = state.planById(picked);
+          final copy = MembershipFlowTheme.copyOf(context);
+          // The step is walked once per TRAINING person, so the run's own
+          // order is what the answering line counts through.
+          final order = state.trainingPersonIndexes;
           return KioskStepScaffold(
             step: KioskSignupStep.plans,
-            title: _title(state),
-            subtitle: _subtitle(state),
+            title: copy.planStepTitle(
+              firstName: state.activePerson.firstName,
+              isGroup: state.isGroup,
+            ),
+            subtitle: copy.planStepSubtitle(
+              personIndex: order.indexOf(state.activePersonIndex),
+              personCount: order.length,
+            ),
             bodyController: _scroll,
             // Pinned so it cannot scroll away: a parent picking three
             // memberships in a row must never buy the wrong one for the wrong
@@ -117,29 +128,9 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
     );
   }
 
-  /// The step is walked once per TRAINING person, so in a GROUP the title names
-  /// whose choice is on screen — every turn, the payer's included. An unnamed
-  /// turn in a run of named ones is paid for with the wrong membership on the
-  /// wrong person. Solo keeps the second person.
-  String _title(KioskSignupState state) {
-    if (!state.isGroup) return 'Pick your membership';
-    final first = state.activePerson.firstName.trim();
-    return first.isEmpty
-        ? 'Pick their membership'
-        : 'Pick $first\'s membership';
-  }
-
   String _fullName(KioskSignupState state) {
     final person = state.activePerson;
     return '${person.firstName} ${person.lastName}'.trim();
-  }
-
-  String _subtitle(KioskSignupState state) {
-    const rule = 'You can change it any time at the front desk · no lock-in';
-    final order = state.trainingPersonIndexes;
-    if (order.length < 2) return rule;
-    final at = order.indexOf(state.activePersonIndex);
-    return 'Person ${at + 1} of ${order.length} · $rule';
   }
 }
 

@@ -61,6 +61,82 @@ abstract class MembershipFlowCopy {
   /// The screen-reader label on a roster row's remove control.
   String removeSemantic(String name);
 
+  // ── Step heads ────────────────────────────────────────────────────────────
+  // The title and its one answering line, for the steps BOTH surfaces walk.
+  // A step only one of them has keeps its words on that surface's own copy
+  // class — there is no second voice for those to drift from, and an abstract
+  // method the other surface can only answer with a lie is worse than none.
+  //
+  // Every one of these takes the FACTS the line interpolates, never a
+  // pre-formatted sentence, so one voice can reorder or drop a clause the
+  // other keeps: the member reads "Pick your membership", the desk reads
+  // "Pick Marcus's plans", from the same call.
+
+  /// One rung of the step rail, for a screen reader.
+  ///
+  /// The rail is drawn as discs and connectors, so a reader hearing only the
+  /// rung's word learns neither where it sits nor whether it has been passed.
+  /// It is structural rather than voiced — both surfaces answer it the same
+  /// way — but it is still a user-facing sentence, so it lives here rather
+  /// than inside the shared widget.
+  String railStepSemantic({
+    required int index,
+    required int total,
+    required String label,
+    required bool done,
+    required bool current,
+  });
+
+  /// The roster step — who is joining, and who pays for them.
+  String get rosterStepTitle;
+  String get rosterStepSubtitle;
+
+  /// The plans step. [isGroup] is what makes naming a person mean anything on
+  /// a surface that usually has only one; [firstName] may be empty.
+  String planStepTitle({required String firstName, required bool isGroup});
+
+  /// The plans step's answering line. [personIndex] is ZERO-based, so a
+  /// surface that counts people prints `personIndex + 1`; a run of one person
+  /// has nothing to count and says so by dropping the clause.
+  String planStepSubtitle({
+    required int personIndex,
+    required int personCount,
+  });
+
+  /// The waivers step.
+  String waiverStepTitle({required String firstName, required bool isGroup});
+
+  /// The waivers step's answering line. [index] is ZERO-based. [planName] is
+  /// the membership that REQUIRES this signature, absent while the plan is
+  /// unknown.
+  String waiverStepSubtitle({
+    required int index,
+    required int total,
+    required String? planName,
+    required String firstName,
+  });
+
+  /// The review step — the lineup and what it costs.
+  String get reviewStepTitle;
+  String reviewStepSubtitle({required bool isGroup});
+
+  /// The settlement step. Its answering line is per-surface: the kiosk names
+  /// the plan being bought, the desk names the amount, and neither is the
+  /// other's sentence.
+  String get paymentStepTitle;
+
+  /// The receipt. [count] is how many memberships landed.
+  String resultsStepTitle({required bool allCreated, required int count});
+
+  /// The receipt's answering line. [amountLabel] and [cardLast4] are what
+  /// actually settled, for a surface that states it; both may be absent.
+  String resultsStepSubtitle({
+    required bool allCreated,
+    required bool isGroup,
+    required String? amountLabel,
+    required String? cardLast4,
+  });
+
   // ── The roster ────────────────────────────────────────────────────────────
 
   /// The per-person "is this one being charged" check. [isGroup] is what makes

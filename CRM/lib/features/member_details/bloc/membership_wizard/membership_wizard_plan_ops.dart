@@ -117,7 +117,15 @@ mixin MembershipWizardPlanOps on MembershipWizardBase {
   /// Remove one membership from the review. When it was that person's last,
   /// they stop being part of the run — and the consequence says so, rather than
   /// the row simply vanishing along with them.
-  void removeMembership(String memberId, String planId) {
+  ///
+  /// A cart that changed is a price that changed, so this drops the staged
+  /// preview like every other lineup edit — and then RE-STAGES it, because
+  /// this is the one lineup edit made from the screen that renders the price.
+  /// Without that the money half of the review would blank permanently and the
+  /// forward action could never re-enable; the re-stage belongs here rather
+  /// than in a widget watching for an idle read, since what a changed cart
+  /// costs is the money layer's question.
+  Future<void> removeMembership(String memberId, String planId) async {
     final consequence = consequenceOfRemoving(memberId, planId);
     if (consequence == null || !consequence.destroys) return;
     final remaining = draftsWithMembershipRemoved(state.drafts, memberId, planId);
@@ -138,6 +146,13 @@ mixin MembershipWizardPlanOps on MembershipWizardBase {
       ),
     );
     emit(state.copyWith(personIndex: clampPersonIndex(state.personIndex)));
+    // Only from the review, and only while there is still something to price:
+    // an emptied run has no charge to preview, and its own floor
+    // (`hasAnyMembership`) is what closes the forward action there.
+    if (state.step == MembershipWizardStep.reviewCharges &&
+        state.hasAnyMembership) {
+      await enterReviewCharges();
+    }
   }
 
   /// Edit one person's lineup FROM the review: jump to their plans step, and

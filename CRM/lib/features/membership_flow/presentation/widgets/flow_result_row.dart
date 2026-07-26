@@ -22,10 +22,21 @@ class FlowResultRow extends StatelessWidget {
 
   final MemberMembershipsStartStatus status;
 
+  /// The backend's OWN words about this one membership, under the consequence.
+  ///
+  /// Null on the kiosk, and that absence is the rule this widget's second
+  /// paragraph states: a raw backend message is right at a staff desk — where
+  /// somebody has to act on "insufficient funds" — and wrong in a lobby, where
+  /// it reads as a verdict on the person standing at the screen. The
+  /// consequence above it is stated either way, so the row never depends on
+  /// this line to make sense.
+  final String? detail;
+
   const FlowResultRow({
     super.key,
     required this.label,
     required this.status,
+    this.detail,
   });
 
   @override
@@ -59,6 +70,15 @@ class FlowResultRow extends StatelessWidget {
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
+              if (detail case final reason? when reason.trim().isNotEmpty)
+                Text(
+                  reason,
+                  style: scale.micro.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
             ],
           ),
         ),

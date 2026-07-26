@@ -23,13 +23,14 @@ class FlowDiscountChip extends StatelessWidget {
 
   /// The screen-reader label on the × — it names the discount AND the fact
   /// that removal is per-membership, because the same preset is usually on
-  /// several cards at once.
-  final String removeSemanticLabel;
+  /// several cards at once. Unused, and therefore unnecessary, on a read-only
+  /// chip: the review lists what is applied without offering to change it.
+  final String? removeSemanticLabel;
 
   const FlowDiscountChip({
     super.key,
     required this.label,
-    required this.removeSemanticLabel,
+    this.removeSemanticLabel,
     this.onRemove,
   });
 
@@ -60,7 +61,7 @@ class FlowDiscountChip extends StatelessWidget {
           ),
           if (remove != null)
             Semantics(
-              label: removeSemanticLabel,
+              label: removeSemanticLabel ?? label,
               button: true,
               excludeSemantics: true,
               child: InkWell(

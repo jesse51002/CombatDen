@@ -27,6 +27,12 @@ class FlowSegmented<T> extends StatelessWidget {
   /// sits inside a card, so wrapping beats horizontal scrolling.
   final bool wrap;
 
+  /// Divide the full width between the segments instead of hugging their
+  /// words. For a control answering ONE question with two equal answers — how
+  /// the first period is charged — packing them left leaves the chosen one
+  /// looking like a tag rather than half of a decision.
+  final bool fill;
+
   /// Switch WHAT IS SHOWN rather than set a value.
   ///
   /// The two are the same control and must not look the same: a value picker
@@ -42,6 +48,7 @@ class FlowSegmented<T> extends StatelessWidget {
     required this.labelOf,
     required this.onChanged,
     this.wrap = false,
+    this.fill = false,
     this.loud = false,
   });
 
@@ -49,12 +56,22 @@ class FlowSegmented<T> extends StatelessWidget {
   Widget build(BuildContext context) {
     final segments = <Widget>[
       for (final option in options)
-        _Segment(
-          label: labelOf(option),
-          on: option == value,
-          loud: loud,
-          onTap: () => onChanged(option),
-        ),
+        if (fill)
+          Expanded(
+            child: _Segment(
+              label: labelOf(option),
+              on: option == value,
+              loud: loud,
+              onTap: () => onChanged(option),
+            ),
+          )
+        else
+          _Segment(
+            label: labelOf(option),
+            on: option == value,
+            loud: loud,
+            onTap: () => onChanged(option),
+          ),
     ];
     return Container(
       padding: const EdgeInsets.all(DesignConstants.spacingSmall),
@@ -72,7 +89,7 @@ class FlowSegmented<T> extends StatelessWidget {
               children: segments,
             )
           : Row(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: fill ? MainAxisSize.max : MainAxisSize.min,
               spacing: DesignConstants.spacingSmall,
               children: segments,
             ),
@@ -124,7 +141,11 @@ class _Segment extends StatelessWidget {
           boxShadow:
               on && !loud ? DesignConstants.controlShadow : null,
         ),
-        child: Text(label, style: scale.micro.copyWith(color: ink)),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: scale.micro.copyWith(color: ink),
+        ),
       ),
     );
   }

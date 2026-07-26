@@ -35,6 +35,15 @@ class FlowRosterRow extends StatelessWidget {
   final VoidCallback onRemove;
   final ValueChanged<bool> onTrainingChanged;
 
+  /// The check's own second line — what unticking this row would COST.
+  ///
+  /// It belongs to the check rather than to the row beneath it, because the
+  /// consequence is the check's: a surface that renders it separately has to
+  /// re-derive this control's indent, and the two drift the moment either
+  /// moves. Null on a row with nothing to lose — a warning nobody needs is the
+  /// fastest way to teach people to ignore the ones that matter.
+  final String? checkNote;
+
   const FlowRosterRow({
     super.key,
     required this.person,
@@ -42,6 +51,7 @@ class FlowRosterRow extends StatelessWidget {
     required this.onDetails,
     required this.onRemove,
     required this.onTrainingChanged,
+    this.checkNote,
   });
 
   @override
@@ -86,6 +96,7 @@ class FlowRosterRow extends StatelessWidget {
             firstName: person.firstName,
             isGroup: isGroup,
           ),
+          note: checkNote,
         ),
       ],
     );

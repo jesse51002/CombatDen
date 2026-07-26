@@ -5,6 +5,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_optional_fields.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
@@ -100,14 +101,26 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
         // courtesy, the latch is the guarantee.
         final busy = state.submitting;
         final commit = payee ? _commitPayee : _commitPayer;
+        // Kiosk-only step: the desk edits a member's record on their own
+        // profile, so this head lives on the kiosk's own copy. The gym name is
+        // read HERE and handed over — the copy takes facts, never a sentence.
+        final copy = kioskStepCopy(context);
         return KioskStepScaffold(
           step: payee
               ? KioskSignupStep.personDetails
               : KioskSignupStep.extraDetails,
-          title: payee
-              ? 'A bit more about ${person.firstName}'
-              : 'A bit more about you',
-          subtitle: _subtitle(state, payee: payee),
+          title: copy.optionalStepTitle(
+            payee: payee,
+            firstName: person.firstName,
+          ),
+          subtitle: copy.optionalStepSubtitle(
+            wasExisting: person.wasExisting,
+            payee: payee,
+            firstName: person.firstName,
+            personIndex: state.activePersonIndex,
+            personCount: state.persons.length,
+            gymName: selectedGym.gymName,
+          ),
           foot: FlowFoot(
             primaryLabel:
                 payee ? 'Add ${person.firstName}' : 'Continue',
@@ -142,23 +155,5 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
         );
       },
     );
-  }
-
-  /// The optionality, said ONCE where it is read. A matched existing member
-  /// gets the honest reason their form is blank instead.
-  String _subtitle(KioskSignupState state, {required bool payee}) {
-    final person = state.activePerson;
-    if (person.wasExisting) {
-      return '${person.firstName} already has details with us — we don\'t '
-          'show them on a shared screen.';
-    }
-    if (payee) {
-      final total = state.persons.length;
-      return 'Person ${state.activePersonIndex + 1} of $total · all optional';
-    }
-    final gym = selectedGym.gymName;
-    return gym == null || gym.trim().isEmpty
-        ? 'Only gym staff sees this · all of it is optional'
-        : 'Only ${gym.trim()} staff sees this · all of it is optional';
   }
 }

@@ -31,14 +31,18 @@ class FlowFoot extends StatelessWidget {
   final VoidCallback? onSkip;
   final String? skipLabel;
 
-  /// Leave the flow. REQUIRED and non-null on every step: a step that could
-  /// omit its way out is a step that eventually does.
+  /// Leave the flow. Non-null on every step the member or staff may still
+  /// leave: a step that could omit its way out is a step that eventually does.
   ///
-  /// Whether leaving ASKS first is the step's own call, made here rather than
-  /// inside the foot, and it is proportional to what is lost — only the card
-  /// and review steps confirm, since a confirm on an early step is a second
-  /// trap for somebody who already mis-tapped.
-  final VoidCallback onEscape;
+  /// Null is the ONE deliberate exception, and it is not "this step has no
+  /// escape yet" — it is a TERMINAL step, after PAY, where leaving would
+  /// strand a charge whose outcome nobody has read. The kiosk reached the same
+  /// conclusion from the other side and routed its receipt around this widget
+  /// entirely (`kiosk_results_foot.dart`); the absence is expressed here
+  /// instead so both surfaces state it in one place. Rendering the ghost
+  /// button anyway and wiring it to nothing is the failure this replaces — a
+  /// visible way out that does not work is worse than none.
+  final VoidCallback? onEscape;
 
   /// The escape's wording, which answers the SCREEN rather than the
   /// navigation: beside a `Sign Membership · $149.00` button "Cancel" would
@@ -72,15 +76,16 @@ class FlowFoot extends StatelessWidget {
         Stack(
           alignment: Alignment.center,
           children: [
-            Positioned.fill(
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: _EscapeGutter(
-                  label: escapeLabel ?? copy.escapeAction,
-                  onEscape: onEscape,
+            if (onEscape case final escape?)
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: _EscapeGutter(
+                    label: escapeLabel ?? copy.escapeAction,
+                    onEscape: escape,
+                  ),
                 ),
               ),
-            ),
             Positioned.fill(
               child: Align(
                 alignment: Alignment.centerRight,

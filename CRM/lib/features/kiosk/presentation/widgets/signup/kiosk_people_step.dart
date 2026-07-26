@@ -8,6 +8,7 @@ import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_person_adder.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_roster_row.dart';
@@ -50,11 +51,11 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
         // Continue needs BOTH a payer and at least one person training; each
         // block states its own reason below.
         final canGo = hasPayer && state.anyoneTraining && !busy;
+        final copy = MembershipFlowTheme.copyOf(context);
         return KioskStepScaffold(
           step: KioskSignupStep.people,
-          title: 'Anyone else joining?',
-          subtitle: 'Add the people you\'re paying for — family, a partner, a '
-              'friend. You pay for everyone on one card.',
+          title: copy.rosterStepTitle,
+          subtitle: copy.rosterStepSubtitle,
           foot: FlowFoot(
             primaryLabel:
                 count == 1 ? 'It\'s just me' : 'Continue with $count people',

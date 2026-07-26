@@ -11,9 +11,14 @@ import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/payer_waiver_sign_body.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_payer_pane.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_person_copy.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_foot.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_note.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_panel.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_terminal.dart';
+import 'package:crm/shared/widgets/hairline.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 enum _LinkStep { select, sign, success, error }
@@ -27,6 +32,11 @@ enum _LinkStep { select, sign, success, error }
 ///   pick is a new payee the anchor pays for.
 /// - [AuthorizeDirection.addPayer] (payer step): the anchor is the payee; the
 ///   pick is a new authorized payer for the anchor.
+///
+/// The roster it searches is already filtered by the caller — anybody the
+/// anchor is authorized with is gone from it — so the list SAYS that. A name
+/// that can never appear is the one thing a search box cannot explain by
+/// itself, and staff otherwise spell it three ways before giving up.
 ///
 /// On confirm it dispatches [LinkParentRequested] (`memberId` = payee,
 /// `payerMemberId` = payer, who signs) and pops with the PICKED member's id so
@@ -96,6 +106,7 @@ class _StartLinkMemberDialogState
 
   String? _waiverVersionId;
   String _waiverBody = ''; // raw template body; rendered by the sign body
+  String? _waiverName;
   String _signerName = '';
   bool _consent = false;
   bool _submitting = false;
@@ -117,6 +128,12 @@ class _StartLinkMemberDialogState
       otherName: other.fullName,
     );
   }
+
+  String get _payerName =>
+      _parties?.payerName ?? StartPersonCopy.fallbackPayer;
+
+  String get _payeeName =>
+      _parties?.payeeName ?? StartPersonCopy.fallbackPayee;
 
   Future<List<MemberPickerEntry>> _fetchPage(
     String query,
@@ -165,14 +182,14 @@ class _StartLinkMemberDialogState
         _checking = false;
         _waiverVersionId = waiver.versionId;
         _waiverBody = waiver.body;
+        _waiverName = waiver.name;
         _step = _LinkStep.sign;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
         _checking = false;
-        _checkError = "We couldn't load the waiver. "
-            'Please try again.';
+        _checkError = StartPersonCopy.waiverLoadFailed;
       });
     }
   }
@@ -232,15 +249,18 @@ class _StartLinkMemberDialogState
         }
       },
       builder: (context, state) {
-        final isSign = _step == _LinkStep.sign;
-        return AppDialog(
+        final signing = _step == _LinkStep.sign;
+        return TaskDialog(
+          what: StartPersonCopy.findWhat,
+          onClose: _submitting ? null : () => Navigator.of(context).pop(),
+          closeTooltip: StartPersonCopy.closeSemantic,
           title: _title,
-          body: isSign
-              ? _signBody()
-              : _step == _LinkStep.select
-                  ? _selectBody()
-                  : _terminalBody(state),
-          actions: _actions(context, state),
+          subtitle: _subtitle,
+          expanded: true,
+          fillBody: signing || _step == _LinkStep.select,
+          maxWidth: DesignConstants.dialogContentMaxWidth,
+          body: _body(state),
+          foot: _foot(context),
         );
       },
     );
@@ -249,42 +269,75 @@ class _StartLinkMemberDialogState
   String get _title {
     switch (_step) {
       case _LinkStep.sign:
-        return 'Sign authorized-payer waiver';
+        return StartPersonCopy.signTitle(_payerName, _payeeName);
       case _LinkStep.success:
-        return 'Payer authorized';
+        return _kSuccessTitle;
       case _LinkStep.error:
-        return 'Authorization failed';
+        return _kErrorTitle;
       case _LinkStep.select:
-        return widget.direction == AuthorizeDirection.addPayee
-            ? 'Add someone ${widget.anchorName} pays for'
-            : 'Add a payer for ${widget.anchorName}';
+        return StartPersonCopy.findTitle;
     }
   }
 
-  String get _selectIntro {
-    if (widget.direction == AuthorizeDirection.addPayee) {
-      return "The picked member joins ${widget.anchorName}'s paying "
-          'account. ${widget.anchorName} signs an authorization '
-          'for them next.';
+  String? get _subtitle {
+    switch (_step) {
+      case _LinkStep.sign:
+        return StartPersonCopy.signSubtitle;
+      case _LinkStep.select:
+        return StartPersonCopy.findSubtitle(
+          direction: widget.direction,
+          anchorName: widget.anchorName,
+        );
+      case _LinkStep.success:
+      case _LinkStep.error:
+        return null;
     }
-    return 'The picked member becomes an authorized payer for '
-        "${widget.anchorName} and signs ${widget.anchorName}'s "
-        'waiver next.';
+  }
+
+  Widget _body(MemberDetailState state) {
+    switch (_step) {
+      case _LinkStep.select:
+        return _selectBody();
+      case _LinkStep.sign:
+        return AuthorizePayerPane(
+          // The waiver is fetched before this step is entered, so it is
+          // never loading or failed once here.
+          fetching: false,
+          error: null,
+          payerName: _payerName,
+          payeeName: _payeeName,
+          gymName: selectedGym.gymName ?? '',
+          waiverBody: _waiverBody,
+          waiverName: _waiverName,
+          submitting: _submitting,
+          onChanged: (name, consent) => setState(() {
+            _signerName = name;
+            _consent = consent;
+          }),
+        );
+      case _LinkStep.success:
+        return TaskTerminal(
+          icon: Symbols.check_circle_sharp,
+          color: DesignConstants.goodGreen,
+          message: StartPersonCopy.signSuccess(_payerName, _payeeName),
+        );
+      case _LinkStep.error:
+        return TaskTerminal(
+          icon: Symbols.error_sharp,
+          color: DesignConstants.badRed,
+          message: state is MemberDetailLoaded
+              ? (state.actionError ?? StartPersonCopy.unexpectedError)
+              : StartPersonCopy.unexpectedError,
+        );
+    }
   }
 
   Widget _selectBody() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingLarge,
+    final error = _checkError;
+    return TaskPanel(
+      fill: true,
       children: [
-        Text(
-          _selectIntro,
-          style: DesignConstants.p.copyWith(
-            color: DesignConstants.text,
-          ),
-        ),
-        SizedBox(
-          height: DesignConstants.dialogMemberPickerHeight,
+        Expanded(
           child: PaginatedMemberPicker(
             fetchPage: _fetchPage,
             pageSize: _pageSize,
@@ -301,110 +354,59 @@ class _StartLinkMemberDialogState
             },
           ),
         ),
-        if (_checkError != null)
+        if (error != null)
           Text(
-            _checkError!,
-            style: DesignConstants.pSmall.copyWith(
+            error,
+            style: DesignConstants.pSemibold.copyWith(
               color: DesignConstants.badRed,
             ),
           ),
-      ],
-    );
-  }
-
-  Widget _signBody() {
-    final parties = _parties;
-    return PayerWaiverSignBody(
-      payerName: parties?.payerName ?? 'The payer',
-      payeeName: parties?.payeeName ?? 'this member',
-      gymName: selectedGym.gymName ?? '',
-      waiverBody: _waiverBody,
-      enabled: !_submitting,
-      onChanged: (name, consent) => setState(() {
-        _signerName = name;
-        _consent = consent;
-      }),
-    );
-  }
-
-  Widget _terminalBody(MemberDetailState state) {
-    if (_step == _LinkStep.success) {
-      final parties = _parties;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          Icon(
-            Symbols.check_circle_sharp,
-            size: DesignConstants.iconSizeBig,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.goodGreen,
-          ),
-          Text(
-            '${parties?.payerName ?? 'The payer'} is now authorized '
-            'to pay for ${parties?.payeeName ?? 'this member'}.',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text,
-            ),
-          ),
-        ],
-      );
-    }
-    final msg = state is MemberDetailLoaded
-        ? (state.actionError ?? 'An unexpected error occurred.')
-        : 'An unexpected error occurred.';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Icon(
-          Symbols.error_sharp,
-          size: DesignConstants.iconSizeBig,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.badRed,
+        const TaskNote(
+          StartPersonCopy.findPaging,
+          textAlign: TextAlign.center,
         ),
-        Text(
-          msg,
-          style: DesignConstants.p.copyWith(
-            color: DesignConstants.badRed,
+        const Hairline(),
+        TaskNote(
+          StartPersonCopy.findNotListed(
+            direction: widget.direction,
+            anchorName: widget.anchorName,
           ),
         ),
       ],
     );
   }
 
-  Widget? _actions(
-    BuildContext context,
-    MemberDetailState state,
-  ) {
+  Widget _foot(BuildContext context) {
     switch (_step) {
       case _LinkStep.select:
-        return AppDialogActions(
-          primaryLabel: 'Continue',
-          isLoading: _checking,
-          primaryOnPressed: _selected == null || _checking
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.findPrimary,
+          busy: _checking,
+          onPrimary: _selected == null || _checking
               ? null
               : _continueToSign,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: () =>
-              Navigator.of(context).pop(),
+          secondaryLabel: StartPersonCopy.cancel,
+          onSecondary: () => Navigator.of(context).pop(),
         );
       case _LinkStep.sign:
-        return AppDialogActions(
-          primaryLabel: 'Authorize payer',
-          isLoading: _submitting,
-          primaryOnPressed: _canSign ? _confirmSign : null,
-          secondaryLabel: 'Back',
-          secondaryOnPressed: _submitting
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.signPrimary,
+          busy: _submitting,
+          onPrimary: _canSign ? _confirmSign : null,
+          secondaryLabel: StartPersonCopy.back,
+          onSecondary: _submitting
               ? null
               : () => setState(() => _step = _LinkStep.select),
         );
       case _LinkStep.success:
       case _LinkStep.error:
-        return AppDialogActions(
-          primaryLabel: 'Close',
-          primaryOnPressed: () => Navigator.of(context).pop(),
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.close,
+          onPrimary: () => Navigator.of(context).pop(),
         );
     }
   }
 }
+
+const String _kSuccessTitle = 'Payer authorized';
+const String _kErrorTitle = 'Authorization failed';

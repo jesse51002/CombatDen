@@ -10,6 +10,12 @@ import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 /// A membership carries its plan photo and its price; a signed waiver carries
 /// a green tick and no amount, since agreeing costs nothing and a "$0.00"
 /// beside it would imply otherwise.
+///
+/// A row whose price was reduced carries BOTH figures ([struckAmount] over
+/// [amount]), stacked rather than side by side: this row lives in the review's
+/// narrow half, where a struck price sitting beside the net one steals the
+/// width the plan name needs. A surface that never reduces a price leaves
+/// [struckAmount] null and the row is a single figure, exactly as before.
 class FlowBuyRow extends StatelessWidget {
   final String name;
   final String? rule;
@@ -21,12 +27,18 @@ class FlowBuyRow extends StatelessWidget {
   /// leaves the row unpriced.
   final String? amount;
 
+  /// The list price this row was reduced FROM, already formatted. Null on a
+  /// row nothing came off — which is every row on a surface that cannot
+  /// discount.
+  final String? struckAmount;
+
   const FlowBuyRow({
     super.key,
     required this.name,
     this.rule,
     this.imageUrl,
     this.amount,
+    this.struckAmount,
   });
 
   @override
@@ -63,7 +75,42 @@ class FlowBuyRow extends StatelessWidget {
           ),
         ),
         if (price != null)
-          Text(price, style: scale.statement),
+          _Amount(amount: price, struck: struckAmount),
+      ],
+    );
+  }
+}
+
+/// The row's money: one figure, or the list price struck through ABOVE the
+/// real one.
+///
+/// Stacked rather than side by side, because this row lives in the review's
+/// narrow half — a struck price beside the net one takes the width the plan
+/// name needs and starts truncating names instead of prices.
+class _Amount extends StatelessWidget {
+  final String amount;
+  final String? struck;
+
+  const _Amount({required this.amount, this.struck});
+
+  @override
+  Widget build(BuildContext context) {
+    final scale = MembershipFlowTheme.of(context);
+    final gross = struck;
+    if (gross == null) return Text(amount, style: scale.statement);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.end,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          gross,
+          style: scale.micro.copyWith(
+            color: DesignConstants.text2nd,
+            decoration: TextDecoration.lineThrough,
+            decorationColor: DesignConstants.text2nd,
+          ),
+        ),
+        Text(amount, style: scale.statement),
       ],
     );
   }

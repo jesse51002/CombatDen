@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
@@ -31,13 +32,14 @@ class KioskEntryChoiceStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
-    final gym = selectedGym.gymName;
+    // Kiosk-only step: the desk's wizard has no fork, so this head lives on
+    // the kiosk's own copy. The gym name is read HERE and handed over — the
+    // copy stays pure and does the empty-name degrade itself.
+    final copy = kioskStepCopy(context);
     return KioskStepScaffold(
       step: KioskSignupStep.entry,
-      title: gym == null || gym.trim().isEmpty
-          ? 'Welcome in'
-          : 'Welcome to ${gym.trim()}',
-      subtitle: 'Two ways in. Which one are you?',
+      title: copy.entryStepTitle(selectedGym.gymName),
+      subtitle: copy.entryStepSubtitle,
       // [KioskHomeColumns] needs a BOUNDED height to resolve its `Expanded`
       // band against; the scaffold's default scrolling body is unbounded.
       fillBody: true,

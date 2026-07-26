@@ -861,9 +861,10 @@ you walk away…".
 **It is enforced in CI, not by convention.**
 `CRM/test/features/kiosk/kiosk_forbidden_imports_test.dart` walks every file
 under `CRM/lib/features/kiosk/` and fails on an import of `saved_card_section`
-· `one_time_card_dialog` · `update_card_dialog` · `discount_picker_dialog` ·
-`draft_discounts_card` · `added_discount_chip` · any `custom_discount_*` ·
-`live_discounted_price` · `start_payer_step` · `choose_payer_view` ·
+· `one_time_card_dialog` · `update_card_dialog` · anything under
+`membership_flow/discounts/` (the staff-only discount UI + math, banned as a
+DIRECTORY so the entry cannot go stale one renamed widget at a time) · any
+`custom_discount_*` · `change_payer_dialog` · `choose_payer_view` ·
 `payer_radio_tile`, and separately fails on the word "discount" appearing
 anywhere in the kiosk feature at all. It also asserts each guarded file still
 EXISTS, so a rename can't silently turn the ban into theatre — if one of those
@@ -905,10 +906,23 @@ membership.
 
 The invariant: **`grep -ri discount CRM/lib/features/kiosk/` returns
 nothing**, and the forbidden-imports test above is what keeps it that way.
-Phase D does not reuse the CRM's `start_memberships/` wizard at all — it is
-kiosk-native presentation over the existing data layer, precisely so the kiosk
-is never dragged through a future discount change; `add_member/` and
-`start_memberships/` are READ-ONLY pattern references.
+The kiosk reuses none of the CRM's `start_memberships/` widgets: what the two
+surfaces share is the module BELOW both of them (`features/membership_flow/` —
+the rulebook, the component set, the two configs), never the desk's own screens.
+`add_member/` and `start_memberships/` stay READ-ONLY pattern references, so
+the kiosk is never dragged through a future discount change.
+
+**The kiosk's step HEADS now come from copy too.** Every signup step's title
+and subtitle is a member of `KioskFlowCopy` rather than a literal (or a private
+`_title` / `_subtitle`) in the step widget — the six steps both surfaces walk
+answer the shared `MembershipFlowCopy` contract (`rosterStepTitle`,
+`planStepTitle`, `waiverStepTitle`, `reviewStepTitle`, `paymentStepTitle`,
+`resultsStepTitle` and their subtitles), and the eight kiosk-ONLY steps (entry
+choice, identify, details, optional, match, payer pick, payer match, payer
+waiver) carry their heads as non-override members of the same class, reached
+through the one `kioskStepCopy(context)` helper. A kiosk-only head must never
+be pushed up onto the abstract class: the desk would have to answer it with a
+lie. `KioskCardStep`'s subtitle stays the plan NAME — that is data, not copy.
 
 ---
 

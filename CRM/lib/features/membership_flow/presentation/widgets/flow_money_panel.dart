@@ -25,10 +25,28 @@ class FlowMoneyPanel extends StatelessWidget {
   /// shared iPad: the payer confirming what has to work when a renewal fails.
   final String contactEmail;
 
+  /// A control over HOW today's first period is charged, slotted between the
+  /// itemisation and the notes that explain it.
+  ///
+  /// A SLOT rather than a parameter set, for the same reason the discounts
+  /// capability is an object: a surface that does not offer the choice has
+  /// nothing to pass, so the control is absent rather than disabled. The kiosk
+  /// pins `prorate_to_anchor` and passes null; the desk hands staff the pair,
+  /// and the panel's own proration note lands directly beneath it, which is
+  /// what makes the choice legible as it moves the total above.
+  final Widget? firstPeriod;
+
+  /// What the recurring half is MADE of, under its headline — the desk's
+  /// itemisation of what this run adds versus what the payer already pays.
+  /// Null on a surface that states the total and stops there.
+  final Widget? recurringBreakdown;
+
   const FlowMoneyPanel({
     super.key,
     required this.money,
     required this.contactEmail,
+    this.firstPeriod,
+    this.recurringBreakdown,
   });
 
   @override
@@ -58,6 +76,7 @@ class FlowMoneyPanel extends StatelessWidget {
             style: scale.total,
           ),
           _Lines(money: money),
+          ?firstPeriod,
           if (money.prorated) FlowProrationNote(until: money.prorationUntil),
           if (money.chargedTwiceToday) const FlowTwoChargesNote(),
           FlowCardChip(brand: money.cardBrand, last4: money.cardLast4),
@@ -71,7 +90,7 @@ class FlowMoneyPanel extends StatelessWidget {
                 color: DesignConstants.text2nd,
               ),
             ),
-          _Then(money: money),
+          _Then(money: money, breakdown: recurringBreakdown),
         ],
       ),
     );
@@ -132,7 +151,10 @@ class _Lines extends StatelessWidget {
 class _Then extends StatelessWidget {
   final FlowMoneyView money;
 
-  const _Then({required this.money});
+  /// The host's own itemisation of the recurring half, under the headline.
+  final Widget? breakdown;
+
+  const _Then({required this.money, this.breakdown});
 
   @override
   Widget build(BuildContext context) {
@@ -162,6 +184,7 @@ class _Then extends StatelessWidget {
             color: DesignConstants.text2nd,
           ),
         ),
+        ?breakdown,
       ],
     );
   }

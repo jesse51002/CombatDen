@@ -28,16 +28,15 @@ void main() {
     'one_time_card_dialog',
     'update_card_dialog',
     // Discounts, in every shape. `grep -ri discount lib/features/kiosk/`
-    // must stay empty.
-    'discount_picker_dialog',
-    'draft_discounts_card',
-    'added_discount_chip',
+    // must stay empty. The whole staff-only module is one fragment now that
+    // the desk's discount UI lives there rather than in the wizard's own
+    // folder — a directory ban cannot go stale the way five filenames could.
+    'membership_flow/discounts/',
     'custom_discount_',
-    'live_discounted_price',
     // The CRM's own DESK payer-selection surfaces — they offer payers whose
     // saved card would then be chargeable. The kiosk's own picker doesn't:
     // it carries no eligibility gate, and whoever it names types a fresh card.
-    'start_payer_step',
+    'change_payer_dialog',
     'choose_payer_view',
     'payer_radio_tile',
   ];
@@ -48,12 +47,9 @@ void main() {
     'lib/features/member_details/presentation/dialogs/start_memberships/saved_card_section.dart',
     'lib/features/member_details/presentation/dialogs/start_memberships/one_time_card_dialog.dart',
     'lib/features/member_details/presentation/dialogs/update_card_dialog.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/discount_picker_dialog.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/draft_discounts_card.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/added_discount_chip.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/custom_discount_value_form.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/live_discounted_price.dart',
-    'lib/features/member_details/presentation/dialogs/start_memberships/start_payer_step.dart',
+    'lib/features/membership_flow/discounts/flow_discount_panel.dart',
+    'lib/features/memberships/presentation/dialogs/custom_discount_value_helpers.dart',
+    'lib/features/member_details/presentation/dialogs/start_memberships/change_payer_dialog.dart',
     'lib/features/member_details/presentation/dialogs/add_member/choose_payer_view.dart',
     'lib/features/member_details/presentation/dialogs/add_member/payer_radio_tile.dart',
   ];

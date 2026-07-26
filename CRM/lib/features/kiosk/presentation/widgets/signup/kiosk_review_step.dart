@@ -8,6 +8,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_money_panel.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_review_group_panel.dart';
@@ -38,16 +39,11 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
+        final copy = MembershipFlowTheme.copyOf(context);
         return KioskStepScaffold(
           step: KioskSignupStep.review,
-          // Button-agnostic: the label below says what is being signed and for
-          // how much, so naming it here would start lying the moment a trial
-          // cart changes the verb.
-          title: 'Check this over',
-          subtitle: state.isGroup
-              ? 'One card covers everyone. Nothing is charged until you '
-                  'confirm.'
-              : 'Nothing is charged until you confirm.',
+          title: copy.reviewStepTitle,
+          subtitle: copy.reviewStepSubtitle(isGroup: state.isGroup),
           foot: FlowFoot(
             primaryLabel: _primaryLabel(state, ready: ready),
             // The label carries the amount, so the button is inert until the

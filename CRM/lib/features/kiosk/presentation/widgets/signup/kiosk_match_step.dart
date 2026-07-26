@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
@@ -35,16 +36,19 @@ class KioskMatchStep extends StatelessWidget {
         final match = state.matchCandidate;
         final searching = state.matchSearchOpen || match == null;
         final busy = state.submitting;
+        // Kiosk-only step: staff never meet a payee duplicate mid-wizard, so
+        // this head lives on the kiosk's own copy.
+        final copy = kioskStepCopy(context);
         return KioskStepScaffold(
           step: KioskSignupStep.match,
-          title: searching
-              ? 'Find them by name'
-              : 'Is this the same ${match.firstName}?',
-          subtitle: searching
-              ? 'Pick the person you\'re adding. We\'ll use their account '
-                  'instead of making a second one.'
-              : 'We already train a ${match.fullName}. If it\'s them, we\'ll '
-                  'use their account instead of making a second one.',
+          title: copy.matchStepTitle(
+            searching: searching,
+            firstName: match?.firstName ?? '',
+          ),
+          subtitle: copy.matchStepSubtitle(
+            searching: searching,
+            fullName: match?.fullName ?? '',
+          ),
           foot: FlowFoot(
             // The decision lives in the panel, so no primary here — it would
             // compete with the two buttons that answer the actual question.

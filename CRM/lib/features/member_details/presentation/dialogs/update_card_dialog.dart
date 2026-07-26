@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
-import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/data/models/card_on_file.dart';
 import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_field_label.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_foot.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_note.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_secure_strip.dart';
 
 /// Collects new card details via the Stripe [CardField]
 /// (web-supported), tokenizes them into a Stripe
@@ -21,11 +26,16 @@ import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
 /// [MembersManagementUpdateCardRequest]; this dialog only
 /// produces the `payment_method_id` it carries.
 ///
-/// When a [card] is already on file the dialog shows its
-/// summary and a destructive "Remove card" action. Removal
-/// isn't handled here — tapping it pops `true` so the
-/// caller can run the existing confirmation flow against a
-/// still-mounted page context.
+/// **The blast radius is stated before the field, not under it.** This is the
+/// one control reachable from a checkout run that changes what happens to
+/// memberships OUTSIDE it: the card saved here becomes the payer's default, so
+/// every recurring membership they pay for moves onto it. That sentence is
+/// warm — it is a consequence somebody should know before typing, not an error.
+///
+/// When a [card] is already on file and [allowRemove] is set the footer's left
+/// gutter carries the destructive "Remove card". Removal isn't handled here —
+/// tapping it pops `true` so the caller can run the existing confirmation flow
+/// against a still-mounted page context.
 class UpdateCardDialog extends StatefulWidget {
   final String memberName;
   final CardOnFile? card;
@@ -40,7 +50,8 @@ class UpdateCardDialog extends StatefulWidget {
   /// True on the member profile (the management surface);
   /// false in checkout flows (start / charge), where removing
   /// a card mid-purchase makes no sense — removal lives on the
-  /// profile, behind its own confirmation.
+  /// profile, behind its own confirmation, and this dialog
+  /// says so rather than leaving staff hunting for it.
   final bool allowRemove;
 
   const UpdateCardDialog({
@@ -86,6 +97,15 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
   bool _submitting = false;
   String? _error;
 
+  /// What the rest of the copy calls them. A dialog that says the full name
+  /// four times reads like a form letter.
+  String get _first {
+    final parts = widget.memberName.trim().split(' ');
+    return parts.isEmpty || parts.first.isEmpty
+        ? widget.memberName
+        : parts.first;
+  }
+
   Future<void> _submit() async {
     if (!_complete || _submitting) return;
     setState(() {
@@ -107,13 +127,11 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
             ),
           );
       Navigator.of(context).pop();
-    } catch (e) {
+    } catch (_) {
       if (!mounted) return;
       setState(() {
         _submitting = false;
-        _error =
-            'We couldn’t save that card. Check the details '
-            'and try again.';
+        _error = _kSaveFailed;
       });
     }
   }
@@ -121,31 +139,20 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
   @override
   Widget build(BuildContext context) {
     final card = widget.card;
-    return AppDialog(
-      showCloseButton: !_submitting,
-      title: card == null ? 'Add card' : 'Update card',
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        spacing: DesignConstants.spacingLarge,
+    final error = _error;
+    return TaskDialog(
+      what: card == null ? _kAddWhat : _kWhat,
+      who: widget.memberName,
+      onClose: _submitting ? null : () => Navigator.of(context).pop(),
+      closeTooltip: _kClose,
+      title: card == null
+          ? 'Add a card for $_first'
+          : 'Replace $_first\'s card',
+      subtitle: 'The new card becomes $_first\'s default straight away.',
+      body: TaskPanel(
         children: [
-          if (card != null) _CurrentCardLine(card: card),
-          Text(
-            card == null
-                ? 'Enter a card for ${widget.memberName}. '
-                    'Card details go straight to Stripe and '
-                    'are never stored on our servers.'
-                : 'Enter a new card to replace the saved one '
-                    'for ${widget.memberName}. Card details '
-                    'go straight to Stripe and are never '
-                    'stored on our servers.',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text,
-            ),
-          ),
-          _RecurringImpactWarning(
-            memberName: widget.memberName,
-            replacing: card != null,
-          ),
+          FlowInlineNotice(message: _blastRadius(card)),
+          const TaskFieldLabel(label: 'Card details', note: _kStripeNote),
           CardFieldBox(
             onComplete: (isComplete) {
               if (isComplete != _complete) {
@@ -153,120 +160,55 @@ class _UpdateCardDialogState extends State<UpdateCardDialog> {
               }
             },
           ),
-          if (_error != null)
+          FlowSecureStrip(gymName: selectedGym.gymName),
+          if (error != null)
             Text(
-              _error!,
-              style: DesignConstants.pSmall.copyWith(
+              error,
+              style: DesignConstants.pSemibold.copyWith(
                 color: DesignConstants.badRed,
               ),
             ),
+          if (card != null && !widget.allowRemove) TaskNote(_noRemove()),
         ],
       ),
-      actions: AppDialogActions(
-        primaryLabel: 'Save card',
-        isLoading: _submitting,
-        primaryOnPressed:
-            _complete && !_submitting ? _submit : null,
-        secondaryLabel: 'Cancel',
-        secondaryOnPressed: _submitting
-            ? null
-            : () => Navigator.of(context).pop(),
-        destructiveLabel: (card == null || !widget.allowRemove)
-            ? null
-            : 'Remove card',
-        destructiveOnPressed:
-            (_submitting || !widget.allowRemove)
-                ? null
-                : () => Navigator.of(context).pop(true),
+      foot: TaskFoot(
+        primaryLabel: _kSave,
+        busy: _submitting,
+        onPrimary: _complete && !_submitting ? _submit : null,
+        secondaryLabel: _kCancel,
+        onSecondary:
+            _submitting ? null : () => Navigator.of(context).pop(),
+        destructiveLabel:
+            (card == null || !widget.allowRemove) ? null : _kRemove,
+        onDestructive:
+            _submitting ? null : () => Navigator.of(context).pop(true),
       ),
     );
   }
-}
 
-/// Read-only summary of the card currently on file, shown
-/// above the new-card field when replacing an existing card.
-class _CurrentCardLine extends StatelessWidget {
-  final CardOnFile card;
-
-  const _CurrentCardLine({required this.card});
-
-  @override
-  Widget build(BuildContext context) {
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: 'Current card  ',
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.text2nd,
-            ),
-          ),
-          TextSpan(
-            text: '${card.brand} ···· ${card.lastFour} · '
-                'Expires ${card.expMonth}/${card.expYear}',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text,
-            ),
-          ),
-        ],
-      ),
-    );
+  /// Everything this one save reaches. It names the card being replaced, so
+  /// nobody has to hold "which card was on file?" in their head while typing
+  /// the next one.
+  String _blastRadius(CardOnFile? card) {
+    final reach = 'Every recurring membership $_first pays for — including '
+        'ones this screen doesn\'t show — bills to it from its next cycle.';
+    if (card == null) {
+      return 'This becomes $_first\'s default card. $reach';
+    }
+    return 'This replaces the ${card.brand} ending ${card.lastFour}. $reach';
   }
+
+  String _noRemove() =>
+      'Cards can\'t be removed from here. Do that from $_first\'s profile, '
+      'where what it stops paying for is visible.';
 }
 
-/// Spells out the global side effect of saving a card: it becomes the
-/// member's DEFAULT, so every recurring membership they have bills to it —
-/// not a one-off for a single purchase.
-class _RecurringImpactWarning extends StatelessWidget {
-  final String memberName;
-  final bool replacing;
-
-  const _RecurringImpactWarning({
-    required this.memberName,
-    required this.replacing,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(
-        DesignConstants.paddingSmall,
-      ),
-      decoration: BoxDecoration(
-        color: DesignConstants.backgroundColor,
-        borderRadius: BorderRadius.circular(
-          DesignConstants.radiusSmall,
-        ),
-        border: Border.all(color: DesignConstants.okYellow),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingSmall,
-        children: [
-          Icon(
-            Symbols.warning_sharp,
-            size: DesignConstants.iconSizeSmall,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.okYellow,
-          ),
-          Expanded(
-            child: Text(
-              replacing
-                  ? 'This is $memberName’s saved DEFAULT card. '
-                      'Saving a new one re-bills EVERY recurring '
-                      'membership they have to it going forward '
-                      '— it’s not a one-off for a single charge.'
-                  : 'This becomes $memberName’s saved DEFAULT '
-                      'card — every recurring membership they '
-                      'have bills to it going forward, not just '
-                      'one charge.',
-              style: DesignConstants.pSmall.copyWith(
-                color: DesignConstants.text,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
+const String _kWhat = 'Update card on file';
+const String _kAddWhat = 'Add a card on file';
+const String _kClose = 'Close without saving a card';
+const String _kStripeNote = 'Handled by Stripe';
+const String _kSave = 'Save card';
+const String _kCancel = 'Cancel';
+const String _kRemove = 'Remove card';
+const String _kSaveFailed =
+    'We couldn\'t save that card. Check the details and try again.';

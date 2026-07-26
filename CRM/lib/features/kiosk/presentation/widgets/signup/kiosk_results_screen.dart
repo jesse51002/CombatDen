@@ -8,6 +8,7 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_result_row.dart';
@@ -43,12 +44,22 @@ class KioskResultsScreen extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final allCreated = state.allCreated;
+        final copy = MembershipFlowTheme.copyOf(context);
         return KioskStepScaffold(
           step: KioskSignupStep.results,
-          title: allCreated
-              ? 'You\'re all set'
-              : 'Some of these didn\'t go through',
-          subtitle: _subtitle(state, allCreated: allCreated),
+          title: copy.resultsStepTitle(
+            allCreated: allCreated,
+            count: state.startItems.length,
+          ),
+          // Nothing settled is re-quoted here: the member cannot change a
+          // charge that already landed, so the amount and the card stay off
+          // this line and live on the ledger below it.
+          subtitle: copy.resultsStepSubtitle(
+            allCreated: allCreated,
+            isGroup: state.isGroup,
+            amountLabel: null,
+            cardLast4: null,
+          ),
           // No identity strip: that band is for steps about ONE person, and
           // this screen is about the signup as a whole.
           foot: KioskResultsFoot(
@@ -91,16 +102,6 @@ class KioskResultsScreen extends StatelessWidget {
         );
       },
     );
-  }
-
-  /// The title branches on the OUTCOME; the subtitle branches on group-ness.
-  String _subtitle(KioskSignupState state, {required bool allCreated}) {
-    if (!allCreated) {
-      return 'Have a look — you can try the rest on the same card.';
-    }
-    return state.isGroup
-        ? 'Every membership below started today.'
-        : 'Your membership started today.';
   }
 }
 

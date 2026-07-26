@@ -44,6 +44,7 @@ class FlowRail extends StatelessWidget {
             _RailStep(
               number: i + 1,
               label: steps[i],
+              total: steps.length,
               done: i < current,
               now: i == current,
             ),
@@ -55,15 +56,22 @@ class FlowRail extends StatelessWidget {
 }
 
 /// One rung: the disc and its label.
+///
+/// The pair is ONE semantic node. A reader walking discs and words separately
+/// hears "2" and then "Plans" with nothing tying them together and no way to
+/// tell a passed rung from an unreached one, so the whole rung is announced as
+/// a single sentence the surface's own copy composes.
 class _RailStep extends StatelessWidget {
   final int number;
   final String label;
+  final int total;
   final bool done;
   final bool now;
 
   const _RailStep({
     required this.number,
     required this.label,
+    required this.total,
     required this.done,
     required this.now,
   });
@@ -71,22 +79,34 @@ class _RailStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      spacing: DesignConstants.spacingMedium,
-      children: [
-        _RailDisc(number: number, done: done, now: now),
-        Text(
-          label,
-          style: scale.caption.copyWith(
-            // A rail label is a muted WORD, so even a resting rung stays on the
-            // kiosk's AA floor; emphasis comes from ink + weight, never from
-            // contrast a member can't read at 2m.
-            color: now ? DesignConstants.text : DesignConstants.text2nd,
-            fontWeight: now ? FontWeight.w600 : FontWeight.w500,
+    final copy = MembershipFlowTheme.copyOf(context);
+    return Semantics(
+      label: copy.railStepSemantic(
+        index: number - 1,
+        total: total,
+        label: label,
+        done: done,
+        current: now,
+      ),
+      selected: now,
+      excludeSemantics: true,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: DesignConstants.spacingMedium,
+        children: [
+          _RailDisc(number: number, done: done, now: now),
+          Text(
+            label,
+            style: scale.caption.copyWith(
+              // A rail label is a muted WORD, so even a resting rung stays on
+              // the kiosk's AA floor; emphasis comes from ink + weight, never
+              // from contrast a member can't read at 2m.
+              color: now ? DesignConstants.text : DesignConstants.text2nd,
+              fontWeight: now ? FontWeight.w600 : FontWeight.w500,
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

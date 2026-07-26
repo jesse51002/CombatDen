@@ -9,6 +9,7 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_facts.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
@@ -85,9 +86,10 @@ class _KioskCardStepState extends State<KioskCardStep> {
           prev.cardAttempt != cur.cardAttempt,
       builder: (context, state) {
         final payerName = _payerName(state);
+        final copy = MembershipFlowTheme.copyOf(context);
         return KioskStepScaffold(
           step: KioskSignupStep.card,
-          title: 'Your card',
+          title: copy.paymentStepTitle,
           // In a group the "active person" is whoever signed last, so a plan
           // name here would be a fact about somebody who may not be paying.
           subtitle: state.isGroup ? null : state.selectedPlan?.planName,

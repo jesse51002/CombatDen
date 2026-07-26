@@ -5,6 +5,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
@@ -41,14 +42,13 @@ class KioskPayerPickStep extends StatelessWidget {
       builder: (context, state) {
         final candidates = state.payerCandidateIndexes;
         final payer = state.payerOrNull;
+        // Kiosk-only step: the desk starts from the member's own record and
+        // never picks a payer here, so this head is the kiosk copy's.
+        final copy = kioskStepCopy(context);
         return KioskStepScaffold(
           step: KioskSignupStep.payerPick,
-          title: 'Who\'s paying?',
-          subtitle: payer == null
-              ? 'Pick who pays for everyone here. They enter their card at '
-                  'the end, and everyone on the list is on it.'
-              : 'Pick anyone here, or find another member. They enter their '
-                  'card at the end, and everyone on the list is on it.',
+          title: copy.payerPickStepTitle,
+          subtitle: copy.payerPickStepSubtitle(hasPayer: payer != null),
           // Who it is changing FROM, pinned so the answer does not scroll.
           identity: payer == null
               ? null

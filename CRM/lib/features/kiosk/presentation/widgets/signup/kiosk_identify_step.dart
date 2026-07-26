@@ -3,6 +3,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
@@ -21,11 +22,13 @@ class KioskIdentifyStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
+    // Kiosk-only step: staff already have the member's record open, so there
+    // is no desk counterpart and its head lives on the kiosk's own copy.
+    final copy = kioskStepCopy(context);
     return KioskStepScaffold(
       step: KioskSignupStep.identify,
-      title: 'Find your name',
-      subtitle: 'Type the name you train under. We\'ll use your account '
-          'instead of making a second one.',
+      title: copy.identifyStepTitle,
+      subtitle: copy.identifyStepSubtitle,
       // The decision is a row in a list, so the footer carries only the way
       // back — to the fork, a safe destination: nothing was typed.
       foot: FlowFoot(
