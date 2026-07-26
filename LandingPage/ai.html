@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>CombatDen AI — a 24/7 employee for your gym</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+        <meta
+            name="description"
+            content="An AI employee that watches your members, tracks nearby gyms, drafts the promos, and runs it on its own once you approve. Works alongside your current gym software."
+        />
+        <link rel="canonical" href="https://www.combatden.net/ai.html" />
+
+        <meta property="og:type" content="website" />
+        <meta property="og:url" content="https://www.combatden.net/ai.html" />
+        <meta
+            property="og:title"
+            content="CombatDen AI — your gym software should be working harder than you are"
+        />
+        <meta
+            property="og:description"
+            content="An AI employee that watches members, tracks nearby gyms, and drafts the work. You approve it once, it runs on its own."
+        />
+        <meta
+            property="og:image"
+            content="https://www.combatden.net/assets/landing/logo.png"
+        />
+        <meta property="og:site_name" content="CombatDen" />
+
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta
+            name="twitter:title"
+            content="CombatDen AI — a 24/7 employee for your gym"
+        />
+        <meta
+            name="twitter:description"
+            content="An AI employee that watches members, tracks nearby gyms, and drafts the work. You approve it once, it runs on its own."
+        />
+        <meta
+            name="twitter:image"
+            content="https://www.combatden.net/assets/landing/logo.png"
+        />
+
+        <link rel="icon" type="image/png" href="assets/landing/logo_tiny.png" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Schibsted+Grotesk:wght@400;450;500;600;650;700&family=DM+Mono:wght@400;500&display=swap"
+            rel="stylesheet"
+        />
+
+        <style>
+            :root {
+                --log-card-h: 168px;
+                --log-gap: 14px;
+                --ease-deck: cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                margin: 0;
+                padding: 0;
+                background: #f3f5f8;
+                scroll-behavior: smooth;
+                overflow-x: clip;
+            }
+            body {
+                font-family:
+                    "Schibsted Grotesk",
+                    system-ui,
+                    -apple-system,
+                    sans-serif;
+                -webkit-font-smoothing: antialiased;
+                color: #16181d;
+            }
+            #root {
+                min-height: 100vh;
+                position: relative;
+                z-index: 1;
+            }
+
+            /* ---------------------------------------------------------------
+               Scroll reveal. Driven by useReveal() in ds.jsx, which adds `.anim`
+               to <html> only when motion is allowed. Everything keys off that, so
+               under reduced motion the markup simply stays visible instead of
+               being animated into view. Stagger a group with --rd per element.
+               --------------------------------------------------------------- */
+            .anim [data-reveal] {
+                opacity: 0;
+                transform: translate3d(0, 20px, 0);
+                transition:
+                    opacity 0.72s var(--ease-deck) var(--rd, 0ms),
+                    transform 0.72s var(--ease-deck) var(--rd, 0ms);
+            }
+            .anim [data-reveal].is-in {
+                opacity: 1;
+                transform: none;
+            }
+
+            /* ---------------------------------------------------------------
+               motif hosts. The pinned layer is fixed to the viewport and sits
+               at z-index 0, BEHIND the page. That only works because every
+               section on this page is transparent and the ground colour is
+               painted once on <body>; give a section its own background and it
+               will hide the motif.
+               --------------------------------------------------------------- */
+            .cd-motif {
+                position: absolute;
+                inset: 0;
+                z-index: 0;
+                pointer-events: none;
+                opacity: 0;
+                transition: opacity 700ms var(--ease-deck);
+            }
+            .cd-motif.is-ready {
+                opacity: 1;
+            }
+            .cd-motif--pin {
+                position: fixed;
+            }
+            .cd-motif canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+            }
+
+            /* ---------------------------------------------------------------
+               §5 deck. Absolute stacking, transitions and the per-category hue
+               ramp cannot be inline styles, so they live here; the section
+               component owns the copy, the timing and which card is active.
+               --------------------------------------------------------------- */
+            .cd-log {
+                display: flex;
+                flex-direction: column;
+                gap: var(--log-gap);
+            }
+            .cd-log__card {
+                background: linear-gradient(
+                    180deg,
+                    oklch(0.995 0.014 var(--hue, 258)),
+                    oklch(0.955 0.036 var(--hue, 258))
+                );
+                border: 1px solid oklch(0.86 0.045 var(--hue, 258) / 0.5);
+                border-radius: 22px;
+                box-shadow:
+                    0 1px 2px rgba(20, 22, 40, 0.03),
+                    0 22px 50px -30px rgba(20, 22, 50, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                padding: 24px 28px 26px;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                gap: 14px;
+            }
+            .cd-log__meta {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 14px;
+            }
+            .cd-log__time {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.1em;
+                text-transform: uppercase;
+                color: oklch(0.58 0.045 var(--hue, 258));
+                font-variant-numeric: tabular-nums;
+                white-space: nowrap;
+            }
+            .cd-log__tag {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                font-weight: 500;
+                letter-spacing: 0.04em;
+                color: oklch(0.45 0.11 var(--hue, 258));
+                background: oklch(0.94 0.05 var(--hue, 258));
+                padding: 4px 9px;
+                border-radius: 999px;
+                white-space: nowrap;
+            }
+            .cd-log__text {
+                margin: 0;
+                font-size: clamp(16px, 1.5vw, 19px);
+                line-height: 1.45;
+                font-weight: 500;
+                letter-spacing: -0.022em;
+                color: #16181d;
+                text-wrap: pretty;
+            }
+
+            /* deck mode, layered on top of the plain list above */
+            .cd-employee.is-deck .cd-log {
+                position: relative;
+                display: block;
+                /* room for two full cards (active + prev) plus headroom for the
+                   receding paper stack behind them */
+                height: calc(var(--log-card-h) * 2 + var(--log-gap) + 56px);
+                width: 100%;
+                margin-top: -6px;
+                margin-bottom: 0;
+            }
+            /* the active card sits flush at the deck's bottom edge and carries a
+               wide shadow, so the trailing headline needs real clearance */
+            .cd-employee.is-deck .cd-log-trail {
+                margin-top: 64px;
+            }
+            .cd-employee.is-deck .cd-log__card {
+                position: absolute;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                height: var(--log-card-h);
+                transform-origin: bottom center;
+                will-change: transform, opacity;
+                transition:
+                    transform 0.58s var(--ease-deck),
+                    opacity 0.42s ease,
+                    box-shadow 0.58s var(--ease-deck);
+                /* default: waiting below, out of sight */
+                opacity: 0;
+                transform: translate3d(0, 34px, 0) scale(0.97);
+                z-index: 1;
+            }
+            .cd-employee.is-deck .cd-log__card.is-active {
+                opacity: 1;
+                transform: none;
+                z-index: 40;
+                box-shadow:
+                    0 2px 4px rgba(20, 22, 40, 0.04),
+                    0 36px 72px -34px rgba(20, 22, 50, 0.34),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+            }
+            /* a full card-height above the active one, a real gap and not a
+               sliver, so two entries are genuinely both readable */
+            .cd-employee.is-deck .cd-log__card.is-prev {
+                opacity: 1;
+                transform: translate3d(
+                        0,
+                        calc(-1 * (var(--log-card-h) + var(--log-gap))),
+                        0
+                    )
+                    scale(0.98);
+                z-index: 35;
+                box-shadow:
+                    0 1px 3px rgba(20, 22, 40, 0.04),
+                    0 20px 40px -24px rgba(20, 22, 50, 0.22),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+            }
+            /* anything further back IS just paper: hidden content, so an exposed
+               edge never leaks half a timestamp */
+            .cd-employee.is-deck .cd-log__card.is-back .cd-log__meta,
+            .cd-employee.is-deck .cd-log__card.is-back .cd-log__text {
+                opacity: 0;
+            }
+            .cd-employee.is-deck .cd-log__card.is-back-1 {
+                opacity: 0.55;
+                z-index: 30;
+                transform: translate3d(
+                        0,
+                        calc(-1 * (var(--log-card-h) + var(--log-gap)) - 18px),
+                        0
+                    )
+                    scale(0.965);
+            }
+            .cd-employee.is-deck .cd-log__card.is-back-2 {
+                opacity: 0.32;
+                z-index: 25;
+                transform: translate3d(
+                        0,
+                        calc(-1 * (var(--log-card-h) + var(--log-gap)) - 30px),
+                        0
+                    )
+                    scale(0.95);
+            }
+            .cd-employee.is-deck .cd-log__card.is-back-3 {
+                opacity: 0.16;
+                z-index: 20;
+                transform: translate3d(
+                        0,
+                        calc(-1 * (var(--log-card-h) + var(--log-gap)) - 38px),
+                        0
+                    )
+                    scale(0.935);
+            }
+
+            /* ---------------------------------------------------------------
+               §3 cards and their live glyphs. Each step shows its own verb
+               working: Monitor reads a live signal, Plan drafts its lines in,
+               Execute runs a job to completion. Staggered across the row by --sd
+               so it never pulses in unison. Resting state is the finished shape.
+               --------------------------------------------------------------- */
+            .cd-step {
+                background: linear-gradient(180deg, #ffffff, #f5f7fb);
+                border: 1px solid rgba(20, 22, 40, 0.065);
+                border-radius: 22px;
+                box-shadow:
+                    0 1px 2px rgba(20, 22, 40, 0.03),
+                    0 22px 50px -30px rgba(20, 22, 50, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                padding: 30px 28px 32px;
+            }
+            .cd-step__top {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                height: 34px;
+            }
+            .cd-step__n {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 10.5px;
+                font-weight: 500;
+                letter-spacing: 0.12em;
+                color: #2a67bd;
+            }
+            .cd-step__live svg {
+                display: block;
+            }
+            .cd-step__rule {
+                height: 1px;
+                background: rgba(20, 22, 30, 0.06);
+                margin: 26px 0 24px;
+            }
+            .cd-step h3 {
+                margin: 0;
+                font-size: 25px;
+                font-weight: 600;
+                letter-spacing: -0.034em;
+                line-height: 1.1;
+                color: #16181d;
+            }
+            .cd-step p {
+                margin: 10px 0 0;
+                font-size: 16px;
+                line-height: 1.5;
+                font-weight: 450;
+                color: #565b66;
+                text-wrap: pretty;
+            }
+
+            .cd-glyph-faint {
+                fill: rgba(20, 22, 30, 0.09);
+            }
+            .cd-glyph-accent {
+                fill: #2a67bd;
+            }
+
+            .cd-sig {
+                transform-box: fill-box;
+                transform-origin: bottom;
+            }
+            .cd-how.is-live .cd-sig {
+                animation: cdSigWave 1.9s calc(var(--sd, 0s) + var(--gd, 0s))
+                    ease-in-out infinite;
+            }
+            @keyframes cdSigWave {
+                0%,
+                100% {
+                    transform: scaleY(0.34);
+                }
+                50% {
+                    transform: scaleY(1);
+                }
+            }
+
+            .cd-draft {
+                transform-box: fill-box;
+                transform-origin: left center;
+            }
+            .cd-how.is-live .cd-draft {
+                animation: cdDraftIn 3.4s calc(var(--sd, 0s) + var(--gd, 0s))
+                    ease-out infinite;
+            }
+            @keyframes cdDraftIn {
+                0%,
+                4% {
+                    transform: scaleX(0);
+                    opacity: 0;
+                }
+                18%,
+                88% {
+                    transform: none;
+                    opacity: 1;
+                }
+                100% {
+                    transform: none;
+                    opacity: 0;
+                }
+            }
+
+            .cd-run__arc {
+                fill: none;
+                stroke: #2a67bd;
+                stroke-width: 2.4;
+                stroke-linecap: round;
+                stroke-dasharray: 76;
+                stroke-dashoffset: 0;
+            }
+            .cd-how.is-live .cd-run__arc {
+                animation: cdRunArc 3.4s var(--sd, 0s) ease-in-out infinite;
+            }
+            @keyframes cdRunArc {
+                0%,
+                6% {
+                    stroke-dashoffset: 76;
+                }
+                62%,
+                88% {
+                    stroke-dashoffset: 0;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                    opacity: 0;
+                }
+            }
+            .cd-run__tick {
+                stroke: #1f5099;
+                stroke-width: 2.2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                fill: none;
+                stroke-dasharray: 14;
+                stroke-dashoffset: 0;
+            }
+            .cd-how.is-live .cd-run__tick {
+                animation: cdRunTick 3.4s var(--sd, 0s) ease-out infinite;
+            }
+            @keyframes cdRunTick {
+                0%,
+                62% {
+                    stroke-dashoffset: 14;
+                }
+                76%,
+                88% {
+                    stroke-dashoffset: 0;
+                }
+                100% {
+                    stroke-dashoffset: 0;
+                    opacity: 0;
+                }
+            }
+
+            /* ---------------------------------------------------------------
+               §4 cards. One 6s loop for the whole section, phase-shifted per
+               card by --cd so only one is ever mid-animation. Every resting
+               state below is the FINISHED picture; the .is-live variants are
+               the loop, so reduced motion and no-JS both land on something
+               whole rather than a half-drawn chart.
+               --------------------------------------------------------------- */
+            .cd-stat {
+                background: linear-gradient(180deg, #ffffff, #f5f7fb);
+                border: 1px solid rgba(20, 22, 40, 0.065);
+                border-radius: 22px;
+                box-shadow:
+                    0 1px 2px rgba(20, 22, 40, 0.03),
+                    0 22px 50px -30px rgba(20, 22, 50, 0.2),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+                padding: 30px 30px 28px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            /* The card's title is the channel's handle, in that channel's hue and
+               in the mono that every handle on this page is set in. Colour is
+               doing the work a heavier weight would otherwise have to: it makes
+               the four cards distinguishable at a glance without any of them
+               competing with its own numeral, and it is the same colour the §5
+               log will use for the same handle. */
+            .cd-stat__cat {
+                margin: 0;
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 21px;
+                font-weight: 500;
+                letter-spacing: -0.02em;
+                line-height: 1.1;
+                color: oklch(0.48 0.13 var(--hue, 258));
+            }
+            .cd-stat__row {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 20px;
+            }
+            .cd-stat__num {
+                font-size: clamp(38px, 2.6vw + 18px, 62px);
+                font-weight: 700;
+                letter-spacing: -0.045em;
+                line-height: 0.9;
+                color: #1f5099;
+                font-variant-numeric: tabular-nums;
+                transition: color 0.5s ease;
+            }
+            /* mid-count the numeral sits on the live accent, then settles back.
+               The colour change is the "still working" tell. */
+            .cd-stat__num.is-counting {
+                color: #2a67bd;
+                transition: none;
+            }
+            /* The unit the numeral is counting. A bare figure means nothing on
+               its own, so this reads as part of the same statement rather than as
+               a caption: same ink as the heading, tight under the number. */
+            .cd-stat__numlabel {
+                margin: -2px 0 0;
+                font-size: 17px;
+                font-weight: 500;
+                letter-spacing: -0.018em;
+                line-height: 1.35;
+                color: #16181d;
+                max-width: 22ch;
+            }
+            .cd-stat__viz {
+                flex: 0 0 auto;
+                width: 170px;
+                height: 62px;
+            }
+            .cd-stat__viz svg {
+                display: block;
+                width: 100%;
+                height: 100%;
+                overflow: visible;
+            }
+            .cd-stat__secondary {
+                margin: 0;
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px 22px;
+                padding-top: 16px;
+                border-top: 1px solid rgba(20, 22, 30, 0.06);
+            }
+            .cd-stat__secondary > div {
+                display: flex;
+                align-items: baseline;
+                gap: 7px;
+            }
+            .cd-stat__secondary dt {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 10.5px;
+                letter-spacing: 0.04em;
+                text-transform: uppercase;
+                color: #878d99;
+            }
+            .cd-stat__secondary dd {
+                margin: 0;
+                font-size: 14px;
+                font-weight: 600;
+                color: #16181d;
+                font-variant-numeric: tabular-nums;
+            }
+            .cd-stat__status {
+                margin-top: auto;
+                padding-top: 4px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                letter-spacing: 0.03em;
+                color: #878d99;
+            }
+            .cd-proof__note {
+                margin: 40px 0 0;
+                text-align: center;
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 11px;
+                letter-spacing: 0.04em;
+                color: #878d99;
+            }
+
+            /* the two-beat "it saw X, so it did Y" list */
+            .cd-stat__steps {
+                list-style: none;
+                margin: 0;
+                padding: 0;
+                min-height: 62px;
+                display: flex;
+                flex-direction: column;
+                gap: 11px;
+            }
+            .cd-stat__step {
+                display: flex;
+                align-items: flex-start;
+                gap: 9px;
+                font-size: 14.5px;
+                line-height: 1.45;
+                color: #16181d;
+                opacity: 1;
+            }
+            .cd-stat__step svg {
+                flex: 0 0 auto;
+                margin-top: 3px;
+            }
+            .cd-proof.is-live .cd-stat__step {
+                animation: cdStepIn 6s calc(var(--cd) + var(--sd, 0s)) ease-out
+                    infinite;
+            }
+            @keyframes cdStepIn {
+                0%,
+                7% {
+                    opacity: 0;
+                    transform: translateY(5px);
+                }
+                17%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            /* Chat: the actual back and forth. Side and fill carry who is who,
+               the avatar reinforces which one is the agent. */
+            .cd-cx-wrap {
+                position: relative;
+                min-height: 62px;
+            }
+            .cd-cx {
+                position: absolute;
+                left: 0;
+                right: 0;
+                display: flex;
+                align-items: flex-end;
+                gap: 7px;
+                opacity: 1;
+            }
+            .cd-cx--you {
+                top: 0;
+                justify-content: flex-end;
+            }
+            .cd-cx--wait,
+            .cd-cx--ai {
+                bottom: 0;
+                justify-content: flex-start;
+            }
+            .cd-cx--wait {
+                opacity: 0;
+            }
+            .cd-cx__b {
+                font-size: 12.5px;
+                line-height: 1.35;
+                letter-spacing: -0.008em;
+                border-radius: 12px;
+                padding: 7px 10px;
+                max-width: 84%;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .cd-cx--you .cd-cx__b {
+                background: linear-gradient(180deg, #2a67bd, #1f5099);
+                color: #fff;
+                font-weight: 500;
+                border-bottom-right-radius: 3px;
+            }
+            .cd-cx--ai .cd-cx__b,
+            .cd-cx--wait .cd-cx__b {
+                background: #ffffff;
+                color: #16181d;
+                border: 1px solid rgba(20, 22, 30, 0.09);
+                font-weight: 450;
+                border-bottom-left-radius: 3px;
+            }
+            .cd-cx__av {
+                flex: 0 0 auto;
+                width: 19px;
+                height: 19px;
+                border-radius: 999px;
+                background: linear-gradient(180deg, #2a67bd, #1f5099);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+            .cd-cx__av::after {
+                content: "";
+                width: 6px;
+                height: 6px;
+                border-radius: 999px;
+                background: #fff;
+            }
+            .cd-cx__meta {
+                font-family: "DM Mono", ui-monospace, monospace;
+                font-size: 9.5px;
+                letter-spacing: 0.06em;
+                color: #878d99;
+                margin-left: 3px;
+            }
+            .cd-cx__dots {
+                display: inline-flex;
+                align-items: center;
+                gap: 3px;
+                padding: 10px;
+            }
+            .cd-cx__dots i {
+                width: 4px;
+                height: 4px;
+                border-radius: 999px;
+                background: #878d99;
+                display: block;
+            }
+            .cd-proof.is-live .cd-cx--you {
+                animation: cdCxYou 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx--wait {
+                animation: cdCxWait 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx--ai {
+                animation: cdCxAi 6s var(--cd) ease-out infinite;
+            }
+            .cd-proof.is-live .cd-cx__dots i {
+                animation: cdCxDot 1.05s ease-in-out infinite;
+            }
+            .cd-proof.is-live .cd-cx__dots i:nth-child(2) {
+                animation-delay: 0.14s;
+            }
+            .cd-proof.is-live .cd-cx__dots i:nth-child(3) {
+                animation-delay: 0.28s;
+            }
+            @keyframes cdCxYou {
+                0%,
+                5% {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                13%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+            @keyframes cdCxWait {
+                0%,
+                23% {
+                    opacity: 0;
+                }
+                29%,
+                42% {
+                    opacity: 1;
+                }
+                48%,
+                100% {
+                    opacity: 0;
+                }
+            }
+            @keyframes cdCxAi {
+                0%,
+                48% {
+                    opacity: 0;
+                    transform: translateY(6px);
+                }
+                56%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+            @keyframes cdCxDot {
+                0%,
+                100% {
+                    opacity: 0.35;
+                    transform: translateY(0);
+                }
+                50% {
+                    opacity: 1;
+                    transform: translateY(-2px);
+                }
+            }
+
+            /* ---------------------------------------------------------------
+               The four diagrams. One drawing language: same 170x62 box, same
+               hairline weights, accent for the measured thing and faint ink for
+               context. Each encodes its own card's numbers; none is a shared
+               decorative sparkline.
+               --------------------------------------------------------------- */
+            .cd-viz-faint {
+                fill: rgba(20, 22, 30, 0.09);
+            }
+            .cd-viz-rule {
+                stroke: rgba(20, 22, 30, 0.09);
+                stroke-width: 1;
+            }
+            .cd-viz-accent {
+                fill: #2a67bd;
+            }
+            .cd-viz-accent-soft {
+                fill: #e8f0fb;
+            }
+
+            /* chat: you asked, it answered, it is waiting on the next one */
+            .cd-viz__caret {
+                fill: #2a67bd;
+            }
+            .cd-proof.is-live .cd-viz__caret {
+                animation: cdVizCaret 1.15s steps(1, end) infinite;
+            }
+            @keyframes cdVizCaret {
+                0%,
+                49% {
+                    opacity: 1;
+                }
+                50%,
+                100% {
+                    opacity: 0;
+                }
+            }
+
+            /* member: cumulative retention saved, climbing across the month */
+            .cd-viz__line {
+                fill: none;
+                stroke: #2a67bd;
+                stroke-width: 2;
+                stroke-linecap: round;
+                stroke-linejoin: round;
+                stroke-dasharray: 220;
+                stroke-dashoffset: 0;
+            }
+            .cd-viz__area {
+                opacity: 1;
+            }
+            .cd-viz__halo {
+                fill: #2a67bd;
+                transform-box: fill-box;
+                transform-origin: center;
+                opacity: 0;
+            }
+            .cd-proof.is-live .cd-viz__line {
+                animation: cdVizDraw 6s var(--cd) linear infinite;
+            }
+            .cd-proof.is-live .cd-viz__area {
+                animation: cdVizFade 6s var(--cd) linear infinite;
+            }
+            .cd-proof.is-live .cd-viz__halo {
+                animation: cdVizHalo 2.9s var(--cd) ease-out infinite;
+            }
+            @keyframes cdVizDraw {
+                0% {
+                    stroke-dashoffset: 220;
+                }
+                24%,
+                100% {
+                    stroke-dashoffset: 0;
+                }
+            }
+            @keyframes cdVizFade {
+                0%,
+                6% {
+                    opacity: 0;
+                }
+                30%,
+                100% {
+                    opacity: 1;
+                }
+            }
+            @keyframes cdVizHalo {
+                0% {
+                    transform: scale(0.5);
+                    opacity: 0.4;
+                }
+                60%,
+                100% {
+                    transform: scale(2.6);
+                    opacity: 0;
+                }
+            }
+
+            /* competition: 18 posts read, 4 of them flagged; the scan never stops */
+            .cd-viz__sweep {
+                opacity: 0;
+            }
+            .cd-proof.is-live .cd-viz__sweep {
+                animation: cdVizSweep 4.4s var(--cd) linear infinite;
+            }
+            @keyframes cdVizSweep {
+                0% {
+                    transform: translateX(0);
+                    opacity: 0;
+                }
+                8%,
+                84% {
+                    opacity: 1;
+                }
+                100% {
+                    transform: translateX(206px);
+                    opacity: 0;
+                }
+            }
+
+            /* growth: a year of demand with the slow month picked out */
+            .cd-viz__mark {
+                fill: #2a67bd;
+                transform-box: fill-box;
+                transform-origin: center;
+                opacity: 1;
+            }
+            .cd-proof.is-live .cd-viz__mark {
+                animation: cdVizPop 6s calc(var(--cd) + var(--md, 0s)) ease-out
+                    infinite;
+            }
+            @keyframes cdVizPop {
+                0%,
+                5% {
+                    opacity: 0;
+                    transform: translateY(3px) scale(0.4);
+                }
+                18%,
+                100% {
+                    opacity: 1;
+                    transform: none;
+                }
+            }
+
+            /* live-status dot on the §4 cards */
+            .cd-pulse {
+                animation: cd-pulse 2.4s ease-in-out infinite;
+            }
+            @keyframes cd-pulse {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0.3;
+                }
+            }
+
+            @media (max-width: 768px) {
+                :root {
+                    --log-card-h: 178px;
+                    --log-gap: 12px;
+                }
+                .cd-log__card {
+                    padding: 20px 20px 22px;
+                    gap: 12px;
+                }
+                .cd-employee.is-deck .cd-log-trail {
+                    margin-top: 40px;
+                }
+                .cd-step {
+                    padding: 24px 22px 26px;
+                }
+                .cd-step h3 {
+                    font-size: 22px;
+                }
+                .cd-stat {
+                    padding: 24px 22px 24px;
+                }
+                .cd-stat__cat {
+                    font-size: 18.5px;
+                }
+                .cd-stat__numlabel {
+                    font-size: 15.5px;
+                }
+                .cd-stat__viz {
+                    width: 124px;
+                    height: 46px;
+                }
+            }
+
+            /* Every animation has a complete, static rest state. Deck mode is
+               never switched on under reduced motion, so §5 renders as the plain
+               list it already is in the markup. */
+            @media (prefers-reduced-motion: reduce) {
+                html {
+                    scroll-behavior: auto;
+                }
+                *,
+                *::before,
+                *::after {
+                    animation: none !important;
+                    transition: none !important;
+                }
+            }
+
+            /* SEO fallback — visible to crawlers and if React fails to mount.
+               Removed from the DOM by the render script once React mounts. */
+            #seo-fallback {
+                display: none;
+                max-width: 880px;
+                margin: 0 auto;
+                padding: 48px 24px;
+            }
+            #seo-fallback a {
+                color: #2a67bd;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="seo-fallback">
+            <header>
+                <p><strong>CombatDen</strong></p>
+                <nav>
+                    <a href="/">Home</a> · <a href="/pricing.html">Pricing</a>
+                </nav>
+            </header>
+            <main>
+                <h1>Your gym software should be working harder than you are.</h1>
+                <p>
+                    CombatDen AI is a 24/7 employee for your gym. It watches your
+                    members, compares nearby gyms, tracks the industry, and
+                    drafts the work. You approve it once and it runs on its own
+                    from there. Works alongside your current gym software, no
+                    payment migration required.
+                </p>
+
+                <h2>Monitor, plan, execute</h2>
+                <p>
+                    It watches members, compares gyms, and tracks the industry.
+                    It plans messages to at-risk members, marketing pushes, and
+                    seasonal discounts. Approve it once, and it runs on its own
+                    from there.
+                </p>
+
+                <h2>Four things it never stops working on</h2>
+                <p>
+                    Chat: ask it for last month's revenue by plan and get an
+                    answer in seconds. Member: it finds at-risk members and
+                    messages them before they lapse. Competition: it catches a
+                    nearby gym's sale or seasonal promo and tells you. Growth: it
+                    spots a slow month and drafts a campaign for it.
+                </p>
+
+                <h2>An employee that never sleeps</h2>
+                <p>
+                    Through the day it finds members training without an active
+                    plan, matches new reviews to the members who left them, flags
+                    an underfilled class, benchmarks your pricing against gyms
+                    your size, and has tomorrow's summary ready before you open
+                    the CRM.
+                </p>
+
+                <p>
+                    <a href="/pricing.html">See pricing</a> ·
+                    <a href="mailto:jesse@combatden.net"
+                        >Book a 15-minute demo</a
+                    >
+                </p>
+            </main>
+        </div>
+
+        <div id="root"></div>
+
+        <script
+            src="https://unpkg.com/react@18.3.1/umd/react.development.js"
+            integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"
+            integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm"
+            crossorigin="anonymous"
+        ></script>
+        <script
+            src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"
+            integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y"
+            crossorigin="anonymous"
+        ></script>
+
+        <!-- three.js for the motif. An ES module, so it loads separately from the
+             Babel bundle and exposes window.CDMotif for the page to call. -->
+        <script type="importmap">
+            {
+                "imports": {
+                    "three": "https://unpkg.com/three@0.169.0/build/three.module.js",
+                    "three/addons/": "https://unpkg.com/three@0.169.0/examples/jsm/"
+                }
+            }
+        </script>
+        <script type="module" src="hifi/motif.js"></script>
+
+        <!-- load order: tokens -> copy -> chrome/footer -> sections -->
+        <script type="text/babel" src="hifi/ds.jsx"></script>
+        <script type="text/babel" src="hifi/copy.jsx"></script>
+        <script type="text/babel" src="hifi/chrome.jsx"></script>
+        <script type="text/babel" src="hifi/footer.jsx"></script>
+        <script type="text/babel" src="hifi/sections/ai-hero.jsx"></script>
+        <script type="text/babel" src="hifi/sections/ai-problem.jsx"></script>
+        <script type="text/babel" src="hifi/sections/ai-how.jsx"></script>
+        <script type="text/babel" src="hifi/sections/ai-proof.jsx"></script>
+        <script type="text/babel" src="hifi/sections/ai-employee.jsx"></script>
+
+        <script type="text/babel">
+            function AiPage() {
+                // The motif measures real section geometry, so it can only start
+                // after the first paint. motif.js is a module and may still be
+                // loading when React mounts, so wait for it rather than assuming.
+                // Scroll reveal for the whole page, one observer for every
+                // [data-reveal] element across all five sections.
+                useReveal();
+
+                React.useEffect(() => {
+                    let raf = 0;
+                    const tryInit = () => {
+                        if (window.CDMotif) window.CDMotif.init();
+                        else raf = requestAnimationFrame(tryInit);
+                    };
+                    tryInit();
+                    return () => cancelAnimationFrame(raf);
+                }, []);
+
+                return (
+                    <main style={{ whiteSpace: "pre-line" }}>
+                        <GWNav />
+                        <AiHeroSection />
+                        <AiProblemSection />
+                        <AiHowSection />
+                        <AiProofSection />
+                        <AiEmployeeSection />
+                        <div data-motif-section>
+                            <FooterSection
+                                headline={COPY.ai.footerHeadline}
+                                background="transparent"
+                            />
+                        </div>
+                    </main>
+                );
+            }
+            const fb = document.getElementById("seo-fallback");
+            if (fb) fb.remove();
+            ReactDOM.createRoot(document.getElementById("root")).render(
+                <AiPage />,
+            );
+        </script>
+    </body>
+</html>

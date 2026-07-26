@@ -1,0 +1,2663 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>CombatDen, a 24/7 AI employee for your gym</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Supercharge your gym with a 24/7 AI employee. It watches your members, tracks nearby gyms, plans the work, and runs it once you approve."
+    />
+
+    <link rel="icon" type="image/png" href="../assets/landing/logo_tiny.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;650;700&family=Geist+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <style>
+      /* ------------------------------------------------------------------ */
+      /* tokens — mirrors hifi/ds.jsx (GW) exactly                          */
+      /* ------------------------------------------------------------------ */
+      :root {
+        --bg: #f3f5f8;
+        --bg-alt: #eef1f6;
+        --surface: #ffffff;
+        --ink: #16181d;
+        --ink-soft: #565b66;
+        --ink-faint: #878d99;
+        --line: rgba(20, 22, 30, 0.09);
+        --line-soft: rgba(20, 22, 30, 0.06);
+        --accent: #2a67bd;
+        --accent-dark: #1f5099;
+        --accent-soft: #e8f0fb;
+        --accent-glow: rgba(42, 103, 189, 0.18);
+        --cyan-glow: oklch(0.72 0.15 215 / 0.13);
+        --sans: "Geist", "Inter", system-ui, -apple-system, sans-serif;
+        --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+        --maxw: 1180px;
+
+        /* the site's card recipe (feed.jsx ffCard) */
+        --card-bg: linear-gradient(180deg, #ffffff, #f5f7fb);
+        --card-border: 1px solid rgba(20, 22, 40, 0.065);
+        --card-shadow: 0 1px 2px rgba(20, 22, 40, 0.03),
+          0 22px 50px -30px rgba(20, 22, 50, 0.2),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+        --btn-shadow: 0 1px 2px rgba(15, 45, 95, 0.32),
+          0 8px 22px -6px rgba(30, 80, 160, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.28);
+
+        /* motion */
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --ease-deck: cubic-bezier(0.22, 1, 0.36, 1);
+
+        /* §5 deck geometry */
+        --log-card-h: 168px;
+        --log-gap: 14px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        scroll-behavior: smooth;
+        /* `clip` (not `hidden`) on purpose: it stops sideways bleed without
+           creating a scroll container, so §5's position:sticky still works. */
+        overflow-x: clip;
+      }
+      body {
+        font-family: var(--sans);
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        color: var(--ink);
+        font-synthesis-weight: none;
+      }
+      img {
+        max-width: 100%;
+        display: block;
+      }
+
+      .wrap {
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding-left: 32px;
+        padding-right: 32px;
+        position: relative;
+        z-index: 1;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* atmosphere primitives — GWDotGrid / GWGlow from ds.jsx              */
+      /* ------------------------------------------------------------------ */
+      .dotgrid {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 0;
+        background-image: radial-gradient(
+          rgba(20, 22, 40, 0.05) 1px,
+          transparent 1px
+        );
+        background-size: 22px 22px;
+        -webkit-mask-image: radial-gradient(
+          120% 100% at 50% 0%,
+          #000 40%,
+          transparent 85%
+        );
+        mask-image: radial-gradient(
+          120% 100% at 50% 0%,
+          #000 40%,
+          transparent 85%
+        );
+      }
+      .glow {
+        position: absolute;
+        border-radius: 50%;
+        pointer-events: none;
+        z-index: 0;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* type                                                                */
+      /* ------------------------------------------------------------------ */
+      /* One scale, real steps between them. Tracking is set in `em` so the
+         tightening tracks the clamp instead of over-crushing small sizes. */
+      .t-hero {
+        margin: 0;
+        font-size: clamp(38px, 3.6vw + 24px, 84px);
+        line-height: 0.95;
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      .t-title {
+        margin: 0;
+        font-size: clamp(32px, 2.6vw + 18px, 58px);
+        line-height: 1;
+        font-weight: 600;
+        letter-spacing: -0.032em;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      .t-statement {
+        margin: 0 auto;
+        max-width: 880px;
+        text-align: center;
+        font-size: clamp(29px, 2.4vw + 16px, 52px);
+        line-height: 1.1;
+        letter-spacing: -0.03em;
+        font-weight: 550;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      .t-body {
+        font-size: clamp(16px, 0.35vw + 14.4px, 18.5px);
+        line-height: 1.6;
+        font-weight: 450;
+        letter-spacing: -0.005em;
+        color: var(--ink-soft);
+        max-width: 62ch;
+        text-wrap: pretty;
+      }
+      .t-label {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+      .accent-dot {
+        color: var(--accent);
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* buttons                                                             */
+      /* ------------------------------------------------------------------ */
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        border: none;
+        cursor: pointer;
+        white-space: nowrap;
+        font-family: var(--sans);
+        font-weight: 600;
+        font-size: 15px;
+        letter-spacing: -0.012em;
+        text-decoration: none;
+        border-radius: 12px;
+        color: #fff;
+        background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+        box-shadow: var(--btn-shadow);
+        padding: 13px 22px;
+        transition:
+          transform 0.16s ease,
+          box-shadow 0.16s ease;
+      }
+      .btn:hover {
+        transform: translateY(-1px);
+        box-shadow:
+          0 1px 2px rgba(15, 45, 95, 0.34),
+          0 14px 30px -8px rgba(30, 80, 160, 0.55),
+          inset 0 1px 0 rgba(255, 255, 255, 0.3);
+      }
+      .btn:active {
+        transform: translateY(0);
+      }
+      .btn--lg {
+        font-size: 16px;
+        padding: 15px 26px;
+      }
+      .btn--sm {
+        font-size: 14px;
+        padding: 9px 16px;
+      }
+      .btn--block {
+        width: 100%;
+        justify-content: center;
+        font-size: 15.5px;
+        padding: 15px 22px;
+      }
+      .btn[disabled] {
+        cursor: default;
+        transform: none;
+        opacity: 0.85;
+      }
+      .btn.is-done {
+        background: var(--accent-soft);
+        color: var(--accent-dark);
+        box-shadow: none;
+      }
+      a:focus-visible,
+      button:focus-visible,
+      input:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+
+      .disclaimer {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--ink-faint);
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.02em;
+      }
+      .disclaimer svg {
+        flex: 0 0 auto;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* card recipe                                                         */
+      /* ------------------------------------------------------------------ */
+      .card {
+        background: var(--card-bg);
+        border: var(--card-border);
+        border-radius: 22px;
+        box-shadow: var(--card-shadow);
+      }
+      .card--lg {
+        border-radius: 28px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* scroll reveal — enabled by the head script only when motion is OK   */
+      /* ------------------------------------------------------------------ */
+      .anim [data-reveal] {
+        opacity: 0;
+        transform: translate3d(0, 20px, 0);
+        transition:
+          opacity 0.72s var(--ease-out) var(--rd, 0ms),
+          transform 0.72s var(--ease-out) var(--rd, 0ms);
+      }
+      .anim [data-reveal].is-in {
+        opacity: 1;
+        transform: none;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* nav                                                                 */
+      /* ------------------------------------------------------------------ */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: transparent;
+        border-bottom: 1px solid transparent;
+        transition:
+          background 0.25s,
+          border-color 0.25s;
+      }
+      .nav.is-scrolled,
+      .nav.is-open {
+        background: rgba(243, 245, 248, 0.78);
+        -webkit-backdrop-filter: saturate(180%) blur(14px);
+        backdrop-filter: saturate(180%) blur(14px);
+        border-bottom-color: var(--line);
+      }
+      .nav__bar {
+        max-width: var(--maxw);
+        margin: 0 auto;
+        padding: 0 32px;
+        height: 68px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .nav__brand {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        text-decoration: none;
+      }
+      .nav__brand img {
+        height: 32px;
+        width: auto;
+      }
+      .nav__brand span {
+        font-size: 17px;
+        font-weight: 650;
+        letter-spacing: -0.024em;
+        color: var(--ink);
+      }
+      .nav__links {
+        display: flex;
+        align-items: center;
+        gap: 30px;
+      }
+      .nav__links a:not(.btn) {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--ink-soft);
+        letter-spacing: -0.006em;
+        text-decoration: none;
+        transition: color 0.15s;
+      }
+      .nav__links a:not(.btn):hover {
+        color: var(--ink);
+      }
+      .nav__burger {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        width: 42px;
+        height: 42px;
+        border-radius: 11px;
+        border: 1px solid var(--line);
+        background: var(--surface);
+        cursor: pointer;
+        box-shadow: 0 1px 2px rgba(20, 22, 40, 0.05);
+      }
+      .nav__panel {
+        display: none;
+        position: absolute;
+        top: 68px;
+        left: 0;
+        right: 0;
+        background: rgba(243, 245, 248, 0.94);
+        -webkit-backdrop-filter: saturate(180%) blur(14px);
+        backdrop-filter: saturate(180%) blur(14px);
+        border-bottom: 1px solid var(--line);
+        box-shadow: 0 18px 40px -24px rgba(20, 22, 50, 0.3);
+        padding: 12px 20px 20px;
+      }
+      .nav.is-open .nav__panel {
+        display: block;
+      }
+      .nav__panel a:not(.btn) {
+        display: block;
+        font-size: 16px;
+        font-weight: 500;
+        letter-spacing: -0.012em;
+        color: var(--ink);
+        text-decoration: none;
+        padding: 12px 4px;
+        border-bottom: 1px solid var(--line-soft);
+      }
+      .nav__panel .btn {
+        margin-top: 14px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* §1 hero                                                             */
+      /* ------------------------------------------------------------------ */
+      .hero {
+        position: relative;
+        overflow: hidden;
+        background: var(--bg);
+        margin-top: -68px;
+      }
+      .hero__inner {
+        position: relative;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-align: center;
+        justify-content: center;
+        min-height: min(78vh, 760px);
+        padding: 168px 32px 116px;
+        max-width: 1000px;
+        margin: 0 auto;
+      }
+      .hero h1 {
+        max-width: 15.5ch;
+      }
+      .hero__sub {
+        margin: 30px 0 0;
+        font-size: clamp(17px, 0.5vw + 15px, 21px);
+        line-height: 1.5;
+        font-weight: 450;
+        letter-spacing: -0.012em;
+        color: var(--ink-soft);
+        max-width: 34ch;
+        text-wrap: balance;
+      }
+      .hero__cta {
+        margin-top: 38px;
+      }
+      .hero__note {
+        margin-top: 20px;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* §2 problem statement                                                */
+      /* ------------------------------------------------------------------ */
+      .problem {
+        background: var(--bg);
+        padding: 136px 0 0;
+      }
+      .problem .t-body {
+        text-align: center;
+        max-width: 46ch;
+        margin: 22px auto 0;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* §3 how it works                                                     */
+      /* ------------------------------------------------------------------ */
+      .how {
+        background: var(--bg);
+        padding: 76px 0 138px;
+      }
+      .how__grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+      }
+      .step {
+        padding: 28px 28px 34px;
+        display: flex;
+        flex-direction: column;
+        transition:
+          transform 0.3s var(--ease-out),
+          box-shadow 0.3s var(--ease-out);
+      }
+      .step:hover {
+        transform: translateY(-3px);
+        box-shadow:
+          0 1px 2px rgba(20, 22, 40, 0.04),
+          0 32px 60px -32px rgba(20, 22, 50, 0.26),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      /* the step index and its live glyph share one 34px row, so the rule and
+         every heading below still land on one baseline across the three cards */
+      .step__top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 34px;
+      }
+      .step__n {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        font-weight: 500;
+        letter-spacing: 0.12em;
+        color: var(--accent);
+      }
+      .step__rule {
+        height: 1px;
+        background: var(--line-soft);
+        margin: 26px 0 24px;
+      }
+
+      /* --- §3 live glyphs -----------------------------------------------
+         Each step shows its own verb working: Monitor reads a live signal,
+         Plan drafts its lines in, Execute runs a job to completion. Small,
+         quiet, and staggered across the three cards so the row never pulses
+         in unison. Resting state is the finished/at-rest shape. */
+      .step__live svg {
+        display: block;
+      }
+      .glyph-faint {
+        fill: var(--line);
+      }
+      .glyph-accent {
+        fill: var(--accent);
+      }
+      .sig {
+        transform-box: fill-box;
+        transform-origin: bottom;
+      }
+      .how.is-live .sig {
+        animation: sigWave 1.9s calc(var(--sd, 0s) + var(--gd, 0s)) ease-in-out
+          infinite;
+      }
+      @keyframes sigWave {
+        0%,
+        100% {
+          transform: scaleY(0.34);
+        }
+        50% {
+          transform: scaleY(1);
+        }
+      }
+
+      .draft {
+        transform-box: fill-box;
+        transform-origin: left center;
+      }
+      .how.is-live .draft {
+        animation: draftIn 3.4s calc(var(--sd, 0s) + var(--gd, 0s)) ease-out
+          infinite;
+      }
+      @keyframes draftIn {
+        0%,
+        4% {
+          transform: scaleX(0);
+          opacity: 0;
+        }
+        18%,
+        88% {
+          transform: none;
+          opacity: 1;
+        }
+        100% {
+          transform: none;
+          opacity: 0;
+        }
+      }
+
+      .run__arc {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2.4;
+        stroke-linecap: round;
+        stroke-dasharray: 76;
+        stroke-dashoffset: 0;
+      }
+      .how.is-live .run__arc {
+        animation: runArc 3.4s var(--sd, 0s) ease-in-out infinite;
+      }
+      @keyframes runArc {
+        0%,
+        6% {
+          stroke-dashoffset: 76;
+        }
+        62%,
+        88% {
+          stroke-dashoffset: 0;
+        }
+        100% {
+          stroke-dashoffset: 0;
+          opacity: 0;
+        }
+      }
+      .run__tick {
+        stroke: var(--accent-dark);
+        stroke-width: 2.2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        fill: none;
+        stroke-dasharray: 14;
+        stroke-dashoffset: 0;
+      }
+      .how.is-live .run__tick {
+        animation: runTick 3.4s var(--sd, 0s) ease-out infinite;
+      }
+      @keyframes runTick {
+        0%,
+        62% {
+          stroke-dashoffset: 14;
+        }
+        76%,
+        88% {
+          stroke-dashoffset: 0;
+        }
+        100% {
+          stroke-dashoffset: 0;
+          opacity: 0;
+        }
+      }
+      .step h3 {
+        margin: 0;
+        font-size: 25px;
+        font-weight: 600;
+        letter-spacing: -0.034em;
+        line-height: 1.1;
+        color: var(--ink);
+      }
+      .step p {
+        margin: 12px 0 0;
+        font-size: 16.5px;
+        line-height: 1.6;
+        font-weight: 450;
+        letter-spacing: -0.005em;
+        color: var(--ink-soft);
+        text-wrap: pretty;
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* §4 proof                                                            */
+      /* ------------------------------------------------------------------ */
+      .proof {
+        position: relative;
+        background: var(--bg);
+        padding: 128px 0 132px;
+        overflow: visible;
+      }
+      /* px, not ch: `ch` on a wrapper resolves against the wrapper's own
+         font-size, not the display type inside it. */
+      .proof__head {
+        text-align: center;
+        margin: 0 auto 68px;
+        max-width: 620px;
+      }
+      .proof__grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 24px;
+      }
+      /* staggered cycle phase — one card is mid-count at any moment */
+      .proof__grid .stat:nth-of-type(1) {
+        --cd: 0s;
+      }
+      .proof__grid .stat:nth-of-type(2) {
+        --cd: 1.5s;
+      }
+      .proof__grid .stat:nth-of-type(3) {
+        --cd: 3s;
+      }
+      .proof__grid .stat:nth-of-type(4) {
+        --cd: 4.5s;
+      }
+      .stat {
+        padding: 26px 28px 24px;
+        display: flex;
+        flex-direction: column;
+      }
+      .stat__cat {
+        margin-bottom: 26px;
+      }
+      .stat__row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+      }
+      .stat__num {
+        font-size: clamp(42px, 3.2vw + 20px, 76px);
+        font-weight: 700;
+        letter-spacing: -0.045em;
+        line-height: 0.9;
+        color: var(--accent-dark);
+        font-variant-numeric: tabular-nums;
+        transition: color 0.5s ease;
+      }
+      /* mid-count the numeral sits on the live accent, then settles back to
+         accent-dark. The colour change is the "still working" tell. */
+      .stat__num.is-counting {
+        color: var(--accent);
+      }
+      .stat__numlabel {
+        margin: 15px 0 0;
+        font-size: 15.5px;
+        font-weight: 500;
+        letter-spacing: -0.014em;
+        color: var(--ink);
+      }
+      .stat__viz {
+        flex: 0 0 auto;
+        width: 170px;
+        height: 62px;
+      }
+      .stat__viz svg {
+        display: block;
+        width: 100%;
+        height: 100%;
+        overflow: visible;
+      }
+      .stat__action {
+        /* shorthand, not margin-top: the slot is a <ul> in three of the four
+           cards and the shorthand clears the list's default block margins */
+        margin: 24px 0 0;
+        position: relative;
+        /* floor so the secondary-stat rows stay on one baseline across a row of
+           cards whose action lines wrap to different lengths. Set by the
+           tallest occupant, the Chat card's two-turn exchange. */
+        min-height: 96px;
+        background: var(--bg-alt);
+        border: 1px solid var(--line-soft);
+        border-radius: 12px;
+        padding: 13px 15px;
+        font-size: 14.5px;
+        line-height: 1.55;
+        font-weight: 450;
+        letter-spacing: -0.005em;
+        color: var(--ink-soft);
+        text-wrap: pretty;
+      }
+      /* --- the action slot is a live worklog ---------------------------
+         Every card plays back what the agent actually did, one beat at a
+         time, on the same 6s cycle as its numeral. Three cards use the
+         detected-then-acted checklist; Chat plays the real exchange instead,
+         because Chat IS the conversation.
+         Resting state (no JS / reduced motion) is the finished list, so the
+         same words are all readable without a single frame of animation. */
+      /* the exchange is absolutely positioned, so this floor is the only
+         thing giving the Chat slot height at every breakpoint */
+      .stat__action--chat {
+        min-height: 96px;
+      }
+
+      /* no margin/padding reset here on purpose — .stat__action already owns
+         the box, and its shorthands beat the list's UA defaults */
+      .stat__steps {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 11px;
+      }
+      .stat__step {
+        display: flex;
+        align-items: flex-start;
+        gap: 9px;
+        opacity: 1;
+      }
+      .stat__step svg {
+        flex: 0 0 auto;
+        margin-top: 3px;
+      }
+      .proof.is-live .stat__step {
+        animation: stepIn 6s calc(var(--cd) + var(--sd, 0s)) ease-out infinite;
+      }
+      @keyframes stepIn {
+        0%,
+        7% {
+          opacity: 0;
+          transform: translateY(5px);
+        }
+        17%,
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* Chat: the actual back and forth. Side + fill carry who is who, the
+         avatar reinforces which one is the agent. */
+      .cx {
+        position: absolute;
+        left: 15px;
+        right: 15px;
+        display: flex;
+        align-items: flex-end;
+        gap: 7px;
+        opacity: 1;
+      }
+      .cx--you {
+        top: 13px;
+        justify-content: flex-end;
+      }
+      .cx--wait,
+      .cx--ai {
+        bottom: 13px;
+        justify-content: flex-start;
+      }
+      .cx--wait {
+        opacity: 0;
+      }
+      .cx__b {
+        font-size: 12.5px;
+        line-height: 1.35;
+        letter-spacing: -0.008em;
+        border-radius: 12px;
+        padding: 7px 10px;
+        max-width: 84%;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .cx--you .cx__b {
+        background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+        color: #fff;
+        font-weight: 500;
+        border-bottom-right-radius: 3px;
+      }
+      .cx--ai .cx__b,
+      .cx--wait .cx__b {
+        background: var(--surface);
+        color: var(--ink);
+        border: 1px solid var(--line);
+        font-weight: 450;
+        border-bottom-left-radius: 3px;
+      }
+      .cx__av {
+        flex: 0 0 auto;
+        width: 19px;
+        height: 19px;
+        border-radius: 999px;
+        background: linear-gradient(180deg, var(--accent), var(--accent-dark));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .cx__av::after {
+        content: "";
+        width: 6px;
+        height: 6px;
+        border-radius: 999px;
+        background: #fff;
+      }
+      .cx__meta {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        letter-spacing: 0.06em;
+        color: var(--ink-faint);
+        margin-left: 3px;
+      }
+      .cx__dots {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        padding: 10px;
+      }
+      .cx__dots i {
+        width: 4px;
+        height: 4px;
+        border-radius: 999px;
+        background: var(--ink-faint);
+        display: block;
+      }
+      .proof.is-live .cx--you {
+        animation: cxYou 6s var(--cd) ease-out infinite;
+      }
+      .proof.is-live .cx--wait {
+        animation: cxWait 6s var(--cd) ease-out infinite;
+      }
+      .proof.is-live .cx--ai {
+        animation: cxAi 6s var(--cd) ease-out infinite;
+      }
+      .proof.is-live .cx__dots i {
+        animation: cxDot 1.05s ease-in-out infinite;
+      }
+      .proof.is-live .cx__dots i:nth-child(2) {
+        animation-delay: 0.14s;
+      }
+      .proof.is-live .cx__dots i:nth-child(3) {
+        animation-delay: 0.28s;
+      }
+      @keyframes cxYou {
+        0%,
+        5% {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        13%,
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes cxWait {
+        0%,
+        23% {
+          opacity: 0;
+        }
+        29%,
+        42% {
+          opacity: 1;
+        }
+        48%,
+        100% {
+          opacity: 0;
+        }
+      }
+      @keyframes cxAi {
+        0%,
+        48% {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        56%,
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+      @keyframes cxDot {
+        0%,
+        100% {
+          opacity: 0.3;
+          transform: translateY(0);
+        }
+        50% {
+          opacity: 1;
+          transform: translateY(-2px);
+        }
+      }
+      .stat__secondary {
+        margin: 24px 0 0;
+        padding-top: 20px;
+        border-top: 1px solid var(--line-soft);
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 14px;
+      }
+      .stat__secondary > div {
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+      }
+      .stat__secondary dt {
+        font-family: var(--mono);
+        font-size: 9.5px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+        line-height: 1.35;
+      }
+      .stat__secondary dd {
+        margin: 8px 0 0;
+        font-size: 21px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: var(--ink);
+        font-variant-numeric: tabular-nums;
+      }
+      .stat__status {
+        margin-top: 26px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .pulse {
+        position: relative;
+        flex: 0 0 auto;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+      }
+      .pulse::after {
+        content: "";
+        position: absolute;
+        inset: -4px;
+        border-radius: 999px;
+        border: 1px solid var(--accent);
+        opacity: 0;
+        animation: pulse 2.6s ease-out infinite;
+      }
+      @keyframes pulse {
+        0% {
+          transform: scale(0.6);
+          opacity: 0.55;
+        }
+        70%,
+        100% {
+          transform: scale(1.35);
+          opacity: 0;
+        }
+      }
+      .stat__status span:not(.pulse) {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.09em;
+        text-transform: uppercase;
+        color: var(--ink-faint);
+      }
+      .proof__note {
+        margin: 40px 0 0;
+        text-align: center;
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        color: var(--ink-faint);
+      }
+
+      /* --- §4 card visuals ---------------------------------------------
+         Four devices, one drawing language (same 170x62 box, same hairline
+         weights, accent for the measured thing, faint ink for context).
+         Each encodes its own card's numbers; none is a shared motif.
+         Resting state below = finished/complete. The `.is-live` variants are
+         the loop, so reduced-motion and no-JS both land on a static, whole
+         picture. */
+      .viz-faint {
+        fill: var(--line);
+      }
+      .viz-rule {
+        stroke: var(--line);
+        stroke-width: 1;
+      }
+      .viz-accent {
+        fill: var(--accent);
+      }
+      .viz-accent-soft {
+        fill: var(--accent-soft);
+      }
+
+      /* chat: you asked, it answered, it is waiting on the next one */
+      .viz__caret {
+        fill: var(--accent);
+      }
+      .proof.is-live .viz__caret {
+        animation: vizCaret 1.15s steps(1, end) infinite;
+      }
+      @keyframes vizCaret {
+        0%,
+        49% {
+          opacity: 1;
+        }
+        50%,
+        100% {
+          opacity: 0;
+        }
+      }
+
+      /* member: cumulative retention saved, climbing across the month */
+      .viz__line {
+        fill: none;
+        stroke: var(--accent);
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        stroke-dasharray: 220;
+        stroke-dashoffset: 0;
+      }
+      .viz__area {
+        opacity: 1;
+      }
+      .viz__halo {
+        fill: var(--accent);
+        transform-box: fill-box;
+        transform-origin: center;
+        opacity: 0;
+      }
+      .proof.is-live .viz__line {
+        animation: vizDraw 6s var(--cd) linear infinite;
+      }
+      .proof.is-live .viz__area {
+        animation: vizFade 6s var(--cd) linear infinite;
+      }
+      .proof.is-live .viz__halo {
+        animation: vizHalo 2.9s var(--cd) ease-out infinite;
+      }
+      @keyframes vizDraw {
+        0% {
+          stroke-dashoffset: 220;
+        }
+        24%,
+        100% {
+          stroke-dashoffset: 0;
+        }
+      }
+      @keyframes vizFade {
+        0%,
+        6% {
+          opacity: 0;
+        }
+        30%,
+        100% {
+          opacity: 1;
+        }
+      }
+      @keyframes vizHalo {
+        0% {
+          transform: scale(0.5);
+          opacity: 0.4;
+        }
+        60%,
+        100% {
+          transform: scale(2.6);
+          opacity: 0;
+        }
+      }
+
+      /* competition: 18 posts read, 4 of them flagged; the scan never stops */
+      .viz__sweep {
+        opacity: 0;
+      }
+      .proof.is-live .viz__sweep {
+        animation: vizSweep 4.4s var(--cd) linear infinite;
+      }
+      @keyframes vizSweep {
+        0% {
+          transform: translateX(0);
+          opacity: 0;
+        }
+        8%,
+        84% {
+          opacity: 1;
+        }
+        100% {
+          transform: translateX(206px);
+          opacity: 0;
+        }
+      }
+
+      /* growth: a year of demand with the slow month picked out */
+      .viz__mark {
+        fill: var(--accent);
+        transform-box: fill-box;
+        transform-origin: center;
+        opacity: 1;
+      }
+      .proof.is-live .viz__mark {
+        animation: vizPop 6s calc(var(--cd) + var(--md, 0s)) ease-out infinite;
+      }
+      @keyframes vizPop {
+        0%,
+        5% {
+          opacity: 0;
+          transform: translateY(3px) scale(0.4);
+        }
+        18%,
+        100% {
+          opacity: 1;
+          transform: none;
+        }
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* §5 the employee — scroll-driven deck                                */
+      /* ------------------------------------------------------------------ */
+      .employee {
+        background: var(--bg);
+        padding: 128px 0 132px;
+      }
+      /* The headline is set into opposite corners with the deck working
+         between them, so the section reads as one sentence wrapped around the
+         thing it describes. `display: contents` keeps it a single <h2> for
+         semantics while letting the two halves be placed as grid items. */
+      .employee__track {
+        position: relative;
+      }
+      .employee__stage {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .employee__title {
+        display: contents;
+      }
+      .employee__lede,
+      .employee__trail {
+        display: block;
+        font-size: clamp(32px, 3.6vw + 14px, 78px);
+        line-height: 0.95;
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        color: var(--ink);
+        white-space: nowrap;
+      }
+      .employee__lede {
+        grid-row: 1;
+        justify-self: start;
+      }
+      .employee__trail {
+        grid-row: 4;
+        justify-self: end;
+      }
+
+      /* Default (no JS, or reduced motion): a plain, complete, static list.
+         Deck mode is layered on top only when `.is-deck` is added by JS. */
+      .log {
+        grid-row: 2;
+        list-style: none;
+        margin: 34px auto;
+        padding: 0;
+        max-width: 720px;
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+      .log__card {
+        background: linear-gradient(
+          180deg,
+          oklch(0.995 0.014 var(--hue, 258)),
+          oklch(0.955 0.036 var(--hue, 258))
+        );
+        border: 1px solid oklch(0.86 0.045 var(--hue, 258) / 0.5);
+        border-radius: 22px;
+        box-shadow: var(--card-shadow);
+        padding: 24px 28px 26px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 14px;
+      }
+      .log__meta {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 14px;
+      }
+      .log__time {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: oklch(0.58 0.045 var(--hue, 258));
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+      }
+      /* The one deliberate exception to the One-Accent Rule. These are agent
+         handles, not brand: four hues at matched oklch lightness/chroma so
+         they read as one categorical set, and the reader can tell at a glance
+         WHICH job the agent switched to. Hues dodge both palette
+         anti-references (no mint/teal wellness green, no indigo/violet). */
+      .log__tag {
+        font-family: var(--mono);
+        font-size: 11px;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        color: oklch(0.45 0.13 var(--hue, 258));
+        background: oklch(0.95 0.05 var(--hue, 258));
+        border-radius: 999px;
+        padding: 6px 12px;
+        white-space: nowrap;
+        transition:
+          color 0.3s ease,
+          background 0.3s ease;
+      }
+      .log__card--chat {
+        --hue: 258;
+      }
+      .log__card--member {
+        --hue: 218;
+      }
+      .log__card--competition {
+        --hue: 18;
+      }
+      .log__card--growth {
+        --hue: 72;
+      }
+      .log__card--revenue {
+        --hue: 145;
+      }
+      .log__card--reputation {
+        --hue: 300;
+      }
+      .log__card--schedule {
+        --hue: 45;
+      }
+      .log__card--industry {
+        --hue: 180;
+      }
+      .log__text {
+        margin: 0;
+        font-size: clamp(17px, 0.4vw + 15.5px, 20px);
+        line-height: 1.45;
+        font-weight: 500;
+        letter-spacing: -0.022em;
+        color: var(--ink);
+        text-wrap: pretty;
+      }
+
+      /* --- deck mode ----------------------------------------------------
+         The deck runs itself: entries deal in on a timer, one after another,
+         all day and then round again. It never holds the scroll.
+         The margins tighten the gap to the headline slightly without letting
+         the two-card stack (active + prev, see `.log` height below) cross
+         into the glyphs of "An employee". */
+      .employee.is-deck .log {
+        margin-top: -6px;
+        margin-bottom: 0;
+      }
+      .employee.is-deck .employee__trail {
+        margin-top: -6px;
+      }
+      /* the instant, transition-free jump back to the start of the day */
+      .log.is-resetting .log__card,
+      .log.is-resetting .log__card .log__meta,
+      .log.is-resetting .log__card .log__text {
+        transition: none;
+      }
+      .employee.is-deck .log {
+        position: relative;
+        display: block;
+        /* room for two full cards (active + prev) stacked with a gap,
+           plus headroom for the receding "paper" stack behind them */
+        height: calc(var(--log-card-h) * 2 + var(--log-gap) + 56px);
+        width: 100%;
+      }
+      .employee.is-deck .log__card {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--log-card-h);
+        transform-origin: bottom center;
+        will-change: transform, opacity;
+        transition:
+          transform 0.58s var(--ease-deck),
+          opacity 0.42s ease,
+          box-shadow 0.58s var(--ease-deck);
+        /* default = waiting below, out of sight */
+        opacity: 0;
+        transform: translate3d(0, 34px, 0) scale(0.97);
+        z-index: 1;
+      }
+      .employee.is-deck .log__card.is-active {
+        opacity: 1;
+        transform: none;
+        z-index: 40;
+        box-shadow:
+          0 2px 4px rgba(20, 22, 40, 0.04),
+          0 36px 72px -34px rgba(20, 22, 50, 0.34),
+          inset 0 1px 0 rgba(255, 255, 255, 0.9);
+      }
+      /* The card just before the active one sits a full card-height above it
+         (a real gap, not a sliver) and stays fully legible — two entries are
+         genuinely both readable at once, the newest in front, the previous
+         one still visible above it, so the deck doesn't demand the viewer
+         read-and-forget a card the instant the next one arrives. */
+      .employee.is-deck .log__card.is-prev {
+        opacity: 1;
+        transform: translate3d(
+            0,
+            calc(-1 * (var(--log-card-h) + var(--log-gap))),
+            0
+          )
+          scale(0.98);
+        z-index: 35;
+        box-shadow:
+          0 1px 3px rgba(20, 22, 40, 0.04),
+          0 20px 40px -24px rgba(20, 22, 50, 0.22),
+          inset 0 1px 0 rgba(255, 255, 255, 0.85);
+      }
+
+      /* Anything further back than that IS just paper — hidden content, so
+         the exposed edge never leaks a half-read timestamp when a narrow
+         viewport makes the peek taller than the card's top padding. */
+      .employee.is-deck .log__card.is-back .log__meta,
+      .employee.is-deck .log__card.is-back .log__text {
+        opacity: 0;
+        transition: opacity 0.3s ease;
+      }
+
+      /* Recede from behind the prev card, not from behind the active one —
+         offsets shrink (18px, then 12px, then 8px of visible edge above the
+         prev card) so the stack still reads as depth behind the visible pair. */
+      .employee.is-deck .log__card.is-back-1 {
+        opacity: 0.28;
+        transform: translate3d(
+            0,
+            calc(-1 * (var(--log-card-h) + var(--log-gap)) - 18px),
+            0
+          )
+          scale(0.95);
+        z-index: 20;
+      }
+      .employee.is-deck .log__card.is-back-2 {
+        opacity: 0.13;
+        transform: translate3d(
+            0,
+            calc(-1 * (var(--log-card-h) + var(--log-gap)) - 30px),
+            0
+          )
+          scale(0.93);
+        z-index: 10;
+      }
+      .employee.is-deck .log__card.is-back-3 {
+        opacity: 0;
+        transform: translate3d(
+            0,
+            calc(-1 * (var(--log-card-h) + var(--log-gap)) - 38px),
+            0
+          )
+          scale(0.915);
+        z-index: 5;
+      }
+      /* ------------------------------------------------------------------ */
+      /* §6 final CTA + footer                                               */
+      /* ------------------------------------------------------------------ */
+      .final {
+        position: relative;
+        background: var(--bg);
+        padding: 120px 0 48px;
+      }
+      .book {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 46px 64px 42px;
+        border-radius: 24px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+      .book__head {
+        text-align: center;
+        margin-bottom: 14px;
+      }
+      .book__head h2 {
+        margin: 0;
+        font-size: clamp(28px, 1.8vw + 20px, 46px);
+        line-height: 1;
+        letter-spacing: -0.035em;
+        font-weight: 600;
+        color: var(--ink);
+        text-wrap: balance;
+      }
+      .book__head .disclaimer {
+        margin-top: 16px;
+      }
+      .book input {
+        width: 100%;
+        padding: 15px 16px;
+        font-family: var(--sans);
+        font-size: 15px;
+        font-weight: 450;
+        letter-spacing: -0.008em;
+        color: var(--ink);
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        outline: none;
+        box-shadow: 0 1px 2px rgba(20, 22, 40, 0.03);
+        transition:
+          border-color 0.15s,
+          box-shadow 0.15s;
+      }
+      .book input::placeholder {
+        color: var(--ink-faint);
+      }
+      .book input:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(42, 103, 189, 0.13);
+        outline: none;
+      }
+      .book .btn {
+        margin-top: 4px;
+      }
+      .footbar {
+        max-width: var(--maxw);
+        margin: 80px auto 0;
+        padding: 26px 32px 0;
+        border-top: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+      }
+      .footbar__brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .footbar__brand img {
+        height: 26px;
+        width: auto;
+      }
+      .footbar__brand span {
+        font-size: 14.5px;
+        font-weight: 650;
+        letter-spacing: -0.022em;
+        color: var(--ink);
+      }
+      .footbar__copy {
+        font-family: var(--mono);
+        font-size: 10.5px;
+        letter-spacing: 0.08em;
+        color: var(--ink-faint);
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* mobile                                                              */
+      /* ------------------------------------------------------------------ */
+      @media (max-width: 768px) {
+        :root {
+          --log-card-h: 178px;
+          --log-gap: 12px;
+        }
+
+        .wrap {
+          padding-left: 20px;
+          padding-right: 20px;
+        }
+        .nav__bar {
+          padding: 0 20px;
+        }
+        .nav__links {
+          display: none;
+        }
+        .nav__burger {
+          display: flex;
+        }
+
+        .hero__inner {
+          min-height: 0;
+          padding: 126px 20px 92px;
+        }
+        .hero h1 {
+          max-width: none;
+        }
+        .hero__sub {
+          margin-top: 22px;
+          max-width: 30ch;
+        }
+        .hero__cta {
+          margin-top: 30px;
+        }
+
+        .problem {
+          padding: 92px 0 0;
+        }
+        .problem .t-body {
+          margin-top: 18px;
+        }
+
+        .how {
+          padding: 52px 0 92px;
+        }
+        .how__grid {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+        .step {
+          padding: 24px 22px 26px;
+        }
+        .step__rule {
+          margin: 30px 0 20px;
+        }
+        .step h3 {
+          font-size: 23px;
+        }
+
+        .proof {
+          padding: 88px 0 92px;
+        }
+        .proof__head {
+          margin-bottom: 44px;
+          max-width: none;
+        }
+        .proof__grid {
+          grid-template-columns: 1fr;
+          gap: 16px;
+        }
+        .stat {
+          padding: 22px 22px 22px;
+        }
+        .stat__cat {
+          margin-bottom: 20px;
+        }
+        .stat__viz {
+          width: 124px;
+          height: 46px;
+        }
+        .stat__action {
+          min-height: 0;
+          margin-top: 20px;
+        }
+        .stat__action--chat {
+          min-height: 96px;
+        }
+        .stat__secondary {
+          gap: 10px;
+          margin-top: 20px;
+        }
+        .stat__secondary dd {
+          font-size: 18px;
+        }
+        .stat__status {
+          margin-top: 20px;
+        }
+        .proof__note {
+          margin-top: 28px;
+        }
+
+        .employee {
+          padding: 88px 0 92px;
+        }
+        .log__card {
+          padding: 20px 20px 22px;
+          gap: 12px;
+        }
+        .final {
+          padding: 84px 0 40px;
+        }
+        .book {
+          padding: 32px 22px 28px;
+        }
+        .footbar {
+          margin-top: 60px;
+          padding: 24px 20px 0;
+        }
+      }
+
+      /* ------------------------------------------------------------------ */
+      /* reduced motion — every animation has a complete, static rest state  */
+      /* ------------------------------------------------------------------ */
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+        /* .anim is never added, so [data-reveal] stays at its visible default,
+           `.is-deck` is never added, and §5 renders as the plain static list. */
+        *,
+        *::before,
+        *::after {
+          animation: none !important;
+          transition: none !important;
+        }
+        .btn:hover,
+        .step:hover {
+          transform: none;
+        }
+        .viz__caret,
+        .viz__mark,
+        .viz__area {
+          opacity: 1;
+        }
+        .viz__line {
+          stroke-dashoffset: 0;
+        }
+        .viz__sweep,
+        .viz__halo {
+          opacity: 0;
+        }
+      }
+    </style>
+
+    <script>
+      /* Motion is opt-in: the reveal + deck CSS only engages once this class
+         lands, so no-JS and reduced-motion both render the finished page. */
+      (function () {
+        try {
+          if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+            document.documentElement.className += " anim";
+          }
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+
+  <body>
+    <!-- ================================================================= -->
+    <!-- nav                                                                -->
+    <!-- ================================================================= -->
+    <div class="nav" id="nav">
+      <div class="nav__bar">
+        <a class="nav__brand" href="index.html">
+          <img src="../assets/landing/logo_tiny.png" alt="" />
+          <span>CombatDen</span>
+        </a>
+
+        <div class="nav__links">
+          <a href="index.html">Home</a>
+          <a href="https://themes.combatden.net">Themes</a>
+          <a href="pricing.html">Pricing</a>
+          <a class="btn btn--sm" href="#book">Book a demo</a>
+        </div>
+
+        <button
+          class="nav__burger"
+          id="burger"
+          type="button"
+          aria-label="Open menu"
+          aria-expanded="false"
+        >
+          <svg
+            width="19"
+            height="19"
+            viewBox="0 0 18 18"
+            fill="none"
+            stroke="#16181d"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          >
+            <path d="M2.5 5h13M2.5 9h13M2.5 13h13" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="nav__panel">
+        <a href="index.html">Home</a>
+        <a href="https://themes.combatden.net">Themes</a>
+        <a href="pricing.html">Pricing</a>
+        <a class="btn btn--block" href="#book">Book a demo</a>
+      </div>
+    </div>
+
+    <main>
+      <!-- =============================================================== -->
+      <!-- §1 hero                                                          -->
+      <!-- =============================================================== -->
+      <section class="hero">
+        <div
+          class="glow"
+          style="
+            top: -300px;
+            left: -160px;
+            width: 820px;
+            height: 760px;
+            background: radial-gradient(
+              50% 50% at 50% 50%,
+              var(--accent-glow),
+              transparent 70%
+            );
+          "
+        ></div>
+        <div
+          class="glow"
+          style="
+            top: -240px;
+            right: -180px;
+            width: 760px;
+            height: 740px;
+            background: radial-gradient(
+              50% 50% at 50% 50%,
+              var(--cyan-glow),
+              transparent 70%
+            );
+          "
+        ></div>
+        <div class="dotgrid"></div>
+
+        <div class="hero__inner">
+          <h1 class="t-hero" data-reveal>
+            Your gym software should be working harder than you are.
+          </h1>
+          <p class="hero__sub" data-reveal style="--rd: 110ms">
+            Supercharge your gym with a 24/7 AI employee.
+          </p>
+          <div class="hero__cta" data-reveal style="--rd: 200ms">
+            <a class="btn btn--lg" href="#book">
+              Book a 15-minute demo
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.9"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M3 8h10M9 4l4 4-4 4" />
+              </svg>
+            </a>
+          </div>
+          <div class="hero__note" data-reveal style="--rd: 280ms">
+            <span class="disclaimer">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.5"
+              >
+                <path
+                  d="M8 1.5l5.5 2v4c0 3.4-2.4 5.7-5.5 6.9C4.9 13.2 2.5 10.9 2.5 7.5v-4z"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M5.8 8l1.6 1.6L10.4 6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span>No payment migration required.</span>
+            </span>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============================================================== -->
+      <!-- §2 problem statement                                             -->
+      <!-- =============================================================== -->
+      <section class="problem">
+        <div class="wrap">
+          <p class="t-statement" data-reveal>
+            Software shouldn't wait for you to do
+            everything<span class="accent-dot">.</span>
+          </p>
+          <p class="t-body" data-reveal style="--rd: 120ms">
+            CombatDen AI takes what you have and puts it on autopilot.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================================== -->
+      <!-- §3 how it works — Monitor / Plan / Execute                       -->
+      <!-- =============================================================== -->
+      <section class="how" id="how">
+        <div class="wrap">
+          <div class="how__grid">
+            <article class="card step" data-reveal style="--sd: 0s">
+              <div class="step__top">
+                <span class="step__n">01</span>
+                <span class="step__live"><svg width="44" height="34" viewBox="0 0 44 34" fill="none" aria-hidden="true"><rect class="sig glyph-accent" style="--gd: 0.00s" x="1" y="18" width="3.4" height="14" rx="1.7" opacity="0.6"/><rect class="sig glyph-accent" style="--gd: 0.16s" x="10" y="6" width="3.4" height="26" rx="1.7" opacity="0.6"/><rect class="sig glyph-accent" style="--gd: 0.32s" x="19" y="12" width="3.4" height="20" rx="1.7" opacity="0.6"/><rect class="sig glyph-accent" style="--gd: 0.48s" x="28" y="2" width="3.4" height="30" rx="1.7" opacity="0.6"/><rect class="sig glyph-accent" style="--gd: 0.64s" x="37" y="15" width="3.4" height="17" rx="1.7" opacity="0.6"/></svg></span>
+              </div>
+              <div class="step__rule"></div>
+              <h3>Monitor</h3>
+              <p>Watches members, compares gyms, and tracks industry.</p>
+            </article>
+
+            <article class="card step" data-reveal style="--rd: 90ms; --sd: 0.5s">
+              <div class="step__top">
+                <span class="step__n">02</span>
+                <span class="step__live"><svg width="44" height="34" viewBox="0 0 50 34" fill="none" aria-hidden="true"><rect class="draft glyph-accent" style="--gd: 0.00s" x="8" y="3" width="34" height="6" rx="3" opacity="0.55"/><rect class="draft glyph-faint" style="--gd: 0.00s" x="0" y="3" width="5" height="6" rx="2"/><rect class="draft glyph-accent" style="--gd: 0.28s" x="8" y="14" width="42" height="6" rx="3" opacity="0.55"/><rect class="draft glyph-faint" style="--gd: 0.28s" x="0" y="14" width="5" height="6" rx="2"/><rect class="draft glyph-accent" style="--gd: 0.56s" x="8" y="25" width="26" height="6" rx="3" opacity="0.55"/><rect class="draft glyph-faint" style="--gd: 0.56s" x="0" y="25" width="5" height="6" rx="2"/></svg></span>
+              </div>
+              <div class="step__rule"></div>
+              <h3>Plan</h3>
+              <p>Message at-risk members, marketing pushes, seasonal discounts.</p>
+            </article>
+
+            <article class="card step" data-reveal style="--rd: 180ms; --sd: 1s">
+              <div class="step__top">
+                <span class="step__n">03</span>
+                <span class="step__live"><svg width="34" height="34" viewBox="0 0 34 34" fill="none" aria-hidden="true"><circle cx="17" cy="17" r="12.1" stroke="var(--line)" stroke-width="2.4"/><path class="run__arc" d="M17 4.9a12.1 12.1 0 1 1-8.56 3.54"/><path class="run__tick" d="M11.7 17.2 15.4 20.9 22.4 13.6"/></svg></span>
+              </div>
+              <div class="step__rule"></div>
+              <h3>Execute</h3>
+              <p>Approve it once, and it runs on its own from there.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============================================================== -->
+      <!-- §4 proof — four stat cards                                       -->
+      <!-- =============================================================== -->
+      <section class="proof" id="proof">
+        <div
+          class="glow"
+          style="
+            top: -140px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(880px, 100vw);
+            height: 460px;
+            background: radial-gradient(
+              50% 50% at 50% 50%,
+              var(--accent-glow),
+              transparent 72%
+            );
+          "
+        ></div>
+
+        <div class="wrap">
+          <div class="proof__head" data-reveal>
+            <h2 class="t-title">
+              Four things it never stops working on<span class="accent-dot"
+                >.</span
+              >
+            </h2>
+          </div>
+
+          <div class="proof__grid">
+            <!-- Chat ---------------------------------------------------- -->
+            <article class="card stat" data-reveal>
+              <div class="t-label stat__cat">Chat</div>
+
+              <div class="stat__row">
+                <div class="stat__num" data-count="9">9</div>
+                <div class="stat__viz">
+                  <!-- you asked / it answered / it is waiting on the next one -->
+                  <svg viewBox="0 0 170 62" fill="none" aria-hidden="true">
+                    <rect
+                      x="82"
+                      y="0"
+                      width="86"
+                      height="18"
+                      rx="9"
+                      class="viz-accent"
+                    />
+                    <rect
+                      x="2"
+                      y="22"
+                      width="112"
+                      height="18"
+                      rx="9"
+                      fill="var(--bg-alt)"
+                      stroke="var(--line)"
+                      stroke-width="1"
+                    />
+                    <rect
+                      x="92"
+                      y="44"
+                      width="76"
+                      height="18"
+                      rx="9"
+                      stroke="var(--accent)"
+                      stroke-opacity="0.4"
+                      stroke-width="1.2"
+                      stroke-dasharray="4 3.5"
+                    />
+                    <rect
+                      class="viz__caret"
+                      x="101"
+                      y="48"
+                      width="1.8"
+                      height="10"
+                      rx="0.9"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <p class="stat__numlabel">requests handled this week</p>
+
+              <div
+                class="stat__action stat__action--chat"
+                role="img"
+                aria-label="Example exchange: you ask for last month's revenue by plan, the agent answers in 12 seconds."
+              >
+                <div class="cx cx--you">
+                  <span class="cx__b">Last month's revenue by plan?</span>
+                </div>
+                <div class="cx cx--wait" aria-hidden="true">
+                  <span class="cx__av"></span>
+                  <span class="cx__b cx__dots"><i></i><i></i><i></i></span>
+                </div>
+                <div class="cx cx--ai">
+                  <span class="cx__av"></span>
+                  <span class="cx__b"
+                    >$18,240. Premium is 62%.
+                    <span class="cx__meta">12s</span></span
+                  >
+                </div>
+              </div>
+              <dl class="stat__secondary">
+                <div>
+                  <dt>Avg response</dt>
+                  <dd>8s</dd>
+                </div>
+                <div>
+                  <dt>Actions taken</dt>
+                  <dd>6</dd>
+                </div>
+                <div>
+                  <dt>Reports pulled</dt>
+                  <dd>3</dd>
+                </div>
+              </dl>
+              <div class="stat__status">
+                <span class="pulse" aria-hidden="true"></span>
+                <span>Waiting on your next question</span>
+              </div>
+            </article>
+
+            <!-- Member -------------------------------------------------- -->
+            <article class="card stat" data-reveal style="--rd: 90ms">
+              <div class="t-label stat__cat">Member</div>
+
+              <div class="stat__row">
+                <div class="stat__num" data-count="400" data-count-kind="money">
+                  $400
+                </div>
+                <div class="stat__viz">
+                  <!-- retention saved, accumulating across the month -->
+                  <svg viewBox="0 0 170 62" fill="none" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="memArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop
+                          offset="0"
+                          stop-color="var(--accent)"
+                          stop-opacity="0.2"
+                        />
+                        <stop
+                          offset="1"
+                          stop-color="var(--accent)"
+                          stop-opacity="0"
+                        />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      class="viz__area"
+                      d="M2 54 L24 50 L46 52 L68 43 L90 39 L112 30 L134 18 L164 8 L164 58 L2 58 Z"
+                      fill="url(#memArea)"
+                    />
+                    <path
+                      class="viz__line"
+                      vector-effect="non-scaling-stroke"
+                      d="M2 54 L24 50 L46 52 L68 43 L90 39 L112 30 L134 18 L164 8"
+                    />
+                    <circle class="viz__halo" cx="164" cy="8" r="3.5" />
+                    <circle class="viz-accent" cx="164" cy="8" r="3.2" />
+                  </svg>
+                </div>
+              </div>
+              <p class="stat__numlabel">in retention saved this month</p>
+
+<ul class="stat__action stat__steps">
+                <li class="stat__step"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="var(--ink-faint)" stroke-width="1.3"/><circle cx="7" cy="7" r="1.7" fill="var(--ink-faint)"/></svg><span>Found 5 at-risk members</span></li>
+                <li class="stat__step" style="--sd: 0.62s"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6.35" fill="var(--accent-soft)"/><path d="M4.3 7.15 6.2 9.05 9.8 5.2" stroke="var(--accent-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Messaged each, 3 came back</span></li>
+              </ul>
+              <dl class="stat__secondary">
+                <div>
+                  <dt>Members flagged</dt>
+                  <dd>12</dd>
+                </div>
+                <div>
+                  <dt>Check-ins sent</dt>
+                  <dd>8</dd>
+                </div>
+                <div>
+                  <dt>Win-backs</dt>
+                  <dd>3</dd>
+                </div>
+              </dl>
+              <div class="stat__status">
+                <span class="pulse" aria-hidden="true"></span>
+                <span>Reviewing this week's attendance</span>
+              </div>
+            </article>
+
+            <!-- Competition --------------------------------------------- -->
+            <article class="card stat" data-reveal style="--rd: 180ms">
+              <div class="t-label stat__cat">Competition</div>
+
+              <div class="stat__row">
+                <div class="stat__num" data-count="4">4</div>
+                <div class="stat__viz">
+                  <!-- 18 posts read (the secondary stat), 4 flagged; the scan
+                       bar is the part that never stops -->
+                  <svg viewBox="0 0 170 62" fill="none" aria-hidden="true">
+                    <defs>
+                      <linearGradient id="cmpSweep" x1="0" y1="0" x2="1" y2="0">
+                        <stop
+                          offset="0"
+                          stop-color="var(--accent)"
+                          stop-opacity="0"
+                        />
+                        <stop
+                          offset="0.75"
+                          stop-color="var(--accent)"
+                          stop-opacity="0.2"
+                        />
+                        <stop
+                          offset="1"
+                          stop-color="var(--accent)"
+                          stop-opacity="0"
+                        />
+                      </linearGradient>
+                    </defs>
+                    <rect x="4" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="13.2" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="22.4" y="18" width="3" height="30" rx="1.5" class="viz-accent" />
+                    <rect x="31.6" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="40.8" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="50" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="59.2" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="68.4" y="18" width="3" height="30" rx="1.5" class="viz-accent" />
+                    <rect x="77.6" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="86.8" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="96" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="105.2" y="18" width="3" height="30" rx="1.5" class="viz-accent" />
+                    <rect x="114.4" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="123.6" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="132.8" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="142" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <rect x="151.2" y="18" width="3" height="30" rx="1.5" class="viz-accent" />
+                    <rect x="160.4" y="34" width="3" height="14" rx="1.5" class="viz-faint" />
+                    <path class="viz-rule" d="M2 52.5 H168" stroke-linecap="round" />
+                    <rect
+                      class="viz__sweep"
+                      x="-32"
+                      y="8"
+                      width="32"
+                      height="46"
+                      fill="url(#cmpSweep)"
+                    />
+                  </svg>
+                </div>
+              </div>
+              <p class="stat__numlabel">competitor signals caught this week</p>
+
+<ul class="stat__action stat__steps">
+                <li class="stat__step"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="var(--ink-faint)" stroke-width="1.3"/><circle cx="7" cy="7" r="1.7" fill="var(--ink-faint)"/></svg><span>Nearby gym posted a fall program launch on Instagram</span></li>
+                <li class="stat__step" style="--sd: 0.62s"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6.35" fill="var(--accent-soft)"/><path d="M4.3 7.15 6.2 9.05 9.8 5.2" stroke="var(--accent-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Flagged as a seasonal trend</span></li>
+              </ul>
+              <dl class="stat__secondary">
+                <div>
+                  <dt>Promos tracked</dt>
+                  <dd>2</dd>
+                </div>
+                <div>
+                  <dt>Posts reviewed</dt>
+                  <dd>18</dd>
+                </div>
+                <div>
+                  <dt>Events flagged</dt>
+                  <dd>1</dd>
+                </div>
+              </dl>
+              <div class="stat__status">
+                <span class="pulse" aria-hidden="true"></span>
+                <span>Reading this week's posts</span>
+              </div>
+            </article>
+
+            <!-- Growth -------------------------------------------------- -->
+            <article class="card stat" data-reveal style="--rd: 270ms">
+              <div class="t-label stat__cat">Growth</div>
+
+              <div class="stat__row">
+                <div class="stat__num" data-count="3">3</div>
+                <div class="stat__viz">
+                  <!-- a year of demand, the slow month picked out, and one
+                       marker per drafted idea -->
+                  <svg viewBox="0 0 170 62" fill="none" aria-hidden="true">
+                    <rect x="4" y="26" width="8" height="26" rx="2.5" class="viz-faint" />
+                    <rect x="17.6" y="30" width="8" height="22" rx="2.5" class="viz-faint" />
+                    <rect x="31.2" y="24" width="8" height="28" rx="2.5" class="viz-faint" />
+                    <rect x="44.8" y="22" width="8" height="30" rx="2.5" class="viz-faint" />
+                    <rect x="58.4" y="28" width="8" height="24" rx="2.5" class="viz-faint" />
+                    <rect x="72" y="34" width="8" height="18" rx="2.5" class="viz-faint" />
+                    <rect x="85.6" y="38" width="8" height="14" rx="2.5" class="viz-faint" />
+                    <rect
+                      x="99.2"
+                      y="42"
+                      width="8"
+                      height="10"
+                      rx="2.5"
+                      class="viz-accent-soft"
+                      stroke="var(--accent)"
+                      stroke-opacity="0.5"
+                      stroke-width="1"
+                    />
+                    <rect x="112.8" y="36" width="8" height="16" rx="2.5" class="viz-faint" />
+                    <rect x="126.4" y="28" width="8" height="24" rx="2.5" class="viz-faint" />
+                    <rect x="140" y="22" width="8" height="30" rx="2.5" class="viz-faint" />
+                    <rect x="153.6" y="18" width="8" height="34" rx="2.5" class="viz-faint" />
+                    <path class="viz-rule" d="M2 55 H168" stroke-linecap="round" />
+                    <circle class="viz__mark" style="--md: 0.1s" cx="103.2" cy="34" r="2.6" />
+                    <circle class="viz__mark" style="--md: 0.3s" cx="130.4" cy="20" r="2.6" />
+                    <circle class="viz__mark" style="--md: 0.5s" cx="157.6" cy="10" r="2.6" />
+                  </svg>
+                </div>
+              </div>
+              <p class="stat__numlabel">campaign ideas drafted</p>
+
+<ul class="stat__action stat__steps">
+                <li class="stat__step"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="5.2" stroke="var(--ink-faint)" stroke-width="1.3"/><circle cx="7" cy="7" r="1.7" fill="var(--ink-faint)"/></svg><span>Slow week detected in August</span></li>
+                <li class="stat__step" style="--sd: 0.62s"><svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true"><circle cx="7" cy="7" r="6.35" fill="var(--accent-soft)"/><path d="M4.3 7.15 6.2 9.05 9.8 5.2" stroke="var(--accent-dark)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Drafted a &ldquo;bring a friend&rdquo; promo</span></li>
+              </ul>
+              <dl class="stat__secondary">
+                <div>
+                  <dt>Ideas drafted</dt>
+                  <dd>3</dd>
+                </div>
+                <div>
+                  <dt>Trends found</dt>
+                  <dd>5</dd>
+                </div>
+                <div>
+                  <dt>Seasons planned</dt>
+                  <dd>2</dd>
+                </div>
+              </dl>
+              <div class="stat__status">
+                <span class="pulse" aria-hidden="true"></span>
+                <span>Drafting next month's promo</span>
+              </div>
+            </article>
+          </div>
+
+          <p class="proof__note" data-reveal>
+            Illustrative examples. Not real usage data.
+          </p>
+        </div>
+      </section>
+
+      <!-- =============================================================== -->
+      <!-- §5 the employee — a day of log entries, dealt one at a time      -->
+      <!-- =============================================================== -->
+      <section class="employee" id="employee">
+        <div class="wrap">
+          <div class="employee__track">
+            <div class="employee__stage">
+              <h2 class="employee__title">
+                <span class="employee__lede" data-reveal>An employee</span>
+                <span class="employee__trail" data-reveal style="--rd: 90ms"
+                  >that never sleeps<span class="accent-dot">.</span></span
+                >
+              </h2>
+
+              <ol class="log" id="log">
+                <li class="log__card log__card--revenue">
+                  <div class="log__meta">
+                    <span class="log__time">6:10 AM</span>
+                    <span class="log__tag">@revenue</span>
+                  </div>
+                  <p class="log__text">
+                    Found 2 members training without an active plan on file.
+                  </p>
+                </li>
+                <li class="log__card log__card--reputation">
+                  <div class="log__meta">
+                    <span class="log__time">7:15 AM</span>
+                    <span class="log__tag">@reputation</span>
+                  </div>
+                  <p class="log__text">
+                    Matched a new five-star review to a member, recommended a
+                    thank-you discount.
+                  </p>
+                </li>
+                <li class="log__card log__card--chat">
+                  <div class="log__meta">
+                    <span class="log__time">9:00 AM</span>
+                    <span class="log__tag">@chat</span>
+                  </div>
+                  <p class="log__text">
+                    Answered &ldquo;who's overdue on payment&rdquo; in 9
+                    seconds.
+                  </p>
+                </li>
+                <li class="log__card log__card--competition">
+                  <div class="log__meta">
+                    <span class="log__time">11:30 AM</span>
+                    <span class="log__tag">@competition</span>
+                  </div>
+                  <p class="log__text">
+                    Caught a competitor's fall sale, recommended you run one
+                    too.
+                  </p>
+                </li>
+                <li class="log__card log__card--schedule">
+                  <div class="log__meta">
+                    <span class="log__time">2:45 PM</span>
+                    <span class="log__tag">@schedule</span>
+                  </div>
+                  <p class="log__text">
+                    Flagged Tuesday's 6pm class, underfilled three weeks
+                    running.
+                  </p>
+                </li>
+                <li class="log__card log__card--member">
+                  <div class="log__meta">
+                    <span class="log__time">4:15 PM</span>
+                    <span class="log__tag">@member</span>
+                  </div>
+                  <p class="log__text">
+                    Found 4 members overdue on their promotions.
+                  </p>
+                </li>
+                <li class="log__card log__card--growth">
+                  <div class="log__meta">
+                    <span class="log__time">6:00 PM</span>
+                    <span class="log__tag">@growth</span>
+                  </div>
+                  <p class="log__text">
+                    Spotted a seasonal opening for a New Year kickoff
+                    challenge.
+                  </p>
+                </li>
+                <li class="log__card log__card--industry">
+                  <div class="log__meta">
+                    <span class="log__time">9:20 PM</span>
+                    <span class="log__tag">@industry</span>
+                  </div>
+                  <p class="log__text">
+                    Benchmarked your pricing against gyms your size nearby.
+                  </p>
+                </li>
+                <li class="log__card log__card--chat">
+                  <div class="log__meta">
+                    <span class="log__time">11:50 PM</span>
+                    <span class="log__tag">@chat</span>
+                  </div>
+                  <p class="log__text">
+                    Compiled today's flags into tomorrow's summary, ready before
+                    you open the CRM.
+                  </p>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- =============================================================== -->
+      <!-- §6 final CTA + footer                                            -->
+      <!-- =============================================================== -->
+      <section class="final" id="book">
+        <div
+          class="glow"
+          style="
+            top: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: min(900px, 100vw);
+            height: 520px;
+            background: radial-gradient(
+              50% 50% at 50% 50%,
+              var(--accent-glow),
+              transparent 72%
+            );
+          "
+        ></div>
+
+        <div class="wrap">
+          <form class="card book" id="bookForm" novalidate data-reveal>
+            <div class="book__head">
+              <h2>Supercharge your gym<span class="accent-dot">.</span></h2>
+              <span class="disclaimer">
+                <svg
+                  width="15"
+                  height="15"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                >
+                  <path
+                    d="M8 1.5l5.5 2v4c0 3.4-2.4 5.7-5.5 6.9C4.9 13.2 2.5 10.9 2.5 7.5v-4z"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M5.8 8l1.6 1.6L10.4 6"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                <span>No payment migration required.</span>
+              </span>
+            </div>
+
+            <input
+              id="f-name"
+              type="text"
+              placeholder="Your name"
+              aria-label="Your name"
+              autocomplete="name"
+              required
+            />
+            <input
+              id="f-email"
+              type="email"
+              placeholder="Email"
+              aria-label="Email"
+              autocomplete="email"
+              required
+            />
+            <input
+              id="f-gym"
+              type="text"
+              placeholder="Gym name"
+              aria-label="Gym name"
+              autocomplete="organization"
+              required
+            />
+
+            <button class="btn btn--block" id="bookSubmit" type="submit">
+              Book a 15-minute demo
+            </button>
+          </form>
+        </div>
+
+        <div class="footbar">
+          <div class="footbar__brand">
+            <img src="../assets/landing/logo_tiny.png" alt="" />
+            <span>CombatDen</span>
+          </div>
+          <span class="footbar__copy">&copy; 2026 CombatDen</span>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      (function () {
+        var motion = document.documentElement.classList.contains("anim");
+        var hasIO = "IntersectionObserver" in window;
+
+        /* --- nav: frosted on scroll ---------------------------------- */
+        var nav = document.getElementById("nav");
+        var onScroll = function () {
+          if (window.scrollY > 12) nav.classList.add("is-scrolled");
+          else nav.classList.remove("is-scrolled");
+        };
+        window.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+
+        /* --- nav: mobile menu ---------------------------------------- */
+        var burger = document.getElementById("burger");
+        var setOpen = function (open) {
+          nav.classList.toggle("is-open", open);
+          burger.setAttribute("aria-expanded", open ? "true" : "false");
+          burger.setAttribute("aria-label", open ? "Close menu" : "Open menu");
+          burger.innerHTML = open
+            ? '<svg width="19" height="19" viewBox="0 0 18 18" fill="none" stroke="#16181d" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l10 10M14 4L4 14"/></svg>'
+            : '<svg width="19" height="19" viewBox="0 0 18 18" fill="none" stroke="#16181d" stroke-width="1.8" stroke-linecap="round"><path d="M2.5 5h13M2.5 9h13M2.5 13h13"/></svg>';
+        };
+        burger.addEventListener("click", function () {
+          setOpen(!nav.classList.contains("is-open"));
+        });
+        nav.querySelectorAll(".nav__panel a").forEach(function (a) {
+          a.addEventListener("click", function () {
+            setOpen(false);
+          });
+        });
+        window
+          .matchMedia("(max-width: 768px)")
+          .addEventListener("change", function (e) {
+            if (!e.matches) setOpen(false);
+          });
+
+        /* --- shared reveal gate (IN_VIEW_MARGIN from ds.jsx) ----------
+           Bottom inset so a section reveals once it is ~25% up into the
+           viewport, never the instant a sliver peeks in. */
+        var IN_VIEW_MARGIN = "0px 0px -25% 0px";
+
+        var revealables = [].slice.call(
+          document.querySelectorAll("[data-reveal]"),
+        );
+        if (!motion || !hasIO) {
+          revealables.forEach(function (el) {
+            el.classList.add("is-in");
+          });
+        } else {
+          var revealIo = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (e) {
+                if (!e.isIntersecting) return;
+                e.target.classList.add("is-in");
+                revealIo.unobserve(e.target);
+              });
+            },
+            { rootMargin: IN_VIEW_MARGIN },
+          );
+          revealables.forEach(function (el) {
+            revealIo.observe(el);
+          });
+        }
+
+        /* --- §3: the step glyphs run only while on screen ------------- */
+        var how = document.getElementById("how");
+        if (motion && how) {
+          if (hasIO) {
+            var howIo = new IntersectionObserver(
+              function (entries) {
+                entries.forEach(function (e) {
+                  how.classList.toggle("is-live", e.isIntersecting);
+                });
+              },
+              { rootMargin: IN_VIEW_MARGIN },
+            );
+            howIo.observe(how);
+          } else {
+            how.classList.add("is-live");
+          }
+        }
+
+        /* --- §4: the counters never settle ---------------------------
+           Each numeral runs a continuous loop: a short count up to its
+           value, a long hold, then it starts over. The four cards are
+           phase-shifted by STAGGER so only one is ever mid-count, which is
+           what keeps it reading as "always running" instead of a slot
+           machine. Numbers are illustrative (see the disclaimer), so a
+           looping count is honest here. The CSS visual loops share the same
+           6s period and the same per-card delay, so they stay in step. */
+        var CYCLE = 6000;
+        var COUNT = 1200;
+        var STAGGER = 1500;
+
+        var proof = document.querySelector(".proof");
+        var nums = [].slice.call(document.querySelectorAll("[data-count]"));
+
+        var fmtVal = function (v, kind) {
+          var n = Math.round(v);
+          return kind === "money" ? "$" + n.toLocaleString("en-US") : String(n);
+        };
+
+        if (motion && nums.length) {
+          var live = !hasIO;
+
+          if (hasIO) {
+            var proofIo = new IntersectionObserver(
+              function (entries) {
+                entries.forEach(function (e) {
+                  live = e.isIntersecting;
+                  proof.classList.toggle("is-live", e.isIntersecting);
+                });
+              },
+              { rootMargin: IN_VIEW_MARGIN },
+            );
+            proofIo.observe(proof);
+          } else {
+            proof.classList.add("is-live");
+          }
+
+          nums.forEach(function (el, i) {
+            var target = parseFloat(el.getAttribute("data-count"));
+            var kind = el.getAttribute("data-count-kind") || "int";
+
+            var run = function () {
+              if (!live || document.hidden) {
+                el.textContent = fmtVal(target, kind);
+                return;
+              }
+              el.classList.add("is-counting");
+              var t0 = performance.now();
+              var tick = function (now) {
+                var p = Math.min(1, (now - t0) / COUNT);
+                var eased = 1 - Math.pow(1 - p, 3);
+                el.textContent = fmtVal(target * eased, kind);
+                if (p < 1) {
+                  requestAnimationFrame(tick);
+                } else {
+                  el.textContent = fmtVal(target, kind);
+                  el.classList.remove("is-counting");
+                }
+              };
+              requestAnimationFrame(tick);
+            };
+
+            setTimeout(function () {
+              run();
+              setInterval(run, CYCLE);
+            }, i * STAGGER);
+          });
+        }
+
+        /* --- §5: the log deals itself ---------------------------------
+           The agent works on its own, so this section does too: entries pop
+           up one at a time on a timer, the ones before them recede into a
+           stack behind, and after the last one the deck clears and the day
+           starts over. It does NOT hold the scroll — the reader is never
+           trapped in it. Like every other loop on the page it only runs while
+           in view, and it restarts from 6:10 AM each time it comes back so a
+           viewer always catches the day from the top. Without JS (or with
+           reduced motion) `.is-deck` is never added and the same markup
+           renders as a plain static list of all eight entries. */
+        var employee = document.querySelector(".employee");
+        var logEl = document.getElementById("log");
+        var cards = [].slice.call(document.querySelectorAll(".log__card"));
+
+        if (motion && cards.length) {
+          var HOLD = 3500; /* how long each entry stays in focus */
+          var HOLD_FIRST = 2500; /* shorter first hold, so it's quickly obvious the deck is moving */
+          var CLEAR = 900; /* the deck emptying at the end of the day */
+          var REARM = 320; /* the beat before the next day starts */
+
+          employee.classList.add("is-deck");
+
+          var logTimer = null;
+          var step = -1;
+          /* keep each card's own category modifier — the state classes are
+             rewritten every tick and must not clobber it */
+          var baseClass = cards.map(function (c) {
+            return c.className;
+          });
+
+          var render = function (active) {
+            cards.forEach(function (c, i) {
+              var d = active - i;
+              var state =
+                d < 0
+                  ? ""
+                  : d === 0
+                    ? " is-active"
+                    : d === 1
+                      ? " is-prev"
+                      : " is-back is-back-" + Math.min(3, d - 1);
+              c.className = baseClass[i] + state;
+            });
+          };
+
+          var rewind = function () {
+            logEl.classList.add("is-resetting");
+            render(-1);
+            void logEl.offsetWidth; /* flush styles so the jump is instant */
+            logEl.classList.remove("is-resetting");
+          };
+
+          var advance = function () {
+            step += 1;
+            if (step < cards.length) {
+              render(step);
+              logTimer = setTimeout(advance, step === 0 ? HOLD_FIRST : HOLD);
+            } else if (step === cards.length) {
+              /* far enough past the end that every card recedes and fades */
+              render(cards.length + 4);
+              logTimer = setTimeout(advance, CLEAR);
+            } else {
+              rewind();
+              step = -1;
+              logTimer = setTimeout(advance, REARM);
+            }
+          };
+
+          var stopLog = function () {
+            clearTimeout(logTimer);
+            logTimer = null;
+          };
+
+          var startLog = function () {
+            stopLog();
+            rewind();
+            step = -1;
+            logTimer = setTimeout(advance, 260);
+          };
+
+          if (hasIO) {
+            var logIo = new IntersectionObserver(
+              function (entries) {
+                entries.forEach(function (e) {
+                  if (e.isIntersecting) startLog();
+                  else stopLog();
+                });
+              },
+              { rootMargin: IN_VIEW_MARGIN },
+            );
+            logIo.observe(logEl);
+          } else {
+            startLog();
+          }
+        }
+
+        /* --- §6: booking form -----------------------------------------
+           Comp behavior: opens the real Calendly (so the success copy is
+           truthful) but deliberately does NOT POST to the live Google Form,
+           which would write test rows into the founder's real lead sheet.
+           Production wiring lives in hifi/footer.jsx. */
+        var CALENDLY_URL = "https://calendly.com/jessemusa2/30min";
+        var form = document.getElementById("bookForm");
+        var submit = document.getElementById("bookSubmit");
+        form.addEventListener("submit", function (e) {
+          e.preventDefault();
+          if (submit.disabled) return;
+          var name = document.getElementById("f-name").value.trim();
+          var email = document.getElementById("f-email").value.trim();
+          var gym = document.getElementById("f-gym").value.trim();
+          if (!name || !email || !gym) return;
+          submit.textContent = "Sending…";
+          submit.disabled = true;
+          setTimeout(function () {
+            var u = new URL(CALENDLY_URL);
+            u.searchParams.set("name", name);
+            u.searchParams.set("email", email);
+            u.searchParams.set("a1", gym);
+            window.open(u.toString(), "_blank", "noopener,noreferrer");
+            submit.textContent = "✓ Thanks, Calendly opened in a new tab";
+            submit.classList.add("is-done");
+          }, 600);
+        });
+      })();
+    </script>
+  </body>
+</html>

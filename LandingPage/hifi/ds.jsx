@@ -26,8 +26,8 @@ const GW = {
   accentGlow: 'rgba(42,103,189,0.18)',
   cyanGlow: 'oklch(0.72 0.15 215 / 0.13)',
   // type
-  sans: '"Geist", "Inter", system-ui, -apple-system, sans-serif',
-  mono: '"Geist Mono", ui-monospace, "SF Mono", Menlo, monospace',
+  sans: '"Schibsted Grotesk", system-ui, -apple-system, sans-serif',
+  mono: '"DM Mono", ui-monospace, "SF Mono", Menlo, monospace',
   // layout
   maxW: 1180,
 };
@@ -104,4 +104,51 @@ function useIsMobile(q = MOBILE_Q) {
   return m;
 }
 
-Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN, useIsMobile, MOBILE_Q });
+// The agent's channels, as hues. This is the ONE documented exception to
+// DESIGN.md's One-Accent Rule: these are agent handles, not brand. Matched oklch
+// lightness and chroma so they read as a single categorical set, and chosen to
+// dodge both palette anti-references (no mint/teal wellness green, no
+// indigo/violet AI slop). Shared, because the AI page names the same channels in
+// two places (the §4 cards and the §5 log) and they have to agree.
+const AGENT_HUES = {
+  chat: 258, member: 218, competition: 18, growth: 72,
+  revenue: 145, reputation: 300, schedule: 45, industry: 180,
+};
+
+// Scroll reveal. Elements marked `data-reveal` start 20px low and transparent and
+// settle once they scroll into view, at the same reveal point as every other
+// animation (IN_VIEW_MARGIN). Stagger a group by setting `--rd` per element.
+//
+// Two properties worth keeping. The `.anim` class is only added when motion is
+// allowed, and the CSS keys everything off it, so under reduced motion the markup
+// stays at its natural visible state rather than being animated to visible. And an
+// element is unobserved once revealed, so a reveal never replays on the way back up.
+//
+// The CSS lives in the page's own <style> block (it needs a descendant selector,
+// which an inline style cannot express).
+function useReveal(rootRef) {
+  React.useEffect(() => {
+    const root = rootRef && rootRef.current ? rootRef.current : document;
+    const els = Array.from(root.querySelectorAll('[data-reveal]'));
+    if (!els.length) return;
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      els.forEach((el) => el.classList.add('is-in'));
+      return;
+    }
+    document.documentElement.classList.add('anim');
+
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach((e) => {
+        if (!e.isIntersecting) return;
+        e.target.classList.add('is-in');
+        io.unobserve(e.target);
+      });
+    }, { rootMargin: IN_VIEW_MARGIN });
+
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, []);
+}
+
+Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN, useIsMobile, MOBILE_Q, useReveal, AGENT_HUES });

@@ -7,7 +7,15 @@ const CALENDLY_URL = 'https://calendly.com/jessemusa2/30min';
 const GOOGLE_FORM_ACTION = 'https://docs.google.com/forms/d/e/1FAIpQLSeaRZoyYuP9YKD-oDu19y9pb11-iOLcgWdCO2WfrxRCGk7uaA/formResponse';
 const FORM_ENTRY_IDS = { name: 'entry.643842673', gym: 'entry.714252564', email: 'entry.1844120895' };
 
-function FooterSection() {
+// `headline` lets a page override the closing line (the AI page closes on its own
+// pitch) while reusing the identical form, Google Form POST, Calendly hand-off and
+// bottom bar. Everything else is shared, so there is only ever one booking flow.
+//
+// `background` exists for pages that paint something behind the whole document: the
+// AI page's motif is a fixed layer at z-index 0, and an opaque footer would cover it.
+// The default is GW.bg, which is also the body colour, so passing 'transparent'
+// looks identical and only changes what can show through.
+function FooterSection({ headline, background }) {
   const isMobile = useIsMobile();
   const [form, setForm] = React.useState({ name: '', email: '', gym: '' });
   const [status, setStatus] = React.useState('idle'); // idle | submitting | submitted | error
@@ -49,7 +57,7 @@ function FooterSection() {
   );
 
   return (
-    <footer id="book" data-screen-label="08 Footer" style={{ width: '100%', background: GW.bg, fontFamily: GW.sans, position: 'relative' }}>
+    <footer id="book" data-screen-label="08 Footer" style={{ width: '100%', background: background || GW.bg, fontFamily: GW.sans, position: 'relative' }}>
       <GWGlow style={{ top: -120, left: '50%', transform: 'translateX(-50%)', width: 900, height: 520, background: `radial-gradient(50% 50% at 50% 50%, ${GW.accentGlow}, transparent 72%)` }} />
       <div style={{ position: 'relative', zIndex: 1, maxWidth: GW.maxW, margin: '0 auto', padding: isMobile ? '80px 20px 40px' : '104px 32px 48px' }}>
         <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -57,7 +65,7 @@ function FooterSection() {
           <form onSubmit={onSubmit} style={{ background: 'linear-gradient(180deg, #ffffff, #f5f7fb)', border: '1px solid rgba(20,22,40,0.07)', borderRadius: 24, boxShadow: '0 1px 2px rgba(20,22,40,0.03), 0 24px 54px -30px rgba(20,22,50,0.22), inset 0 1px 0 rgba(255,255,255,0.9)', padding: isMobile ? '32px 22px 28px' : '44px 64px 40px', display: 'flex', flexDirection: 'column', gap: 12, width: '100%', maxWidth: 800, textAlign: 'left' }}>
             {/* card header */}
             <div style={{ textAlign: 'center', marginBottom: 10 }}>
-              <h2 style={{ margin: 0, fontSize: 'clamp(27px,3.2vw,40px)', lineHeight: 1.04, letterSpacing: -1.4, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{c.headline}</h2>
+              <h2 style={{ margin: 0, fontSize: 'clamp(27px,3.2vw,40px)', lineHeight: 1.04, letterSpacing: -1.4, fontWeight: 600, color: GW.ink, textWrap: 'balance' }}>{headline || c.headline}</h2>
               <div style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 9, color: GW.inkFaint }}>
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 1.5l5.5 2v4c0 3.4-2.4 5.7-5.5 6.9C4.9 13.2 2.5 10.9 2.5 7.5v-4z" strokeLinejoin="round"/><path d="M5.8 8l1.6 1.6L10.4 6" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <span style={{ fontFamily: GW.mono, fontSize: 12, letterSpacing: 0.1 }}>{c.reassurance}</span>

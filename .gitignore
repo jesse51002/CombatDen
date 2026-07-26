@@ -5,3 +5,6 @@ __pycache__
 CRM/.env.dev
 CRM/.env.prod
 openapi.json
+
+# impeccable design-hook cache, regenerated on every run
+.impeccable/

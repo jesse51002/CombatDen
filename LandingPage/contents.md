@@ -18,7 +18,7 @@ both `copy.jsx` (what renders) and this doc (the record + rationale) in the same
 
 No FAQ. The load-bearing "no migration / works alongside your software" objection is folded into the Hero (the small disclaimer under the CTA) instead.
 
-The page is built modularly under `hifi/` (tokens, theme store, copy, shared chrome, mocks, per-section files), light/blue/Geist system. See `DESIGN.md` and `CLAUDE.md`.
+The page is built modularly under `hifi/` (tokens, theme store, copy, shared chrome, mocks, per-section files), light/blue/Schibsted Grotesk system. See `DESIGN.md` and `CLAUDE.md`.
 
 ---
 
@@ -155,3 +155,120 @@ _What it says:_
 Button states: "Sending…" while posting, then "✓ Thanks, Calendly opened in a new tab" (no em dash). Form logs to the Google Form and opens Calendly in a new tab, unchanged.
 
 _How it's displayed:_ a single cohesive booking card holding the headline, the reassurance line, and the form (name / email / gym + submit), so the closing CTA reads as one unit rather than a floating headline above a separate card. Submits to Google Forms and opens Calendly. The nav and pricing CTAs anchor here (`#book`).
+
+---
+
+# AI page (`ai.html`)
+
+A second page, linked from the nav as **AI**. The landing page sells the member app; this one sells
+the agent layer to the same buyer. `COPY.ai` in `hifi/copy.jsx` maps 1:1 to the copy below, and the
+same sync rule applies: change one, change both.
+
+**Every number and example on this page is illustrative, not measured usage.** The stat cards and the
+day log are mock furniture in the same sense as the phone mocks on the landing page: they show the
+shape of the thing, not a customer's data.
+
+**Spine:**
+
+1. Hero
+2. Problem statement
+3. How it works (Monitor / Plan / Execute)
+4. Proof (four stat cards)
+5. The employee (a day, dealt as a deck)
+6. Footer (the shared booking card, with its own headline)
+
+## AI 1. Hero
+
+**Status:** BUILT (`hifi/sections/ai-hero.jsx`)
+
+- **Headline:** "Your gym software should be working harder than you are."
+- **Subline:** "Supercharge your gym with a 24/7 AI employee."
+- **CTA:** "Book a 15-minute demo", anchors to `#book`
+- **Reassurance:** "No payment migration required." (the shared `GWDisclaimer`)
+
+_How it's displayed:_ centred, on the same glow + dot-grid atmosphere as the landing hero, with a pair
+of ring-forms from the motif drifting behind it. They scale away as the page starts moving.
+
+## AI 2. Problem statement
+
+**Status:** BUILT (`hifi/sections/ai-problem.jsx`)
+
+- **Statement:** "Software shouldn't wait for you to do everything."
+- **Body:** "CombatDen AI takes what you have and puts it on autopilot."
+
+## AI 3. How it works
+
+**Status:** BUILT (`hifi/sections/ai-how.jsx`)
+
+- **Monitor:** "Watches members, compares gyms, and tracks industry."
+- **Plan:** "Message at-risk members, marketing pushes, seasonal discounts."
+- **Execute:** "Approve it once, and it runs on its own from there."
+
+_How it's displayed:_ three cards, numbered 01/02/03. The numbering is information here, not
+decoration: each step genuinely needs the one before it. The "nothing runs without you" trust point
+lives in the Execute card rather than in a section of its own.
+
+## AI 4. Proof
+
+**Status:** BUILT (`hifi/sections/ai-proof.jsx`)
+
+- **Heading:** "Four things it never stops working on."
+- **Chat** — 9 requests handled this week. "Asked for last month's revenue by plan, answered in 12
+  seconds." Avg response 8s, actions taken 6, reports pulled 3. Status: waiting on your next question.
+- **Member** — $400 in retention saved this month. "Found 5 at-risk members, messaged each, 3 came
+  back." Members flagged 12, check-ins sent 8, win-backs 3. Status: reviewing this week's attendance.
+- **Competition** — 4 competitor signals caught this week. "Nearby gym posted a fall program launch,
+  flagged as a seasonal trend." Promos tracked 2, posts reviewed 18, events flagged 1. Status: reading
+  this week's posts.
+- **Growth** — 3 campaign ideas drafted. "Slow week detected in August, drafted a 'bring a friend'
+  promo." Ideas drafted 3, trends found 5, seasons planned 2. Status: drafting next month's promo.
+
+_How it's displayed:_ a 2×2 grid of cards. Each is titled with the channel's handle (`@chat`,
+`@member`, `@competition`, `@growth`) in that channel's hue, so the four are distinguishable at a
+glance and the §5 log is already legible by the time you reach it. Under it: a numeral that counts up
+and then keeps re-counting on a loop (phase-shifted per card, so only one is ever mid-count), the unit
+it counts set as part of the same statement rather than as a caption, a small diagram encoding that
+card's own numbers, a two-beat "saw X, so did Y" list, secondary figures, and a live status with a
+pulsing dot.
+Competition deliberately covers promos, marketing and events rather than price tracking, which is
+one-dimensional and rarely changes.
+
+## AI 5. The employee
+
+**Status:** BUILT (`hifi/sections/ai-employee.jsx`)
+
+- **Headline:** "An employee" / "that never sleeps." (set into opposite corners)
+- **Log:** 6:10 AM found 2 members training without an active plan · 7:15 AM matched a five-star
+  review to a member, recommended a thank-you discount · 9:00 AM answered "who's overdue on payment"
+  in 9 seconds · 11:30 AM caught a competitor's fall sale, recommended you run one too · 2:45 PM
+  flagged Tuesday's 6pm class, underfilled three weeks running · 4:15 PM found 4 members overdue on
+  their promotions · 6:00 PM spotted a seasonal opening for a New Year kickoff challenge · 9:20 PM
+  benchmarked your pricing against gyms your size nearby · 11:50 PM compiled today's flags into
+  tomorrow's summary.
+
+_How it's displayed:_ a deck that deals one entry at a time, holding each for 3.5s (the first for
+2.5s, so the idea lands fast). Two entries are legible at once, the newest in front and the previous
+still readable above it, so it never demands a read-and-forget pace. Cards further back are blank
+paper. Each entry carries an `@tag` in its own hue.
+
+**Two deliberate rules here.** The log never reuses a §4 example for a shared category: a repeated
+story reads as filler and a visitor skips it. And the eight tag hues are the one exception to
+DESIGN.md's One-Accent Rule, because they are agent handles rather than brand.
+
+## AI 6. Footer
+
+**Status:** BUILT (reuses `hifi/footer.jsx`)
+
+- **Headline:** "Supercharge your gym." (overrides the landing page's "Keep more members.")
+
+Everything else, the form, the Google Form POST, the Calendly hand-off, the bottom bar, is the shared
+component. There is only ever one booking flow.
+
+## The motif
+
+A scroll-driven 3D layer (`hifi/motif.js`), the page's one piece of visual identity. Three named
+space curves, each a single closed tube with no ends and no joints: a closed spherical spiral, the
+trefoil knot (Rolfsen 3_1), and a four-petal conical rose. One form is pinned to the viewport and
+morphs between them as the page scrolls, holding each shape and changing quickly in between rather
+than sitting in a half-blend. It drifts from the right margin to the left as it descends, and the
+flower is fully formed by the time §5 reaches the middle of the screen.

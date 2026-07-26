@@ -1,9 +1,10 @@
 # LandingPage
 
-The CombatDen marketing site. A **modular** React-via-CDN + Babel-standalone build (no bundler). Two
-pages at the repo root — `index.html` (landing, 8 sections) and `pricing.html` — each loads the
-modular `.jsx` files under `hifi/` via `<script type="text/babel" src=…>` and renders inside a
-`<ThemeProvider>`.
+The CombatDen marketing site. A **modular** React-via-CDN + Babel-standalone build (no bundler). Three
+pages at the repo root — `index.html` (landing, 8 sections), `ai.html` (the agent layer, 6 sections)
+and `pricing.html` — each loads the modular `.jsx` files under `hifi/` via
+`<script type="text/babel" src=…>`. `index.html` renders inside a `<ThemeProvider>`; `ai.html` does
+not, because nothing it renders consumes the (dormant) theme store.
 
 ## No assumptions
 
@@ -19,13 +20,15 @@ This file is a living document — exactly like a skill, it must track reality. 
 - `hifi/theme-store.jsx` — the stateful global theme: `THEMES`, the hardcoded `THEME_ASSETS` dict, `ThemeProvider`, `useTheme`, `ThemeSwitcher`.
 - `hifi/copy.jsx` — `COPY`: all marketing/section strings (mirrors `contents.md`).
 - `hifi/chrome.jsx` — shared chrome: `GWButton`, `GWNav`, `GWDisclaimer`.
-- `hifi/footer.jsx` — `FooterSection` (shared by both pages; Google Form POST + Calendly open).
+- `hifi/footer.jsx` — `FooterSection` (shared by all three pages; Google Form POST + Calendly open). Optional `headline` and `background` props: the AI page closes on its own line and needs a transparent footer so its fixed motif layer shows through.
 - `hifi/mocks/` — `phone-mock.jsx` (`PhoneFrame` device shell + the theme-driven `PhoneMock`/`GymAppScreen`; the hero defines its own `ScreenshotPhone` around `PhoneFrame` for real screenshots), `theme-preview.jsx` (prop-driven `ThemePreview` card, no longer rendered on the page).
-- `hifi/sections/` — one file per section: `hero`, `what-it-is`, `brand`, `feed`, `recs`, `loyalty`, `why`, `pricing-table`.
+- `hifi/sections/` — one file per section: `hero`, `what-it-is`, `brand`, `feed`, `recs`, `loyalty`, `why`, `pricing-table`, plus the AI page's `ai-hero`, `ai-problem`, `ai-how`, `ai-proof`, `ai-employee`.
+- `hifi/motif.js` — the AI page's 3D motif. **The one non-JSX file under `hifi/`**: three.js ships as an ES module, so this loads as `<script type="module">` alongside the Babel bundle instead of through it. It exports `window.CDMotif.init()`, which `ai.html` calls from a `useEffect` after mount, because it measures real section geometry that doesn't exist before the first render. It finds its hosts by data attribute (`[data-motif-hero]`, `[data-motif-section]`), never by class, so sections can be renamed or reordered without touching it.
+- `comps/` — standalone design comps and motif studies. **Working files, not pages.** They lived at the repo root while being built, where the non-recursive `*.html` deploy glob *would* have shipped them publicly; `comps/` is out of that glob's reach and is also named in `EXCLUDE_PREFIXES` as a second guard.
 
 **Load order matters** — there is no module system; files share globals via `window`. Order is `ds → theme-store → copy → chrome → footer → mocks → sections → inline render`. When you add a file, wire it into the HTML in dependency order (anything it references must load first). Each file ends with `window.X = …` / `Object.assign(window, {…})`.
 
-**Don't move paths.** `deploy/upload.py` uploads root `*.html` (non-recursive), the root single-file globs `robots.txt`, `sitemap.xml`, and `llms.txt`, plus `hifi/**/*` and `assets/**/*`, and excludes the internal-only `one_pager/` (legacy `onepager/` is also in the guard). Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). The three root text files (`robots.txt`/`sitemap.xml`/`llms.txt`) are each matched by name, so a NEW root file of another kind would be silently dropped — add its own glob to `INCLUDE_GLOBS` if it must ship. Move any of these and deploy globbing silently drops files.
+**Don't move paths.** Note the deploy glob for pages is **non-recursive root `*.html`**: any new `.html` left at the root ships to the public site, and any page moved into a subdirectory silently stops shipping. `deploy/upload.py` uploads root `*.html` (non-recursive), the root single-file globs `robots.txt`, `sitemap.xml`, and `llms.txt`, plus `hifi/**/*` and `assets/**/*`, and excludes the internal-only `one_pager/` (legacy `onepager/` is also in the guard). Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). The three root text files (`robots.txt`/`sitemap.xml`/`llms.txt`) are each matched by name, so a NEW root file of another kind would be silently dropped — add its own glob to `INCLUDE_GLOBS` if it must ship. Move any of these and deploy globbing silently drops files.
 
 **`one_pager/` is the internal-only print-sheet leave-behind**, never deployed: `one_pager.html` (a static, self-contained 8.5×11in print/PDF sheet ported from the Claude Design comp — Geist fonts, an Export-PDF `window.print()` button, no React/theme/animation), its `img/` screenshots, and `one_pager.md` (the contents record, mirrors `contents.md`). No `INCLUDE_GLOB` matches it today (root `*.html` is non-recursive), and `EXCLUDE_PREFIXES` guards it regardless. Keep it out of the deploy globs.
 
@@ -77,6 +80,8 @@ If you genuinely need the server running (e.g. for a Bash HTTP check), **ask fir
 **Every `<video>` on the landing page must play only while it is on screen, and restart (reset to the start) when it scrolls out of view.** No clip ever plays off-screen, and a viewer always catches it from the top. This is a standing rule, not a per-section choice.
 
 Don't use the `autoPlay` attribute. Instead attach a ref to the `<video>` and call the shared `useVideoInView(videoRef[, onVisible])` hook from `hifi/ds.jsx` — an IntersectionObserver that calls `play()` on enter and `pause()` + `currentTime = 0` on exit. Keep `loop muted playsInline preload="auto"` on the element. The optional `onVisible(bool)` callback is for callers (like the §4 feed) that also need the in-view state for their own logic. The §3 brand video (`sections/brand.jsx`, transparent alpha clip), the §4 feed phone (`sections/feed.jsx`), and the §5 recs phone (`sections/recs.jsx`) all use it; any new video must too.
+
+**Scroll reveal — `useReveal()` (`ds.jsx`).** Mark an element `data-reveal` and it starts 20px low and transparent, settling once it scrolls in; stagger a group with a `--rd` per element. A page calls `useReveal()` once and it covers every tagged element on it (`ai.html` does this). The hook adds `.anim` to `<html>` only when motion is allowed and the CSS keys off that, so under reduced motion the markup simply stays visible rather than being animated to visible. It also unobserves each element once revealed, so nothing replays on the way back up. The CSS lives in the page's own `<style>` block, because it needs a descendant selector an inline style cannot express.
 
 **Shared reveal point — `IN_VIEW_MARGIN` (`ds.jsx`).** Scroll-triggered animations must not fire the instant a sliver peeks in. `useVideoInView` and every other scroll-gated animation — the §7 count-up (`why.jsx`), the §6 loyalty loops (`loyalty.jsx`), and the hero gym-cycle (`hero.jsx`) — observe with `rootMargin: IN_VIEW_MARGIN` (a bottom inset of `-25%`), so an element only counts as "in view" once it has scrolled ~25% up into the viewport. It's a bottom `rootMargin`, not an element-ratio `threshold`, on purpose — ratio thresholds misfire on phone mockups taller than the fold. Tune that one constant to move where every animation begins; any new scroll-triggered animation should reuse it. (Exception: the §4 feed's separate `threshold: 0` observer is intentional — it only **preloads thumbnails** ahead of the reveal, it doesn't start playback.)
 
