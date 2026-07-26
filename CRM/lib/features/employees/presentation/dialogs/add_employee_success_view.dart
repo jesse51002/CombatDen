@@ -58,9 +58,12 @@ class _AddEmployeeSuccessViewState extends State<AddEmployeeSuccessView> {
         InviteOutcome.skippedNoEmail =>
           'There was no email on file to send to. Share these steps so they '
               'can get in:',
+        // A staff nudge is TRANSACTIONAL, so an unsubscribe can never
+        // suppress it — reaching here means the address hard-bounced.
+        // Saying "unsubscribed" would send staff chasing the wrong fix.
         InviteOutcome.skippedSuppressed =>
-          'That address has unsubscribed, so nothing was emailed. Share '
-              'these steps so they can get in:',
+          "That address isn't accepting mail, so nothing was emailed. "
+              'Share these steps so they can get in:',
         InviteOutcome.unknown =>
           "We couldn't confirm the invite was sent. Share these steps so "
               'they can get in:',

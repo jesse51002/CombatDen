@@ -232,7 +232,15 @@ class EmailsService:
         gym_id: UUID,
         category: EmailCategory,
     ) -> str | None:
-        """The signed unsubscribe link, for marketing kinds only."""
+        """The signed unsubscribe link, for marketing kinds only.
+
+        Deliberately NOT guarded against an unconfigured signing secret:
+        ``mint_token`` raises, ``send_now`` records that as a failed row, and
+        the retry sweep re-attempts it once the secret is set. Do not "fix"
+        this by catching the error and sending without a link — a marketing
+        email whose opt-out can be forged (or is missing entirely) is worse
+        than one that waits for configuration.
+        """
         if category is not EmailCategory.marketing:
             return None
         token = self._suppression.mint_token(email, gym_id)

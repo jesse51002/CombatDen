@@ -26,3 +26,15 @@ class ResendLimitExceededError(ValueError):
 
     Router → 429.
     """
+
+
+class EmailsUnsubscribeUnconfiguredError(ValueError):
+    """No unsubscribe signing secret is set, so no marketing mail may go out.
+
+    Raised by ``EmailsSuppression.mint_token``. An empty secret is not a weak
+    key — HMAC accepts ``b""`` happily — so minting anyway would produce a
+    token anyone could forge from the public algorithm. A marketing email
+    whose opt-out link can be forged (or, worse, one that silently opts a
+    stranger out) is worse than one that is not sent, so the send is recorded
+    as failed and retried once the secret is configured.
+    """

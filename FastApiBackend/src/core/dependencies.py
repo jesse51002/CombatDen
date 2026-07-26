@@ -288,6 +288,9 @@ class DependencyInjector(containers.DeclarativeContainer):
     # card-declined mail are separate channels that never touch this domain.
     # Every dependency arrives by constructor, so no service here imports
     # `settings` or the container.
+    # The per-subject hourly resend cap, injected into the send route so
+    # it stays an env-tunable ops lever rather than a recompile.
+    emails_resend_cap = providers.Object(settings.email_resend_max_per_hour)
     emails_log = providers.Factory(EmailsLog, db_pool=db_pool)
     emails_recipients = providers.Factory(EmailsRecipients, db_pool=db_pool)
     emails_renderer = providers.Factory(EmailsRenderer)

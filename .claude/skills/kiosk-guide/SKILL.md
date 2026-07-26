@@ -20,7 +20,8 @@ description: >-
   guard, which takes THREE client statuses for its two SQL strings because
   `overdue` is a display status masking a raw `active`; the CRM's own rule is now
   aligned to the same guard) — the structural
-  no-discounts rule, the TWO
+  no-discounts rule, the never-ask-about-the-app-invite rule (`send_invite: true`
+  hardcoded at both create sites, and why a prompt there would be wrong), the TWO
   rejection shapes (a 200 with `skip_reason` vs a thrown error carrying a stable
   `code`), the TWO separate class lists (check-in window vs the forward-looking
   showcase), the four gym-wide catalogues warmed once at entry, the seven
@@ -50,7 +51,7 @@ description: >-
   member", "already on that membership", "plan block", "kiosk results screen",
   "partial signup", "skip this person", "find my name", "someone else is
   paying", "decline retry", "retry same card", "already signed that waiver",
-  "meets_floor", "re-sign floor", or "Incomplete tab".
+  "meets_floor", "re-sign floor", "send_invite", "app invite", or "Incomplete tab".
 ---
 
 # Kiosk Mode — a member surface inside the admin app
@@ -400,7 +401,7 @@ something the kiosk can be trusted to notice later.
 
 ---
 
-## 3. The fresh-card law, the one-trial rule, and no discounts at all
+## 3. The fresh-card law, the one-trial rule, no discounts at all, and the unasked invite
 
 Three rules, all about the same thing: a self-serve iPad must not be able to
 spend someone else's money, hand itself a second free trial, or discount its own
@@ -878,6 +879,35 @@ Phase D does not reuse the CRM's `start_memberships/` wizard at all — it is
 kiosk-native presentation over the existing data layer, precisely so the kiosk
 is never dragged through a future discount change; `add_member/` and
 `start_memberships/` are READ-ONLY pattern references.
+
+### The app invite is never asked about — `send_invite: true`, always
+
+`MembersManagementCreateRequest.send_invite` is **required with no default** on the backend
+(`FastApiBackend/src/members/schema/members_schema.py`; omitting it is a 422), and the CRM's admin
+dialogs answer it with a two-action footer — "Create & invite" vs. create without. **The kiosk does not
+ask. It hardcodes `sendInvite: true` at BOTH of its create sites** — `kiosk_signup_cubit.dart:289` (the
+signup lane's ONE `createMember` for the person being signed up) and `:702` (the payee/payer create on
+the already-a-member fork).
+
+This is a founder decision, not an oversight, and it should not be "fixed" into a prompt:
+
+- **The intent a prompt would ask about has already been expressed.** Someone signing up on the gym's
+  own iPad is standing there typing *their own* email into it. The admin dialogs ask precisely because
+  staff are creating a row **for** someone else, and only staff can know whether that person wants mail;
+  here there is no third party to ask about.
+- **The lane is tuned for speed.** A prompt is one more screen and one more tap on a surface whose whole
+  design goal is a member getting through unattended (§0). Adding a question a member has no basis to
+  answer trades that away for nothing.
+- **The outcome is deliberately not surfaced either.** The create's `invite` field
+  (`queued` / `held` / `skipped_no_email` / `skipped_suppressed` / `not_requested`) is read and
+  discarded here. A member can't act on "held" — that is a deploy fact about `EMAIL_ENABLED_KINDS`, not
+  something the person at the iPad did wrong — and putting it on the welcome screen would be an error
+  message for a problem only staff can fix. The admin dialogs report it because staff CAN act on it.
+- The member app invite is a **`marketing`** kind (`FastApiBackend/src/emails/emails_registry.py`), so
+  every send carries an unsubscribe link and a prior unsubscribe silently resolves to
+  `skipped_suppressed` — the opt-out lives with the member, at the address, not in a kiosk checkbox.
+
+Both call sites carry the reasoning as a comment; keep the two in sync if either is touched.
 
 ---
 

@@ -22,6 +22,7 @@ flowchart TB
     r_theme["<b>theme</b> · /api/v1/gyms/{id}/showcase + /api/v1/theme · 2 routes<br/>GET /gyms/{id}/showcase (gym-employee gated)<br/>GET /theme/showcase-defaults (PUBLIC — category-keyed demo cards)"]
     r_upl["<b>uploads</b> · /api/v1/uploads · 1 route<br/>POST /image (multipart + category form field → CDN URL; staff-principal gated)"]
     r_growth["<b>growth</b> · /api/v1/growth · 1 route<br/>GET / (cached per-gym analytics; registry-owned name/categories/order attached at serve time)"]
+    r_emails["<b>emails</b> · /api/v1/emails · 2 routes<br/>POST /send (STAFF · allowlisted kinds · 3/subject/kind/hour → 429 · 202 + outcome)<br/>GET /unsubscribe (PUBLIC, no auth — the signed HMAC token IS the authorization;<br/>an invalid token still answers 200 so a probe learns nothing)"]
     r_mp["<b>member_portal</b> · /api/v1/member · 13 routes · verify_member_self (member-facing)<br/>GET /members (verify_verified_account — the caller's member rows across gyms)<br/>GET /gyms/{gid}/members/{mid} (own profile: rank · points · streak · memberships · redemptions)<br/>GET .../streak · GET .../class-history<br/>GET .../classes (the gym schedule board, read-only)<br/>POST .../signup · DELETE .../signup (own reservation)<br/>GET .../rewards (active only) · GET .../redemptions<br/>POST .../rewards/{rid}/redeem (always PENDING — never auto-approve)<br/>GET .../videos (served feed only) · GET .../video-rec · POST .../video-rec/{rec}/click"]
     checkin_class_resolver["CheckinClassResolver<br/>src/checkin/ · resolve one occurrence against the class's schedule versions + exceptions (pure read)<br/>(the one-way checkin → classes dependency)"]
     checkin_member_gate["CheckinMemberGate<br/>src/checkin/ · per-member gate + write<br/>(eligibility, capacity vs the signed-up-or-attended union,<br/>unsigned-waiver gate, plan select trial→one_time→recurring, auto-end)"]
@@ -76,6 +77,13 @@ flowchart TB
     theme_showcase_defaults_service["ThemeShowcaseDefaultsService<br/>src/theme/service/ · PUBLIC, no DB<br/>category-keyed demo class/reward cards from a bundled YAML file<br/>(ShowcaseCategory — 8-bucket vocabulary mirroring ParentGymType)"]
     uploads_s3_service["UploadsS3Service<br/>src/uploads/service/ · boto3 proxy into combatden-assets<br/>size-caps the multipart part before buffering, then the byte count as a backstop"]
     member_portal_service["MemberPortalService<br/>src/member_portal/service/ · the two reads no staff service answers:<br/>list_members_for_email (verified email → member rows across gyms — the portal entry point)<br/>get_profile (projects MembersBillingDetailService down to the member-facing profile)"]
+    emails_service["EmailsService — src/emails/service/ · CombatDen's OWN mail only<br/>enqueue (claim INSIDE the caller's txn — a rolled-back create un-sends its email)<br/>request_send (own txn, honest InviteOutcome) · send_now (NEVER raises) · pending_for_retry<br/>registry-driven: SPECS[kind] → category · template · payload (no service branches on kind)<br/>a kind outside EMAIL_ENABLED_KINDS is claimed 'held' — terminal by policy, never swept<br/>imports NOTHING from another domain, which is what keeps employees/members/reconciler cycle-free"]
+    emails_log["EmailsLog — src/emails/service/ · email_log = the audit trail AND the retry queue<br/>claim runs in the CALLER's session (never commits) · UNIQUE idempotency_key<br/>&lt;kind&gt;:&lt;subject_id&gt;:&lt;resend_seq&gt; is the whole no-duplicates mechanism"]
+    emails_recipients["EmailsRecipients — src/emails/service/ · payload (IDs only) → address + gym branding<br/>its OWN small SELECTs over gym_employees / members, resolved at SEND time<br/>(a row delivered by tomorrow's sweep goes to the address the gym has NOW)"]
+    emails_renderer["EmailsRenderer — src/emails/service/ · jinja2 subject/.html/.txt<br/>autoescape scoped to .html ONLY (an escaped ampersand in a subject is a visible bug)"]
+    emails_suppression["EmailsSuppression — src/emails/service/ · the pre-send gate + the signed unsubscribe token<br/>marketing kind blocked by marketing OR all; transactional ONLY by all (a hard bounce)<br/>HMAC-SHA256 over (email, gym_id) — the link carries its own authorization"]
+    emails_resend_client["EmailsResendClient — src/emails/service/ · POST one rendered message to Resend<br/>email_sandbox_redirect replaces EVERY recipient (local mail does NOT land in Inbucket)"]
+    emails_runner["EmailsRunner — src/emails/service/ · fire-and-forget detached delivery (drain() in lifespan)<br/>fired by the ROUTER after the triggering write commits · NO coalescing (every id is a distinct message)<br/>a send lost to a restart stays 'pending' for the retry sweep"]
     litellm_client["LiteLLMClient — src/shared/litellm_client.py<br/>complete_structured(prompt, schema, model) · model=provider/name<br/>resolves provider key from settings · Singleton"]
     video_spec_service["VideoSpecService — src/videos/service/<br/>spec DB read/write · load_latest · save_version · no LLM"]
     video_query_generator["VideoQueryGenerator — src/videos/service/<br/>litellm TWO-CALL query gen: landscape (LandscapeResult) → queries<br/>~⅓ name-targeted · count = video_query_count · called by VideoSpecAuthoring.commit"]
@@ -87,7 +95,7 @@ flowchart TB
     video_feed_refiner["VideoFeedRefiner — src/videos/service/<br/>litellm feed→criteria refine · refine_from_feed<br/>delegates commit to VideoSpecAuthoring · prompt: video_feed_refine.md"]
     video_feed_refine_runner["VideoFeedRefineRunner — src/videos/service/<br/>fire-and-forget, per-gym-COALESCED feed_update auto-refine (drain() in lifespan)<br/>fired router-level on reject/keep ONLY (not owner add/remove)<br/>→ VideoFeedRefiner.refine_from_feed → a feed_update spec version (worker scan re-judges ~1h later)"]
     video_agent_service["VideoAgentService — src/videos/service/video_agent/<br/>THIN WRAPPER · agent_turn only · NO tools<br/>Pydantic AI (AnthropicModel · settings.video_agent_model)<br/>output: str | VideoSpecDraft | AgentQuestion (multi-choice chips)<br/>accept-path: accepted_spec → videos_service.save_accepted_spec<br/>system prompt: src/videos/prompts/video_agent_system.md"]
-    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push → sub-orphans (cancel unlinked subs)<br/>per-family lock guards mutations; no sweep-wide lock"]
+    reconciler_service["ReconcilerService — twice-daily sweep (APScheduler)<br/>invoice-fetch → stale-task recovery → orphan-clean → push → sub-orphans (cancel unlinked subs)<br/>then email-retry — step 6, deliberately LAST and OUTSIDE the billing chain<br/>(a mail-provider outage must never delay the five billing steps)<br/>per-family lock guards mutations; no sweep-wide lock"]
     growth_service["GrowthService — src/growth/ · READ path only<br/>get_growth: reads gym_growth_metrics, validates each payload against the registry model<br/>unknown key / stale payload = skipped (self-heals next compute); registry type always wins"]
     growth_compute_service["GrowthComputeService — src/growth/ · hourly + at-launch sweep (APScheduler, IntervalTrigger + next_run_time=now)<br/>per gym: run each registry metric .sql → validate → UPSERT gym_growth_metrics → prune retired keys<br/>every metric individually try/except-guarded; missing .sql logged + skipped"]
     resource_lock["ResourceLock<br/>generic non-blocking TTL lease (resource_locks)"]
@@ -211,6 +219,20 @@ flowchart TB
     r_mp --> rewards_redemption_service
     r_mp --> videos_service
     r_mp -->|"class sign-up: fire profile refresh"| member_video_profile_refresh_runner
+    r_emails --> emails_service
+    r_emails -->|"resend cap: count this subject's trailing hour"| emails_log
+    r_emails -->|"unsubscribe: verify token + suppress (marketing)"| emails_suppression
+    r_emails -->|"fire the detached send"| emails_runner
+    emails_service --> emails_log
+    emails_service --> emails_recipients
+    emails_service --> emails_renderer
+    emails_service --> emails_suppression
+    emails_service --> emails_resend_client
+    emails_runner --> emails_service
+    employees_service -->|"create: claim the staff onboarding invite (one-way edge)"| emails_service
+    members_management_service -->|"create: claim the member app invite (one-way edge)"| emails_service
+    r_emp -->|"create: fire the detached send AFTER the row commits"| emails_runner
+    r_mem -->|"create: fire the detached send AFTER the Stripe customer exists"| emails_runner
     r_mm -->|"batch reprice: discover + create"| membership_reprice_task_handler
     r_mm -->|"in-task guard (item ops)"| tasks_service
     r_mm -->|"fire batch run"| tasks_executor
@@ -263,6 +285,7 @@ flowchart TB
     reconciler_service -->|"push: bulk_payment_sync (billing none)"| payment_sync_service
     reconciler_service -->|"sub-orphans: list + cancel unlinked subs"| Payments
     reconciler_service --> payer_resolver
+    reconciler_service -->|"step 6, LAST + outside the billing chain: re-attempt unsent mail (never 'held')"| emails_service
     stripe_webhooks_service -->|"customer.subscription.deleted → sync"| payment_sync_service
   end
   Supabase["🗄️ Supabase<br/>Postgres + Auth (our DB) · pgvector<br/>member_membership_applied_discounts (sync writes back stripe_coupon_id + status)<br/>video_rag · member_video_recs · members.video_profile_* (RAG taste profile)"]
@@ -270,6 +293,7 @@ flowchart TB
   YouTube["📺 YouTube Data API v3<br/>video metadata for owner-added videos"]
   LLMProvider["🤖 LLM Provider (Anthropic)<br/>agent: Pydantic AI · AnthropicModel · settings.video_agent_model<br/>regular calls: litellm · settings.video_llm_model<br/>keys: anthropic_api_key / openai_api_key / gemini_api_key"]
   CDN["☁️ S3 + CloudFront CDN<br/>cdn.combatden.net · combatden-assets bucket"]
+  Resend["✉️ Resend — CombatDen's OWN outbound mail<br/>NOT GoTrue's login/confirmation mail (Supabase Dashboard config)<br/>NOT Stripe's card-declined mail (each gym's OWN connected account)"]
   CRM -->|"authenticated REST · Supabase JWT · WIP"| FastApiBackend
   MobileApp -->|"member REST · Supabase JWT · verify_member_self · not wired yet"| FastApiBackend
   FastApiBackend -->|"read/write · JWT auth · applied-discount rows · RAG (pgvector)"| Supabase
@@ -278,16 +302,17 @@ flowchart TB
   FastApiBackend -->|"videos: owner-add fetches video title/channel/thumbnail/views"| YouTube
   FastApiBackend -->|"videos: agent (Pydantic AI · AnthropicModel) + query gen / refiner / RAG embeddings (litellm)"| LLMProvider
   FastApiBackend -->|"image uploads (uploads domain)"| CDN
+  FastApiBackend -->|"emails: staff onboarding + member app invite (send_now, detached)"| Resend
   classDef client fill:#eaf2ff,stroke:#2f6fb0,color:#0b2942;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef route fill:#eef2ff,stroke:#5b6bb0,color:#222;
   classDef svc fill:#e6f7ec,stroke:#2f8f53,color:#0c3a1f;
   classDef hub fill:#fdf0c8,stroke:#caab2f,color:#4a3d08;
   class CRM,MobileApp client;
-  class Supabase,Stripe,YouTube,LLMProvider,CDN ext;
-  class r_mem,r_gym,r_emp,r_cls,r_chk,r_rank,r_rep,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme,r_upl,r_growth,r_mp route;
-  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,employees_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,ranks_members,ranks_reorder,ranks_presets,ranks_reads,reports_period_service,reports_full_export_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,theme_showcase_defaults_service,uploads_s3_service,member_portal_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_feed_refine_runner,video_feed_service,member_video_profile_service,video_recs_service,video_rec_click_service,member_video_profile_refresh_runner,video_agent_service,growth_service,growth_compute_service svc;
-  class payment_sync_service,payer_resolver,reconciler_service hub;
+  class Supabase,Stripe,YouTube,LLMProvider,CDN,Resend ext;
+  class r_mem,r_gym,r_emp,r_cls,r_chk,r_rank,r_rep,r_rew,r_waiver,r_disc,r_mm,r_plan,r_hook,r_task,r_vid,r_pres,r_theme,r_upl,r_growth,r_mp,r_emails route;
+  class checkin_class_resolver,checkin_member_gate,cycle_counts_service,classes_crud_service,classes_exceptions_service,classes_schedule_reader_service,batch_checkin_service,checkin_attendees_service,checkin_remover,checkin_reverser,signup_service,classes_undo_service,classes_expander,classes_version_expander,classes_versions_service,crm_members_list_service,crm_total_counts_service,discounts_service,employees_service,gym_stripe_service,gyms_service,gyms_stripe_connect_service,member_memberships_service,members_billing_detail_service,members_payments_service,members_management_service,member_memberships_refund_service,membership_plans_service,payment_sync_one_time,ranks_service,ranks_members,ranks_reorder,ranks_presets,ranks_reads,reports_period_service,reports_full_export_service,rewards_redemption_service,rewards_service,streak_service,stripe_webhooks_service,waivers_service,memberships_linked,resource_lock,tasks_service,tasks_executor,memberships_reprice,memberships_upgrade,membership_reprice_task_handler,memberships_invoice_fetch,memberships_invoice_fetch_runner,videos_service,presets_service,presets_template_service,theme_showcase_service,theme_showcase_defaults_service,uploads_s3_service,member_portal_service,litellm_client,video_spec_service,video_query_generator,video_spec_authoring,video_feed_refiner,video_feed_refine_runner,video_feed_service,member_video_profile_service,video_recs_service,video_rec_click_service,member_video_profile_refresh_runner,video_agent_service,growth_service,growth_compute_service,emails_log,emails_recipients,emails_renderer,emails_suppression,emails_resend_client,emails_runner svc;
+  class payment_sync_service,payer_resolver,reconciler_service,emails_service hub;
   style CRM stroke-dasharray:4 3;
   style MobileApp stroke-dasharray:4 3;
   style FastApiBackend fill:#f4f9f6,stroke:#2f8f53,stroke-dasharray:5 4;

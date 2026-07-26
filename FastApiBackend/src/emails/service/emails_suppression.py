@@ -15,6 +15,9 @@ from uuid import UUID
 from sqlalchemy import text
 
 from src.emails import SQL_DIR
+from src.emails.emails_exceptions import (
+    EmailsUnsubscribeUnconfiguredError,
+)
 from src.emails.emails_registry import EmailCategory
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
@@ -94,8 +97,33 @@ class EmailsSuppression:
             },
         )
 
+    @property
+    def signing_enabled(self) -> bool:
+        """Is a real signing key configured?
+
+        An EMPTY secret is not a weak key — it is no key at all. HMAC with
+        ``b""`` is perfectly valid, so without this guard an unset secret
+        would mint tokens anyone could forge from the public algorithm, and
+        verify them too: one forged link could unsubscribe any address at
+        any gym. Both directions therefore fail closed rather than degrade.
+        """
+        return bool(self._secret)
+
     def mint_token(self, email: str, gym_id: UUID) -> str:
-        """Mint the signed token embedded in a marketing email's link."""
+        """Mint the signed token embedded in a marketing email's link.
+
+        Raises:
+            EmailsUnsubscribeUnconfiguredError: When no signing secret is
+                set. Callers must not fall back to an unsigned link — a
+                marketing send with a forgeable opt-out is worse than one
+                that is held until the secret is configured.
+        """
+        if not self.signing_enabled:
+            raise EmailsUnsubscribeUnconfiguredError(
+                "No unsubscribe signing secret is configured "
+                "(EMAIL_UNSUBSCRIBE_SECRET); refusing to mint a forgeable "
+                "unsubscribe token."
+            )
         body = self._encode(
             f"{email.lower()}{TOKEN_FIELD_SEPARATOR}{gym_id}"
         )
@@ -108,6 +136,9 @@ class EmailsSuppression:
         UUID. The caller answers all of them identically, so a probe learns
         nothing from the response.
         """
+        # Fail closed with no key: otherwise every forged token verifies.
+        if not self.signing_enabled:
+            return None
         body, _, signature = token.partition(TOKEN_PART_SEPARATOR)
         if not body or not signature:
             return None

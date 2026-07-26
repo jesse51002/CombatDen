@@ -37,7 +37,9 @@ MANUAL_SEND_KINDS = frozenset(
 # Per-subject, per-kind resend cap. Three in a trailing hour is generous for
 # "they say they never got it" and still stops a staff member turning the
 # button into a mail bomb (which is our sending reputation, not just theirs).
-RESEND_CAP = 3
+# The window the per-person cap counts over. The CAP ITSELF is a Settings
+# field (`email_resend_max_per_hour`), injected below — it is an ops lever
+# worth tuning without a deploy when a gym's onboarding day hits it.
 RESEND_WINDOW_SECONDS = 3600
 
 UNSUBSCRIBE_REASON = "unsubscribed"
@@ -105,6 +107,9 @@ async def send_email(
     emails_runner: EmailsRunner = Depends(
         Provide[DependencyInjector.emails_runner]
     ),
+    resend_cap: int = Depends(
+        Provide[DependencyInjector.emails_resend_cap]
+    ),
 ) -> SendEmailResponse:
     """Claim + fire one manual send, honoring the per-subject resend cap."""
     user_payload = auth.get_current_user(credentials)
@@ -134,7 +139,7 @@ async def send_email(
             detail="Failed to send email",
         ) from None
 
-    if recent >= RESEND_CAP:
+    if recent >= resend_cap:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=(

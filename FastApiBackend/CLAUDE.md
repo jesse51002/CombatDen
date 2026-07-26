@@ -1152,6 +1152,115 @@ enforced before and after the body is read.
 **Dependencies:** `boto3`, `python-multipart`. **Required `Settings`:** `assets_bucket`,
 `aws_region`, `assets_cdn_base_url` (AWS creds via the boto3 env credential chain, not `Settings`).
 
+## Emails domain (`src/emails/`)
+
+**CombatDen's OWN outbound mail, and nothing else.** Three separate channels send mail on this
+product's behalf, and conflating them is the mistake this domain's boundary exists to prevent:
+
+1. **Supabase Auth (GoTrue)** sends login confirmation + password-reset mail. Dashboard config, no
+   code here — it never touches `email_log`.
+2. **Stripe** sends card-declined / dunning mail from each **gym's own connected account**, to the
+   member, in the gym's branding. Config, no code here either.
+3. **This domain** sends the mail CombatDen itself writes — currently a staff onboarding nudge and a
+   member app invite.
+
+**CombatDen deliberately sends no payment receipts and no overdue notices.** A monthly receipt is a
+monthly prompt to cancel, and Stripe's Smart Retries already own the dunning conversation — a second
+"you're overdue" from us would also fire on a `next_due_date` that reads past-due while Stripe shows
+the member paid (a missed webhook the reconciler has not yet swept). Neither is a gap to fill.
+
+**`emails_registry.py` is the extension point, and nothing else branches on kind.** The log, the
+renderer, the suppression check, the client, and the runner all read `SPECS[kind]`. Adding a kind is
+always the same five things: one member on `EmailKind` (`Database/python_data/schema/email.py`), one
+`ALTER TYPE email_kind ADD VALUE` migration, one payload model in `schema/emails_schema.py` added to
+the `EmailPayload` discriminated union, three template files, one `SPECS` entry. **Apply the migration
+before any code referencing the new value ships** — a value added by `ALTER TYPE … ADD VALUE` cannot be
+referenced by the transaction that added it.
+
+- **`EmailCategory` (`transactional` | `marketing`) is a property of a KIND, so it lives in code, not
+  the DB** — unlike `EmailSuppressionScope`, which describes what an ADDRESS opted out of. The pairing
+  is asymmetric on purpose: a `marketing` kind is blocked by a `marketing` **or** an `all` suppression,
+  a `transactional` kind only by `all` — opting out of a pitch must never cost someone the link that
+  grants them access. A hard bounce (`scope='all'`) blocks everything, because retrying a dead address
+  is what damages the sending domain's reputation. Every `marketing` template carries the unsubscribe
+  link; transactional ones carry none.
+- **A payload carries IDs only — never an address, never a display name.** `EmailsRecipients` re-reads
+  the person at SEND time, so a row claimed today and delivered by tomorrow's sweep goes to the address
+  the gym has NOW, and a caller cannot mail the wrong person. `email_log.recipient` (written at send
+  time) is the audit answer to "where did it really go" — never trust the payload for that.
+- **`email_log.idempotency_key` UNIQUE is the whole no-duplicates mechanism.** The key is
+  `<kind>:<subject_id>:<resend_seq>`, so a double-clicked button, a retried request, and a re-run sweep
+  all collide on one row. A DELIBERATE resend bumps `resend_seq` inside the key, which makes it a
+  genuinely new send rather than a no-op — so the key is not what stops a mail bomb. **The
+  per-subject/per-kind cap of 3 in a trailing hour is** (`RESEND_CAP` / `RESEND_WINDOW_SECONDS` in
+  `emails_router.py`; 429 over it), and it is protecting our sending domain, not just that inbox.
+- **Status `held` is terminal BY POLICY and the retry sweep skips it forever.** A kind absent from
+  `EMAIL_ENABLED_KINDS` at claim time is claimed as `held`: the row records that staff asked, but
+  nothing ever sends it. Otherwise enabling a kind months later would drain the whole backlog at once
+  and mail everyone who ever joined about a gym they joined long ago. Releasing held rows is a
+  deliberate act, never a side effect of flipping a flag — `_deliver` refuses to send a `held` row too,
+  not only the sweep.
+- **`settings.email_enabled_kinds` defaults to EMPTY — a fresh environment sends nothing.**
+  **Local mail does NOT land in Inbucket**: Inbucket only catches GoTrue's mail, and
+  `EmailsResendClient` talks to Resend over HTTPS regardless of the local stack. An empty enabled-kinds
+  set or `settings.email_sandbox_redirect` (which replaces EVERY recipient with one address) is what
+  stops a dev box mailing real members.
+- **The domain imports NOTHING from another domain.** `EmailsRecipients` owns its own two small SELECTs
+  over `gym_employees` / `members` rather than calling `EmployeesService` / members services — which
+  would themselves want to enqueue mail. That is what lets `employees`, `members`, and `reconciler` all
+  depend on `emails_service` with no cycle (same discipline as `CheckinReverser`). **DI ordering
+  constraint:** the emails providers are defined EARLY in `core/dependencies.py`, right after
+  `db_pool`/`auth`, because a `DeclarativeContainer` resolves provider references at class-body
+  evaluation — a provider referenced before it is defined is a `NameError` at import.
+- **The claim runs inside the caller's transaction; the SEND runs after it commits.**
+  `EmailsService.enqueue(session, payload)` takes the caller's session and never commits, so a
+  rolled-back create un-sends its email for free. The detached delivery is fired by the **router**
+  (`emails_runner.start(result.email_id)`) after the service returns — mail can never delay or fail a
+  create. In `employees_create.py` the claim happens after the row is committed; in
+  `members_management_create.py` it is step 5, after the Stripe customer exists, because everything
+  before that can still unwind and delete the shell row.
+- **`EmailsRunner` is fire-and-forget with a `ClassVar` task set + `drain()` in the `main.py` lifespan**
+  (mirroring `MemberVideoProfileRefreshRunner`), and deliberately has **no coalescing** — every
+  `email_id` is a distinct message, never a recomputation of the same thing. A send lost to a restart is
+  not lost: the row stays `pending` and the retry sweep recovers it.
+- **`EmailRetrySweep` is the reconciler's SIXTH step, deliberately LAST and outside the billing chain.**
+  Outbound mail is not billing state, and a mail-provider outage must never delay or abort the five
+  billing steps. It talks only to the `EmailsService` facade (`pending_for_retry` → `send_now` per id),
+  never to `EmailsLog`.
+- **`send_now` NEVER raises to its caller.** The operation that triggered the email already succeeded;
+  a failure is recorded on the row (`mark_failed` bumps `attempts`) for the sweep to re-attempt until
+  `settings.email_max_attempts`.
+
+**Routes** (`emails_router.py`, both mounted in `main.py`):
+
+| Route | Gate | What it does |
+|---|---|---|
+| `POST /api/v1/emails/send` | `STAFF` at the gym | Claims a row + fires the detached send. **202** with `SendEmailResponse{outcome, email_id}`; the kind must be in `MANUAL_SEND_KINDS` (an allowlist, so a future kind is automatic-only until someone decides on-demand resending is safe) else 400; **429** over the hourly cap. Carries NO recipient address. |
+| `GET /api/v1/emails/unsubscribe` | **PUBLIC, no auth** | The target of every marketing email's unsubscribe link. |
+
+**The unsubscribe route is public by necessity and the signed token IS the authorization.** It is
+opened from a mail client with no session, so `EmailsSuppression` mints an HMAC-SHA256-signed token
+carrying `(email, gym_id)` — a guessable or enumerable link would let anyone unsubscribe anyone. An
+invalid token returns **200 with a "this link isn't valid" page**, identical for a bad signature, a
+malformed body, or a bad UUID, so a probe learns nothing. It writes a `marketing` suppression, which
+never blocks transactional mail.
+
+**`InviteOutcome`** (`queued` | `held` | `skipped_no_email` | `skipped_suppressed` | `not_requested`)
+is the honest answer returned by the create endpoints and the manual send. Asking staff whether to
+invite someone obliges an honest answer: a UI must never render "invite sent" over an address that does
+not exist or a kind that is not enabled.
+
+**New dependency: `jinja2`.** `EmailsRenderer` autoescapes **`.html` only**
+(`select_autoescape(enabled_extensions=("html",), default=False, default_for_string=False)`): the HTML
+body carries person- and gym-supplied values and must be escaped, while the plaintext body and the
+subject line must NOT be (an escaped ampersand in a subject line is a visible bug). Subjects are
+`.strip()`ed — a trailing newline in a subject is a header-injection hazard.
+
+**Required `Settings`:** `resend_api_key`, `email_from_address`, `email_from_name`, `email_reply_to`,
+`email_enabled_kinds`, `email_sandbox_redirect`, `email_max_attempts`, `email_retry_batch_limit`,
+`email_unsubscribe_secret`, `email_unsubscribe_base_url`. **Tables:** `email_log`,
+`email_suppressions` (`../Database/supabase/schemas/`) — both service-role-write-only.
+
 ## Member portal domain (`src/member_portal/`)
 
 **The member-facing surface, and the ONLY caller of `Auth.verify_member_self`.** Everything under

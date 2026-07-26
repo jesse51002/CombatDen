@@ -20,7 +20,11 @@ enum InviteOutcome {
   /// Nobody to write to — the person has no email on file.
   skippedNoEmail('skipped_no_email'),
 
-  /// The address unsubscribed from this gym's marketing email.
+  /// The address is on the do-not-send list. For a MARKETING kind that
+  /// is usually an unsubscribe; for a TRANSACTIONAL kind (the staff
+  /// login nudge) an unsubscribe can never suppress it, so this can
+  /// only mean a hard bounce — the mailbox is dead or rejecting. The
+  /// copy stays neutral because one enum value covers both.
   skippedSuppressed('skipped_suppressed'),
 
   /// Nobody asked for an invite (created without inviting).
@@ -49,7 +53,7 @@ enum InviteOutcome {
         InviteOutcome.held => 'Invite held — invites are off right now',
         InviteOutcome.skippedNoEmail => 'No email on file — nothing was sent',
         InviteOutcome.skippedSuppressed =>
-          'That address has unsubscribed — nothing was sent',
+          "That address can't be emailed — nothing was sent",
         InviteOutcome.notRequested => null,
         InviteOutcome.unknown => "We couldn't confirm the invite was sent",
       };

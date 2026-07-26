@@ -234,8 +234,14 @@ class Settings(BaseSettings):
     # so this cap — not the key — is what protects the sending domain when the
     # real problem is that the mail is sitting in someone's spam folder.
     email_resend_max_per_hour: int = 3
-    # HMAC secret for unsubscribe links. Empty disables minting (and so
-    # marketing sends) — set it before any marketing kind goes live.
+    # HMAC secret for unsubscribe links. An EMPTY value is not a weak key,
+    # it is no key: HMAC accepts b"" happily, so minting anyway would
+    # produce tokens anyone could forge from the public algorithm — one
+    # forged link could unsubscribe any address at any gym. So
+    # EmailsSuppression fails CLOSED in both directions when this is
+    # empty: mint_token raises (the send is recorded failed and retried
+    # once configured) and verify_token rejects everything. Set this
+    # before any marketing kind goes live.
     email_unsubscribe_secret: str = ""
     # Public base URL the unsubscribe link points at (this backend).
     email_unsubscribe_base_url: str = "https://api.combatden.net"
