@@ -434,6 +434,14 @@ class DesignConstants {
   // none restates a size. The admin ramp (h1/h2/h3/p, `AppPrimaryButton`,
   // `AppOutlineButton`) is untouched by any of it.
   //
+  // The SIGNUP lane reads them one hop away, through
+  // `MembershipFlowScale.kiosk()`
+  // (`features/membership_flow/config/membership_flow_scale.dart`): its
+  // components render two surfaces at two reading distances, so they ask for
+  // a ROLE and the surface's scale picks the token. That scale SELECTS
+  // between these tokens and restates none of them, so this ramp stays the
+  // one source of the numbers.
+  //
   // The ladder, largest first (see each token's own doc for its role):
   //   kioskStreakNum 112 · kioskDisplay 40 · kioskMetric 30 ·
   //   kioskPanelTitle 25 · kioskStatement 22 · kioskFieldText 22 ·
@@ -441,7 +449,11 @@ class DesignConstants {
   //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 ·
   //   kioskButtonGhostLabel 17 · kioskBody 17 ·
   //   kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 ·
-  //   kioskMicro 13 · kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
+  //   kioskMicro 13 · kioskMonoValue 13 · eyebrow 12 · tag 11
+  //
+  // The last two carry no `kiosk` prefix: they measure the same at BOTH
+  // reading distances, so they are shared roles rather than kiosk ones. They
+  // are still the tail of this ladder and still move with it.
   //
   // Like the other text getters these carry `color: text`; callers apply a
   // muted color for a role that reads as secondary (e.g. a section's
@@ -605,7 +617,7 @@ class DesignConstants {
 
   /// A literal value rendered as a kiosk chip — the sign-in email on the "Get
   /// the app" card's step 2. Geist Mono at body size so an address reads
-  /// unambiguously (l/1, O/0), untracked — unlike [kioskEyebrow], which is a
+  /// unambiguously (l/1, O/0), untracked — unlike [eyebrow], which is a
   /// tracked uppercase micro-label.
   static TextStyle get kioskMonoValue => monoFont.copyWith(
         fontWeight: FontWeight.w600,
@@ -614,11 +626,16 @@ class DesignConstants {
         letterSpacing: 0,
       );
 
-  /// The kiosk's tracked mono eyebrow ("YOUR POINTS", "IN THE APP", "WHY") — a
+  /// The tracked mono EYEBROW ("YOUR POINTS", "IN THE APP", "WHY") — a
   /// Geist-Mono micro-label above the thing it names. Muted and
   /// letter-tracked (lifted to [text2nd] — see the contrast note at the top
   /// of this ramp).
-  static TextStyle get kioskEyebrow => monoFont.copyWith(
+  ///
+  /// Unprefixed because it is the same size at BOTH reading distances: a
+  /// tracked 12px mono label is already at the floor where tracking still
+  /// reads, so the kiosk has nothing to step up to. It is the tail of the
+  /// kiosk ladder and a shared role — see `MembershipFlowScale`.
+  static TextStyle get eyebrow => monoFont.copyWith(
         fontWeight: FontWeight.w600,
         fontSize: 12,
         color: text2nd,
@@ -627,10 +644,12 @@ class DesignConstants {
 
   /// A TAG pinned on artwork or the tiniest meta line — a reward tile's price
   /// pill, the rank ladder's RESTING belt names (its featured rung steps up to
-  /// [kioskLabel]), a showcase video's view count (w500). The one kiosk role
-  /// that stays genuinely tiny: it always sits ON an image or inside a dense
-  /// strip.
-  static TextStyle get kioskTag => baseFont.copyWith(
+  /// [kioskLabel]), a showcase video's view count (w500). The one role that
+  /// stays genuinely tiny: it always sits ON an image or inside a dense strip.
+  ///
+  /// Unprefixed for the same reason as [eyebrow] — a tag pinned on artwork is
+  /// sized by the artwork, not by how far away the reader is standing.
+  static TextStyle get tag => baseFont.copyWith(
         fontWeight: FontWeight.w700,
         fontSize: 11,
         color: text,
@@ -687,7 +706,7 @@ class DesignConstants {
   /// one sentence.
   static const double kioskFormMeasure = 860.0;
 
-  /// Height of the kiosk's date WHEEL (`KioskDobField`'s bottom sheet).
+  /// Height of the kiosk's date WHEEL (`FlowDobField`'s bottom sheet).
   ///
   /// A `CupertinoDatePicker` has no intrinsic height — it must be given a
   /// bounded box — and the value is a MEASURE, not a type size, so it lives
@@ -704,9 +723,13 @@ class DesignConstants {
   // not a separate scale — the primary label sits with [kioskName] (19) and
   // the outline label between [kioskSubtitle] (18) and [kioskBody] (17).
   // Applied ONLY through `KioskPrimaryButton` / `KioskOutlineButton`
-  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`) so the whole
-  // kiosk button set scales together and no call site restates a size; the
-  // admin app keeps the `AppPrimaryButton` / `AppOutlineButton` defaults.
+  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`, the check-in
+  // lane) and through `MembershipFlowScale.kiosk()` →
+  // `FlowPrimaryButton` / `FlowOutlineButton`
+  // (`features/membership_flow/presentation/chrome/flow_buttons.dart`, the
+  // signup lane) so the whole kiosk button set scales together and no call
+  // site restates a size; the admin app keeps the `AppPrimaryButton` /
+  // `AppOutlineButton` defaults.
 
   /// Kiosk PRIMARY button label — 19px semibold.
   static TextStyle get kioskButtonPrimaryLabel => baseFont.copyWith(

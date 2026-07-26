@@ -5,11 +5,11 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/utils/validators.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_field_box.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_field_pair.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_box.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_pair.dart';
 
 /// D1 — who you are. First name, last name, email, phone.
 ///
@@ -93,18 +93,18 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
   @override
   Widget build(BuildContext context) {
     final show = _submitted;
-    return KioskSignupStepScaffold(
+    return FlowStepScaffold(
       step: KioskSignupStep.details,
       title: 'Let\'s get you started',
       subtitle: 'Two minutes, and you can train today.',
       // Step 1 has no Back — home is where they came from, and the escape in
       // the left gutter already answers that.
-      foot: KioskFlowFoot(onPrimary: _valid ? _continue : null),
-      child: KioskSignupFormPanel(
+      foot: FlowFoot(onPrimary: _valid ? _continue : null),
+      child: FlowFormPanel(
         children: [
-          KioskSignupFieldPair(
+          FlowFieldPair(
             children: [
-              KioskFieldBox(
+              FlowFieldBox(
                 controller: _firstName,
                 label: 'First name',
                 hintText: 'Marcus',
@@ -112,7 +112,7 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
                 textInputAction: TextInputAction.next,
                 onChanged: (_) => setState(() {}),
               ),
-              KioskFieldBox(
+              FlowFieldBox(
                 controller: _lastName,
                 label: 'Last name',
                 hintText: 'Bell',
@@ -122,7 +122,7 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
               ),
             ],
           ),
-          KioskFieldBox(
+          FlowFieldBox(
             controller: _email,
             label: 'Email',
             hintText: 'you@example.com',
@@ -134,7 +134,7 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
             textInputAction: TextInputAction.next,
             onChanged: (_) => setState(() {}),
           ),
-          KioskFieldBox(
+          FlowFieldBox(
             controller: _phone,
             label: 'Phone',
             // Optional is the EXCEPTION on this step, so it is marked here; on

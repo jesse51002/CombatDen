@@ -19,7 +19,6 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_paying_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_remove_confirm.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
@@ -31,6 +30,9 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_block.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 /// The member-facing SELF-SERVE SIGNUP lane, mounted by `KioskScreen`'s view
@@ -45,6 +47,11 @@ import 'package:crm/features/memberships/data/repositories/memberships_repositor
 /// It hosts its OWN activity listener too: `KioskScreen`'s body-level
 /// `Listener` reads `KioskFlowCubit`, provided ABOVE this subtree, so a signup
 /// tap must answer the guard actually running down here.
+///
+/// It is also the SURFACE that names its own scale: the shared flow components
+/// carry no size of their own and read [MembershipFlowTheme] instead, so the
+/// host mounts `MembershipFlowScale.kiosk()` once, above the step switcher and
+/// every overlay. Nothing below names a surface again.
 class KioskSignupScreen extends StatelessWidget {
   const KioskSignupScreen({super.key});
 
@@ -60,7 +67,10 @@ class KioskSignupScreen extends StatelessWidget {
         session: context.read<KioskSessionCubit>(),
         gymId: selectedGym.gymId!,
       ),
-      child: const _KioskSignupBody(),
+      child: const MembershipFlowTheme(
+        scale: MembershipFlowScale.kiosk(),
+        child: _KioskSignupBody(),
+      ),
     );
   }
 }
@@ -156,7 +166,7 @@ class _PlanBlockOverlay extends StatelessWidget {
       buildWhen: (prev, cur) => prev.planBlockActive != cur.planBlockActive,
       builder: (context, state) {
         if (state.planBlockActive == null) return const SizedBox.shrink();
-        return const KioskPlanBlock();
+        return const FlowPlanBlock();
       },
     );
   }

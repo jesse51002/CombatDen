@@ -6,13 +6,13 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 
 /// "Who's paying?" — pick the member who pays for this signup.
 ///
@@ -41,7 +41,7 @@ class KioskPayerPickStep extends StatelessWidget {
       builder: (context, state) {
         final candidates = state.payerCandidateIndexes;
         final payer = state.payerOrNull;
-        return KioskSignupStepScaffold(
+        return FlowStepScaffold(
           step: KioskSignupStep.payerPick,
           title: 'Who\'s paying?',
           subtitle: payer == null
@@ -52,21 +52,21 @@ class KioskPayerPickStep extends StatelessWidget {
           // Who it is changing FROM, pinned so the answer does not scroll.
           identity: payer == null
               ? null
-              : KioskWhoFor(
+              : FlowWhoFor(
                   eyebrow: 'PAYING NOW',
                   name: '${payer.firstName} ${payer.lastName}'.trim(),
                 ),
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             // The decision is a row in the list, so the foot has no primary.
             onPrimary: null,
             onBack: state.submitting ? null : cubit.back,
           ),
-          child: KioskSignupFormPanel(
+          child: FlowFormPanel(
             children: [
               // A CRM hit already on the roster is a REDIRECT, not a rejection:
               // nothing on this screen has committed anything.
               if (state.payerAlreadyInSignup)
-                const KioskInlineNotice(
+                const FlowInlineNotice(
                   message: 'They\'re already on this signup — pick them from '
                       'the list above.',
                 ),

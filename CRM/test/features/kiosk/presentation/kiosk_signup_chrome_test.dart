@@ -9,14 +9,9 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_proration_note.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
@@ -31,6 +26,13 @@ import 'package:crm/features/member_details/data/repositories/member_repository.
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_rail.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_proration_note.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_doc_panel.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signature_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_type.dart';
@@ -153,6 +155,12 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          child: child!,
+        ),
         home: Scaffold(
           body: BlocProvider<KioskSignupCubit>.value(
             value: cubit,
@@ -196,7 +204,7 @@ void main() {
       expect(cubit.state.activePersonIndex, 0);
       expect(find.text('Pick Marcus\'s membership'), findsOneWidget);
       expect(find.text('Pick your membership'), findsNothing);
-      expect(find.byType(KioskWhoFor), findsOneWidget);
+      expect(find.byType(FlowWhoFor), findsOneWidget);
       expect(find.text('PICKING FOR'), findsOneWidget);
       expect(find.text('Marcus Bell'), findsOneWidget);
 
@@ -218,7 +226,7 @@ void main() {
       expect(find.text('Pick your membership'), findsOneWidget);
       expect(find.text('Pick Marcus\'s membership'), findsNothing);
       // Nobody to disambiguate from, so no strip either.
-      expect(find.byType(KioskWhoFor), findsNothing);
+      expect(find.byType(FlowWhoFor), findsNothing);
       await cubit.close();
     });
 
@@ -232,7 +240,7 @@ void main() {
         cubit.continueToPlans();
         await pump(tester, const KioskPlanPickStep(), size: size);
 
-        for (final label in kKioskGroupFlowSteps) {
+        for (final label in kFlowGroupSteps) {
           expect(find.text(label), findsOneWidget, reason: '$label at $size');
         }
         expect(
@@ -255,15 +263,15 @@ void main() {
       await addElla();
       cubit.continueToPlans();
       await pump(tester, const KioskPlanPickStep());
-      expect(find.byType(KioskPlanCard), findsWidgets);
+      expect(find.byType(FlowPlanCard), findsWidgets);
 
       await tester.drag(
-        find.byType(KioskPlanCard).first,
+        find.byType(FlowPlanCard).first,
         const Offset(0, -600),
       );
       await tester.pump();
 
-      expect(find.byType(KioskWhoFor), findsOneWidget);
+      expect(find.byType(FlowWhoFor), findsOneWidget);
       expect(find.text('Marcus Bell'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -295,7 +303,7 @@ void main() {
 
       expect(cubit.state.activePersonIndex, 0);
       expect(find.text('Marcus\'s waiver'), findsOneWidget);
-      expect(find.byType(KioskWhoFor), findsOneWidget);
+      expect(find.byType(FlowWhoFor), findsOneWidget);
       expect(find.text('WAIVER FOR'), findsOneWidget);
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -307,7 +315,7 @@ void main() {
       await pump(tester, const KioskWaiverStep());
 
       // The document panel takes the fold, not an admin dialog's 240px box.
-      final panel = tester.getSize(find.byType(KioskWaiverDocPanel));
+      final panel = tester.getSize(find.byType(FlowWaiverDocPanel));
       expect(panel.height, greaterThan(320));
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -322,7 +330,7 @@ void main() {
 
       // The footer is still on the fold — a long body cannot push it away.
       expect(find.text('Sign and continue'), findsOneWidget);
-      expect(find.byType(KioskWhoFor), findsOneWidget);
+      expect(find.byType(FlowWhoFor), findsOneWidget);
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
@@ -409,7 +417,7 @@ void main() {
       await atReview(tester, _prorated());
       await pump(tester, const KioskReviewStep());
 
-      expect(find.byType(KioskProrationNote), findsOneWidget);
+      expect(find.byType(FlowProrationNote), findsOneWidget);
       // Derived from the preview's own `next_payment_date`, rendered local,
       // rather than hard-coded against whatever zone the suite runs in.
       expect(
@@ -425,7 +433,7 @@ void main() {
       await atReview(tester, _plain());
       await pump(tester, const KioskReviewStep());
 
-      expect(find.byType(KioskProrationNote), findsNothing);
+      expect(find.byType(FlowProrationNote), findsNothing);
       expect(find.textContaining('part-period'), findsNothing);
       expect(tester.takeException(), isNull);
       await cubit.close();
@@ -436,7 +444,7 @@ void main() {
       await atReview(tester, _proratedPlusOneTime());
       await pump(tester, const KioskReviewStep());
 
-      expect(find.byType(KioskProrationNote), findsOneWidget);
+      expect(find.byType(FlowProrationNote), findsOneWidget);
       expect(
         find.textContaining('two separate charges today'),
         findsOneWidget,

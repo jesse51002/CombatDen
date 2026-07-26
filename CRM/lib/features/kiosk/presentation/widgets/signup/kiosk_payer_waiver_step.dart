@@ -8,13 +8,13 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_sign_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_doc_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_status.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
 /// E3 — the authorized-payer agreement, one per payee.
@@ -109,18 +109,18 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
       },
       builder: (context, state) {
         final controller = _controller;
-        return KioskSignupStepScaffold(
+        return FlowStepScaffold(
           step: KioskSignupStep.waivers,
           title: 'You\'re paying for ${state.activePerson.firstName}',
           subtitle: _subtitle(state),
           // Names the payee this agreement is about. This run is always per
           // person, so it is never omitted here.
-          identity: KioskWhoFor(
+          identity: FlowWhoFor(
             eyebrow: 'PAYING FOR',
             name: _name(state.activePerson),
           ),
           fillBody: true,
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             primaryLabel: 'Sign and continue',
             onPrimary: _canSign(state)
                 ? () => cubit.signPayerAuth(signerName: _signerName.text)
@@ -128,7 +128,7 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
             onBack: state.submitting ? null : cubit.back,
           ),
           child: controller == null
-              ? KioskWaiverStatus(
+              ? FlowWaiverStatus(
                   loading: state.payerAuthLoading,
                   failed: state.payerAuthFailed,
                   onRetry: cubit.retryPayerAuth,
@@ -197,12 +197,12 @@ class _Body extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.payerAuthStale)
-          const KioskInlineNotice(
+          const FlowInlineNotice(
             message: 'The gym updated this agreement — please read and sign '
                 'the new version.',
           ),
         if (state.payerAuthFailed)
-          KioskInlineNotice(
+          FlowInlineNotice(
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),
@@ -213,7 +213,7 @@ class _Body extends StatelessWidget {
             children: [
               Expanded(
                 flex: 3,
-                child: KioskWaiverDocPanel(
+                child: FlowWaiverDocPanel(
                   title: state.payerAuthWaiver?.name ??
                       'Authorized Payer Agreement',
                   controller: controller,
@@ -222,7 +222,7 @@ class _Body extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
-                  child: KioskSignPanel(
+                  child: FlowSignPanel(
                     memberName: payerName,
                     eyebrow: 'YOU ARE SIGNING',
                     bannerNote: 'Authorising yourself to pay for $payeeName.',

@@ -5,10 +5,10 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_optional_fields.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 
 /// D1a and E1a — the optional block: date of birth, address, and an emergency
 /// contact, for whoever the roster is currently about. Always shown, never
@@ -100,7 +100,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
         // courtesy, the latch is the guarantee.
         final busy = state.submitting;
         final commit = payee ? _commitPayee : _commitPayer;
-        return KioskSignupStepScaffold(
+        return FlowStepScaffold(
           step: payee
               ? KioskSignupStep.personDetails
               : KioskSignupStep.extraDetails,
@@ -108,7 +108,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
               ? 'A bit more about ${person.firstName}'
               : 'A bit more about you',
           subtitle: _subtitle(state, payee: payee),
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             primaryLabel:
                 payee ? 'Add ${person.firstName}' : 'Continue',
             onPrimary: busy ? null : commit,
@@ -123,7 +123,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
             spacing: DesignConstants.spacingLarge,
             children: [
               if (state.personDetailsFailed)
-                KioskInlineNotice(
+                FlowInlineNotice(
                   message: 'We couldn\'t save those details. Please try '
                       'again, or skip for now.',
                   onRetry: busy ? null : commit,

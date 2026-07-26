@@ -2,14 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_group_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_side_panel.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_status.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_group_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_side_panel.dart';
 
 /// The review's left half, on the two things it must not get wrong.
 ///
@@ -28,6 +30,12 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          child: child!,
+        ),
         home: Scaffold(body: SingleChildScrollView(child: panel)),
       ),
     );
@@ -39,7 +47,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewSidePanel(state: _soloState()),
+        FlowReviewSidePanel(state: _soloState()),
       );
 
       expect(find.text('m•••••@gmail.com'), findsOneWidget);
@@ -53,7 +61,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewSidePanel(state: _soloState(email: '')),
+        FlowReviewSidePanel(state: _soloState(email: '')),
       );
 
       expect(find.textContaining('•'), findsNothing);
@@ -67,7 +75,7 @@ void main() {
         'charged do not', (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupStateAfterPartial()),
+        FlowReviewGroupPanel(state: _groupStateAfterPartial()),
       );
 
       expect(find.text('Marcus Bell'), findsOneWidget);
@@ -83,7 +91,7 @@ void main() {
     testWidgets('nothing is marked before a start has landed', (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupState()),
+        FlowReviewGroupPanel(state: _groupState()),
       );
 
       // The mark is derived from a LANDED response, never from a person who
@@ -98,7 +106,7 @@ void main() {
       // marking them STARTED would claim a membership they never bought.
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupStateAfterPartial(payerTrains: false)),
+        FlowReviewGroupPanel(state: _groupStateAfterPartial(payerTrains: false)),
       );
 
       expect(find.text('STARTED'), findsOneWidget);

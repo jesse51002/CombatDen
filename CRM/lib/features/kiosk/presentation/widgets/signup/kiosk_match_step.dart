@@ -5,11 +5,11 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// E2 — "Is this the same Ella?" The PAYEE duplicate, offered back for
@@ -35,7 +35,7 @@ class KioskMatchStep extends StatelessWidget {
         final match = state.matchCandidate;
         final searching = state.matchSearchOpen || match == null;
         final busy = state.submitting;
-        return KioskSignupStepScaffold(
+        return FlowStepScaffold(
           step: KioskSignupStep.match,
           title: searching
               ? 'Find them by name'
@@ -45,7 +45,7 @@ class KioskMatchStep extends StatelessWidget {
                   'instead of making a second one.'
               : 'We already train a ${match.fullName}. If it\'s them, we\'ll '
                   'use their account instead of making a second one.',
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             // The decision lives in the panel, so no primary here — it would
             // compete with the two buttons that answer the actual question.
             onPrimary: null,
@@ -53,7 +53,7 @@ class KioskMatchStep extends StatelessWidget {
             onSkip: searching || busy ? null : cubit.openMatchSearch,
             skipLabel: 'Search by name instead',
           ),
-          child: KioskSignupFormPanel(
+          child: FlowFormPanel(
             children: searching
                 ? const [KioskMatchSearch()]
                 : [

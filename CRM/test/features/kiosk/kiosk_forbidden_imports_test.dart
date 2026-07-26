@@ -58,6 +58,40 @@ void main() {
     'lib/features/member_details/presentation/dialogs/add_member/payer_radio_tile.dart',
   ];
 
+  /// Import-path fragments no file in the SHARED component set may reference.
+  /// The set renders both surfaces, so anything only one of them may show has
+  /// to arrive from outside it — a shared widget that reaches for a
+  /// staff-only module is the drift this whole module exists to prevent.
+  const bannedShared = <String>[
+    // The staff-only discount UI + math. It does not exist yet; the guard is
+    // in place FIRST so the surface that adds it lands into a rule rather
+    // than being trusted to remember one.
+    'membership_flow/discounts/',
+    // Any CRM member-detail DIALOG. Those are staff tooling OVER the flow —
+    // a nested dialog that a member-facing kiosk can never open — so a shared
+    // component importing one is a component only one surface can render.
+    'features/member_details/presentation/dialogs/',
+  ];
+
+  /// The roots the shared component set lives under. Both are listed even
+  /// though one currently nests inside the other: `chrome/` is the set's own
+  /// layer and stays guarded wherever it is hoisted to.
+  const sharedRoots = <String>[
+    'lib/features/membership_flow/presentation',
+    'lib/features/membership_flow/chrome',
+  ];
+
+  List<File> dartFilesUnder(Iterable<String> roots) {
+    return [
+      for (final path in roots)
+        if (Directory(path).existsSync())
+          ...Directory(path)
+              .listSync(recursive: true)
+              .whereType<File>()
+              .where((f) => f.path.endsWith('.dart')),
+    ];
+  }
+
   List<File> kioskFiles() {
     final root = Directory('lib/features/kiosk');
     expect(root.existsSync(), isTrue,
@@ -67,6 +101,25 @@ void main() {
         .whereType<File>()
         .where((f) => f.path.endsWith('.dart'))
         .toList();
+  }
+
+  List<String> importOffences(List<File> files, List<String> fragments) {
+    final offences = <String>[];
+    for (final file in files) {
+      final lines = file.readAsLinesSync();
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        if (!line.startsWith('import ') && !line.startsWith('export ')) {
+          continue;
+        }
+        for (final fragment in fragments) {
+          if (line.contains(fragment)) {
+            offences.add('${file.path}:${i + 1} → $fragment');
+          }
+        }
+      }
+    }
+    return offences;
   }
 
   test('every guarded module still exists (the ban is not stale)', () {
@@ -128,6 +181,47 @@ void main() {
           'not a member-entered promo code, not a disabled parameter, not a '
           'comment that invites one. Offending lines:\n'
           '${offences.join('\n')}',
+    );
+  });
+
+  test('the shared component set is non-empty', () {
+    expect(
+      dartFilesUnder(sharedRoots),
+      isNotEmpty,
+      reason: 'the shared membership-flow components moved or were renamed — '
+          'point `sharedRoots` at wherever they live now, or the two guards '
+          'below silently protect nothing',
+    );
+  });
+
+  test('no shared flow component imports a staff-only module', () {
+    final offences =
+        importOffences(dartFilesUnder(sharedRoots), bannedShared);
+    expect(
+      offences,
+      isEmpty,
+      reason: 'A component in the shared set renders BOTH surfaces, so it may '
+          'never reach for something only one of them has. A staff-only '
+          'capability is INJECTED by the host that owns it (the kiosk factory '
+          'cannot construct one, which is what keeps the no-discounts rule '
+          'structural rather than a `showDiscounts: false` default). Offending '
+          'imports:\n${offences.join('\n')}',
+    );
+  });
+
+  test('no shared flow component imports the kiosk\'s banned modules either',
+      () {
+    // The kiosk renders every one of these, so the fresh-card law reaches
+    // through them: a saved-card or payer-selection surface pulled in HERE
+    // lands on the kiosk without ever appearing under `lib/features/kiosk/`.
+    final offences = importOffences(dartFilesUnder(sharedRoots), banned);
+    expect(
+      offences,
+      isEmpty,
+      reason: 'The kiosk renders the shared component set, so its bans apply '
+          'to the set as well — otherwise moving a file out of '
+          '`lib/features/kiosk/` would be enough to escape them. Offending '
+          'imports:\n${offences.join('\n')}',
     );
   });
 }

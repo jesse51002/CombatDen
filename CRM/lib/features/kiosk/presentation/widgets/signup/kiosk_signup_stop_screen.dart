@@ -144,7 +144,7 @@ class _WhyBox extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         spacing: DesignConstants.spacingSmall,
         children: [
-          Text('WHY', style: DesignConstants.kioskEyebrow),
+          Text('WHY', style: DesignConstants.eyebrow),
           Text(reason, style: DesignConstants.kioskStatement),
         ],
       ),

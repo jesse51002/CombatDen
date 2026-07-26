@@ -42,8 +42,11 @@ void main() {
         'kioskCaption': DesignConstants.kioskCaption,
         'kioskMicro': DesignConstants.kioskMicro,
         'kioskMonoValue': DesignConstants.kioskMonoValue,
-        'kioskEyebrow': DesignConstants.kioskEyebrow,
-        'kioskTag': DesignConstants.kioskTag,
+        // The tail two carry no `kiosk` prefix: they measure the same at both
+        // reading distances, so they were promoted to shared roles. They are
+        // still the bottom of this ladder and still move with it.
+        'eyebrow': DesignConstants.eyebrow,
+        'tag': DesignConstants.tag,
       };
 
   group('kiosk type ramp ordering', () {
@@ -181,8 +184,8 @@ void main() {
       });
     });
 
-    testWidgets('the kiosk eyebrow reads on text2nd', (tester) async {
-      expect(DesignConstants.kioskEyebrow.color, DesignConstants.text2nd);
+    testWidgets('the eyebrow reads on text2nd', (tester) async {
+      expect(DesignConstants.eyebrow.color, DesignConstants.text2nd);
     });
   });
 }

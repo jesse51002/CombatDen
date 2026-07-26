@@ -61,7 +61,7 @@ class _Identity extends StatelessWidget {
               ),
               Text(
                 'Check in',
-                style: DesignConstants.kioskTag.copyWith(
+                style: DesignConstants.tag.copyWith(
                   color: DesignConstants.text2nd,
                   fontWeight: FontWeight.w600,
                 ),

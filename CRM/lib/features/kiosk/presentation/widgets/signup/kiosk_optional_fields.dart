@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_dob_field.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_field_box.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_detail_group.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_field_pair.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_detail_group.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_dob_field.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_box.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_pair.dart';
 
 /// The optional block's five fields — date of birth, address, and an
 /// emergency contact — in the ONE layout used for everyone on the roster.
@@ -33,14 +33,14 @@ class KioskOptionalFields extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return KioskSignupFormPanel(
+    return FlowFormPanel(
       children: [
-        KioskSignupDetailGroup(
+        FlowDetailGroup(
           children: [
-            KioskSignupFieldPair(
+            FlowFieldPair(
               children: [
-                KioskDobField(value: dob, onChanged: onDobChanged),
-                KioskFieldBox(
+                FlowDobField(value: dob, onChanged: onDobChanged),
+                FlowFieldBox(
                   controller: address,
                   label: 'Address',
                   hintText: 'Street, city, ZIP',
@@ -51,26 +51,26 @@ class KioskOptionalFields extends StatelessWidget {
             ),
           ],
         ),
-        KioskSignupDetailGroup(
+        FlowDetailGroup(
           eyebrow: 'Emergency contact',
           children: [
-            KioskFieldBox(
+            FlowFieldBox(
               controller: ecName,
               label: 'Name',
               hintText: 'Who we should call',
               icon: Symbols.person_sharp,
               textInputAction: TextInputAction.next,
             ),
-            KioskSignupFieldPair(
+            FlowFieldPair(
               children: [
-                KioskFieldBox(
+                FlowFieldBox(
                   controller: ecPhone,
                   label: 'Phone',
                   hintText: '(555) 000-0000',
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.next,
                 ),
-                KioskFieldBox(
+                FlowFieldBox(
                   controller: ecEmail,
                   label: 'Email',
                   hintText: 'dana@example.com',

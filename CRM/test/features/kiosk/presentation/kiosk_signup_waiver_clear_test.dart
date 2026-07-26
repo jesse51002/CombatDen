@@ -7,7 +7,6 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_field_box.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waiver_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_step.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
@@ -20,6 +19,9 @@ import 'package:crm/features/member_details/data/models/membership_plan_response
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_field_box.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signature_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_type.dart';
@@ -138,6 +140,12 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          child: child!,
+        ),
         home: Scaffold(
           body: BlocProvider<KioskSignupCubit>.value(
             value: cubit,
@@ -171,10 +179,10 @@ void main() {
   /// The signer-name field's current text — its controller IS the step's
   /// `_signerName`, so this is exactly what a member would see typed.
   String signerText(WidgetTester tester) =>
-      tester.widget<KioskFieldBox>(find.byType(KioskFieldBox)).controller.text;
+      tester.widget<FlowFieldBox>(find.byType(FlowFieldBox)).controller.text;
 
   Finder signerField() => find.descendant(
-        of: find.byType(KioskFieldBox),
+        of: find.byType(FlowFieldBox),
         matching: find.byType(TextField),
       );
 
@@ -193,7 +201,7 @@ void main() {
     await pump(tester, const KioskWaiverStep());
     await tester.pump();
     expect(cubit.state.currentWaiverId, 'waiver-1');
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
 
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
@@ -205,7 +213,7 @@ void main() {
     expect(cubit.state.currentWaiverId, 'waiver-2');
 
     // THE INVARIANT: the second document opens with nothing pre-typed.
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
     expect(signerText(tester), isEmpty);
     await cubit.close();
   });
@@ -234,7 +242,7 @@ void main() {
     await tester.pump();
     expect(cubit.state.payerAuthPending, isFalse);
     expect(cubit.state.activePersonIndex, 1); // Ella
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
 
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
@@ -247,7 +255,7 @@ void main() {
     expect(cubit.state.activePersonIndex, 0); // Marcus now
 
     // THE INVARIANT: a different person's typed name never carries over.
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
     expect(signerText(tester), isEmpty);
     await cubit.close();
   });
@@ -276,7 +284,7 @@ void main() {
     await tester.pump();
     expect(cubit.state.payerAuthPending, isTrue);
     expect(cubit.state.activePersonIndex, 1); // Ella
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
 
     await tester.enterText(signerField(), 'Marcus Bell');
     await tester.pump();
@@ -290,7 +298,7 @@ void main() {
     expect(cubit.state.activePersonIndex, 2); // Theo now
 
     // THE INVARIANT: even the same payer's second authorisation opens empty.
-    expect(find.byType(KioskFieldBox), findsOneWidget);
+    expect(find.byType(FlowFieldBox), findsOneWidget);
     expect(signerText(tester), isEmpty);
     await cubit.close();
   });

@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_dob_field.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_dob_field.dart';
 
 /// An UNTOUCHED wheel may not commit a date of birth.
 ///
@@ -27,9 +29,15 @@ void main() {
     DateTime? value = initial;
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          child: child!,
+        ),
         home: Scaffold(
           body: StatefulBuilder(
-            builder: (context, setState) => KioskDobField(
+            builder: (context, setState) => FlowDobField(
               value: value,
               onChanged: (picked) {
                 changes.add(picked);
@@ -52,10 +60,10 @@ void main() {
     expect(find.byType(CupertinoDatePicker), findsOneWidget);
   }
 
-  Finder doneButton() => find.widgetWithText(KioskPrimaryButton, 'Done');
+  Finder doneButton() => find.widgetWithText(FlowPrimaryButton, 'Done');
 
-  KioskPrimaryButton done(WidgetTester tester) =>
-      tester.widget<KioskPrimaryButton>(doneButton());
+  FlowPrimaryButton done(WidgetTester tester) =>
+      tester.widget<FlowPrimaryButton>(doneButton());
 
   testWidgets('Done is inert until the wheel reports a date, and pressing it '
       'commits nothing', (tester) async {
@@ -93,7 +101,7 @@ void main() {
     expect(picked, isNotNull);
     // The wheel's reported date, never the opening position it was seeded with.
     expect(picked!.year, lessThan(today.year));
-    expect(find.text(KioskDobField.display(picked)), findsOneWidget);
+    expect(find.text(FlowDobField.display(picked)), findsOneWidget);
   });
 
   testWidgets('a date already held is what Done re-commits, no turn needed',
@@ -116,7 +124,7 @@ void main() {
     final changes = await pumpField(tester, initial: DateTime(1994, 3, 7));
     await openSheet(tester);
 
-    await tester.tap(find.widgetWithText(KioskOutlineButton, 'Clear'));
+    await tester.tap(find.widgetWithText(FlowOutlineButton, 'Clear'));
     await tester.pumpAndSettle();
 
     // An explicit null — the answer an untouched wheel can never give.

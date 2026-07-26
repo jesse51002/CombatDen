@@ -5,13 +5,13 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_picked_banner.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/fill_grid.dart';
 
@@ -78,7 +78,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
         builder: (context, state) {
           final picked = state.activePerson.selectedPlanId;
           final pickedPlan = state.planById(picked);
-          return KioskSignupStepScaffold(
+          return FlowStepScaffold(
             step: KioskSignupStep.plans,
             title: _title(state),
             subtitle: _subtitle(state),
@@ -87,12 +87,12 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
             // memberships in a row must never buy the wrong one for the wrong
             // child. Solo has only one person to mean, so it is omitted.
             identity: state.isGroup
-                ? KioskWhoFor(
+                ? FlowWhoFor(
                     eyebrow: 'PICKING FOR',
                     name: _fullName(state),
                   )
                 : null,
-            foot: KioskFlowFoot(
+            foot: FlowFoot(
               onPrimary: picked == null ? null : cubit.continueFromPlans,
               onBack: cubit.back,
               // Skip is GROUP-only (founder ruling): skipping the sole person
@@ -183,9 +183,9 @@ class _PlanGrid extends StatelessWidget {
         // Context first, then the pick just made. The notice NAMES the
         // membership this person already holds, so a marked card has its answer
         // above it and not only behind a tap; it is self-gating.
-        if (held != null) KioskInlineNotice(message: held),
+        if (held != null) FlowInlineNotice(message: held),
         if (pickedPlanName != null)
-          KioskPlanPickedBanner(planName: pickedPlanName!),
+          FlowPlanPickedBanner(planName: pickedPlanName!),
         FillGrid(
           // Three across on the kiosk stage, degrading to two on a narrower
           // fold — the class grid's own numbers.
@@ -235,7 +235,7 @@ class _PlanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reason = state.planBlockReason(plan);
-    return KioskPlanCard(
+    return FlowPlanCard(
       plan: plan,
       selected: selected,
       // A blocked plan can never be selected; the cubit turns its tap into the

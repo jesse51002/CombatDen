@@ -5,13 +5,13 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_result_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_two_charges_note.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_result_row.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_two_charges_note.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// D7a — the per-person receipt for a landed start: who got what, whether it
@@ -43,7 +43,7 @@ class KioskResultsScreen extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final allCreated = state.allCreated;
-        return KioskSignupStepScaffold(
+        return FlowStepScaffold(
           step: KioskSignupStep.results,
           title: allCreated
               ? 'You\'re all set'
@@ -122,7 +122,7 @@ class _Body extends StatelessWidget {
         // a real option — the front desk finishes the rest. Without that second
         // sentence `Next` is illegible beside "Retry the rest".
         if (!allCreated)
-          const KioskInlineNotice(
+          const FlowInlineNotice(
             message: 'The ones marked Started are paid for. Trying again only '
                 'charges for the ones that didn\'t go through. Or tap Next and '
                 'ask the front desk to finish the rest.',
@@ -132,7 +132,7 @@ class _Body extends StatelessWidget {
         // retrying. On the all-created branch it is noise.
         if (!allCreated)
           Center(
-            child: KioskCardChip(
+            child: FlowCardChip(
               brand: state.cardBrand,
               last4: state.cardLast4,
             ),
@@ -169,16 +169,16 @@ class _ResultsPanel extends StatelessWidget {
         children: [
           Text(
             state.isGroup ? 'MEMBERSHIPS' : 'YOUR MEMBERSHIP',
-            style: DesignConstants.kioskEyebrow,
+            style: DesignConstants.eyebrow,
           ),
           for (var i = 0; i < rows.length; i++) ...[
             if (i > 0) const Hairline(),
-            KioskResultRow(label: rows[i].label, status: rows[i].item.status),
+            FlowResultRow(label: rows[i].label, status: rows[i].item.status),
           ],
           // All-created only: on a partial one of the two charges did not
           // happen, so "two separate charges" would be false.
           if (allCreated && state.chargedTwiceToday)
-            const KioskTwoChargesNote(),
+            const FlowTwoChargesNote(),
           // NOT a receipt line — nothing emails a receipt. There is no mailer,
           // and the connected account notifies on a FAILED payment only, so
           // promising one here would be a falsehood told at the moment money
