@@ -117,7 +117,15 @@ MAX_PAGE_LIMIT = 100
         "possibly across gyms. An email that is nobody's member returns an "
         "empty list (a valid state), not an error. Requires only a CONFIRMED "
         "auth account for the email claim (``verify_verified_account``); no "
-        "``member_id`` exists to scope yet."
+        "``member_id`` exists to scope yet.\n\n"
+        "Each row also carries its gym's CAPABILITY flags — "
+        "``gym_rank_enabled`` (the gym's rank toggle), ``gym_has_rewards`` "
+        "(the gym has at least one ACTIVE reward) and ``gym_has_videos`` "
+        "(the gym's feed would serve at least one video) — so the app can "
+        "decide which bottom-nav tabs to render at first paint, from cache, "
+        "without a second round trip. The latter two are DERIVED from the same "
+        "predicates ``GET …/rewards`` and ``GET …/videos`` use, so a flag can "
+        "never disagree with the screen behind the tab."
     ),
     responses={
         200: {"description": "The caller's member rows (possibly empty)"},
@@ -157,11 +165,17 @@ async def list_my_members(
     summary="The member's own profile",
     description=(
         "The app's home-screen payload: identity + contact block, retention "
-        "(points balance, class streak, last class, videos watched), rank "
-        "progress, membership cards, and recent / pending reward "
-        "redemptions. There is no separate points-balance or rank-progress "
-        "route — both live here (``retention.points_balance`` / ``rank``). "
-        "Gated by ``verify_member_self`` on the path gym."
+        "(points balance, class streak, this week's attended weekdays, last "
+        "class, videos watched), rank progress, membership cards, and recent "
+        "/ pending reward redemptions. There is no separate points-balance or "
+        "rank-progress route — both live here (``retention.points_balance`` / "
+        "``rank``). ``retention.current_week_attended_weekdays`` is the week "
+        "strip: SUNDAY-FIRST weekday indices (0 = Sunday … 6 = Saturday) over "
+        "the SAME gym-local week ``class_streak_weeks`` is measured on, so "
+        "the strip and the streak number can never disagree — and a "
+        "rank-disabled gym can render the streak as the profile's centrepiece "
+        "without a second call. Gated by ``verify_member_self`` on the path "
+        "gym."
     ),
     responses={
         200: {"description": "Profile returned"},

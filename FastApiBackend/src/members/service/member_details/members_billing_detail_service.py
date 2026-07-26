@@ -11,6 +11,7 @@ from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.checkin.schema.checkin_schema import StreakResult
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.members import SQL_DIR
@@ -113,7 +114,15 @@ class MembersBillingDetailService:
             member_id,
         )
         await supplementary.load()
-        streak_weeks = await self._streak_service.get_streak(member_id, gym_id)
+        # ``get_streak_details``, not ``get_streak``: the retention block now
+        # carries the CURRENT week's attended weekdays alongside the week
+        # count, and this is the ONE call that derives both from the same
+        # session and the same gym-local Monday anchor. Deriving the strip
+        # anywhere else would be a second definition of "an attended class"
+        # that could disagree with the number rendered beside it.
+        streak = await self._streak_service.get_streak_details(
+            member_id, gym_id
+        )
 
         # The query returns the viewed member + every member they PAY FOR
         # (paid_by_member_id) so `pays_for` (the freeze-impact roster) can see
@@ -156,7 +165,7 @@ class MembersBillingDetailService:
             pays_for=pays_for,
             redeemed_rewards=supplementary.redeemed_rewards,
             pending_redemptions=supplementary.pending_redemptions,
-            streak_weeks=streak_weeks,
+            streak=streak,
             # Per-payer semantics: the QUERIED member's own row carries what
             # THEY pay monthly (the sync writes each payer's own total; a
             # member who pays nothing reads 0).
@@ -224,7 +233,7 @@ class MembersBillingDetailService:
         pays_for: list,
         redeemed_rewards: list,
         pending_redemptions: list[PendingRedemptionCard],
-        streak_weeks: int,
+        streak: StreakResult,
         total_monthly_recurring_price: int,
         today: date,
         next_rank_image_url: str | None,
@@ -259,9 +268,18 @@ class MembersBillingDetailService:
             memberships=grouped,
             retention=BillingRetention(
                 last_class=target_row["last_class"],
-                class_streak_weeks=streak_weeks,
+                class_streak_weeks=streak.weeks,
                 points_balance=(target_row["points_balance"] or 0),
                 videos_watched=0,
+                # Sunday-first (0 = Sunday) because that is the origin the
+                # member app's week strip renders against; the WEEK is still
+                # the streak's gym-local Monday-start week, so both numbers
+                # describe the same seven days.
+                current_week_attended_weekdays=(
+                    StreakService.sunday_first_attended_indices(
+                        streak.current_week_days
+                    )
+                ),
             ),
             rank=self._build_rank(target_row, next_rank_image_url),
             recently_redeemed_rewards=redeemed_rewards,

@@ -8,7 +8,9 @@ existing owner:
 1. ``list_members_for_email`` — the portal's ENTRY POINT. No existing service
    answers "which member rows bear this verified email", because no CRM route
    ever needs to: staff always come in holding a ``member_id``. A member's app
-   holds only a JWT.
+   holds only a JWT. It also carries each gym's three CAPABILITY flags
+   (``gym_rank_enabled`` / ``gym_has_rewards`` / ``gym_has_videos``), which the
+   app uses to decide which bottom-nav tabs exist.
 2. ``get_profile`` — projects the CRM's ``MemberBillingDetailResponse`` down
    to the member-appropriate ``MemberPortalProfile``. A field projection, not
    business logic: every number is computed by
@@ -71,6 +73,12 @@ class MemberPortalService:
         inbox), so this is always a list. An email that matches nothing
         returns an empty list, not an error: a signed-in person who is
         nobody's member is a valid, empty state.
+
+        Each row carries its gym's display block AND its three capability
+        flags — ``gym_rank_enabled`` (the stored toggle) plus
+        ``gym_has_rewards`` / ``gym_has_videos``, both DERIVED from the same
+        predicates the member-facing rewards list and video feed use, so a flag
+        can never disagree with the screen behind the tab.
 
         Args:
             email: The caller's lowercased, already-verified email claim.

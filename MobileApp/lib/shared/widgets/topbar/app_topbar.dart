@@ -25,6 +25,7 @@ class AppTopbar extends StatelessWidget {
     required this.showBackButton,
     required this.gymName,
     required this.logoAsset,
+    this.gymLogoUrl,
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
@@ -42,6 +43,10 @@ class AppTopbar extends StatelessWidget {
   final bool showBackButton;
   final String gymName;
   final String logoAsset;
+
+  /// The gym's own uploaded logo (`gyms.logo_url`), preferred over the
+  /// theme's mark in the [AppTopbarMode.bigLogo] variant.
+  final String? gymLogoUrl;
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
@@ -97,6 +102,7 @@ class AppTopbar extends StatelessWidget {
             showBackButton: showBackButton,
             gymName: gymName,
             logoAsset: logoAsset,
+            gymLogoUrl: gymLogoUrl,
             memberName: memberName,
             memberPhotoUrl: memberPhotoUrl,
             memberFirstName: memberFirstName,

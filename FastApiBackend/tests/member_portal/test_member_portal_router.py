@@ -171,8 +171,27 @@ def _profile(gym_id: str, member_id: str) -> MemberPortalProfile:
             class_streak_weeks=3,
             points_balance=250,
             videos_watched=7,
+            # Sunday-first: 1 = Monday, 3 = Wednesday.
+            current_week_attended_weekdays=[1, 3],
         ),
     )
+
+
+def _identity(gym_id: str, **overrides) -> MemberPortalIdentity:
+    """One identity row with every gym-capability flag ON by default."""
+    fields = {
+        "member_id": uuid4(),
+        "gym_id": UUID(gym_id),
+        "gym_name": "Test Gym",
+        "gym_address": "1200 Combat Ave, Austin, TX 78701",
+        "gym_rank_enabled": True,
+        "gym_has_rewards": True,
+        "gym_has_videos": True,
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+    }
+    fields.update(overrides)
+    return MemberPortalIdentity(**fields)
 
 
 def _reward(gym_id: str, reward_id: str) -> RewardResponse:
@@ -225,16 +244,7 @@ def test_list_my_members_uses_verified_account_gate(
 ):
     portal_service_mock.list_members_for_email = AsyncMock(
         return_value=MemberPortalIdentityListResponse(
-            members=[
-                MemberPortalIdentity(
-                    member_id=uuid4(),
-                    gym_id=UUID(fake_gym_id),
-                    gym_name="Test Gym",
-                    gym_address="1200 Combat Ave, Austin, TX 78701",
-                    first_name="Ada",
-                    last_name="Lovelace",
-                )
-            ]
+            members=[_identity(fake_gym_id)]
         )
     )
 
@@ -265,6 +275,68 @@ def test_list_my_members_allows_an_empty_result(
 
     assert resp.status_code == 200
     assert resp.json()["members"] == []
+
+
+def test_identity_carries_the_three_gym_capability_flags(
+    client, auth_headers, portal_service_mock, fake_gym_id
+):
+    """The app picks its bottom-nav tabs off THIS payload.
+
+    All three flags must reach the wire on the identity read — it is fetched
+    once at boot and cached, so a missing flag means a tab is wrong at first
+    paint (and stays wrong offline).
+    """
+    on_gym = str(uuid4())
+    portal_service_mock.list_members_for_email = AsyncMock(
+        return_value=MemberPortalIdentityListResponse(
+            members=[
+                _identity(fake_gym_id),
+                _identity(
+                    on_gym,
+                    gym_name="ZZ Bare Gym",
+                    gym_rank_enabled=False,
+                    gym_has_rewards=False,
+                    gym_has_videos=False,
+                ),
+            ]
+        )
+    )
+
+    resp = client.get("/api/v1/member/members", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    by_gym = {row["gym_id"]: row for row in resp.json()["members"]}
+    assert by_gym[fake_gym_id]["gym_rank_enabled"] is True
+    assert by_gym[fake_gym_id]["gym_has_rewards"] is True
+    assert by_gym[fake_gym_id]["gym_has_videos"] is True
+    # Per-GYM, not per-caller: a family spanning gyms gets a different tab set
+    # per row.
+    assert by_gym[on_gym]["gym_rank_enabled"] is False
+    assert by_gym[on_gym]["gym_has_rewards"] is False
+    assert by_gym[on_gym]["gym_has_videos"] is False
+
+
+def test_profile_carries_the_current_week_strip_sunday_first(
+    client, auth_headers, portal_service_mock, fake_gym_id, fake_member_id
+):
+    """The week strip rides the PROFILE payload, Sunday-first.
+
+    A rank-disabled gym makes the streak the profile's centrepiece, so the
+    seven dots must come from the same call — not from a second fetch of the
+    whole class history.
+    """
+    portal_service_mock.get_profile = AsyncMock(
+        return_value=_profile(fake_gym_id, fake_member_id)
+    )
+
+    resp = client.get(_base(fake_gym_id, fake_member_id), headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    retention = resp.json()["retention"]
+    # 1 = Monday, 3 = Wednesday on the Sunday-first strip the member app's
+    # StreakWeekStrip renders (0 = Sunday .. 6 = Saturday).
+    assert retention["current_week_attended_weekdays"] == [1, 3]
+    assert retention["class_streak_weeks"] == 3
 
 
 # ── profile / streak / history ────────────────────────────────────

@@ -28,6 +28,7 @@ class TopbarHeaderSection extends StatelessWidget {
     required this.showBackButton,
     required this.gymName,
     required this.logoAsset,
+    this.gymLogoUrl,
     required this.onTitleTap,
     this.memberName,
     this.memberPhotoUrl,
@@ -40,6 +41,10 @@ class TopbarHeaderSection extends StatelessWidget {
   final bool showBackButton;
   final String gymName;
   final String logoAsset;
+
+  /// The gym's own uploaded logo (`gyms.logo_url`), preferred over the
+  /// theme's mark in the [AppTopbarMode.bigLogo] variant.
+  final String? gymLogoUrl;
 
   /// The selected member's display name — the avatar's accessibility label.
   /// Null/blank still renders the avatar (on its person-glyph fallback).
@@ -65,7 +70,11 @@ class TopbarHeaderSection extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: _kFlankInset),
           child: mode == AppTopbarMode.bigLogo
-              ? GymHeader(gymName: gymName, logoAsset: logoAsset)
+              ? GymHeader(
+                  gymName: gymName,
+                  logoAsset: logoAsset,
+                  gymLogoUrl: gymLogoUrl,
+                )
               : _GymNameLabel(gymName: gymName),
         ),
       ),

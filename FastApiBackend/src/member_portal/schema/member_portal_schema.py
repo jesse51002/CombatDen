@@ -45,9 +45,25 @@ class MemberPortalIdentity(BaseModel):
         gym_logo_url: The gym's logo, when set.
         gym_address: The gym's street address, when set — free text the app
             shows for directions.
+        gym_rank_enabled: Whether the gym runs a rank ladder at all
+            (``gyms.is_rank_enabled``). False hides every rank surface.
+        gym_has_rewards: Whether the gym has at least one ACTIVE reward — the
+            same set ``GET …/rewards`` serves the member. Derived from data,
+            never a toggle.
+        gym_has_videos: Whether the gym's video feed would serve at least one
+            video — the same served predicate ``GET …/videos`` pages over
+            (enriched AND accepted, owner section or latest completed run).
+            Derived from data, never a toggle.
         first_name: The member's first name.
         last_name: The member's last name.
         photo_url: The member's photo, when set.
+
+    The three capability flags ride the IDENTITY read rather than the profile
+    read because the client uses them to decide which BOTTOM NAV TABS exist:
+    identity is fetched once at boot and cached, so the tab bar is right at
+    first paint and survives offline. They are required (no default) on
+    purpose — a missing column must fail loudly rather than silently hide a
+    tab the gym actually offers.
     """
 
     member_id: UUID
@@ -55,6 +71,9 @@ class MemberPortalIdentity(BaseModel):
     gym_name: str
     gym_logo_url: str | None = None
     gym_address: str | None = None
+    gym_rank_enabled: bool
+    gym_has_rewards: bool
+    gym_has_videos: bool
     first_name: str
     last_name: str
     photo_url: str | None = None
@@ -75,10 +94,15 @@ class MemberPortalProfile(BaseModel):
     """One member's own profile — the app's home screen payload.
 
     Carries the member's identity, contact block, retention stats (points
-    balance, class streak, last class, videos watched), rank progress, their
-    membership cards, and their recent / pending reward redemptions. There is
-    no separate points-balance or rank endpoint: both live here
-    (``retention.points_balance`` / ``rank``).
+    balance, class streak, THIS WEEK's attended weekdays, last class, videos
+    watched), rank progress, their membership cards, and their recent /
+    pending reward redemptions. There is no separate points-balance or rank
+    endpoint: both live here (``retention.points_balance`` / ``rank``).
+
+    ``retention.current_week_attended_weekdays`` is the profile's week strip —
+    SUNDAY-FIRST indices over the streak's own gym-local week, so a gym with
+    ranks disabled can make the streak the screen's centrepiece without a
+    second call to build seven dots (see ``BillingRetention``).
     """
 
     member_id: UUID

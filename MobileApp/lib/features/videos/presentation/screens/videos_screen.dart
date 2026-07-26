@@ -246,6 +246,7 @@ class _Topbar extends StatelessWidget {
           memberFirstName: selectedMember.firstName,
           memberLastName: selectedMember.lastName,
           logoAsset: _kDefaultLogoAsset,
+          gymLogoUrl: selectedMember.gymLogoUrl,
           streakDays: retention?.classStreakWeeks ?? 0,
           pointsLabel:
               retention != null ? formatCount(retention.pointsBalance) : '—',
