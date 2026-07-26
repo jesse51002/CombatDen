@@ -18,14 +18,23 @@ String _routeFor(AppBottomNavTab tab) {
 
 const double _kBottomNavRowHeight = 64;
 
+/// The nav's cell grid is always FOUR columns wide, whatever the tab count.
+const int _kBottomNavColumns = 4;
+
 class AppBottomNavBar extends StatelessWidget {
   const AppBottomNavBar({
     super.key,
     required this.selected,
+    this.tabs = AppBottomNavTab.values,
     this.onTabSelected,
   });
 
   final AppBottomNavTab selected;
+
+  /// The tabs to render, in order. Defaults to the full set; every screen in
+  /// the app passes the gym's filtered set (`gymNavTabs()` in `nav_tabs.dart`).
+  final List<AppBottomNavTab> tabs;
+
   final ValueChanged<AppBottomNavTab>? onTabSelected;
 
   @override
@@ -44,20 +53,31 @@ class AppBottomNavBar extends StatelessWidget {
       padding: EdgeInsets.only(bottom: bottomInset),
       child: SizedBox(
         height: _kBottomNavRowHeight,
-        child: Row(
-          children: AppBottomNavTab.values
-              .map(
-                (tab) => Expanded(
-                  child: AppNavItem(
-                    icon: _iconFor(tab),
-                    iconSlot: _iconSlotFor(tab),
-                    label: _labelFor(tab),
-                    isActive: tab == selected,
-                    onTap: () => _handleTap(context, tab),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // A cell is ALWAYS a quarter of the bar, and the row is centred.
+            // At four tabs this is pixel-identical to an `Expanded` split; at
+            // three it leaves a symmetric gutter, and at two a centred pair —
+            // every tab keeps the same icon, label and tap geometry instead of
+            // a 24pt icon marooned in half a phone.
+            final cellWidth = constraints.maxWidth / _kBottomNavColumns;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (final tab in tabs)
+                  SizedBox(
+                    width: cellWidth,
+                    child: AppNavItem(
+                      icon: _iconFor(tab),
+                      iconSlot: _iconSlotFor(tab),
+                      label: _labelFor(tab),
+                      isActive: tab == selected,
+                      onTap: () => _handleTap(context, tab),
+                    ),
                   ),
-                ),
-              )
-              .toList(growable: false),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -93,7 +113,11 @@ class AppBottomNavBar extends StatelessWidget {
   String _labelFor(AppBottomNavTab tab) {
     return switch (tab) {
       AppBottomNavTab.home => 'Home',
-      AppBottomNavTab.rank => 'Rank',
+      // The tab is the member's whole retention surface — streak, week strip
+      // and (only at a rank-enabled gym) the rank block — so it reads
+      // "Profile". The enum value and the `nav_rank` icon slot keep their
+      // names: they are the theme/route contract, not the label.
+      AppBottomNavTab.rank => 'Profile',
       AppBottomNavTab.reward => 'Reward',
       AppBottomNavTab.videos => 'Videos',
     };

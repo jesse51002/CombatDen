@@ -1,6 +1,7 @@
 import 'package:mobile_app/features/profile/data/models/member_profile.dart';
 import 'package:mobile_app/features/stats/data/celebration_data.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
+import 'package:mobile_app/features/stats/data/streak_week_days.dart';
 
 /// Builds the celebration cards' view-models from LIVE data — the shared
 /// [MemberProfile] (streak / points / rank) plus the triggering occurrence's
@@ -12,9 +13,6 @@ import 'package:mobile_app/features/stats/data/mock_stats.dart';
 /// re-layout. This is the one place that constructs them from live values; the
 /// screens call these builders instead of importing the demo constants.
 
-/// Sunday-first day letters for the streak strip.
-const List<String> _kDayLabels = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
 MockStreakStats buildStreakStats(MemberProfile? profile, CelebrationData data) {
   final completed = (data.completedWeekdayIndices ??
           <int>[if (data.occurredAt != null) data.occurredAt!.weekday % 7])
@@ -22,10 +20,7 @@ MockStreakStats buildStreakStats(MemberProfile? profile, CelebrationData data) {
   return MockStreakStats(
     weekCount: profile?.retention.classStreakWeeks ?? 0,
     subtitle: '+${data.pointsWorth} points',
-    weekDays: [
-      for (var i = 0; i < _kDayLabels.length; i++)
-        MockStreakDay(label: _kDayLabels[i], completed: completed.contains(i)),
-    ],
+    weekDays: streakWeekDays(completed),
   );
 }
 

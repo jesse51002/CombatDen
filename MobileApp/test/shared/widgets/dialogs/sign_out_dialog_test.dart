@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/shared/widgets/dialogs/sign_out_dialog.dart';
 
 /// Opens the dialog from a button and records what it resolved to.
@@ -55,6 +57,28 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(results, [false]);
+    });
+
+    testWidgets('a rank-OFF gym does not promise a rank back', (tester) async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      SharedPreferences.setMockInitialValues({});
+      await selectedMember.select(
+        memberId: 'm1',
+        gymId: 'g1',
+        gymName: 'Global MMA',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        gymRankEnabled: false,
+      );
+      addTearDown(selectedMember.reset);
+
+      await _open(tester);
+
+      expect(
+        find.textContaining('Your streak and points stay'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('rank'), findsNothing);
     });
   });
 }

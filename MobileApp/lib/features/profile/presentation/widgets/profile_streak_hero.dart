@@ -10,7 +10,13 @@ import 'package:mobile_app/shared/widgets/sparkle_hero/sparkle_hero.dart';
 /// streak changes so the sparkle animation isn't restarted by unrelated
 /// profile updates.
 class ProfileStreakHero extends StatelessWidget {
-  const ProfileStreakHero({super.key});
+  const ProfileStreakHero({super.key, this.allowZeroState = false});
+
+  /// Opt in to the ZERO-streak copy ("START YOUR / STREAK / BOOK A CLASS",
+  /// sparkles suppressed). Only the rank-less profile — where this hero is the
+  /// whole screen — turns it on; a rank-enabled profile keeps the count hero
+  /// verbatim, because it has a rank block carrying the page either way.
+  final bool allowZeroState;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +25,20 @@ class ProfileStreakHero extends StatelessWidget {
           p.profile?.retention.classStreakWeeks !=
           c.profile?.retention.classStreakWeeks,
       builder: (context, state) {
-        final weeks = state.profile?.retention.classStreakWeeks ?? 0;
+        final loaded = state.profile?.retention;
+        final weeks = loaded?.classStreakWeeks ?? 0;
+        // "0 WEEK STREAK" celebrates nothing — name the goal instead, and drop
+        // the sparkles, which are the earned part. Only on a LOADED profile:
+        // an unresolved fetch must not tell a member with a streak to start
+        // one.
+        if (allowZeroState && loaded != null && weeks == 0) {
+          return SparkleHero(
+            top: 'START YOUR',
+            accent: 'STREAK',
+            bottom: 'BOOK A CLASS',
+            showSparkles: false,
+          );
+        }
         return SparkleHero(
           top: 'YOU HAVE A',
           accent: '$weeks WEEK',

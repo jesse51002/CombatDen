@@ -35,6 +35,9 @@ class SelectedMember extends ChangeNotifier {
   String? _firstName;
   String? _lastName;
   String? _photoUrl;
+  bool _gymRankEnabled = true;
+  bool _gymHasRewards = true;
+  bool _gymHasVideos = true;
 
   /// The chosen member row's id; null until a member is selected.
   String? get memberId => _memberId;
@@ -50,6 +53,21 @@ class SelectedMember extends ChangeNotifier {
   String? get firstName => _firstName;
   String? get lastName => _lastName;
   String? get photoUrl => _photoUrl;
+
+  /// Whether the gym runs a rank / belt ladder. Gates the whole rank surface:
+  /// the "Profile" tab's rank block, the topbar belt tile, and the post-class
+  /// rank card. **True when unknown** — hiding a real feature is worse than
+  /// showing an empty one.
+  bool get gymRankEnabled => _gymRankEnabled;
+
+  /// Whether the gym has at least one active reward. Gates the Rewards tab,
+  /// the topbar points tile's link into the store, and the post-class rewards
+  /// card. True when unknown.
+  bool get gymHasRewards => _gymHasRewards;
+
+  /// Whether the gym's feed would serve at least one video. Gates the Videos
+  /// tab and the post-booking video recommendation. True when unknown.
+  bool get gymHasVideos => _gymHasVideos;
 
   /// The member's display name, or empty when no member is selected.
   String get fullName =>
@@ -69,6 +87,9 @@ class SelectedMember extends ChangeNotifier {
     String? gymAddress,
     String? gymLogoUrl,
     String? photoUrl,
+    bool gymRankEnabled = true,
+    bool gymHasRewards = true,
+    bool gymHasVideos = true,
   }) async {
     _memberId = memberId;
     _gymId = gymId;
@@ -78,6 +99,9 @@ class SelectedMember extends ChangeNotifier {
     _gymAddress = gymAddress;
     _gymLogoUrl = gymLogoUrl;
     _photoUrl = photoUrl;
+    _gymRankEnabled = gymRankEnabled;
+    _gymHasRewards = gymHasRewards;
+    _gymHasVideos = gymHasVideos;
     notifyListeners();
     await _persist();
   }
@@ -110,6 +134,11 @@ class SelectedMember extends ChangeNotifier {
       _firstName = map['first_name'] as String?;
       _lastName = map['last_name'] as String?;
       _photoUrl = map['photo_url'] as String?;
+      // A cache written by an older build carries no flags — default to
+      // showing everything rather than hiding a feature the gym really runs.
+      _gymRankEnabled = map['gym_rank_enabled'] as bool? ?? true;
+      _gymHasRewards = map['gym_has_rewards'] as bool? ?? true;
+      _gymHasVideos = map['gym_has_videos'] as bool? ?? true;
       notifyListeners();
       return true;
     } catch (e, st) {
@@ -130,6 +159,9 @@ class SelectedMember extends ChangeNotifier {
     _firstName = null;
     _lastName = null;
     _photoUrl = null;
+    _gymRankEnabled = true;
+    _gymHasRewards = true;
+    _gymHasVideos = true;
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_memberIdKey);
@@ -150,6 +182,9 @@ class SelectedMember extends ChangeNotifier {
         'first_name': _firstName,
         'last_name': _lastName,
         'photo_url': _photoUrl,
+        'gym_rank_enabled': _gymRankEnabled,
+        'gym_has_rewards': _gymHasRewards,
+        'gym_has_videos': _gymHasVideos,
       }),
     );
   }

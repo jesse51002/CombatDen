@@ -30,6 +30,8 @@ class AppTopbar extends StatelessWidget {
     required this.pointsLabel,
     required this.rankBadgeAsset,
     this.rankImageUrl,
+    this.showRank = true,
+    this.pointsSpendable = true,
     this.memberName,
     this.memberPhotoUrl,
     this.memberFirstName,
@@ -56,6 +58,14 @@ class AppTopbar extends StatelessWidget {
   /// `MemberProfileBloc`; null (no profile loaded yet, ranks off, or a rank
   /// with no image) leaves the themed/bundled belt in place.
   final String? rankImageUrl;
+
+  /// Whether the gym runs a rank ladder (`selectedMember.gymRankEnabled`).
+  /// False collapses the [InfoBar]'s belt tile on every topbar.
+  final bool showRank;
+
+  /// Whether the gym has rewards (`selectedMember.gymHasRewards`). False makes
+  /// the [InfoBar]'s points tile a read-out instead of a link into the store.
+  final bool pointsSpendable;
 
   /// The selected member's display name — the accessibility label on the
   /// trailing identity avatar. The avatar renders either way.
@@ -113,6 +123,8 @@ class AppTopbar extends StatelessWidget {
           InfoBar(
             rankBadgeAsset: rankBadgeAsset,
             rankImageUrl: rankImageUrl,
+            showRank: showRank,
+            pointsSpendable: pointsSpendable,
             streakDays: streakDays,
             pointsLabel: pointsLabel,
             onQrTap: onQrTap,

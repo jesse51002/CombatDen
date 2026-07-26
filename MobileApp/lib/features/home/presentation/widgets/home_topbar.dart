@@ -39,6 +39,8 @@ class HomeTopbar extends StatelessWidget {
               retention != null ? formatCount(retention.pointsBalance) : '—',
           rankBadgeAsset: _kDefaultRankBadgeAsset,
           rankImageUrl: state.profile?.rank?.imageUrl,
+          showRank: selectedMember.gymRankEnabled,
+          pointsSpendable: selectedMember.gymHasRewards,
           onTitleDoubleTap: () =>
               Navigator.of(context).pushNamed(AppRoutes.memberSelect),
           onQrTap: () =>

@@ -4,6 +4,7 @@ import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
 import 'package:mobile_app/features/stats/data/celebration_data.dart';
+import 'package:mobile_app/features/stats/data/celebration_flow.dart';
 import 'package:mobile_app/features/stats/data/celebration_stats_builder.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/points/points_body.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
@@ -33,21 +34,26 @@ class _PointsScreenState extends State<PointsScreen> {
         const CelebrationData.empty();
     return BlocBuilder<MemberProfileBloc, MemberProfileState>(
       builder: (context, state) {
+        final next = nextCelebrationCard(
+          current: AppRoutes.postClassPoints,
+          hasRank: state.profile?.rank != null,
+        );
+        void toHome() => Navigator.of(context).pushNamedAndRemoveUntil(
+              AppRoutes.home,
+              (r) => false,
+            );
         return PostClassScaffold(
           controller: _controller,
           body: PointsBody(
             stats: buildPointsStats(state.profile, data),
             controller: _controller,
           ),
-          ctaLabel: 'Continue',
-          onClose: () => Navigator.of(context).pushNamedAndRemoveUntil(
-            AppRoutes.home,
-            (r) => false,
-          ),
-          onCtaPressed: () => Navigator.of(context).pushReplacementNamed(
-            AppRoutes.postClassRewards,
-            arguments: data,
-          ),
+          ctaLabel: celebrationCtaLabel(next),
+          onClose: toHome,
+          onCtaPressed: next == null
+              ? toHome
+              : () => Navigator.of(context)
+                  .pushReplacementNamed(next, arguments: data),
         );
       },
     );

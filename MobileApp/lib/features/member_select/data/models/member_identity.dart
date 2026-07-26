@@ -10,6 +10,13 @@ part 'member_identity.g.dart';
 /// `members.email` has no uniqueness constraint (a family shares one inbox), so
 /// every other member-portal route takes the chosen [memberId] + [gymId]
 /// explicitly.
+///
+/// The three gym CAPABILITY flags ride this identity read so the shell can be
+/// composed before any feature fetch: they decide which bottom-nav tabs exist,
+/// whether the rank UI renders at all, and which post-class cards are shown.
+/// All three default to **true** when absent — a payload from an older build
+/// (or an offline cache written by one) must not hide a feature the gym really
+/// runs; an empty surface is recoverable, a missing one is invisible.
 @JsonSerializable(fieldRename: FieldRename.snake)
 class MemberIdentity {
   final String memberId;
@@ -21,6 +28,18 @@ class MemberIdentity {
   final String lastName;
   final String? photoUrl;
 
+  /// Whether the gym runs a rank / belt ladder at all (`gyms.is_rank_enabled`).
+  @JsonKey(defaultValue: true)
+  final bool gymRankEnabled;
+
+  /// Whether the gym has at least one ACTIVE reward.
+  @JsonKey(defaultValue: true)
+  final bool gymHasRewards;
+
+  /// Whether the gym's video feed would serve at least one video.
+  @JsonKey(defaultValue: true)
+  final bool gymHasVideos;
+
   const MemberIdentity({
     required this.memberId,
     required this.gymId,
@@ -30,6 +49,9 @@ class MemberIdentity {
     this.gymLogoUrl,
     this.gymAddress,
     this.photoUrl,
+    this.gymRankEnabled = true,
+    this.gymHasRewards = true,
+    this.gymHasVideos = true,
   });
 
   /// The member's display name.

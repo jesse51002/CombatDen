@@ -15,6 +15,7 @@ import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs.da
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_topbar.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/store_grid/store_grid.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 /// Points Store body: the live catalog grid over the per-member chrome. A
@@ -66,7 +67,10 @@ class PointsStoreBody extends StatelessWidget {
       ],
       child: AppScreenScaffold(
         horizontalPadding: AppScreenHorizontalPadding.none,
-        bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.reward),
+        bottomNav: AppBottomNavBar(
+          selected: AppBottomNavTab.reward,
+          tabs: gymNavTabs(),
+        ),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

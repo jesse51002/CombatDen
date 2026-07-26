@@ -17,6 +17,7 @@ import 'package:mobile_app/features/videos/presentation/widgets/video_category_t
 import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
@@ -61,7 +62,10 @@ class _VideosScaffold extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,
-      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.videos),
+      bottomNav: AppBottomNavBar(
+        selected: AppBottomNavTab.videos,
+        tabs: gymNavTabs(),
+      ),
       child: SingleChildScrollView(
         controller: captureController,
         padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
@@ -252,6 +256,8 @@ class _Topbar extends StatelessWidget {
               retention != null ? formatCount(retention.pointsBalance) : '—',
           rankBadgeAsset: _kDefaultRankBadgeAsset,
           rankImageUrl: state.profile?.rank?.imageUrl,
+          showRank: selectedMember.gymRankEnabled,
+          pointsSpendable: selectedMember.gymHasRewards,
           onTitleDoubleTap: () =>
               Navigator.of(context).pushNamed(AppRoutes.memberSelect),
         );

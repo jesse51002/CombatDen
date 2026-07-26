@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_outline_button.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
@@ -11,7 +12,12 @@ import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 /// Confirming pops `true`; dismissing pops `false` / null. The caller (which
 /// holds the [LoginBloc]) dispatches the sign-out.
 class SignOutDialog extends StatelessWidget {
-  const SignOutDialog({super.key});
+  const SignOutDialog({super.key, this.showRank});
+
+  /// Whether to promise the member's RANK back. Null resolves from the
+  /// selected member's gym — a gym that runs no rank ladder must not offer to
+  /// keep something the member has never had.
+  final bool? showRank;
 
   /// Open the dialog; resolves to `true` when the member confirms.
   static Future<bool?> show(BuildContext context) {
@@ -23,6 +29,7 @@ class SignOutDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final withRank = showRank ?? selectedMember.gymRankEnabled;
     return Dialog(
       backgroundColor: DesignConstants.popup,
       insetPadding: EdgeInsets.symmetric(
@@ -45,8 +52,9 @@ class SignOutDialog extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             Text(
-              "You'll sign back in with your email. Your streak, points and "
-              'rank stay on your account.',
+              "You'll sign back in with your email. "
+              '${withRank ? 'Your streak, points and rank stay' : 'Your streak and points stay'}'
+              ' on your account.',
               style: DesignConstants.p.copyWith(
                 color: DesignConstants.text2nd,
               ),

@@ -16,6 +16,9 @@ MemberIdentity _$MemberIdentityFromJson(Map<String, dynamic> json) =>
       gymLogoUrl: json['gym_logo_url'] as String?,
       gymAddress: json['gym_address'] as String?,
       photoUrl: json['photo_url'] as String?,
+      gymRankEnabled: json['gym_rank_enabled'] as bool? ?? true,
+      gymHasRewards: json['gym_has_rewards'] as bool? ?? true,
+      gymHasVideos: json['gym_has_videos'] as bool? ?? true,
     );
 
 Map<String, dynamic> _$MemberIdentityToJson(MemberIdentity instance) =>
@@ -28,4 +31,7 @@ Map<String, dynamic> _$MemberIdentityToJson(MemberIdentity instance) =>
       'first_name': instance.firstName,
       'last_name': instance.lastName,
       'photo_url': instance.photoUrl,
+      'gym_rank_enabled': instance.gymRankEnabled,
+      'gym_has_rewards': instance.gymHasRewards,
+      'gym_has_videos': instance.gymHasVideos,
     };

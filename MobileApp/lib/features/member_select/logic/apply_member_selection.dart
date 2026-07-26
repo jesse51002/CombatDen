@@ -10,8 +10,9 @@ import 'package:mobile_app/features/member_select/data/models/member_identity.da
 ///
 /// The ONE in-app switch path — both the "Switch profile" screen and the
 /// topbar identity sheet call it, so the two can never drift on which fields
-/// get recorded (`gymAddress` in particular feeds class-detail "Open in Maps")
-/// or on where a switch lands.
+/// get recorded (`gymAddress` feeds class-detail "Open in Maps";
+/// `gymRankEnabled` / `gymHasRewards` / `gymHasVideos` decide which nav tabs,
+/// rank UI and post-class cards exist) or on where a switch lands.
 ///
 /// Takes the [navigator] rather than a `BuildContext` because both callers
 /// can be torn down mid-switch: `AppShell` re-keys on the new member id, so the
@@ -30,6 +31,9 @@ Future<void> applyMemberSelection({
     gymAddress: member.gymAddress,
     gymLogoUrl: member.gymLogoUrl,
     photoUrl: member.photoUrl,
+    gymRankEnabled: member.gymRankEnabled,
+    gymHasRewards: member.gymHasRewards,
+    gymHasVideos: member.gymHasVideos,
   );
   // Never throws — a null/unresolvable design leaves the current theme.
   await GymThemeHydration().applyForGym(member.gymId);

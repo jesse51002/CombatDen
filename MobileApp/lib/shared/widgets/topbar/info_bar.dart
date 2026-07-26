@@ -10,6 +10,10 @@ import 'package:theme_flutter/theme/theme_image.dart';
 const double _kBeltWidth = 39;
 const double _kBeltHeight = 24;
 
+// The info bar's cell grid is always FOUR columns wide, whatever the tile
+// count — the same rule the bottom nav uses.
+const int _kInfoBarColumns = 4;
+
 class InfoBar extends StatelessWidget {
   const InfoBar({
     super.key,
@@ -17,6 +21,8 @@ class InfoBar extends StatelessWidget {
     required this.streakDays,
     required this.pointsLabel,
     this.rankImageUrl,
+    this.showRank = true,
+    this.pointsSpendable = true,
     this.onQrTap,
   });
 
@@ -31,53 +37,73 @@ class InfoBar extends StatelessWidget {
   final int streakDays;
   final String pointsLabel;
 
+  /// Whether the gym runs a rank ladder. False COLLAPSES the belt tile
+  /// entirely — a gym with ranks off has no belt to show, and a fallback belt
+  /// on every screen would advertise a ladder that doesn't exist. (This is
+  /// distinct from the belt's load fallback, which never collapses; see
+  /// [_Belt].)
+  final bool showRank;
+
+  /// Whether the gym has rewards to spend points on. False makes the points
+  /// tile a plain READ-OUT: the number still reflects real attendance, but it
+  /// stops being a doorway into an empty store. Same idiom as [onQrTap]'s null
+  /// handler — a non-interactive tile is already the info bar's norm.
+  final bool pointsSpendable;
+
   /// Optional tap handler for the QR-code tile. When null the tile is a
   /// static icon (its behavior on every topbar that doesn't opt in).
   final VoidCallback? onQrTap;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: _TapTarget(
-            onTap: () =>
-                Navigator.of(context).pushNamed(AppRoutes.profile),
-            child: _RankItem(
-              asset: rankBadgeAsset,
-              imageUrl: rankImageUrl,
-            ),
-          ),
+    final points = _IconValueItem(
+      slot: CombatDenSlots.singlePoint,
+      asset: 'single_point.png',
+      value: pointsLabel,
+      assetWidth: 22,
+      assetHeight: 22,
+    );
+    final tiles = <Widget>[
+      if (showRank)
+        _TapTarget(
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
+          child: _RankItem(asset: rankBadgeAsset, imageUrl: rankImageUrl),
         ),
-        Expanded(
-          child: _TapTarget(
-            onTap: () =>
-                Navigator.of(context).pushNamed(AppRoutes.profile),
-            child: _IconValueItem(
-              slot: CombatDenSlots.streakIcon,
-              asset: 'streak_icon.png',
-              value: '$streakDays',
-              assetWidth: 22,
-              assetHeight: 30,
-            ),
-          ),
+      _TapTarget(
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.profile),
+        child: _IconValueItem(
+          slot: CombatDenSlots.streakIcon,
+          asset: 'streak_icon.png',
+          value: '$streakDays',
+          assetWidth: 22,
+          assetHeight: 30,
         ),
-        Expanded(
-          child: _TapTarget(
-            onTap: () =>
-                Navigator.of(context).pushNamed(AppRoutes.pointsStore),
-            child: _IconValueItem(
-              slot: CombatDenSlots.singlePoint,
-              asset: 'single_point.png',
-              value: pointsLabel,
-              assetWidth: 22,
-              assetHeight: 22,
-            ),
-          ),
-        ),
-        Expanded(child: _QrCodeItem(onTap: onQrTap)),
-      ],
+      ),
+      if (pointsSpendable)
+        _TapTarget(
+          onTap: () => Navigator.of(context).pushNamed(AppRoutes.pointsStore),
+          child: points,
+        )
+      else
+        points,
+      _QrCodeItem(onTap: onQrTap),
+    ];
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // A tile is ALWAYS a quarter of the bar, and the row is centred — the
+        // same rule as the bottom nav. At four tiles this is pixel-identical
+        // to an `Expanded` split; at three it leaves a symmetric gutter rather
+        // than stretching three tiles across the screen.
+        final cellWidth = constraints.maxWidth / _kInfoBarColumns;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            for (final tile in tiles) SizedBox(width: cellWidth, child: tile),
+          ],
+        );
+      },
     );
   }
 }
@@ -118,10 +144,12 @@ class _RankItem extends StatelessWidget {
 /// [asset] under it) when absent or on a load error — the same idiom
 /// `RankHeader._Belt` and `NextRankBadge._Belt` use on the profile.
 ///
-/// The belt is permanent topbar chrome, so a failed load degrades to the
-/// themed belt instead of collapsing (unlike the creator avatar / gym logo
-/// tile, where an absent image is simply omitted) — an empty gap in the info
-/// bar would read as broken.
+/// At a RANK-ENABLED gym the belt is permanent topbar chrome, so missing or
+/// failed ARTWORK degrades to the themed belt instead of collapsing (unlike
+/// the creator avatar / gym logo tile, where an absent image is simply
+/// omitted) — an empty gap in the info bar would read as broken. That rule is
+/// about artwork only: when the gym runs no rank ladder at all the whole tile
+/// is gone before this widget is ever built (see `InfoBar.showRank`).
 class _Belt extends StatelessWidget {
   const _Belt({required this.asset, this.imageUrl});
 

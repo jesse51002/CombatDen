@@ -53,6 +53,8 @@ class ClassDetailTopbar extends StatelessWidget {
       pointsLabel: points,
       rankBadgeAsset: _kDefaultRankBadgeAsset,
       rankImageUrl: rankImageUrl,
+      showRank: selectedMember.gymRankEnabled,
+      pointsSpendable: selectedMember.gymHasRewards,
     );
   }
 }

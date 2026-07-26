@@ -11,6 +11,7 @@ import 'package:mobile_app/features/rewards/presentation/widgets/rewards_load_st
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_topbar.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 /// My Rewards body: the member's redemption history over the per-member chrome.
@@ -21,7 +22,10 @@ class MyRewardsBody extends StatelessWidget {
   Widget build(BuildContext context) {
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,
-      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.reward),
+      bottomNav: AppBottomNavBar(
+        selected: AppBottomNavTab.reward,
+        tabs: gymNavTabs(),
+      ),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,

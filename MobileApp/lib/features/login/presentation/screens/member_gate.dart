@@ -107,6 +107,10 @@ class _MemberGateState extends State<MemberGate> {
         _status = restored ? _GateStatus.offlineApp : _GateStatus.offline);
   }
 
+  /// The BOOT-time counterpart to `applyMemberSelection` (the in-app switch).
+  /// The two must stay field-for-field identical: every field on
+  /// [MemberIdentity] goes through both, or an in-app switch silently drops
+  /// data a boot-time selection keeps.
   Future<void> _selectAndHydrate(MemberIdentity m) async {
     if (mounted) setState(() => _status = _GateStatus.resolving);
     await selectedMember.select(
@@ -118,6 +122,9 @@ class _MemberGateState extends State<MemberGate> {
       gymAddress: m.gymAddress,
       gymLogoUrl: m.gymLogoUrl,
       photoUrl: m.photoUrl,
+      gymRankEnabled: m.gymRankEnabled,
+      gymHasRewards: m.gymHasRewards,
+      gymHasVideos: m.gymHasVideos,
     );
     // Never throws — a null/unresolvable design leaves the bundled theme.
     await GymThemeHydration().applyForGym(m.gymId);

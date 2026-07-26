@@ -9,19 +9,29 @@ import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/gym_video_carousel_card.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
+import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
 // A small page of educational videos is plenty for the profile carousel.
 const int _kLevelUpLimit = 10;
 
 /// "Videos to level up" — a small page of the member's PORTAL feed filtered to
 /// the Education genre, as a horizontal carousel on the profile page. Purely
-/// supplementary: hidden until the feed loads and when the tenant has no
-/// educational videos, so it never shows a spinner or an error here. Reuses the
+/// supplementary: hidden until the feed loads, when the tenant has no
+/// educational videos, and at a gym with no videos at all, so it never shows a
+/// spinner or an error here — and never leaves a "View all" pointing at a tab
+/// the gym doesn't have. NOT rank-dependent; it survives a rank-off gym.
+/// Reuses the
 /// videos feature's `GymVideoCard` model + `GymVideoCarouselCard`; tapping a
 /// card opens it on YouTube through the same `openVideoFor` path as the videos
 /// tab.
 class LevelUpVideosSection extends StatefulWidget {
-  const LevelUpVideosSection({super.key});
+  const LevelUpVideosSection({super.key, this.leadingDivider = false});
+
+  /// Draw a [SectionDivider] above the carousel — but only when the carousel
+  /// itself renders. The rank-less profile has no rank block to separate it
+  /// from, so it asks for its own rule; a stray divider over a self-hidden
+  /// section would be a line under nothing.
+  final bool leadingDivider;
 
   @override
   State<LevelUpVideosSection> createState() => _LevelUpVideosSectionState();
@@ -34,6 +44,10 @@ class _LevelUpVideosSectionState extends State<LevelUpVideosSection> {
     final gymId = selectedMember.gymId;
     final memberId = selectedMember.memberId;
     if (gymId == null || memberId == null) return const [];
+    // A gym whose feed serves nothing has no Videos tab either, so don't spend
+    // a round trip to learn the carousel is empty — and don't leave its "View
+    // all" as a surviving doorway into a tab that was hidden.
+    if (!selectedMember.gymHasVideos) return const [];
     final feed = await MemberVideosRepository(apiClient: ApiClient()).fetchFeed(
       gymId: gymId,
       memberId: memberId,
@@ -55,7 +69,7 @@ class _LevelUpVideosSectionState extends State<LevelUpVideosSection> {
             ready ? (snapshot.data ?? const <GymVideoCard>[]) : const [];
         if (videos.isEmpty) return const SizedBox.shrink();
 
-        return Column(
+        final carousel = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           spacing: DesignConstants.spacingLarge,
@@ -90,6 +104,14 @@ class _LevelUpVideosSectionState extends State<LevelUpVideosSection> {
               ),
             ),
           ],
+        );
+
+        if (!widget.leadingDivider) return carousel;
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingBig,
+          children: [const SectionDivider(), carousel],
         );
       },
     );

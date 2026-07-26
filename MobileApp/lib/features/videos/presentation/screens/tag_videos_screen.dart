@@ -11,6 +11,7 @@ import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/creator_avatar.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
@@ -30,7 +31,10 @@ class TagVideosScreen extends StatelessWidget {
         : (arg is String ? videoGenreOrNullFromJson(arg) : null);
 
     return AppScreenScaffold(
-      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.videos),
+      bottomNav: AppBottomNavBar(
+        selected: AppBottomNavTab.videos,
+        tabs: gymNavTabs(),
+      ),
       child: genre == null || genre == VideoGenre.unknown
           ? const _Missing()
           : BlocProvider<VideosBloc>(

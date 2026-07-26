@@ -190,6 +190,26 @@ note is deleted.
   legitimately matches **several** member rows (a family shares an inbox), so the
   member is chosen explicitly and never derived from the JWT; the chosen
   `memberId` + `gymId` scope every gym-scoped member call.
+- **The identity read also carries the gym's CAPABILITY FLAGS, and they shape
+  the app's chrome.** `MemberIdentity` / `SelectedMember` carry
+  `gymRankEnabled`, `gymHasRewards` and `gymHasVideos` (from
+  `MemberPortalIdentity`) alongside `gymName` / `gymLogoUrl` / `gymAddress`.
+  They ride the IDENTITY read on purpose: the shell — which bottom-nav tabs
+  exist, whether the rank UI renders at all, which post-class cards are shown —
+  is composed **before** any feature fetch, so nothing paints and then
+  vanishes. All three are **persisted with the cached identity and default to
+  `true` when absent** (an older payload, or a disk cache written by an older
+  build): hiding a real feature is worse than showing an empty one. `reset()`
+  returns them to `true`, so a signed-out app never carries the last gym's
+  shape into the next member's boot. What each one gates:
+  - `gymRankEnabled` — the Profile tab's whole rank block (see *The Profile tab
+    has two shapes*), the `InfoBar` belt tile, the post-class rank card, the
+    `RankProgressBloc` fetch, and the "and rank" clause in `SignOutDialog`.
+  - `gymHasRewards` — the Rewards nav tab, the `InfoBar` points tile's LINK
+    into the store (the number itself stays — see *The topbar's info bar*), and
+    the post-class rewards card.
+  - `gymHasVideos` — the Videos nav tab and the post-booking video
+    recommendation.
 - **The boot revalidation ladder** (`features/member_select/logic/`, a pure
   function over the fresh `GET /api/v1/member/members` list): a persisted member
   still in the list **restores** silently; otherwise **1 row auto-selects**, **2+
@@ -214,9 +234,26 @@ note is deleted.
   it). Tapping it opens the **identity sheet** (below); the gym title's own tap
   (`AppRoutes.memberSelect` → `SwitchProfileScreen`) and `onTitleDoubleTap`
   stay wired as the secondary path.
-- **The topbar's info bar shows the member's REAL belt.** Under the header,
-  `InfoBar` (`shared/widgets/topbar/info_bar.dart`) renders rank / streak /
-  points / QR. Its belt tile resolves in this order: the member's own rank art
+- **The topbar's info bar renders only the tiles the gym has.** Under the
+  header, `InfoBar` (`shared/widgets/topbar/info_bar.dart`) renders rank /
+  streak / points / QR, but the tile SET is per-gym and all five topbar
+  wrappers pass the flags from `selectedMember`:
+  - `showRank: gymRankEnabled` — false **collapses the belt tile entirely**. A
+    gym that runs no ladder has no belt, and the themed fallback would put one
+    on every screen.
+  - `pointsSpendable: gymHasRewards` — false leaves the points NUMBER (it is
+    real earned attendance, and the celebration awards it either way) but drops
+    its tap. Points are only spendable on rewards, so at a gym with none the
+    tile would be a second, un-hidden doorway into the store the Rewards tab
+    was just hidden for. A non-interactive tile is already the bar's norm — the
+    QR tile is one on four of the five topbars.
+  - **The layout rule is the bottom nav's, verbatim**: `LayoutBuilder` + a
+    centred `Row` of fixed `maxWidth / 4` cells. At four tiles this is
+    pixel-identical to the old `Expanded` split; at three it leaves a symmetric
+    half-cell gutter instead of stretching three tiles across the phone.
+    Never go back to `Expanded` — it makes a short row look accidental.
+- **The belt tile resolves the member's REAL belt.** Its image resolves in this
+  order: the member's own rank art
   (`MemberProfile.rank?.imageUrl` — already the sub-rank override over the main
   rank's image, resolved server-side) via `CachedNetworkImageProvider`, then the
   themed `CombatDenSlots.rankBelt` slot, then the bundled `rankBadgeAsset`. All
@@ -225,11 +262,15 @@ note is deleted.
   `MemberProfileBloc`; the param is optional, so a bar built without a profile
   (the class-detail `live: false` path) simply keeps the themed belt. Same idiom
   as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile — don't invent a
-  third. **A failed load falls back, it does NOT collapse:** the belt is
-  permanent topbar chrome, so the network `Image`'s `errorBuilder` returns the
-  themed belt (an empty gap in the info bar would read as broken). This is the
-  deliberate exception to the omit-on-missing rule the creator avatar and the
-  picker's gym-logo tile follow — those are optional adornments; this is chrome.
+  third. **A failed load falls back, it does NOT collapse — but that rule is
+  about ARTWORK, at a rank-ENABLED gym.** Where the gym runs a ladder the belt
+  is permanent topbar chrome, so the network `Image`'s `errorBuilder` returns
+  the themed belt (an empty gap in the info bar would read as broken); that is
+  the deliberate exception to the omit-on-missing rule the creator avatar and
+  the picker's gym-logo tile follow — those are optional adornments, this is
+  chrome. It says nothing about a gym with **ranks off**: there the whole tile
+  is composed out by `showRank` before `_Belt` is ever built. Missing art
+  falls back; a missing FEATURE collapses.
 - **The identity sheet is the account surface** (`features/member_select/
   presentation/widgets/identity_sheet.dart`, the app's first modal bottom sheet
   — every sheet goes through `shared/widgets/sheets/app_bottom_sheet.dart`,
@@ -262,9 +303,11 @@ note is deleted.
   first await) rather than a `BuildContext`, because `AppShell` re-keys on the
   new member id and the caller is often already gone. `MemberGate.
   _selectAndHydrate` is the boot-time counterpart and must stay field-for-field
-  identical: every field on `MemberIdentity` (including `gymAddress`, which
-  feeds class-detail "Open in Maps") goes through both, or an in-app switch
-  silently drops data a boot-time selection keeps.
+  identical: every field on `MemberIdentity` goes through both, or an in-app
+  switch silently drops data a boot-time selection keeps. That now includes
+  `gymAddress` (class-detail "Open in Maps") **and the three capability flags**
+  — miss one there and a member who switches profiles gets the previous gym's
+  nav tabs and rank UI.
 - **Sign-out lives in the identity sheet, and NOWHERE else.** The profile /
   rank screen is the **retention** surface (rank, streak, progress) — an
   account-exit action has no business sitting beside a member's streak, so it
@@ -278,6 +321,99 @@ note is deleted.
   unmounting `MemberGate`, which resets `SelectedMember` and the theme to
   default so a re-login never shows the previous member's brand. Don't
   duplicate that teardown at the call site.
+
+## The bottom nav is per-gym
+
+`AppBottomNavBar` (`shared/widgets/nav/app_bottom_nav_bar.dart`) takes a
+`List<AppBottomNavTab> tabs`, and **every screen that renders it passes
+`gymNavTabs()`** (`shared/widgets/nav/nav_tabs.dart`) — home, profile, my
+rewards, points store, videos, tag videos. A screen that forgets falls back to
+the full four, which is how a tab for a feature the gym doesn't have gets back
+on screen; when you add a screen with a nav, pass the filtered set.
+
+- **Home and Profile are structural** — every gym has a schedule and every
+  member has a streak. Rewards appears only when `gymHasRewards`, Videos only
+  when `gymHasVideos`. Order is the enum's declaration order, so a tab never
+  moves position between two gyms that both have it.
+- **The `rank` tab is LABELLED "Profile".** The `AppBottomNavTab.rank` enum
+  value, the `AppRoutes.profile` route and the `CombatDenSlots.navRank` icon
+  slot keep their names — they are the theme/route contract, not the label.
+  Don't rename them to chase the copy.
+- **The layout rule: a cell is ALWAYS `constraints.maxWidth / 4`, and the row
+  is centred** (`LayoutBuilder` + `Row(mainAxisAlignment: center)` + fixed-width
+  cells; `_kBottomNavRowHeight` 64 unchanged, the `InkWell` still fills its
+  cell). At four tabs this is pixel-identical to the old `Expanded` split; at
+  three it gives a symmetric gutter; at two a centred pair with the same icon,
+  label and tap geometry. **Never let `Expanded` stretch a short tab set** — a
+  24pt icon marooned in half a phone reads as broken. `InfoBar` uses the same
+  rule for the same reason.
+
+## The Profile tab has two shapes
+
+`ProfileScreen` branches on **`selectedMember.gymRankEnabled`**, not on
+`rank == null` — a rank-enabled gym can legitimately hold a member who hasn't
+been graded yet, and that member still belongs on the rank-shaped page.
+
+- **Rank enabled** — unchanged: topbar + `ProfileStreakHero` + the rank block
+  (`RankSummarySection` / `NextRankSection`, still additionally conditional on
+  `rank != null`) over `LevelUpVideosSection`. The screen-scoped
+  `RankProgressBloc` is built here.
+- **Rank off** — `RanklessProfileBody`
+  (`features/profile/presentation/widgets/rankless/`): the hero becomes the
+  page. `CustomScrollView` = topbar sliver + `SliverFillRemaining(hasScrollBody:
+  false)`, so the hero + week strip + facts sit as one **vertically-centred**
+  block in the room the rank block vacated, and the page grows past the
+  viewport only once the level-up carousel renders. **No `RankProgressBloc` is
+  built and no fetch is fired** — the backend answers `points: []` for a
+  rank-off gym, and that is a round trip feeding a spinner nobody sees.
+  - `ProfileStreakWeek` feeds `StreakWeekStrip` / `StreakDayBadge` (reused
+    verbatim) from **`retention.current_week_attended_weekdays`**, which the
+    profile read already carries — never fetch class history for the strip.
+    Indices are **Sunday-first (0 = Sun … 6 = Sat)** while the WEEK itself is
+    Monday-anchored to match `class_streak_weeks`, so a Sunday is the last day
+    of the streak week but is drawn in the FIRST cell. That is deliberate;
+    don't "fix" it. `streakWeekDays()` (`features/stats/data/`) is the ONE
+    builder behind both this strip and the celebration card's.
+  - `StreakFacts` closes the block: classes this week + the last class's
+    weekday, `h2` value over a `p`/`text2nd` label.
+  - **Zero streak** — the emptiest state. The hero branches to
+    `START YOUR / STREAK / BOOK A CLASS` with `SparkleHero(showSparkles:
+    false)` (the sparkles are the earned part), the strip still draws seven
+    open days so the goal has a shape, and the facts give way to a full-width
+    `Book a class` button. This branch is opt-in via
+    `ProfileStreakHero(allowZeroState: true)` — the rank-enabled page keeps the
+    count hero verbatim.
+- **Motion budget for the rank-less page**: the hero's 620ms sparkle scatter,
+  `StreakWeekStrip`'s 70ms-per-badge cascade, `_PulseOnLand` on completed
+  badges, and ONE `StaggeredReveal` on the facts. The celebration card's
+  `_StreakOrbit` (~3s gate) and its 1400ms `CountUpText` are deliberately NOT
+  carried over. The entrance plays **once per mount**, completes in ≤900ms, and
+  must never re-fire on a silent refresh — which is why `ProfileStreakHero`,
+  `ProfileStreakWeek` and the facts slot each carry a narrow `buildWhen`. No
+  idle or looping motion.
+
+## The post-class celebration is composed, not hardcoded
+
+`features/stats/data/celebration_flow.dart` owns the card ORDER, and it is the
+only place that decides which cards a member sees: `celebrationCardRoutes` =
+streak → points → (rewards, when `gymHasRewards`) → (rank, when
+`gymRankEnabled` **and** the member holds a rank). Each screen asks
+`nextCelebrationCard(current:, hasRank:)` for its successor and takes its label
+from `celebrationCtaLabel` — so **the last card shown always says "Done" and
+returns home, and never chains into a card that was composed out.** Add a card
+by adding it to that list, not by hardcoding a route in a screen's CTA.
+
+- `RankScreen` keeps its own self-skip (`buildRankStats() == null` → post-frame
+  home) as the **deep-link backstop** for PR 3's after-class push, and
+  `AppRoutes.postClassRank` stays registered. The composition is what stops the
+  normal flow ever landing there, so the preceding card's "Continue" can't
+  bounce off a blank `ColoredBox`.
+- **There is no videos CARD in this flow.** The app's one video card is the
+  post-BOOKING recommendation (`ClassBookedScreen` → `AppRoutes.videoRecc`),
+  which applies the same rule locally: with `gymHasVideos` false the booked
+  screen is the last card and pops home rather than opening an empty rec.
+- `RewardsCardScreen` takes an optional `repository` — the same test seam as
+  `VideoReccScreen`, so no test hits a live backend.
 
 ## Theme hydration
 
@@ -320,7 +456,16 @@ them as mandatory:
   A null watermark seeds **silently** (no replay storm on first run / reinstall /
   member switch); it fires **once** for the newest unseen attendance and advances
   only after the flow completes. The old "wins" card is removed from the flow (the
-  screen file is dormant).
+  screen file is dormant). Which cards the flow then shows is composed per-gym —
+  see *The post-class celebration is composed, not hardcoded*.
+- **Never show a surface for a feature the gym doesn't run.** A tab, a topbar
+  tile, a celebration card or a hand-off into a screen that can only be empty
+  is worse than no entry point at all: the member gets there by a route with no
+  context and nothing to do. Compose it out at the source (the nav tab set, the
+  `InfoBar` tile set, the celebration card list) rather than letting the
+  destination render an empty state. The mirror rule is the UNKNOWN case: when
+  a flag is missing, default to showing — an empty surface is recoverable, an
+  invisible feature is not.
 - **Refresh, no polling.** Pull-to-refresh (home / rewards / videos / profile) +
   refetch-on-tab-focus; a foreground return drives the profile refetch and the
   celebration check. No timers.
@@ -772,6 +917,13 @@ Scoped / significant dependencies:
   what the app asked the OS to open; install it with
   `UrlLauncherPlatform.instance = FakeUrlLauncher()` (pass `succeeds: false`
   for the "nothing handled it" path). App code stays free of test hooks.
+- **A widget test that drives `SelectedMember` must seed
+  `SharedPreferences.setMockInitialValues({})` and `reset()` it in teardown** —
+  it is a process-wide global, so a leaked selection (or a leaked capability
+  flag) changes the next test's app shape.
+- **A screen that builds its own `ApiClient` needs dotenv**:
+  `dotenv.loadFromString(envString: 'API_BASE_URL=http://localhost:8000')` in
+  `setUp`. The request never leaves the test, but the URL has to resolve.
 - `flutter test` before committing.
 
 ## Configuration (dotenv + dart-defines)
