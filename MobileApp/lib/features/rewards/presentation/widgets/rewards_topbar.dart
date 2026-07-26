@@ -38,6 +38,7 @@ class RewardsTopbar extends StatelessWidget {
           pointsLabel:
               retention != null ? formatCount(retention.pointsBalance) : '—',
           rankBadgeAsset: _kDefaultRankBadgeAsset,
+          rankImageUrl: state.profile?.rank?.imageUrl,
           onTitleDoubleTap: () =>
               Navigator.of(context).pushNamed(AppRoutes.memberSelect),
         );

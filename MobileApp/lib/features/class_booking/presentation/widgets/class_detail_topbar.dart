@@ -29,12 +29,17 @@ class ClassDetailTopbar extends StatelessWidget {
           streak: retention?.classStreakWeeks ?? 0,
           points:
               retention != null ? formatCount(retention.pointsBalance) : '—',
+          rankImageUrl: state.profile?.rank?.imageUrl,
         );
       },
     );
   }
 
-  Widget _bar({required int streak, required String points}) {
+  Widget _bar({
+    required int streak,
+    required String points,
+    String? rankImageUrl,
+  }) {
     return AppTopbar(
       mode: AppTopbarMode.nameOnly,
       showBackButton: true,
@@ -47,6 +52,7 @@ class ClassDetailTopbar extends StatelessWidget {
       streakDays: streak,
       pointsLabel: points,
       rankBadgeAsset: _kDefaultRankBadgeAsset,
+      rankImageUrl: rankImageUrl,
     );
   }
 }

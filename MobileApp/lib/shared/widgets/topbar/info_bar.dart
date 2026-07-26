@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
@@ -5,16 +6,28 @@ import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 
+// The belt art's dimensions (per-asset layout, not a design token).
+const double _kBeltWidth = 39;
+const double _kBeltHeight = 24;
+
 class InfoBar extends StatelessWidget {
   const InfoBar({
     super.key,
     required this.rankBadgeAsset,
     required this.streakDays,
     required this.pointsLabel,
+    this.rankImageUrl,
     this.onQrTap,
   });
 
   final String rankBadgeAsset;
+
+  /// The member's OWN rank art (`rank.image_url` on the profile, already
+  /// resolved server-side with the sub-rank override over the main rank's
+  /// image). Preferred over the themed slot when present; null on a screen
+  /// with no profile, a gym with ranks off, or a rank carrying no image.
+  final String? rankImageUrl;
+
   final int streakDays;
   final String pointsLabel;
 
@@ -31,7 +44,10 @@ class InfoBar extends StatelessWidget {
           child: _TapTarget(
             onTap: () =>
                 Navigator.of(context).pushNamed(AppRoutes.profile),
-            child: _RankItem(asset: rankBadgeAsset),
+            child: _RankItem(
+              asset: rankBadgeAsset,
+              imageUrl: rankImageUrl,
+            ),
           ),
         ),
         Expanded(
@@ -83,24 +99,64 @@ class _TapTarget extends StatelessWidget {
 }
 
 class _RankItem extends StatelessWidget {
-  const _RankItem({required this.asset});
+  const _RankItem({required this.asset, this.imageUrl});
+
   final String asset;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
     return SizedBox(
       height: 30,
-      child: Center(
-        child: Image(
-          image: ThemeImage.image(
-            CombatDenSlots.rankBelt,
-            fallback: ApiImage.rankAsset(asset),
-          ),
-          width: 39,
-          height: 24,
-          fit: BoxFit.contain,
-        ),
+      child: Center(child: _Belt(asset: asset, imageUrl: imageUrl)),
+    );
+  }
+}
+
+/// The belt art: the member's own rank [imageUrl] via
+/// [CachedNetworkImageProvider], falling back to the themed slot (bundled
+/// [asset] under it) when absent or on a load error — the same idiom
+/// `RankHeader._Belt` and `NextRankBadge._Belt` use on the profile.
+///
+/// The belt is permanent topbar chrome, so a failed load degrades to the
+/// themed belt instead of collapsing (unlike the creator avatar / gym logo
+/// tile, where an absent image is simply omitted) — an empty gap in the info
+/// bar would read as broken.
+class _Belt extends StatelessWidget {
+  const _Belt({required this.asset, this.imageUrl});
+
+  final String asset;
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final url = imageUrl;
+    if (url == null || url.isEmpty) return _ThemedBelt(asset: asset);
+    return Image(
+      image: CachedNetworkImageProvider(url),
+      width: _kBeltWidth,
+      height: _kBeltHeight,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => _ThemedBelt(asset: asset),
+    );
+  }
+}
+
+class _ThemedBelt extends StatelessWidget {
+  const _ThemedBelt({required this.asset});
+
+  final String asset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Image(
+      image: ThemeImage.image(
+        CombatDenSlots.rankBelt,
+        fallback: ApiImage.rankAsset(asset),
       ),
+      width: _kBeltWidth,
+      height: _kBeltHeight,
+      fit: BoxFit.contain,
     );
   }
 }

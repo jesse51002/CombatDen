@@ -28,6 +28,7 @@ class AppTopbar extends StatelessWidget {
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
+    this.rankImageUrl,
     this.memberName,
     this.memberPhotoUrl,
     this.memberFirstName,
@@ -44,6 +45,12 @@ class AppTopbar extends StatelessWidget {
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
+
+  /// The member's OWN rank art (`MemberProfile.rank?.imageUrl`), threaded to
+  /// the [InfoBar]'s belt. Every wrapper passes it from the shared
+  /// `MemberProfileBloc`; null (no profile loaded yet, ranks off, or a rank
+  /// with no image) leaves the themed/bundled belt in place.
+  final String? rankImageUrl;
 
   /// The selected member's display name — the accessibility label on the
   /// trailing identity avatar. The avatar renders either way.
@@ -99,6 +106,7 @@ class AppTopbar extends StatelessWidget {
           ),
           InfoBar(
             rankBadgeAsset: rankBadgeAsset,
+            rankImageUrl: rankImageUrl,
             streakDays: streakDays,
             pointsLabel: pointsLabel,
             onQrTap: onQrTap,

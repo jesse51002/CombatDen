@@ -214,6 +214,22 @@ note is deleted.
   it). Tapping it opens the **identity sheet** (below); the gym title's own tap
   (`AppRoutes.memberSelect` → `SwitchProfileScreen`) and `onTitleDoubleTap`
   stay wired as the secondary path.
+- **The topbar's info bar shows the member's REAL belt.** Under the header,
+  `InfoBar` (`shared/widgets/topbar/info_bar.dart`) renders rank / streak /
+  points / QR. Its belt tile resolves in this order: the member's own rank art
+  (`MemberProfile.rank?.imageUrl` — already the sub-rank override over the main
+  rank's image, resolved server-side) via `CachedNetworkImageProvider`, then the
+  themed `CombatDenSlots.rankBelt` slot, then the bundled `rankBadgeAsset`. All
+  five topbar wrappers (home / profile / rewards / videos / class-detail) pass
+  `rankImageUrl: state.profile?.rank?.imageUrl` from the shared
+  `MemberProfileBloc`; the param is optional, so a bar built without a profile
+  (the class-detail `live: false` path) simply keeps the themed belt. Same idiom
+  as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile — don't invent a
+  third. **A failed load falls back, it does NOT collapse:** the belt is
+  permanent topbar chrome, so the network `Image`'s `errorBuilder` returns the
+  themed belt (an empty gap in the info bar would read as broken). This is the
+  deliberate exception to the omit-on-missing rule the creator avatar and the
+  picker's gym-logo tile follow — those are optional adornments; this is chrome.
 - **The identity sheet is the account surface** (`features/member_select/
   presentation/widgets/identity_sheet.dart`, the app's first modal bottom sheet
   — every sheet goes through `shared/widgets/sheets/app_bottom_sheet.dart`,
@@ -317,7 +333,9 @@ them as mandatory:
   (the avatar-to-text gap lives on the parent `Row`'s `spacing:`, so it
   disappears with the avatar). When a real URL is present the avatar renders as
   before. Same law as the picker's missing gym logo above; never re-express the
-  emptiness check at a call site.
+  emptiness check at a call site. (The topbar's rank belt is the one deliberate
+  exception — permanent chrome, so it falls back instead of collapsing; see
+  *The topbar's info bar shows the member's REAL belt* above.)
 - **Reset on switch.** Changing `SelectedMember` resets and reloads every
   feature bloc (via the `app_shell` re-key) — no stale data bleeds across profiles.
 
