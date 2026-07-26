@@ -281,6 +281,97 @@ void main() {
     await cubit.close();
   });
 
+  group('a gate belongs to the cart it answered', () {
+    /// A 422 is one answer about one cart. Left standing across a cart edit it
+    /// keeps demanding a signature for a membership nobody is buying — and the
+    /// off-roster rule above means it does that for somebody the request will
+    /// not even carry.
+    void gateOn(MockMemberRepository member, String memberId) {
+      when(() => member.previewStartMemberships(any())).thenThrow(
+        WaiverGateException(
+          message: 'Unsigned waivers',
+          unsigned: [
+            WaiverGateItem(
+              memberId: memberId,
+              waiverId: 'waiver-drift',
+              name: 'Photo release',
+            ),
+          ],
+        ),
+      );
+    }
+
+    test('un-picking the plan it named takes the demand with it', () async {
+      final cubit = await soloAtPlans();
+      cubit.togglePlan(ungated);
+      gateOn(member, 'm-payer');
+      await cubit.next();
+      expect(cubit.state.waiverQueue.single.waiverId, 'waiver-drift');
+
+      await cubit.back();
+      cubit.togglePlan(ungated);
+      expect(cubit.state.serverGate, isEmpty);
+      expect(
+        cubit.state.hasWaivers,
+        isFalse,
+        reason: 'nothing in the cart requires a signature any more',
+      );
+      await cubit.close();
+    });
+
+    test('unticking the person it named takes the demand with it', () async {
+      when(() => member.getMemberDetail('m-kid')).thenAnswer(
+        (_) async => detail(memberId: 'm-kid', firstName: 'Ella'),
+      );
+      final cubit = buildWizard(
+        member: member,
+        memberships: memberships,
+        launchMember: detail(
+          authorizedToPayFor: [linked(memberId: 'm-kid')],
+        ),
+        initialTrainingMemberIds: const {'m-payer', 'm-kid'},
+      );
+      await cubit.open();
+      await cubit.next();
+      cubit.togglePlan(ungated);
+      await cubit.next();
+      cubit.togglePlan(ungated);
+      gateOn(member, 'm-kid');
+      await cubit.next();
+      expect(cubit.state.waiverQueue.single.memberId, 'm-kid');
+
+      cubit.setTraining('m-kid', false);
+      expect(cubit.state.serverGate, isEmpty);
+      expect(cubit.state.hasWaivers, isFalse);
+      await cubit.close();
+    });
+
+    test('a payer switch, which drops every pick, drops it too', () async {
+      when(() => member.getMemberDetail('m-parent')).thenAnswer(
+        (_) async => detail(memberId: 'm-parent', firstName: 'Dana'),
+      );
+      final cubit = buildWizard(
+        member: member,
+        memberships: memberships,
+        launchMember: detail(
+          authorizedPayers: [linked(memberId: 'm-parent', firstName: 'Dana')],
+          authorizedToPayFor: [linked(memberId: 'm-parent', firstName: 'Dana')],
+        ),
+      );
+      await cubit.open();
+      await cubit.next();
+      cubit.togglePlan(ungated);
+      gateOn(member, 'm-payer');
+      await cubit.next();
+      expect(cubit.state.serverGate, isNotEmpty);
+
+      cubit.selectPayer('m-parent');
+      expect(cubit.state.serverGate, isEmpty);
+      expect(cubit.state.hasWaivers, isFalse);
+      await cubit.close();
+    });
+  });
+
   test('a failed waiver body read is an inline retry, never a dead end',
       () async {
     final cubit = await soloAtPlans();

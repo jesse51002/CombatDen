@@ -101,6 +101,15 @@ class MembershipWizardState extends Equatable {
 
   /// What a 422 gate named — the backstop. Never dropped by the client-side
   /// skip, and re-derived into the queue.
+  ///
+  /// **It belongs to [previewRequest], and dies with it.** The gate is one
+  /// answer about one cart, so every edit that drops the staged request drops
+  /// the gate too — otherwise a refusal naming a plan since removed, or a
+  /// person since unticked, would keep demanding a signature for a membership
+  /// nobody is buying, for somebody the request will not even carry. Nothing is
+  /// lost by clearing it: a plan's own `waiver_ids` still derive the signature
+  /// proactively, and a gate that drifted from them simply 422s again on the
+  /// next forward. What signing already recorded is untouched.
   final List<MembershipWizardWaiverTask> serverGate;
 
   /// `memberId:waiverId` for every signature THIS run collected. Signed stays

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -6,6 +8,7 @@ import 'package:crm/features/member_details/bloc/membership_wizard/membership_wi
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_derived.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_request.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_step.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
@@ -242,5 +245,96 @@ void main() {
     await cubit.next();
     expect(cubit.state.idempotencyKey, isNot(first));
     await cubit.close();
+  });
+
+  group('a preview that answers out of order', () {
+    /// The trash on the review is a tap, not an awaited call, so two of them
+    /// inside one round-trip leave two previews in flight — and nothing makes
+    /// the network answer in the order it was asked.
+    test('never lands a superseded cart\'s total on the live cart', () async {
+      final third = plan(planId: 'plan-c', priceId: 'price-c', price: 2000);
+      when(() => member.listMembershipPlans(any()))
+          .thenAnswer((_) async => [recurringPlan, packPlan, third]);
+      final pending = <Completer<MemberMembershipsStartPreview>>[];
+      when(() => member.previewStartMemberships(any())).thenAnswer((_) {
+        final answer = Completer<MemberMembershipsStartPreview>();
+        pending.add(answer);
+        return answer.future;
+      });
+
+      final cubit = buildWizard(
+        member: member,
+        memberships: memberships,
+        launchMember: detail(card: savedCard),
+      );
+      await cubit.open();
+      await cubit.next();
+      cubit.togglePlan(recurringPlan);
+      cubit.togglePlan(packPlan);
+      cubit.togglePlan(third);
+      final arriving = cubit.next();
+      pending[0].complete(startPreview(dueNow: invoice(total: 17000)));
+      await arriving;
+      expect(cubit.state.dueTodayMinor, 17000);
+
+      // Two trash taps, back to back. Neither is awaited — that is what the
+      // widget does.
+      cubit.removeMembership('m-payer', 'plan-c');
+      cubit.removeMembership('m-payer', 'plan-b');
+      expect(pending.length, 3, reason: 'both edits re-staged a preview');
+
+      // The LIVE cart's total arrives first...
+      pending[2].complete(startPreview(dueNow: invoice(total: 10000)));
+      await pumpEventQueue();
+      expect(cubit.state.dueTodayMinor, 10000);
+
+      // ...and the two-membership cart's answer arrives after it. It priced a
+      // cart that no longer exists, so it is dropped rather than rendered
+      // `ready` over the live one with PAY enabled.
+      pending[1].complete(startPreview(dueNow: invoice(total: 15000)));
+      await pumpEventQueue();
+      expect(
+        cubit.state.dueTodayMinor,
+        10000,
+        reason: 'quoting one number and charging another is the failure this '
+            'whole step exists to prevent',
+      );
+      await cubit.close();
+    });
+
+    /// The same guard on the unhappy paths: a superseded answer must not blank
+    /// a live quote, and a superseded 422 must not demand a signature for a
+    /// cart that is gone.
+    test('never lets a superseded failure blank the live quote', () async {
+      final pending = <Completer<MemberMembershipsStartPreview>>[];
+      when(() => member.previewStartMemberships(any())).thenAnswer((_) {
+        final answer = Completer<MemberMembershipsStartPreview>();
+        pending.add(answer);
+        return answer.future;
+      });
+
+      final cubit = buildWizard(
+        member: member,
+        memberships: memberships,
+        launchMember: detail(card: savedCard),
+      );
+      await cubit.open();
+      await cubit.next();
+      cubit.togglePlan(recurringPlan);
+      final arriving = cubit.next();
+
+      // A second Retry tap while the first read is still out.
+      cubit.retryPreview();
+      pending[1].complete(startPreview(dueNow: invoice(total: 13000)));
+      await pumpEventQueue();
+      expect(cubit.state.previewLoad.isReady, isTrue);
+
+      pending[0].completeError(Exception('the first attempt, answering late'));
+      await arriving;
+      await pumpEventQueue();
+      expect(cubit.state.previewLoad.isReady, isTrue);
+      expect(cubit.state.dueTodayMinor, 13000);
+      await cubit.close();
+    });
   });
 }

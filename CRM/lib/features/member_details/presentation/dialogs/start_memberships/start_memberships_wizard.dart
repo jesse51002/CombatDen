@@ -10,6 +10,7 @@ import 'package:crm/features/member_details/bloc/membership_wizard/membership_wi
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_derived.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/wizard_actions.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/wizard_copy.dart';
@@ -92,9 +93,9 @@ class _StartMembershipsWizardState extends State<StartMembershipsWizard> {
   late final MembershipWizardCubit _cubit;
   late final WizardDialogRoutes _routes;
 
-  /// Whether the landed run has already been announced to the page behind, so
-  /// a rebuild cannot re-dispatch the refresh.
-  bool _announced = false;
+  /// The last start response announced to the page behind, held by IDENTITY so
+  /// a restored earlier receipt is recognised as already announced.
+  MemberMembershipsStartResponse? _announced;
 
   @override
   void initState() {
@@ -126,11 +127,11 @@ class _StartMembershipsWizardState extends State<StartMembershipsWizard> {
   }
 
   /// The run landed. The page behind is showing memberships that just changed,
-  /// so it re-reads — once, whatever the outcome, because a PARTIAL moved real
-  /// money too.
+  /// so it re-reads — see [announcesNewLanding] for which landings count.
   void _announceLanded(MembershipWizardState state) {
-    if (_announced || state.startResult == null) return;
-    _announced = true;
+    final landed = state.startResult;
+    if (!announcesNewLanding(_announced, landed)) return;
+    _announced = landed;
     _detailBloc.add(
       MemberDetailRequested(widget.member.memberId, gymId: widget.member.gymId),
     );
@@ -195,3 +196,23 @@ class _StartMembershipsWizardState extends State<StartMembershipsWizard> {
     );
   }
 }
+
+/// Whether [landed] is a start response the page behind has not been told
+/// about yet, given the last one it was told about ([announced]).
+///
+/// Every landing announces, whatever the outcome: a partial moved real money
+/// too, and a retry that creates the rest is a SECOND landing. Announcing only
+/// the first would leave the page showing the partial's memberships and
+/// silently missing the ones the retry created, until somebody reloaded it by
+/// hand.
+///
+/// The comparison is by IDENTITY, and that is what keeps "every landing" from
+/// becoming "every attempt". An attempt that produces no breakdown of its own —
+/// a decline, a network failure, a 409 replay — RESTORES the previous response
+/// object rather than building a new one, so it is recognised as already
+/// announced and costs the page behind no re-read.
+bool announcesNewLanding(
+  MemberMembershipsStartResponse? announced,
+  MemberMembershipsStartResponse? landed,
+) =>
+    landed != null && !identical(landed, announced);

@@ -200,6 +200,57 @@ void main() {
       expect(cubit.state.payer.memberId, 'm-payer');
       await cubit.close();
     });
+
+    /// A switch onto somebody whose OWN detail is already in hand — the common
+    /// case, since the previous payer's roster read fetched it — still rebuilds
+    /// the roster from that payer's dependents, who are a different set of
+    /// people entirely. Their history is what gates their plan cards.
+    test('reads the NEW roster\'s history even when the payer is cached',
+        () async {
+      when(() => member.getMemberDetail('m-parent')).thenAnswer(
+        (_) async => detail(
+          memberId: 'm-parent',
+          firstName: 'Dana',
+          authorizedToPayFor: [linked(memberId: 'm-kid', firstName: 'Ella')],
+        ),
+      );
+      when(() => member.getMemberDetail('m-kid')).thenAnswer(
+        (_) async => detail(
+          memberId: 'm-kid',
+          firstName: 'Ella',
+          memberships: [held(planId: 'plan-a', memberId: 'm-kid')],
+        ),
+      );
+      final cubit = buildWizard(
+        member: member,
+        memberships: memberships,
+        launchMember: detail(
+          // Mutually linked: Dana may pay for Marcus, and Marcus's own roster
+          // read already put Dana's detail in the cache.
+          authorizedPayers: [linked(memberId: 'm-parent', firstName: 'Dana')],
+          authorizedToPayFor: [linked(memberId: 'm-parent', firstName: 'Dana')],
+        ),
+      );
+      await cubit.open();
+      await settle();
+      expect(cubit.state.memberDetails.containsKey('m-parent'), isTrue);
+
+      cubit.selectPayer('m-parent');
+      await settle();
+
+      expect(
+        cubit.state.people.map((p) => p.memberId),
+        containsAll(['m-parent', 'm-kid']),
+      );
+      expect(
+        cubit.state.gateFor('m-kid', unlimited),
+        isNotNull,
+        reason: 'Ella already holds this recurring plan — skipping the roster '
+            'read because the PAYER was cached leaves every card in a '
+            'switched-payer run ungated until the money step refuses it',
+      );
+      await cubit.close();
+    });
   });
 
   group('the training tick', () {

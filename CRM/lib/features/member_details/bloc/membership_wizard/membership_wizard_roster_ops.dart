@@ -122,11 +122,25 @@ mixin MembershipWizardRosterOps on MembershipWizardBase {
         preview: null,
         previewRequest: null,
         previewLoad: const MembershipWizardLoad.idle(),
+        // Every pick is gone, so a refusal about them is too — see
+        // `serverGate`. The switch would otherwise carry a demand to sign for
+        // somebody this payer may not even cover.
+        serverGate: const [],
         lastConsequence:
             consequence != null && consequence.destroys ? consequence : null,
       ),
     );
-    if (cached == null) unawaited(loadPayerDetail());
+    // The ROSTER is what gates the plans, and it was just rebuilt from this
+    // payer's own dependents — a different set of people from the last one,
+    // whose history is a different set of reads. Skipping it because the
+    // PAYER's own detail happened to be cached is how every plan card in a
+    // switched-payer run ends up ungated, offering a recurring plan somebody
+    // already holds and finding out at the money step.
+    if (cached == null) {
+      unawaited(loadPayerDetail());
+    } else {
+      unawaited(loadFamilyDetails());
+    }
   }
 
   /// Turn "getting a membership" on or off for one person.
@@ -143,6 +157,7 @@ mixin MembershipWizardRosterOps on MembershipWizardBase {
           preview: null,
           previewRequest: null,
           previewLoad: const MembershipWizardLoad.idle(),
+          serverGate: const [],
           lastConsequence: null,
         ),
       );
@@ -160,6 +175,10 @@ mixin MembershipWizardRosterOps on MembershipWizardBase {
         preview: null,
         previewRequest: null,
         previewLoad: const MembershipWizardLoad.idle(),
+        // Their picks are gone, so a refusal naming them is too — see
+        // `serverGate`. Otherwise the run keeps a waivers step for somebody the
+        // request will not carry at all.
+        serverGate: const [],
         lastConsequence:
             consequence != null && consequence.destroys ? consequence : null,
       ),

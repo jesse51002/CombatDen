@@ -142,6 +142,8 @@ mixin MembershipWizardPlanOps on MembershipWizardBase {
         preview: null,
         previewRequest: null,
         previewLoad: const MembershipWizardLoad.idle(),
+        // The gate answered the cart this just changed — see `serverGate`.
+        serverGate: const [],
         lastConsequence: consequence,
       ),
     );
@@ -172,7 +174,9 @@ mixin MembershipWizardPlanOps on MembershipWizardBase {
 
   /// Write one person's lineup back, clearing any staged preview: a cart that
   /// changed is a price that changed, and a stale figure beside a live cart is
-  /// how a payer is quoted one number and charged another.
+  /// how a payer is quoted one number and charged another. The 422 gate goes
+  /// with it — it answered the cart that just stopped existing (see
+  /// `serverGate`).
   void _setLineup(String memberId, List<MembershipWizardDraft> lineup) {
     emit(
       state.copyWith(
@@ -182,6 +186,7 @@ mixin MembershipWizardPlanOps on MembershipWizardBase {
         preview: null,
         previewRequest: null,
         previewLoad: const MembershipWizardLoad.idle(),
+        serverGate: const [],
       ),
     );
   }

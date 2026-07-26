@@ -7,6 +7,7 @@ import 'package:crm/features/member_details/bloc/membership_wizard/membership_wi
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_request.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_step.dart';
 import 'package:crm/features/member_details/bloc/membership_wizard/membership_wizard_waiver_ops.dart';
+import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/custom_card_capture.dart';
 
@@ -51,7 +52,7 @@ mixin MembershipWizardMoneyOps
     if (request == null) return;
     try {
       final preview = await memberRepo.previewStartMemberships(request);
-      if (isClosed) return;
+      if (isClosed || !_isLivePreview(request)) return;
       emit(
         state.copyWith(
           preview: preview,
@@ -63,12 +64,12 @@ mixin MembershipWizardMoneyOps
       // BACKSTOP catching what the proactive queue missed — a plan whose
       // waiver list drifted, or a floor that moved mid-run.
       log('Membership wizard: preview waiver gate', error: e, stackTrace: st);
-      if (isClosed) return;
+      if (isClosed || !_isLivePreview(request)) return;
       applyServerWaiverGate(e);
     } catch (e, st) {
       log('Membership wizard: charge preview failed',
           error: e, stackTrace: st);
-      if (isClosed) return;
+      if (isClosed || !_isLivePreview(request)) return;
       emit(
         state.copyWith(
           previewLoad: const MembershipWizardLoad.failed(
@@ -78,6 +79,22 @@ mixin MembershipWizardMoneyOps
       );
     }
   }
+
+  /// Whether [request] is still the preview this run is waiting on.
+  ///
+  /// Two trash taps inside one round-trip fire two previews, and nothing makes
+  /// the network answer in the order it was asked — so the FIRST cart's total
+  /// can arrive last and land on the second cart, `ready`, with PAY enabled
+  /// over a figure nothing will charge. `previewRequest` is the staged
+  /// request's identity and EVERY cart or roster edit nulls it, so a response
+  /// whose own request is no longer staged is dropped rather than rendered
+  /// beside a cart it did not price. Quoting one number and charging another is
+  /// the exact failure this step exists to prevent.
+  ///
+  /// It guards the failure and the 422 alike: a stale error would blank a live
+  /// quote, and a stale gate would demand a signature for a cart that is gone.
+  bool _isLivePreview(MemberMembershipsStartRequest request) =>
+      identical(state.previewRequest, request);
 
   /// Re-run the preview after a failure.
   Future<void> retryPreview() => enterReviewCharges();
