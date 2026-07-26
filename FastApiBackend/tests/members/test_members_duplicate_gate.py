@@ -39,7 +39,7 @@ def test_allow_duplicate_defaults_false():
 
 async def test_check_duplicate_noop_when_email_none():
     """A null-email request never runs the lookup and never raises."""
-    svc = MembersManagementCreate(None, None)
+    svc = MembersManagementCreate(None, None, None)
     svc._find_duplicates = AsyncMock(side_effect=AssertionError("should not run"))
 
     request = MemberCreateRequest(
@@ -55,7 +55,7 @@ async def test_check_duplicate_noop_when_email_none():
 
 async def test_check_duplicate_noop_when_allow_duplicate():
     """An explicit allow_duplicate=True skips the lookup entirely."""
-    svc = MembersManagementCreate(None, None)
+    svc = MembersManagementCreate(None, None, None)
     svc._find_duplicates = AsyncMock(side_effect=AssertionError("should not run"))
 
     request = MemberCreateRequest(
@@ -71,7 +71,7 @@ async def test_check_duplicate_noop_when_allow_duplicate():
 
 
 async def test_check_duplicate_passes_when_no_match():
-    svc = MembersManagementCreate(None, None)
+    svc = MembersManagementCreate(None, None, None)
     svc._find_duplicates = AsyncMock(return_value=[])
 
     request = MemberCreateRequest(
@@ -93,7 +93,7 @@ async def test_check_duplicate_raises_409_with_matches():
         "email": "ada@example.com",
         "photo_url": None,
     }
-    svc = MembersManagementCreate(None, None)
+    svc = MembersManagementCreate(None, None, None)
     svc._find_duplicates = AsyncMock(return_value=[match])
 
     request = MemberCreateRequest(
@@ -136,7 +136,7 @@ async def test_duplicate_gate_409_then_allow_duplicate(
 ):
     email = f"dupgate-{uuid4()}@example.com"
 
-    first = await management_service.create_member(
+    first = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="DupGate",
@@ -144,7 +144,7 @@ async def test_duplicate_gate_409_then_allow_duplicate(
             email=email,
             send_invite=False,
         ),
-    ).member
+    )).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
@@ -159,7 +159,7 @@ async def test_duplicate_gate_409_then_allow_duplicate(
                 email=email,
                 send_invite=False,
             ),
-        ).member
+        )
     assert exc_info.value.status_code == 409
     detail = exc_info.value.detail
     assert detail["code"] == "duplicate_member"
@@ -169,7 +169,7 @@ async def test_duplicate_gate_409_then_allow_duplicate(
     assert await _count_members_by_email(db_pool, gym_id, email) == 1
 
     # Re-sending with allow_duplicate=true creates the member anyway.
-    second = await management_service.create_member(
+    second = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="DupGate",
@@ -178,7 +178,7 @@ async def test_duplicate_gate_409_then_allow_duplicate(
             allow_duplicate=True,
             send_invite=False,
         ),
-    ).member
+    )).member
     created.track_member(second.member_id)
     created.track_customer(second.stripe_customer_id)
 
@@ -205,7 +205,7 @@ async def test_duplicate_gate_normalizes_case_and_whitespace(
     """
     suffix = uuid4().hex[:8]
 
-    first = await management_service.create_member(
+    first = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name=f"Ada{suffix}",
@@ -213,7 +213,7 @@ async def test_duplicate_gate_normalizes_case_and_whitespace(
             email=f"ada.{suffix}@example.com",
             send_invite=False,
         ),
-    ).member
+    )).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
@@ -247,7 +247,7 @@ async def test_null_email_create_never_gated(
     name_suffix = uuid4().hex[:8]
     last_name = f"NullEmail{name_suffix}"
 
-    first = await management_service.create_member(
+    first = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Casey",
@@ -255,12 +255,12 @@ async def test_null_email_create_never_gated(
             email=None,
             send_invite=False,
         ),
-    ).member
+    )).member
     created.track_member(first.member_id)
     created.track_customer(first.stripe_customer_id)
 
     # Same name, still no email — the gate never runs, so this succeeds.
-    second = await management_service.create_member(
+    second = (await management_service.create_member(
         MemberCreateRequest(
             gym_id=gym_id,
             first_name="Casey",
@@ -268,7 +268,7 @@ async def test_null_email_create_never_gated(
             email=None,
             send_invite=False,
         ),
-    ).member
+    )).member
     created.track_member(second.member_id)
     created.track_customer(second.stripe_customer_id)
 

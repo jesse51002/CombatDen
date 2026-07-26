@@ -48,7 +48,7 @@ async def test_update_personal_info(
             last_name="Name",
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:
@@ -110,7 +110,7 @@ async def test_date_of_birth_round_trips_and_survives_partial_update(
             date_of_birth=dob,
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:
@@ -161,7 +161,7 @@ async def test_update_card_existing_customer(
             payment_method_id=pm1,
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:
@@ -221,7 +221,7 @@ async def test_update_card_on_cardless_customer(
             last_name="NeedsOne",
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:
@@ -273,7 +273,7 @@ async def test_unlink_payment(
             payment_method_id=pm_id,
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(created_member.stripe_customer_id)
 
     try:

@@ -148,10 +148,30 @@ async def send_email(
             ),
         )
 
-    # The trailing-hour count doubles as the resend sequence, so the
-    # idempotency key differs on every deliberate resend instead of
-    # colliding with the original send and silently no-opping.
-    payload = _payload_for(request, subject_id, resend_seq=recent)
+    # The SEQUENCE is the ALL-TIME count, never the windowed one used for
+    # the cap above. The window has to reset or nobody could ever be
+    # resent to; the sequence must never reset, or a resend more than an
+    # hour after the original recomputes seq 0, collides with the
+    # original claim's idempotency key, and silently sends nothing while
+    # still answering 202 — which is exactly the case that matters, since
+    # "they never got it" reaches staff hours or days later.
+    try:
+        resend_seq = await emails_log.count_total_for_subject(
+            subject_id, request.kind
+        )
+    except Exception:
+        logger.error(
+            "Failed to read the resend sequence: subject_id=%s, kind=%s",
+            subject_id,
+            request.kind,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send email",
+        ) from None
+
+    payload = _payload_for(request, subject_id, resend_seq=resend_seq)
 
     try:
         email_id, outcome = await emails_service.request_send(payload)

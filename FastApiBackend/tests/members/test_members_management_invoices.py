@@ -40,7 +40,7 @@ async def test_list_invoices_returns_real_invoice(
             payment_method_id=pm_id,
             send_invite=False,
         ),
-    ).member).member
+    )).member
     created.track_customer(member.stripe_customer_id)
 
     try:

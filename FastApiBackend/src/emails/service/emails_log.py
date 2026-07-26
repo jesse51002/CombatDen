@@ -140,6 +140,30 @@ class EmailsLog:
             rows = result.mappings().fetchall()
         return [dict(row) for row in rows]
 
+    async def count_total_for_subject(
+        self,
+        subject_id: UUID,
+        kind: EmailKind,
+    ) -> int:
+        """How many rows of this kind have EVER existed for this person.
+
+        The resend SEQUENCE, not the cap. It must never reset: it is what
+        makes a deliberate resend a new idempotency key instead of a
+        collision with the original claim. See the SQL file's header for why
+        the windowed count cannot serve both roles.
+        """
+        sql = load_sql(SQL_DIR / "email_log_count_total.sql")
+        async with self._db_pool.session() as session:
+            result = await session.execute(
+                text(sql),
+                {
+                    "subject_id": str(subject_id),
+                    "kind": str(kind),
+                },
+            )
+            row = result.mappings().fetchone()
+        return int(row["total_count"]) if row else 0
+
     async def count_recent_for_subject(
         self,
         subject_id: UUID,
