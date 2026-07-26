@@ -1,4 +1,3 @@
-import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
@@ -71,38 +70,6 @@ class MembershipDraft {
   /// Whether any discount (preset or custom) is added.
   bool get hasDiscounts =>
       discountIds.isNotEmpty || customDiscounts.isNotEmpty;
-
-  /// UI estimate of this membership's LINE total after the added
-  /// discounts for [units] units, in cents: percents apply first to
-  /// the line base ([units] × unit price, compounding sequentially),
-  /// then dollar amounts subtract **once** from the line — mirroring
-  /// the backend's quantity-N Stripe line, where a fixed-$ coupon
-  /// applies once to the whole line (not per unit) and a percent
-  /// applies to unit×N. Floored at zero, percent→dollar order. The
-  /// Preview step stays the authoritative figure.
-  int discountedLineTotalCents(
-    List<DiscountResponse> presets,
-    int units,
-  ) {
-    final base = plan.activePrice?.price ?? 0;
-    final values = <DiscountValue>[
-      for (final id in discountIds)
-        for (final d in presets)
-          if (d.discountId == id) d.value,
-      ...customDiscounts,
-    ];
-    var price = (base * units).toDouble();
-    for (final v in values) {
-      final pct = v.percentageOff;
-      if (pct != null) price *= 1 - pct / 100;
-    }
-    var cents = price.round();
-    for (final v in values) {
-      final dollars = v.dollarOff;
-      if (dollars != null) cents -= dollars;
-    }
-    return cents < 0 ? 0 : cents;
-  }
 
   /// The wire item for this draft (carrying [count] as
   /// `quantity`), or null when the plan has no active price

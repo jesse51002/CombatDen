@@ -1,10 +1,13 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/member_details/data/models/membership_info.dart';
+import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/members_list/data/models/membership_status.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart';
+import 'package:crm/features/membership_flow/domain/membership_history.dart';
+import 'package:crm/features/membership_flow/domain/plan_rules.dart';
 
-/// **The wizard's plan block must be the backend's plan block, nothing wider.**
+/// **The shared plan block must be the backend's plan block, nothing wider.**
 ///
 /// `FastApiBackend/src/memberships/sql/member_memberships_check_existing.sql`
 /// is the whole duplicate guard the API actually enforces:
@@ -21,8 +24,9 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 /// non-one_time plan at `active` / `trial` / `frozen` / `overdue`, so it turned
 /// away money the API would have accepted, with no override anywhere in the
 /// flow. The kiosk derives its own block from the same SQL
-/// (`KioskSignupState.planBlockReasonFor`), so these cases are also what keeps
-/// the two clients stating one rule instead of two.
+/// (`KioskSignupState.planBlockReasonFor`) — which now runs THIS module's
+/// [RecurringHeldGate], so these cases are what keeps the two clients stating
+/// one rule instead of two.
 ///
 /// **The status list does not translate string-for-string, and that is the
 /// subtle case below.** The guard reads `member_memberships_status`, whose
@@ -251,6 +255,102 @@ void main() {
       ]);
 
       expect(warnings, {'week-trial': 'Had this trial in the past'});
+    });
+  });
+
+  /// **A gate blocks; a note only annotates — and they are different TYPES.**
+  ///
+  /// Both surfaces test catalogue plans through these objects (the kiosk's
+  /// `planBlockReasonFor` switches exhaustively over the sealed gate
+  /// hierarchy), so the object form is the form that actually decides whether
+  /// a card can be tapped. A note has no `blocks` to call at all — that is the
+  /// point of the split: an advisory cannot become a block by a flipped flag.
+  group('gates block, notes do not', () {
+    MembershipPlanResponse plan(String planId, PlanType type) =>
+        MembershipPlanResponse(
+          planId: planId,
+          gymId: 'gym-1',
+          planName: planId,
+          imageUrl: 'https://cdn.example/$planId.png',
+          planType: type,
+          isPublic: true,
+          createdAt: DateTime.utc(2026, 1, 1),
+        );
+
+    test('RecurringHeldGate closes only the held recurring plan', () {
+      const gate = RecurringHeldGate({'unlimited'});
+
+      expect(gate.blocks(plan('unlimited', PlanType.recurring)), isTrue);
+      expect(gate.blocks(plan('kids-monthly', PlanType.recurring)), isFalse);
+      // Keyed on plan id AND type: a pack sharing an id could never be the
+      // recurring row the guard rejected.
+      expect(gate.blocks(plan('unlimited', PlanType.oneTime)), isFalse);
+      expect(gate.reason, 'Already on this plan');
+    });
+
+    test('TrialOnceGate closes EVERY trial plan, and only trial plans', () {
+      const used = TrialOnceGate(hadTrial: true);
+
+      expect(used.blocks(plan('week-trial', PlanType.trial)), isTrue);
+      expect(used.blocks(plan('day-trial', PlanType.trial)), isTrue);
+      expect(used.blocks(plan('unlimited', PlanType.recurring)), isFalse);
+      // A first-timer is never blocked — the read fails OPEN into this.
+      expect(
+        const TrialOnceGate(hadTrial: false)
+            .blocks(plan('week-trial', PlanType.trial)),
+        isFalse,
+      );
+    });
+
+    test('firstBlockingGate answers in the caller\'s order', () {
+      // A trial plan the member both had AND somehow holds: the kiosk states
+      // the per-MEMBER reason first, because its words never name a plan.
+      final gates = <PlanGate>[
+        const TrialOnceGate(hadTrial: true),
+        const RecurringHeldGate({'week-trial'}),
+      ];
+
+      expect(
+        firstBlockingGate(gates, plan('week-trial', PlanType.trial)),
+        isA<TrialOnceGate>(),
+      );
+      expect(
+        firstBlockingGate(gates, plan('unlimited', PlanType.recurring)),
+        isNull,
+      );
+    });
+
+    test('PastTrialNote annotates its plan without closing anything', () {
+      const note = PastTrialNote({'week-trial'});
+
+      expect(note.applies(plan('week-trial', PlanType.trial)), isTrue);
+      expect(note.applies(plan('day-trial', PlanType.trial)), isFalse);
+      expect(note.note, 'Had this trial in the past');
+      // The type carries no way to block: `note is PlanGate` is false, so a
+      // surface cannot pass it to `firstBlockingGate` even by accident.
+      expect(note, isNot(isA<PlanGate>()));
+    });
+
+    test('the gate factories read the same rows the map forms do', () {
+      final rows = [
+        membership(
+          planId: 'unlimited',
+          planType: 'recurring',
+          status: MembershipStatus.overdue,
+        ),
+        membership(
+          planId: 'week-trial',
+          planType: 'trial',
+          status: MembershipStatus.ended,
+        ),
+      ];
+
+      expect(RecurringHeldGate.fromMemberships(rows).heldPlanIds,
+          {'unlimited'});
+      // Every row ever held counts for the trial rule — an ENDED trial still
+      // means they have had one.
+      expect(TrialOnceGate.fromMemberships(rows).hadTrial, isTrue);
+      expect(PastTrialNote.fromMemberships(rows).planIds, {'week-trial'});
     });
   });
 }

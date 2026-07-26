@@ -4,6 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_card.dart';
+import 'package:crm/features/membership_flow/domain/catalogue_policy.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// The gym's purchasable plans as a two-column grid of image-led product
@@ -47,9 +48,10 @@ class StartPlanList extends StatelessWidget {
             ),
           );
         }
-        final plans = (snapshot.data ?? const [])
-            .where((p) => p.activePrice != null)
-            .toList();
+        // The shared catalogue policy, the same one the kiosk applies:
+        // public AND priced. A non-public plan is no longer sellable at
+        // the desk either — one catalogue, both surfaces.
+        final plans = sellablePlans(snapshot.data ?? const []);
         if (plans.isEmpty) {
           return Text(
             'This gym has no purchasable plans yet.',

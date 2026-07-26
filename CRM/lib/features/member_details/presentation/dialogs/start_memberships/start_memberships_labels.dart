@@ -1,42 +1,14 @@
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/discount_duration_unit.dart';
 import 'package:crm/features/member_details/data/models/discount_value.dart';
-import 'package:crm/features/member_details/data/models/duration_unit.dart';
-import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
-import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/presentation/widgets/member_detail_format.dart';
 
-/// Pure label helpers for the Start Memberships wizard.
-
-/// Class allowance for a plan tile. Recurring plans read
-/// per cycle ("10 classes / month", "Unlimited / month");
-/// one_time / trial plans read as a flat pack ("5 classes"),
-/// multiplied by the stepper [count].
-String planAllowanceLabel(
-  MembershipPlanResponse plan, {
-  int count = 1,
-}) {
-  final classes = plan.classCount;
-  if (plan.planType == PlanType.recurring) {
-    final cycle = _cycleLabel(plan);
-    return classes == null
-        ? 'Unlimited / $cycle'
-        : '$classes classes / $cycle';
-  }
-  if (classes == null) return 'Unlimited classes';
-  final total = classes * count;
-  return total == 1 ? '1 class' : '$total classes';
-}
-
-String _cycleLabel(MembershipPlanResponse plan) {
-  final unit = plan.durationUnit;
-  final amount = plan.durationAmount ?? 1;
-  final unitLabel = unit == null ||
-          unit == DurationUnit.unknown
-      ? 'month'
-      : unit.displayLabel.toLowerCase();
-  return amount == 1 ? unitLabel : '$amount ${unitLabel}s';
-}
+/// The wizard's DISCOUNT label helpers — staff-only vocabulary, which is why
+/// it stays here rather than in the shared flow module.
+///
+/// The plan vocabulary this file used to also own now lives in
+/// `membership_flow/domain/plan_labels.dart`, shared with the kiosk so the two
+/// surfaces cannot word a plan differently.
 
 /// "20% off" / "$10 off" for an inline custom value.
 String discountValueAmountLabel(DiscountValue value) {

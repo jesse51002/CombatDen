@@ -4,6 +4,7 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
+import 'package:crm/features/membership_flow/domain/discount_math.dart';
 
 /// A draft membership's live price readout: the plan price
 /// alone, or — once discounts are added — the original
@@ -34,7 +35,15 @@ class LiveDiscountedPrice extends StatelessWidget {
     // ONCE (matching the backend's quantity-N Stripe line). At count
     // 1 this is the discounted unit price.
     final net = hasDiscount
-        ? draft.discountedLineTotalCents(presets, count)
+        ? discountedLineTotalCents(
+            unitPriceCents: base,
+            units: count,
+            values: resolvedDiscountValues(
+              presetIds: draft.discountIds,
+              presets: presets,
+              customs: draft.customDiscounts,
+            ),
+          )
         : base * count;
 
     if (count <= 1) {

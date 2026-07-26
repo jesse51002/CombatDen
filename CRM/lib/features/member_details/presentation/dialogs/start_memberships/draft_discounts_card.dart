@@ -8,6 +8,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/live_discounted_price.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
+import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 
 /// One membership card on the deals step: the membership

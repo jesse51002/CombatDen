@@ -7,7 +7,11 @@ import 'package:crm/features/member_details/data/models/member_memberships_start
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
+import 'package:crm/features/membership_flow/domain/money_readouts.dart'
+    as money;
+import 'package:crm/features/membership_flow/domain/plan_rules.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 
 /// The signup lane's step spine, in flow order.
@@ -863,26 +867,36 @@ class KioskSignupState extends Equatable {
   /// Why [plan] is closed to [person] specifically — the per-person form, so a
   /// late eligibility answer can re-test a pick already made.
   ///
-  /// Neither rule may be widened. [KioskPlanBlockReason.trialUsed] is
-  /// kiosk-only: any prior trial blocks EVERY trial plan, though staff may
-  /// still grant a repeat from the CRM. [KioskPlanBlockReason.alreadyOnPlan]
-  /// mirrors the backend's conflict guard
-  /// (`member_memberships_check_existing.sql`), keyed on `plan_id`, so one
-  /// recurring plan never blocks a DIFFERENT one; which client statuses count
-  /// as "held" is `KioskSignupCubit._readPlanHistory`'s argument.
+  /// Neither rule may be widened, and neither is stated here: both come from
+  /// the shared rulebook (`membership_flow/domain/plan_rules.dart`), which the
+  /// desk reads too. [KioskPlanBlockReason.trialUsed] is the kiosk's own
+  /// consequence of [TrialOnceGate] — any prior trial blocks EVERY trial plan,
+  /// though staff may still grant a repeat from the CRM.
+  /// [KioskPlanBlockReason.alreadyOnPlan] is [RecurringHeldGate], which mirrors
+  /// the backend's conflict guard (`member_memberships_check_existing.sql`)
+  /// keyed on `plan_id`, so one recurring plan never blocks a DIFFERENT one.
+  ///
+  /// The switch is exhaustive over the sealed gate hierarchy: a new gate cannot
+  /// ship without the kiosk saying what it means.
   KioskPlanBlockReason? planBlockReasonFor(
     KioskSignupPerson person,
     MembershipPlanResponse plan,
   ) {
-    if (plan.planType == PlanType.trial && person.hadTrial) {
-      return KioskPlanBlockReason.trialUsed;
-    }
-    if (plan.planType == PlanType.recurring &&
-        person.heldRecurringPlanIds.contains(plan.planId)) {
-      return KioskPlanBlockReason.alreadyOnPlan;
-    }
-    return null;
+    final gate = firstBlockingGate(_planGatesFor(person), plan);
+    return switch (gate) {
+      TrialOnceGate() => KioskPlanBlockReason.trialUsed,
+      RecurringHeldGate() => KioskPlanBlockReason.alreadyOnPlan,
+      null => null,
+    };
   }
+
+  /// The gates closing plans to [person], in the order their explanations take
+  /// precedence: the per-MEMBER trial rule before the per-PLAN one, which is
+  /// the order the kiosk has always answered a doubly-blocked card in.
+  List<PlanGate> _planGatesFor(KioskSignupPerson person) => [
+        TrialOnceGate(hadTrial: person.hadTrial),
+        RecurringHeldGate(person.heldRecurringPlanIds.toSet()),
+      ];
 
   /// The catalogue names of the recurring plans the ACTIVE person holds — what
   /// the plan notice and the already-on-plan popup state. A held plan the gym
@@ -924,47 +938,34 @@ class KioskSignupState extends Equatable {
     return false;
   }
 
+  /// The proration every readout below is taken at. The kiosk PINS it: an
+  /// unattended iPad never offers "no charge now", so the due-now half of the
+  /// preview is always the one that will actually be charged.
+  static const _proration = ProrationBehavior.prorateToAnchor;
+
   /// The ONLY arithmetic the kiosk does on money: the one-time invoice plus the
   /// recurring amount due now, straight off the preview (a price is never
-  /// derived from a plan row). Safe only because the kiosk pins
-  /// `prorate_to_anchor` — the CRM's `_effectiveDueNow` nulls the due-now half
-  /// for a `no_charge` proration, which the kiosk never offers.
+  /// derived from a plan row). The sum itself lives in the shared readouts,
+  /// which the desk reads too.
   int get dueTodayMinorUnits =>
-      (preview?.oneTime?.total ?? 0) + (preview?.dueNow?.total ?? 0);
+      money.dueTodayMinorUnits(preview, _proration);
 
   /// True when the payer's statement will show TWO charges today — a non-zero
-  /// one-time invoice AND a non-zero recurring amount due now. It tests the
-  /// AMOUNTS, never nullness and never `preview.recurring`: a $0 one-time line
-  /// is a present invoice with nothing on it, not a second charge.
+  /// one-time invoice AND a non-zero recurring amount due now.
   bool get chargedTwiceToday =>
-      (preview?.oneTime?.total ?? 0) > 0 && (preview?.dueNow?.total ?? 0) > 0;
+      money.chargedTwiceToday(preview, _proration);
 
   /// True when today's charge is a PART period — the kiosk pins
-  /// `prorate_to_anchor`, so a mid-cycle join pays the rest of the period. Read
-  /// off the lines' own `is_proration`, never inferred from "the two figures
-  /// differ": a false proration claim misstates the member's money.
-  bool get chargedProrated {
-    for (final line in [
-      ...?preview?.oneTime?.lines,
-      ...?preview?.dueNow?.lines,
-    ]) {
-      if (line.isProration) return true;
-    }
-    return false;
-  }
+  /// `prorate_to_anchor`, so a mid-cycle join pays the rest of the period.
+  bool get chargedProrated => money.chargedProrated(preview, _proration);
 
   /// The billing-period end a part-period charge runs up to, and the day the
   /// full amount first bills — the preview's own `next_payment_date`.
-  DateTime? get prorationUntil =>
-      preview?.dueNow?.nextPaymentAt ?? preview?.recurring?.nextPaymentAt;
+  DateTime? get prorationUntil => money.prorationUntil(preview, _proration);
 
   /// The currency every figure on the review is rendered in — whichever half
   /// of the preview exists, in the CRM's own order of preference.
-  String get currency =>
-      preview?.oneTime?.currency ??
-      preview?.dueNow?.currency ??
-      preview?.recurring?.currency ??
-      'usd';
+  String get currency => money.previewCurrency(preview, _proration);
 
   static const Object _keep = Object();
 

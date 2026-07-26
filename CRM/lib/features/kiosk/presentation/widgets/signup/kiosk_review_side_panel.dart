@@ -5,7 +5,7 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_buy_row.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels.dart';
+import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
 /// The review's left half: who this is, what they picked, and what they have
@@ -52,7 +52,7 @@ class KioskReviewSidePanel extends StatelessWidget {
           if (plan != null)
             KioskBuyRow(
               name: plan.planName,
-              rule: kioskPlanRuleLabel(plan),
+              rule: planAllowanceLabel(plan),
               imageUrl: plan.imageUrl,
               amount: price == null
                   ? null

@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart'
-    as rules;
 import 'package:crm/features/members_list/data/models/membership_status.dart';
+import 'package:crm/features/membership_flow/domain/membership_history.dart'
+    as history;
 import 'package:crm/shared/widgets/invoice_breakdown/invoice_chip.dart';
 
 /// Compact "Already has" block at the top of a member's
@@ -17,7 +17,7 @@ class StartAlreadyHas extends StatelessWidget {
   final String memberId;
 
   /// Non-terminal memberships covering [memberId], per
-  /// `rules.currentMembershipsForParticipant`.
+  /// `history.currentMembershipsForParticipant`.
   final List<MembershipInfo> memberships;
 
   const StartAlreadyHas({
@@ -51,7 +51,7 @@ class StartAlreadyHas extends StatelessWidget {
           for (final m in memberships)
             _AlreadyHasRow(
               planName: m.planName,
-              status: rules.participantStatus(m, memberId),
+              status: history.participantStatus(m, memberId),
             ),
         ],
       ),

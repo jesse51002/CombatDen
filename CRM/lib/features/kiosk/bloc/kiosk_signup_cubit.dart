@@ -23,8 +23,12 @@ import 'package:crm/features/members_list/data/models/crm_members_list_request.d
 import 'package:crm/features/members_list/data/models/member_row.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
-import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/domain/catalogue_policy.dart';
+import 'package:crm/features/membership_flow/domain/plan_rules.dart';
+import 'package:crm/features/membership_flow/domain/start_request_builder.dart'
+    as flow;
+import 'package:crm/features/membership_flow/domain/waiver_queue.dart';
 import 'package:crm/features/memberships/data/models/member_waiver_status.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
@@ -1043,16 +1047,17 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   // ── Plans (warmed at entry) ──
 
-  /// The gym's kiosk-eligible plans: public, and priced. A plan with no
-  /// active price has nothing to charge, and a non-public plan is a staff-only
-  /// arrangement — neither may appear on a self-serve iPad.
+  /// The gym's offerable plans: public, and priced. A plan with no active
+  /// price has nothing to charge, and a non-public plan is not part of the
+  /// gym's offer. The filter itself is the shared catalogue policy
+  /// (`membership_flow/domain/catalogue_policy.dart`), which the desk applies
+  /// too — one catalogue, both surfaces.
   Future<void> _warmPlans() async {
     emit(state.copyWith(plansLoading: true, plansFailed: false));
     try {
       final all = await _membershipsRepo.listPlans(_gymId);
       if (isClosed) return;
-      final offered =
-          all.where((p) => p.isPublic && p.activePrice != null).toList();
+      final offered = sellablePlans(all);
       emit(state.copyWith(plans: offered, plansLoading: false));
       // A warm that lands while the member is already ON the step has to
       // answer the step, not just fill a cache.
@@ -1164,25 +1169,19 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
   Future<_KioskPlanHistory> _readPlanHistory(String memberId) async {
     try {
       final detail = await _memberRepo.getMemberDetail(memberId);
+      // Both facts are derived by the shared rulebook's own gate factories —
+      // the trial rule over every membership row ever held (a trial finished a
+      // year ago still counts), and the held set over the backend's conflict
+      // guard (`member_memberships_check_existing.sql`) translated into the
+      // client's wider display enum. Neither status list is restated here: the
+      // desk reads the same two factories, so the two clients cannot drift.
       return (
         memberId: memberId,
-        // Every membership row ever held, whatever its lifecycle state — a
-        // trial finished a year ago still counts.
-        hadTrial: detail.memberships.any((m) => m.planType == 'trial'),
-        // The held set mirrors the backend's conflict guard
-        // (`member_memberships_check_existing.sql`), whose view emits only
-        // cancelled/ended/frozen/active. `overdue` is a CRM DISPLAY status that
-        // MASKS a raw `active`, so blocking active + frozen + overdue is the
-        // exact mirror, not a wider net: the two SQL literals alone UNDER-block
-        // and let a member in arrears eat the 400 at pay.
-        heldRecurring: <String>{
-          for (final membership in detail.memberships)
-            if (membership.planType == 'recurring' &&
-                (membership.status == MembershipStatus.active ||
-                    membership.status == MembershipStatus.frozen ||
-                    membership.status == MembershipStatus.overdue))
-              membership.planId,
-        }.toList(),
+        hadTrial: TrialOnceGate.fromMemberships(detail.memberships).hadTrial,
+        heldRecurring:
+            RecurringHeldGate.fromMemberships(detail.memberships)
+                .heldPlanIds
+                .toList(),
       );
     } catch (e, st) {
       log('Kiosk signup: membership history read failed (nothing blocked)',
@@ -1441,16 +1440,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
       for (final item in state.waiverGate)
         if (item.memberId == person.memberId) item.waiverId,
     };
-    final satisfied = _satisfiedWaiverIdsFor(person.memberId);
-    final queue = <String>[
-      for (final id in planIds)
-        if (id.trim().isNotEmpty &&
-            (gated.contains(id) || !satisfied.contains(id)))
-          id,
-    ];
-    for (final id in gated) {
-      if (!queue.contains(id)) queue.add(id);
-    }
+    final queue = waiverQueueFor(
+      planWaiverIds: planIds,
+      serverGatedWaiverIds: gated,
+      satisfiedWaiverIds: _satisfiedWaiverIdsFor(person.memberId),
+    );
     final next = _firstUnsigned(person.memberId, queue);
     if (next == null) {
       _advanceWaiverPerson();
@@ -1471,13 +1465,11 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
 
   /// The index of the first entry in [queue] that [memberId] has not signed,
   /// or null when every one of them is done.
-  int? _firstUnsigned(String? memberId, List<String> queue) {
-    final signed = state.signedWaiverIdsFor(memberId);
-    for (var i = 0; i < queue.length; i++) {
-      if (!signed.contains(queue[i])) return i;
-    }
-    return null;
-  }
+  int? _firstUnsigned(String? memberId, List<String> queue) =>
+      firstUnsignedIndex(
+        queue,
+        state.signedWaiverIdsFor(memberId).toSet(),
+      );
 
   // ── E3 · the payer-auth link (sign + link, ONE call) ──
 
@@ -1789,16 +1781,17 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     // Link before start, structurally: the start call never links, so no
     // request assembles until every payee is authorized.
     if (!state.everyPayeeLinked) return null;
-    final items = _startItems();
-    if (items.isEmpty) return null;
-    return MemberMembershipsStartRequest(
+    // The envelope is the shared builder's (`start_request_builder.dart`),
+    // which also owns the "no items, no request" rule — an empty retry set
+    // sends nothing rather than re-posting the cart.
+    return flow.buildStartRequest(
       payerMemberId: payerId,
       gymId: _gymId,
       idempotencyKey: idempotencyKey,
       prorationBehavior: ProrationBehavior.prorateToAnchor,
       paidWithCash: false,
       payment: payment,
-      memberships: items,
+      memberships: _startItems(),
     );
   }
 

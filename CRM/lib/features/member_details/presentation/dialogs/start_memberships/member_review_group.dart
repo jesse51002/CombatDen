@@ -6,6 +6,7 @@ import 'package:crm/features/member_details/data/models/discount_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/live_discounted_price.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
+import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 
 /// One member's block on the review step: their name + an
 /// Edit action (jumps back into their plans/discounts), then

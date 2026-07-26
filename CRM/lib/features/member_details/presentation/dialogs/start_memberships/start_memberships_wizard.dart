@@ -32,6 +32,7 @@ import 'package:crm/features/member_details/presentation/dialogs/start_membershi
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_step_body.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_wizard_helpers.dart';
 import 'package:crm/features/member_details/presentation/dialogs/update_card_dialog.dart';
+import 'package:crm/features/membership_flow/domain/start_request_builder.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 
 /// The Start Memberships wizard — one request per run:
@@ -288,8 +289,7 @@ class _StartMembershipsWizardState
       gymId: widget.member.gymId,
       prorationBehavior: prorationOverride ?? _prorationBehavior,
       paidWithCash: _paidWithCash,
-      configMembers: _configMembers,
-      drafts: _drafts,
+      memberships: startItemsFor(_configMembers, _drafts),
       // A one-off card is never saved as the default (set_default
       // stays false) — it pays today's one-time invoice only.
       payment: useCard

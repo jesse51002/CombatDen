@@ -5,7 +5,7 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/plan_count_stepper.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_memberships_labels.dart';
+import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 
 /// The padded lower half of a plan card: name, cadence/allowance line, price,
 /// and — for a disabled plan — its reason, or — for a selected steppable

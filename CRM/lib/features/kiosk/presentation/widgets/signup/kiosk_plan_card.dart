@@ -4,7 +4,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_labels.dart';
+import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 
 /// One plan, as a card: the 16:9 hero the whole app draws a plan with, then
 /// the name, the one rule line, and the price.
@@ -188,7 +188,7 @@ class _Body extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
         ),
         Text(
-          kioskPlanRuleLabel(plan),
+          planAllowanceLabel(plan),
           style: DesignConstants.kioskCaption.copyWith(
             color: DesignConstants.text2nd,
             fontWeight: FontWeight.w500,
@@ -224,7 +224,7 @@ class _Price extends StatelessWidget {
         ),
         Flexible(
           child: Text(
-            kioskPlanPriceSuffix(plan),
+            planPriceSuffix(plan),
             style: DesignConstants.kioskCaption.copyWith(
               color: DesignConstants.text2nd,
             ),

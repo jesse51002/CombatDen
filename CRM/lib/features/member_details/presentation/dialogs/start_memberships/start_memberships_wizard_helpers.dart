@@ -1,21 +1,21 @@
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_item.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_start_payment.dart';
-import 'package:crm/features/member_details/data/models/member_memberships_start_request.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/membership_info.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
-import 'package:crm/features/member_details/data/models/proration_behavior.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_membership/start_membership_participant.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/membership_draft.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_plan_rules.dart'
-    as rules;
+import 'package:crm/features/membership_flow/domain/membership_history.dart'
+    as history;
+import 'package:crm/features/membership_flow/domain/plan_rules.dart' as rules;
 
 /// Pure derivations the wizard orchestrator feeds the step
 /// body — selection ordering, per-member rule inputs, and
-/// the wire request assembly. Kept as a free-function
-/// module (no instance state), like `start_plan_rules.dart`.
+/// the wire item assembly. Kept as a free-function module
+/// (no instance state), like the shared
+/// `membership_flow/domain/plan_rules.dart` it reads its
+/// rules from.
 
 /// Selected members in stable family order (payer first).
 List<StartMembershipParticipant> configMembersFor({
@@ -64,7 +64,7 @@ Map<String, String> disabledPlanReasonsFor(
   final detail = memberDetails[member?.memberId];
   if (member == null || detail == null) return const {};
   return rules.disabledPlanReasons(
-    rules.membershipsForParticipant(
+    history.membershipsForParticipant(
       detail.memberships,
       member.memberId,
     ),
@@ -81,7 +81,7 @@ List<MembershipInfo> existingMembershipsFor(
 ) {
   final detail = memberDetails[member?.memberId];
   if (member == null || detail == null) return const [];
-  return rules.currentMembershipsForParticipant(
+  return history.currentMembershipsForParticipant(
     detail.memberships,
     member.memberId,
   );
@@ -124,18 +124,14 @@ Map<String, String> planNamesOf(
           d.plan.planId: d.plan.planName,
     };
 
-/// The one wire request for this run, or null when nothing
-/// is configured yet.
-MemberMembershipsStartRequest? buildStartRequest({
-  required String idempotencyKey,
-  required String payerMemberId,
-  required String gymId,
-  required ProrationBehavior prorationBehavior,
-  required bool paidWithCash,
-  required List<StartMembershipParticipant> configMembers,
-  required Map<String, List<MembershipDraft>> drafts,
-  MemberMembershipsStartPayment? payment,
-}) {
+/// This run's wire items, in family then pick order — what
+/// the shared `buildStartRequest` wraps in its envelope.
+/// Empty when nothing is configured yet, which is what makes
+/// that builder return no request at all.
+List<MemberMembershipsStartItem> startItemsFor(
+  List<StartMembershipParticipant> configMembers,
+  Map<String, List<MembershipDraft>> drafts,
+) {
   final items = <MemberMembershipsStartItem>[];
   for (final m in configMembers) {
     for (final d
@@ -147,16 +143,7 @@ MemberMembershipsStartRequest? buildStartRequest({
       items.add(item);
     }
   }
-  if (items.isEmpty) return null;
-  return MemberMembershipsStartRequest(
-    payerMemberId: payerMemberId,
-    gymId: gymId,
-    idempotencyKey: idempotencyKey,
-    prorationBehavior: prorationBehavior,
-    paidWithCash: paidWithCash,
-    payment: payment,
-    memberships: items,
-  );
+  return items;
 }
 
 /// The failed result items re-staged as fresh wire items —

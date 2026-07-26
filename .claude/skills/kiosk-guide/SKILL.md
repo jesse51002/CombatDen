@@ -586,15 +586,23 @@ conflicts on `plan_id = ANY(:plan_ids)` with `status IN ('active','frozen')` AND
   `dormant` and `trial` are still excluded: neither can mask a raw
   `active`/`frozen` **recurring** row.
 
-**Both clients now derive this ONE rule from that ONE guard.** The CRM's own
-`start_plan_rules.dart` (`disabledPlanReasons`) was aligned to the same
-recurring + `{active, frozen, overdue}` shape, so a divergence in either
-direction is a bug rather than a deliberate asymmetry — the only difference that
-remains is the CONSEQUENCE: at a desk a false block is visible and staff reason
-about it, while at a kiosk it silently turns away a paying customer with no
-override. The kiosk still does not IMPORT `start_plan_rules.dart` (the kiosk is
-kiosk-native presentation over the shared data layer), so the two must be kept
-in step by hand: **change one, check the other, and both against the SQL.**
+**Both clients now derive this ONE rule from that ONE guard — through ONE
+module.** The rule lives in `lib/features/membership_flow/domain/plan_rules.dart`
+as `RecurringHeldGate` (recurring + `{active, frozen, overdue}`, carrying the
+display-vs-DB status comment), and BOTH surfaces import it: the CRM wizard
+through `disabledPlanReasons`, the kiosk through
+`KioskSignupState.planBlockReasonFor` and the `heldRecurringPlanIds` derivation
+in `KioskSignupCubit._readPlanHistory`. There is no longer a hand-kept copy to
+drift — **change the gate, and check it against the SQL.** The only difference
+that remains is the CONSEQUENCE: at a desk a false block is visible and staff
+reason about it, while at a kiosk it silently turns away a paying customer with
+no override.
+
+The kiosk's own trial rule sits in the same module as `TrialOnceGate`, and gates
+are a SEALED hierarchy — `planBlockReasonFor` switches exhaustively over it, so
+a new gate cannot ship without the kiosk saying what it means. Advisory rules
+are a separate type (`PlanNote`, e.g. `PastTrialNote`) precisely so an advisory
+can never quietly become a block.
 
 **Zero new requests, and the ids live on the PERSON.** The held set is derived
 from the SAME `getMemberDetail` response the trial rule already fetches, and is
@@ -2344,8 +2352,9 @@ Rules the screen holds:
   `abandoned` → `goHome()`.
   `presentation/widgets/signup/` — the signup chrome (rail, three-slot foot,
   field box, consent check, DOB wheel, stop screen, abandon confirm) and the
-  built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` + `kiosk_plan_labels`
-  (a COPY of the CRM's `planAllowanceLabel` vocabulary, never an import) +
+  built steps: `kiosk_plan_pick_step` + `kiosk_plan_card` (whose words come from
+  the SHARED `membership_flow/domain/plan_labels.dart`, the one plan vocabulary
+  both surfaces import — no longer a copy) +
   `kiosk_plan_picked_banner` (the "YOU'VE PICKED" confirmation, §8.1a),
   `kiosk_waiver_step` + `kiosk_waiver_doc_panel` (read-only
   `WaiverMarkdownEditor`) + `kiosk_sign_panel` + `kiosk_waiver_status`,
