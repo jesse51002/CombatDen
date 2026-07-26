@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
+import 'package:crm/features/emails/presentation/invite_outcome_snackbar.dart';
+import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
+import 'package:crm/features/member_details/bloc/member_detail_event.dart';
+import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/presentation/dialogs/charge_card_dialog.dart';
 import 'package:crm/features/member_details/presentation/dialogs/check_in/member_class_check_in_dialog.dart';
@@ -17,7 +22,11 @@ import 'package:crm/shared/widgets/section_card.dart';
 /// Profile header: avatar, name, membership summary, paid
 /// badge, the member-level action row (Check In / Reserve /
 /// Charge Card / Add or Update Card / Start Membership /
-/// Edit), and the linked-accounts block.
+/// Send app invite / Edit), and the linked-accounts block.
+///
+/// The app-invite send rides its own bloc channel, so the header listens for
+/// its settled outcome and reports what actually happened — a queued send, an
+/// honest not-sent answer, or the hourly resend cap — as a snackbar.
 class ProfileHeaderSection extends StatelessWidget {
   final MemberDetailResponse member;
   final ValueChanged<String>? onLinkedAccountTap;
@@ -30,22 +39,41 @@ class ProfileHeaderSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SectionCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          _ProfileInfo(
-            member: member,
-            onLinkedAccountTap: onLinkedAccountTap,
-          ),
-          LinkedAccountsSection(
-            member: member,
-            onLinkedAccountTap: onLinkedAccountTap,
-          ),
-        ],
+    return BlocListener<MemberDetailBloc, MemberDetailState>(
+      listenWhen: (prev, curr) =>
+          curr is MemberDetailLoaded &&
+          curr.appInviteToken >
+              (prev is MemberDetailLoaded ? prev.appInviteToken : 0),
+      listener: _onAppInviteSettled,
+      child: SectionCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: DesignConstants.spacingLarge,
+          children: [
+            _ProfileInfo(
+              member: member,
+              onLinkedAccountTap: onLinkedAccountTap,
+            ),
+            LinkedAccountsSection(
+              member: member,
+              onLinkedAccountTap: onLinkedAccountTap,
+            ),
+          ],
+        ),
       ),
     );
+  }
+
+  void _onAppInviteSettled(BuildContext context, MemberDetailState state) {
+    if (state is! MemberDetailLoaded) return;
+    final error = state.appInviteError;
+    final outcome = state.appInviteOutcome;
+    if (error != null) {
+      showInviteErrorSnackBar(context, error);
+    } else if (outcome != null) {
+      showInviteOutcomeSnackBar(context, outcome);
+    }
+    context.read<MemberDetailBloc>().add(const SendAppInviteCleared());
   }
 }
 
@@ -233,6 +261,7 @@ class _ActionButtonsRow extends StatelessWidget {
               ? 'Unfreeze this member before adding a membership'
               : null,
         ),
+        _SendAppInviteButton(member: member),
         _ActionButton(
           label: 'Edit',
           onPressed: () => EditMemberDialog.show(
@@ -244,6 +273,43 @@ class _ActionButtonsRow extends StatelessWidget {
     );
   }
 
+}
+
+/// "Send app invite" — the manual (re)send of this member's app invite.
+///
+/// Disabled with an explaining tooltip when the member has no email: the
+/// backend would honestly answer `skipped_no_email`, so offering the button
+/// as if it might work would be a lie the UI can catch first.
+class _SendAppInviteButton extends StatelessWidget {
+  final MemberDetailResponse member;
+
+  const _SendAppInviteButton({required this.member});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasEmail = (member.personalInfo.email ?? '').isNotEmpty;
+    return BlocBuilder<MemberDetailBloc, MemberDetailState>(
+      buildWhen: (prev, curr) =>
+          curr is MemberDetailLoaded &&
+          curr.isSendingAppInvite !=
+              (prev is MemberDetailLoaded && prev.isSendingAppInvite),
+      builder: (context, state) {
+        final sending =
+            state is MemberDetailLoaded && state.isSendingAppInvite;
+        return _ActionButton(
+          label: sending ? 'Sending…' : 'Send app invite',
+          onPressed: !hasEmail || sending
+              ? null
+              : () => context
+                  .read<MemberDetailBloc>()
+                  .add(const SendAppInviteRequested()),
+          tooltip: hasEmail
+              ? null
+              : 'Add an email to this member before inviting them',
+        );
+      },
+    );
+  }
 }
 
 class _ActionButton extends StatelessWidget {

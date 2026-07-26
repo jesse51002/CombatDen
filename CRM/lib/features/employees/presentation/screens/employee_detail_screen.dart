@@ -9,6 +9,7 @@ import 'package:crm/features/employees/bloc/employees_bloc.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/employees/data/repositories/employees_repository.dart';
 import 'package:crm/features/employees/presentation/widgets/detail/employee_profile.dart';
 import 'package:crm/features/employees/presentation/widgets/quick_list/employee_quick_list.dart';
@@ -41,11 +42,15 @@ class EmployeeDetailScreen extends StatelessWidget {
         RepositoryProvider<ScheduleRepository>(
           create: (_) => ScheduleRepository(apiClient: ApiClient()),
         ),
+        RepositoryProvider<EmailsRepository>(
+          create: (_) => EmailsRepository(apiClient: ApiClient()),
+        ),
       ],
       child: BlocProvider<EmployeesBloc>(
         create: (ctx) => EmployeesBloc(
           employeesRepository: ctx.read<EmployeesRepository>(),
           scheduleRepository: ctx.read<ScheduleRepository>(),
+          emailsRepository: ctx.read<EmailsRepository>(),
         )..add(EmployeesInitRequested(gymId)),
         child: _EmployeeDetailView(employeeId: employeeId, gymId: gymId),
       ),

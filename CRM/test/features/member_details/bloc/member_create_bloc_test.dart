@@ -8,6 +8,8 @@ import 'package:crm/features/member_details/data/models/members_management_creat
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
+import 'package:crm/features/member_details/data/models/member_create_result.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -16,6 +18,7 @@ void main() {
 
   MembersManagementCreateRequest buildRequest({bool allow = false}) =>
       MembersManagementCreateRequest(
+        sendInvite: true,
         gymId: gymId,
         firstName: 'Jo',
         lastName: 'Doe',
@@ -44,7 +47,10 @@ void main() {
     'submit creates the member and emits MemberCreated',
     build: () {
       when(() => repo.createMember(any()))
-          .thenAnswer((_) async => 'new-1');
+          .thenAnswer((_) async => MemberCreateResult(
+          memberId: 'new-1',
+          invite: InviteOutcome.queued,
+        ));
       return MemberCreateBloc(repository: repo);
     },
     act: (bloc) => bloc.add(MemberCreateSubmitted(buildRequest())),
@@ -79,7 +85,10 @@ void main() {
     'create-anyway re-sends the pending request with allow_duplicate true',
     build: () {
       when(() => repo.createMember(any()))
-          .thenAnswer((_) async => 'forced-1');
+          .thenAnswer((_) async => MemberCreateResult(
+          memberId: 'forced-1',
+          invite: InviteOutcome.queued,
+        ));
       return MemberCreateBloc(repository: repo);
     },
     seed: () => MemberCreateDuplicate(

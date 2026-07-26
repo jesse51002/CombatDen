@@ -38,8 +38,8 @@ class EmailsRepository {
         data: <String, dynamic>{
           'gym_id': gymId,
           'kind': kind.value,
-          if (employeeId != null) 'employee_id': employeeId,
-          if (memberId != null) 'member_id': memberId,
+          'employee_id': ?employeeId,
+          'member_id': ?memberId,
         },
       );
       final data = response.data as Map<String, dynamic>;

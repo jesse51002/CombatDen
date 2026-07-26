@@ -38,6 +38,7 @@ class AddMemberRosterView extends StatelessWidget {
                 photoUrl: group[i].photoUrl,
                 wasExisting: group[i].wasExisting,
                 isLast: i == group.length - 1,
+                invite: group[i].invite,
               ),
           ],
         ),
@@ -100,6 +101,19 @@ class _Header extends StatelessWidget {
           style: DesignConstants.h1,
           textAlign: TextAlign.center,
         ),
+        // What actually happened to their app invite, in the backend's own
+        // words — never an unqualified "invited" for a send that was held,
+        // suppressed, or never asked for.
+        if (only != null && only.invite.confirmation != null)
+          Text(
+            only.invite.confirmation!,
+            style: DesignConstants.p.copyWith(
+              color: only.invite.wasSent
+                  ? DesignConstants.goodGreen
+                  : DesignConstants.text2nd,
+            ),
+            textAlign: TextAlign.center,
+          ),
         Text(
           'Set up their membership now, or finish here. You can also '
           'add more people who are all paid for by one person.',

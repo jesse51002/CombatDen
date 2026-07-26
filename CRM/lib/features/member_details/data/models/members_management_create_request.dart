@@ -9,6 +9,13 @@ import 'package:equatable/equatable.dart';
 /// create against a same-identity duplicate (409), true confirms and creates
 /// anyway.
 ///
+/// [sendInvite] is REQUIRED with no default, exactly as the backend declares
+/// it. The staff create dialogs answer it with "Create & invite" vs "Create
+/// without inviting"; the kiosk's self-signup passes true without asking,
+/// since someone joining on the gym's own iPad has already expressed the
+/// intent the prompt would ask about. A member with no email always resolves
+/// to `skipped_no_email` regardless of what is sent here.
+///
 /// Hand-written `toJson` (not `json_serializable`) because the class extends
 /// [Equatable]: the generator would otherwise serialize Equatable's `props` /
 /// `hashCode` / `stringify` getters into the body. Mirrors the sibling
@@ -32,11 +39,13 @@ class MembersManagementCreateRequest extends Equatable {
   final String? userId;
   final String? paymentMethodId;
   final bool allowDuplicate;
+  final bool sendInvite;
 
   const MembersManagementCreateRequest({
     required this.gymId,
     required this.firstName,
     required this.lastName,
+    required this.sendInvite,
     this.email,
     this.phone,
     this.dateOfBirth,
@@ -72,6 +81,7 @@ class MembersManagementCreateRequest extends Equatable {
       if (paymentMethodId != null)
         'payment_method_id': paymentMethodId,
       'allow_duplicate': allowDuplicate,
+      'send_invite': sendInvite,
     };
   }
 
@@ -95,6 +105,7 @@ class MembersManagementCreateRequest extends Equatable {
       userId: userId,
       paymentMethodId: paymentMethodId,
       allowDuplicate: allowDuplicate ?? this.allowDuplicate,
+      sendInvite: sendInvite,
     );
   }
 
@@ -115,5 +126,6 @@ class MembersManagementCreateRequest extends Equatable {
         userId,
         paymentMethodId,
         allowDuplicate,
+        sendInvite,
       ];
 }

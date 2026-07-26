@@ -11,6 +11,7 @@ import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
 import 'package:crm/features/schedule/data/repositories/schedule_repository.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 
 class MockMemberRepository extends Mock implements MemberRepository {}
 
@@ -70,7 +71,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card bills the chosen payer (parent), not the beneficiary member',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -100,7 +103,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card self-pay sends the member as their own payer',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -130,7 +135,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card threads a one-off payment_method_id to the repository',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -162,7 +169,9 @@ void main() {
 
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card out-of-band threads paid_cash to the repository',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -198,7 +207,9 @@ void main() {
   // fire the screen-level overlay + error dialog).
   blocTest<MemberDetailBloc, MemberDetailState>(
     'charge_card success bumps chargeCardSuccess, not isMutating/actionError',
-    build: () => MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
+    build: () => MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo),
     seed: () => MemberDetailLoaded(
       member: buildMember(),
       allMembers: const [],
@@ -240,7 +251,9 @@ void main() {
           paymentMethodId: any(named: 'paymentMethodId'),
         ),
       ).thenThrow(Exception('card declined'));
-      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
+      return MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),
@@ -274,7 +287,9 @@ void main() {
       // chargeCard succeeds (the setUp stub); the refresh throws.
       when(() => repo.getMemberDetail(any()))
           .thenThrow(Exception('member refresh unreachable'));
-      return MemberDetailBloc(repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
+      return MemberDetailBloc(
+        emailsRepository: _stubEmailsRepository,
+        repository: repo, ranksRepository: MockRanksRepository(), scheduleRepository: scheduleRepo, rewardsRepository: rewardsRepo);
     },
     seed: () => MemberDetailLoaded(
       member: buildMember(),
@@ -301,3 +316,10 @@ void main() {
     },
   );
 }
+
+
+/// Stub for the emails repository the bloc now takes. No test here exercises
+/// the manual app-invite send, so it is never stubbed — only supplied.
+class _StubEmailsRepository extends Mock implements EmailsRepository {}
+
+final _stubEmailsRepository = _StubEmailsRepository();

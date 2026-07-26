@@ -15,4 +15,5 @@ Map<String, dynamic> _$EmployeeCreateRequestToJson(
   'email': instance.email,
   'phone': ?instance.phone,
   'employee_public_description': ?instance.employeePublicDescription,
+  'send_invite': instance.sendInvite,
 };

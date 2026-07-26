@@ -13,8 +13,16 @@ import 'package:crm/shared/widgets/form/image_upload_picker_field.dart';
 /// calls [MemberCreateFormState.validate], then
 /// [MemberCreateFormState.buildRequest] and dispatches to a
 /// `MemberCreateBloc`. Two-column rows keep the form compact.
+///
+/// [onEmailPresenceChanged] fires whenever the email field flips between
+/// empty and non-empty, so a host's footer can collapse its
+/// invite-or-not question to a single plain "Create" while there is nobody to
+/// invite. It is a UI-state signal, not business logic, so it stays a
+/// callback rather than a bloc event.
 class MemberCreateForm extends StatefulWidget {
-  const MemberCreateForm({super.key});
+  final ValueChanged<bool>? onEmailPresenceChanged;
+
+  const MemberCreateForm({super.key, this.onEmailPresenceChanged});
 
   @override
   State<MemberCreateForm> createState() => MemberCreateFormState();
@@ -34,8 +42,26 @@ class MemberCreateFormState extends State<MemberCreateForm> {
   /// CDN URL of the chosen member photo (upload or pool pick); null = none.
   String? _photoUrl;
 
+  /// Last emptiness reported to [MemberCreateForm.onEmailPresenceChanged] —
+  /// the callback fires only on a flip, not on every keystroke.
+  bool _hadEmail = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _email.addListener(_notifyEmailPresence);
+  }
+
+  void _notifyEmailPresence() {
+    final has = _email.text.trim().isNotEmpty;
+    if (has == _hadEmail) return;
+    _hadEmail = has;
+    widget.onEmailPresenceChanged?.call(has);
+  }
+
   @override
   void dispose() {
+    _email.removeListener(_notifyEmailPresence);
     _firstName.dispose();
     _lastName.dispose();
     _email.dispose();
@@ -64,6 +90,7 @@ class MemberCreateFormState extends State<MemberCreateForm> {
     _ecEmail.clear();
     _formKey.currentState?.reset();
     setState(() => _photoUrl = null);
+    // `clear()` on a controller notifies, so the presence flip already fired.
   }
 
   /// The trimmed value, or null when empty (an omitted optional field).
@@ -72,13 +99,24 @@ class MemberCreateFormState extends State<MemberCreateForm> {
     return v.isEmpty ? null : v;
   }
 
+  /// Whether an email has been entered — there is somebody to invite.
+  bool get hasEmail => _email.text.trim().isNotEmpty;
+
   /// Assembles the wire request for [gymId]. Call after [validate].
-  MembersManagementCreateRequest buildRequest(String gymId) {
+  ///
+  /// [sendInvite] is answered by the host's footer ("Create & invite" vs
+  /// "Create without inviting") — there is deliberately no default here, so a
+  /// new host cannot silently stop inviting anyone.
+  MembersManagementCreateRequest buildRequest(
+    String gymId, {
+    required bool sendInvite,
+  }) {
     return MembersManagementCreateRequest(
       gymId: gymId,
       firstName: _firstName.text.trim(),
       lastName: _lastName.text.trim(),
       email: _email.text.trim(),
+      sendInvite: sendInvite,
       phone: _opt(_phone),
       address: _opt(_address),
       emergencyContactName: _opt(_ecName),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/employees/bloc/employees_bloc.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
@@ -11,6 +12,7 @@ import 'package:crm/features/employees/presentation/dialogs/add_employee_success
 import 'package:crm/features/employees/presentation/dialogs/employee_dialog_steps.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
 import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/shared/widgets/app_dialog/create_invite_actions.dart';
 
 enum _AddStep { form, submitting, success }
 
@@ -18,6 +20,10 @@ enum _AddStep { form, submitting, success }
 /// riding the bloc's dedicated invite success token so the terminal step fires
 /// against committed state, never fire-and-pop. The success step shows the
 /// copyable email-based sign-in instructions (the point of the surface).
+///
+/// The form commits through "Create & invite" or "Create without inviting" —
+/// two equal buttons, no default — and the success step reports what the
+/// backend actually did about that invite, never an unqualified "sent".
 class AddEmployeeDialog extends StatefulWidget {
   const AddEmployeeDialog({super.key});
 
@@ -52,6 +58,7 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
   String? _emailError;
   String _successFirstName = '';
   String _successEmail = '';
+  InviteOutcome _successInvite = InviteOutcome.notRequested;
 
   @override
   void initState() {
@@ -74,7 +81,7 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
 
   String? _nullIfEmpty(String v) => v.trim().isEmpty ? null : v.trim();
 
-  void _submit() {
+  void _submit({required bool sendInvite}) {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() {
       _emailError = null;
@@ -87,6 +94,7 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
       email: _email.text.trim(),
       phone: _nullIfEmpty(_phone.text),
       employeePublicDescription: _nullIfEmpty(_bio.text),
+      sendInvite: sendInvite,
     )));
   }
 
@@ -107,6 +115,7 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
       setState(() {
         _successFirstName = invited?.firstName ?? _firstName.text.trim();
         _successEmail = invited?.email ?? _email.text.trim();
+        _successInvite = state.lastInviteOutcome ?? InviteOutcome.unknown;
         _step = _AddStep.success;
       });
     }
@@ -148,6 +157,7 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
         return AddEmployeeSuccessView(
           firstName: _successFirstName,
           email: _successEmail,
+          invite: _successInvite,
         );
     }
   }
@@ -155,17 +165,17 @@ class _AddEmployeeDialogState extends State<AddEmployeeDialog> {
   Widget _buildActions() {
     switch (_step) {
       case _AddStep.form:
-        return AppDialogActions(
-          primaryLabel: 'Add employee',
-          primaryOnPressed: _submit,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: () => Navigator.of(context).pop(),
+        return CreateInviteActions(
+          createLabel: 'Add',
+          onCreate: (sendInvite) => _submit(sendInvite: sendInvite),
+          onCancel: () => Navigator.of(context).pop(),
         );
       case _AddStep.submitting:
-        return const AppDialogActions(
-          primaryLabel: 'Add employee',
-          isLoading: true,
-          primaryOnPressed: null,
+        return CreateInviteActions(
+          createLabel: 'Add',
+          busy: true,
+          onCreate: (_) {},
+          onCancel: () {},
         );
       case _AddStep.success:
         return AppDialogActions(

@@ -9,6 +9,7 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/member_details/bloc/member_detail_bloc.dart';
 import 'package:crm/features/member_details/bloc/member_detail_event.dart';
 import 'package:crm/features/member_details/bloc/member_detail_state.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/memberships/data/repositories/ranks_repository.dart';
 import 'package:crm/features/rewards/data/repositories/rewards_repository.dart';
@@ -71,6 +72,11 @@ class MemberDetailScreen extends StatelessWidget {
         RepositoryProvider<RewardsRepository>(
           create: (_) => RewardsRepository(apiClient: ApiClient()),
         ),
+        // The profile header's "Send app invite" action posts through the
+        // emails domain.
+        RepositoryProvider<EmailsRepository>(
+          create: (_) => EmailsRepository(apiClient: ApiClient()),
+        ),
       ],
       child: MultiBlocProvider(
         providers: [
@@ -80,6 +86,7 @@ class MemberDetailScreen extends StatelessWidget {
               scheduleRepository: ctx.read<ScheduleRepository>(),
               ranksRepository: RanksRepository(apiClient: ApiClient()),
               rewardsRepository: ctx.read<RewardsRepository>(),
+              emailsRepository: ctx.read<EmailsRepository>(),
             )..add(
                 MemberDetailRequested(memberId, gymId: _gymId),
               ),

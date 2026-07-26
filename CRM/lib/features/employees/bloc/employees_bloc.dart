@@ -9,7 +9,6 @@ import 'package:crm/core/errors/exceptions.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
 import 'package:crm/features/emails/data/models/email_kind.dart';
-import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/features/employees/data/models/employee_create_result.dart';

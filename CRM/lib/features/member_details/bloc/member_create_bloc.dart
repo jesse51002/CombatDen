@@ -3,6 +3,7 @@ import 'dart:developer';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
 import 'package:crm/features/member_details/bloc/member_create_event.dart';
 import 'package:crm/features/member_details/bloc/member_create_state.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
@@ -32,8 +33,8 @@ class MemberCreateBloc
   ) async {
     emit(const MemberCreateSubmitting());
     try {
-      final memberId = await _repository.createMember(request);
-      emit(MemberCreated(memberId));
+      final result = await _repository.createMember(request);
+      emit(MemberCreated(result.memberId, invite: result.invite));
     } on DuplicateMemberException catch (e) {
       emit(MemberCreateDuplicate(
         matches: e.matches,
@@ -72,7 +73,13 @@ class MemberCreateBloc
     MemberCreateUseExisting event,
     Emitter<MemberCreateState> emit,
   ) {
-    emit(MemberCreated(event.memberId));
+    // Nothing was created and nothing was mailed — an existing member was
+    // picked — so the invite outcome is `not_requested` and the host says
+    // nothing about an invite.
+    emit(MemberCreated(
+      event.memberId,
+      invite: InviteOutcome.notRequested,
+    ));
   }
 
   void _onReset(

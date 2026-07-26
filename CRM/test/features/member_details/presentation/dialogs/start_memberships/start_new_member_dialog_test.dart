@@ -35,6 +35,7 @@ void main() {
   final duplicate = MemberCreateDuplicate(
     matches: const [match],
     pendingRequest: const MembersManagementCreateRequest(
+      sendInvite: true,
       gymId: 'gym-1',
       firstName: 'Jo',
       lastName: 'Doe',

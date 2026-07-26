@@ -3,11 +3,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:crm/core/auth/employee_role.dart';
+import 'package:crm/core/errors/exceptions.dart';
+import 'package:crm/features/emails/data/models/email_kind.dart';
+import 'package:crm/features/emails/data/models/invite_outcome.dart';
+import 'package:crm/features/emails/data/repositories/emails_repository.dart';
 import 'package:crm/features/employees/bloc/employees_bloc.dart';
 import 'package:crm/features/employees/bloc/employees_event.dart';
 import 'package:crm/features/employees/bloc/employees_state.dart';
 import 'package:crm/features/employees/data/models/employee.dart';
 import 'package:crm/features/employees/data/models/employee_create_request.dart';
+import 'package:crm/features/employees/data/models/employee_create_result.dart';
 import 'package:crm/features/employees/data/models/employee_update_request.dart';
 import 'package:crm/features/employees/data/models/invite_status.dart';
 import 'package:crm/features/employees/data/repositories/employees_repository.dart';
@@ -19,6 +24,8 @@ import 'package:crm/features/schedule/data/repositories/schedule_repository.dart
 class _MockEmployeesRepository extends Mock implements EmployeesRepository {}
 
 class _MockScheduleRepository extends Mock implements ScheduleRepository {}
+
+class _MockEmailsRepository extends Mock implements EmailsRepository {}
 
 class _FakeEmployeeCreateRequest extends Fake
     implements EmployeeCreateRequest {}
@@ -64,11 +71,13 @@ const _createReq = EmployeeCreateRequest(
   firstName: 'New',
   lastName: 'Hire',
   email: 'new.hire@example.com',
+  sendInvite: true,
 );
 
 void main() {
   late _MockEmployeesRepository employeesRepo;
   late _MockScheduleRepository scheduleRepo;
+  late _MockEmailsRepository emailsRepo;
 
   setUpAll(() {
     registerFallbackValue(_FakeEmployeeCreateRequest());
@@ -78,11 +87,13 @@ void main() {
   setUp(() {
     employeesRepo = _MockEmployeesRepository();
     scheduleRepo = _MockScheduleRepository();
+    emailsRepo = _MockEmailsRepository();
   });
 
   EmployeesBloc build() => EmployeesBloc(
         employeesRepository: employeesRepo,
         scheduleRepository: scheduleRepo,
+        emailsRepository: emailsRepo,
       );
 
   EmployeesLoaded loaded({
@@ -259,7 +270,10 @@ void main() {
       'lastInvitedEmployee, and reloads the roster',
       setUp: () {
         when(() => employeesRepo.createEmployee('gym-1', any())).thenAnswer(
-          (_) async => _employee('emp-new', EmployeeRole.trainer),
+          (_) async => EmployeeCreateResult(
+            employee: _employee('emp-new', EmployeeRole.trainer),
+            invite: InviteOutcome.queued,
+          ),
         );
         when(() => employeesRepo.listEmployees('gym-1')).thenAnswer(
           (_) async => [_employee('emp-new', EmployeeRole.trainer)],
@@ -279,11 +293,44 @@ void main() {
               'lastInvitedEmployee',
               'emp-new',
             )
-            .having((s) => s.employees, 'employees', hasLength(1)),
+            .having((s) => s.employees, 'employees', hasLength(1))
+            .having(
+              (s) => s.lastInviteOutcome,
+              'lastInviteOutcome',
+              InviteOutcome.queued,
+            ),
       ],
       verify: (_) {
         verify(() => employeesRepo.createEmployee('gym-1', any())).called(1);
       },
+    );
+
+    blocTest<EmployeesBloc, EmployeesState>(
+      'the SERVER\'s invite outcome is recorded, not the request\'s ask — '
+      'a create that asked to invite still reports held',
+      setUp: () {
+        when(() => employeesRepo.createEmployee('gym-1', any())).thenAnswer(
+          (_) async => EmployeeCreateResult(
+            employee: _employee('emp-new', EmployeeRole.trainer),
+            invite: InviteOutcome.held,
+          ),
+        );
+        when(() => employeesRepo.listEmployees('gym-1')).thenAnswer(
+          (_) async => [_employee('emp-new', EmployeeRole.trainer)],
+        );
+      },
+      build: build,
+      seed: () => loaded(),
+      act: (b) => b.add(const EmployeeInviteSubmitted(_createReq)),
+      expect: () => [
+        isA<EmployeesLoaded>()
+            .having((s) => s.isMutating, 'isMutating', isTrue),
+        isA<EmployeesLoaded>().having(
+          (s) => s.lastInviteOutcome,
+          'lastInviteOutcome',
+          InviteOutcome.held,
+        ),
+      ],
     );
 
     blocTest<EmployeesBloc, EmployeesState>(
@@ -312,6 +359,81 @@ void main() {
         // reaches the roster reload.
         verifyNever(() => employeesRepo.listEmployees(any()));
       },
+    );
+  });
+
+  group('EmployeesBloc resend invite', () {
+    blocTest<EmployeesBloc, EmployeesState>(
+      'a resend reports the outcome on its own channel and never '
+      'reloads the roster',
+      setUp: () {
+        when(
+          () => emailsRepo.sendEmail(
+            gymId: 'gym-1',
+            kind: EmailKind.staffOnboarding,
+            employeeId: 'emp-1',
+          ),
+        ).thenAnswer((_) async => InviteOutcome.queued);
+      },
+      build: build,
+      seed: () => loaded(
+        employees: [_employee('emp-1', EmployeeRole.trainer)],
+      ),
+      act: (b) => b.add(const EmployeeInviteResendRequested('emp-1')),
+      expect: () => [
+        isA<EmployeesLoaded>()
+            .having((s) => s.resendingEmployeeId, 'resendingEmployeeId',
+                'emp-1')
+            // A resend writes nothing, so it must NOT trip the shared
+            // mutation flag the Add/Edit dialogs watch.
+            .having((s) => s.isMutating, 'isMutating', isFalse),
+        isA<EmployeesLoaded>()
+            .having((s) => s.resendingEmployeeId, 'resendingEmployeeId',
+                isNull)
+            .having((s) => s.resendOutcome, 'resendOutcome',
+                InviteOutcome.queued)
+            .having((s) => s.resendError, 'resendError', isNull)
+            .having((s) => s.resendToken, 'resendToken', 1),
+      ],
+      verify: (_) {
+        verify(
+          () => emailsRepo.sendEmail(
+            gymId: 'gym-1',
+            kind: EmailKind.staffOnboarding,
+            employeeId: 'emp-1',
+          ),
+        ).called(1);
+        verifyNever(() => employeesRepo.listEmployees(any()));
+      },
+    );
+
+    blocTest<EmployeesBloc, EmployeesState>(
+      'the hourly cap lands on resendError, still bumping the token',
+      setUp: () {
+        when(
+          () => emailsRepo.sendEmail(
+            gymId: 'gym-1',
+            kind: EmailKind.staffOnboarding,
+            employeeId: 'emp-1',
+          ),
+        ).thenThrow(const InviteRateLimitedException());
+      },
+      build: build,
+      seed: () => loaded(
+        employees: [_employee('emp-1', EmployeeRole.trainer)],
+      ),
+      act: (b) => b.add(const EmployeeInviteResendRequested('emp-1')),
+      expect: () => [
+        isA<EmployeesLoaded>().having(
+            (s) => s.resendingEmployeeId, 'resendingEmployeeId', 'emp-1'),
+        isA<EmployeesLoaded>()
+            .having((s) => s.resendingEmployeeId, 'resendingEmployeeId',
+                isNull)
+            .having((s) => s.resendOutcome, 'resendOutcome', isNull)
+            .having((s) => s.resendError, 'resendError',
+                isA<InviteRateLimitedException>())
+            .having((s) => s.resendToken, 'resendToken', 1),
+      ],
     );
   });
 

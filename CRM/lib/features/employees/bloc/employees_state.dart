@@ -108,6 +108,13 @@ class EmployeesLoaded extends EmployeesState {
     int? updateSuccess,
     int? removeSuccess,
     Employee? lastInvitedEmployee,
+    InviteOutcome? lastInviteOutcome,
+    String? resendingEmployeeId,
+    bool clearResendingEmployeeId = false,
+    int? resendToken,
+    InviteOutcome? resendOutcome,
+    Object? resendError,
+    bool clearResendOutcome = false,
     bool? isMutating,
     String? mutationError,
     bool clearMutationError = false,
@@ -124,6 +131,15 @@ class EmployeesLoaded extends EmployeesState {
       updateSuccess: updateSuccess ?? this.updateSuccess,
       removeSuccess: removeSuccess ?? this.removeSuccess,
       lastInvitedEmployee: lastInvitedEmployee ?? this.lastInvitedEmployee,
+      lastInviteOutcome: lastInviteOutcome ?? this.lastInviteOutcome,
+      resendingEmployeeId: clearResendingEmployeeId
+          ? null
+          : (resendingEmployeeId ?? this.resendingEmployeeId),
+      resendToken: resendToken ?? this.resendToken,
+      resendOutcome:
+          clearResendOutcome ? null : (resendOutcome ?? this.resendOutcome),
+      resendError:
+          clearResendOutcome ? null : (resendError ?? this.resendError),
       isMutating: isMutating ?? this.isMutating,
       mutationError:
           clearMutationError ? null : (mutationError ?? this.mutationError),
@@ -143,6 +159,11 @@ class EmployeesLoaded extends EmployeesState {
         updateSuccess,
         removeSuccess,
         lastInvitedEmployee,
+        lastInviteOutcome,
+        resendingEmployeeId,
+        resendToken,
+        resendOutcome,
+        resendError,
         isMutating,
         mutationError,
       ];

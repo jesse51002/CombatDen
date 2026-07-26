@@ -266,7 +266,7 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
         );
         if (isClosed) return;
       } else {
-        final memberId = await _memberRepo.createMember(
+        final created = await _memberRepo.createMember(
           MembersManagementCreateRequest(
             gymId: _gymId,
             firstName: person.firstName,
@@ -278,10 +278,19 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
             emergencyContactName: person.ecName,
             emergencyContactPhone: person.ecPhone,
             emergencyContactEmail: person.ecEmail,
+            // Always true, and the kiosk deliberately never asks. Someone
+            // signing up on the gym's own iPad has already expressed the
+            // intent a prompt would ask about, and this lane is tuned for
+            // speed — no extra screen, no extra tap. Do not "fix" this into
+            // a prompt: the admin dialogs ask because staff are creating a
+            // row FOR someone else; here the person is standing right there
+            // typing their own email in. The outcome is deliberately not
+            // surfaced either — a member can't act on "held".
+            sendInvite: true,
           ),
         );
         if (isClosed) return;
-        _updateActivePerson((p) => p.copyWith(memberId: memberId));
+        _updateActivePerson((p) => p.copyWith(memberId: created.memberId));
       }
       emit(state.copyWith(
         submitting: false,
@@ -675,17 +684,26 @@ class KioskSignupCubit extends Cubit<KioskSignupState> {
     _committing = true;
     emit(state.copyWith(submitting: true));
     try {
-      final memberId = await _memberRepo.createMember(
+      final created = await _memberRepo.createMember(
         MembersManagementCreateRequest(
           gymId: _gymId,
           firstName: draft.firstName,
           lastName: draft.lastName,
           email: draft.email,
           allowDuplicate: allowDuplicate,
+          // Always true, and the kiosk deliberately never asks. Someone
+          // signing up on the gym's own iPad has already expressed the intent
+          // a prompt would ask about, and this lane is tuned for speed — no
+          // extra screen, no extra tap. Do not "fix" this into a prompt: the
+          // admin dialogs ask because staff are creating a row FOR someone
+          // else; here the person is standing right there typing the email
+          // in. The outcome is deliberately not surfaced either — a member
+          // can't act on "held".
+          sendInvite: true,
         ),
       );
       if (isClosed) return;
-      _admitPayee(draft.copyWith(memberId: memberId));
+      _admitPayee(draft.copyWith(memberId: created.memberId));
     } on DuplicateMemberException catch (e, st) {
       // A duplicate is an OFFER, never a list: reusing an existing account is
       // the right answer, and naming one person back to whoever just typed
