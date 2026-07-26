@@ -1,5 +1,6 @@
 import 'package:equatable/equatable.dart';
 
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
 import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 
 /// Events for [VideosBloc].
@@ -21,6 +22,18 @@ class VideosLoadRequested extends VideosEvent {
 
   @override
   List<Object?> get props => [initialGenre];
+}
+
+/// Pull-to-refresh: re-fetch the CURRENT tab's feed without blanking it. The
+/// selected genre is kept (a pull is not a tab change), and the "All" tab
+/// re-derives the genre strip so a gym that just published its first video of
+/// a genre grows the tab for it.
+///
+/// [done] is the completion side-channel — see [RefreshSignal].
+class VideosRefreshRequested extends VideosEvent {
+  const VideosRefreshRequested([this.done]);
+
+  final RefreshSignal? done;
 }
 
 /// A category tab was selected: reload the feed filtered to [genre] via the

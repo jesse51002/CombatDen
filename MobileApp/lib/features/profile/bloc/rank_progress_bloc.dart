@@ -20,6 +20,7 @@ class RankProgressBloc extends Bloc<RankProgressEvent, RankProgressState> {
       : _repository = repository,
         super(const RankProgressState()) {
     on<RankProgressLoadRequested>(_onLoadRequested);
+    on<RankProgressRefreshRequested>(_onRefreshRequested);
   }
 
   String? get _memberId => selectedMember.memberId;
@@ -37,6 +38,40 @@ class RankProgressBloc extends Bloc<RankProgressEvent, RankProgressState> {
       status: RankProgressStatus.loading,
       clearError: true,
     ));
+    await _fetch(gymId: gymId, memberId: memberId, emit: emit);
+  }
+
+  /// Pull-to-refresh: the same fetch, minus the flip to `loading` that would
+  /// blank the graph under the spinner. Completes `event.done` in a `finally`
+  /// so the pull awaits the real fetch.
+  Future<void> _onRefreshRequested(
+    RankProgressRefreshRequested event,
+    Emitter<RankProgressState> emit,
+  ) async {
+    try {
+      final gymId = _gymId;
+      final memberId = _memberId;
+      if (gymId == null || memberId == null) return;
+
+      await _fetch(
+        gymId: gymId,
+        memberId: memberId,
+        emit: emit,
+        keepContent: state.status == RankProgressStatus.loaded,
+      );
+    } finally {
+      event.done?.complete();
+    }
+  }
+
+  /// Fetch the series and emit it. When [keepContent] is true a failure keeps
+  /// the drawn graph instead of flipping to the error state.
+  Future<void> _fetch({
+    required String gymId,
+    required String memberId,
+    required Emitter<RankProgressState> emit,
+    bool keepContent = false,
+  }) async {
     try {
       final progress =
           await _repository.getRankProgress(gymId: gymId, memberId: memberId);
@@ -47,6 +82,7 @@ class RankProgressBloc extends Bloc<RankProgressEvent, RankProgressState> {
       ));
     } catch (e, st) {
       log('RankProgressBloc: load failed', error: e, stackTrace: st);
+      if (keepContent) return;
       emit(state.copyWith(
         status: RankProgressStatus.error,
         errorMessage: _userMessage(e),

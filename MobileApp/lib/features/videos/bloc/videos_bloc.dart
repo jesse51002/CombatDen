@@ -24,6 +24,7 @@ class VideosBloc extends Bloc<VideosEvent, VideosState> {
       : _repository = repository,
         super(const VideosState()) {
     on<VideosLoadRequested>(_onLoadRequested);
+    on<VideosRefreshRequested>(_onRefreshRequested);
     on<VideosCategorySelected>(_onCategorySelected);
   }
 
@@ -45,6 +46,20 @@ class VideosBloc extends Bloc<VideosEvent, VideosState> {
     }
   }
 
+  /// Pull-to-refresh: re-fetch whatever tab is showing, silently. Completes
+  /// `event.done` in a `finally` so the pull awaits the real fetch.
+  Future<void> _onRefreshRequested(
+    VideosRefreshRequested event,
+    Emitter<VideosState> emit,
+  ) async {
+    try {
+      final genre = state.selectedGenre;
+      await _load(genre, emit, deriveTabs: genre == null, silent: true);
+    } finally {
+      event.done?.complete();
+    }
+  }
+
   Future<void> _onCategorySelected(
     VideosCategorySelected event,
     Emitter<VideosState> emit,
@@ -58,21 +73,29 @@ class VideosBloc extends Bloc<VideosEvent, VideosState> {
     await _load(event.genre, emit, deriveTabs: event.genre == null);
   }
 
+  /// Fetch a feed page and emit it. [silent] is the pull-to-refresh mode: skip
+  /// the flip to `loading` (which would blank the feed under the spinner) and
+  /// keep the loaded feed on failure — with nothing loaded yet there is
+  /// nothing to protect, so the error state still surfaces.
   Future<void> _load(
     VideoGenre? genre,
     Emitter<VideosState> emit, {
     required bool deriveTabs,
+    bool silent = false,
   }) async {
     final gymId = _gymId;
     final memberId = _memberId;
     if (gymId == null || memberId == null) return;
 
-    emit(state.copyWith(
-      status: VideosStatus.loading,
-      selectedGenre: genre,
-      clearSelectedGenre: genre == null,
-      clearError: true,
-    ));
+    final keepContent = silent && state.status == VideosStatus.loaded;
+    if (!silent) {
+      emit(state.copyWith(
+        status: VideosStatus.loading,
+        selectedGenre: genre,
+        clearSelectedGenre: genre == null,
+        clearError: true,
+      ));
+    }
     try {
       final feed = await _repository.fetchFeed(
         gymId: gymId,
@@ -88,6 +111,7 @@ class VideosBloc extends Bloc<VideosEvent, VideosState> {
       ));
     } catch (e, st) {
       log('VideosBloc: load failed', error: e, stackTrace: st);
+      if (keepContent) return;
       emit(state.copyWith(
         status: VideosStatus.error,
         errorMessage: _userMessage(e),

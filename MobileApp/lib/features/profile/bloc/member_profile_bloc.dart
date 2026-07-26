@@ -60,25 +60,33 @@ class MemberProfileBloc extends Bloc<MemberProfileEvent, MemberProfileState> {
 
   /// Silent re-fetch: never flips to a loading/error state that would blank a
   /// profile already on screen. A failure keeps the last-good data.
+  ///
+  /// Completes `event.done` in a `finally` — including on the early return and
+  /// on failure — so a pull-to-refresh awaits the real outcome instead of a
+  /// state emission that a silent refresh may never produce.
   Future<void> _onRefreshRequested(
     MemberProfileRefreshRequested event,
     Emitter<MemberProfileState> emit,
   ) async {
-    final memberId = _memberId;
-    final gymId = _gymId;
-    if (memberId == null || gymId == null) return;
-
     try {
-      final profile =
-          await _repository.getProfile(gymId: gymId, memberId: memberId);
-      emit(state.copyWith(
-        status: MemberProfileStatus.loaded,
-        profile: profile,
-        clearError: true,
-      ));
-    } catch (e, st) {
-      // Background refresh — keep the last-good profile, don't clobber the UI.
-      log('MemberProfileBloc: refresh failed', error: e, stackTrace: st);
+      final memberId = _memberId;
+      final gymId = _gymId;
+      if (memberId == null || gymId == null) return;
+
+      try {
+        final profile =
+            await _repository.getProfile(gymId: gymId, memberId: memberId);
+        emit(state.copyWith(
+          status: MemberProfileStatus.loaded,
+          profile: profile,
+          clearError: true,
+        ));
+      } catch (e, st) {
+        // Background refresh — keep the last-good profile, don't clobber the UI.
+        log('MemberProfileBloc: refresh failed', error: e, stackTrace: st);
+      }
+    } finally {
+      event.done?.complete();
     }
   }
 

@@ -3,6 +3,8 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/refresh/app_refresh.dart';
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
 import 'package:mobile_app/features/home/bloc/home_bloc.dart';
 import 'package:mobile_app/features/home/bloc/home_event.dart';
 import 'package:mobile_app/features/home/bloc/home_state.dart';
@@ -14,6 +16,7 @@ import 'package:mobile_app/features/home/presentation/widgets/class_schedule/sch
 import 'package:mobile_app/features/home/presentation/widgets/home_error_view.dart';
 import 'package:mobile_app/features/home/presentation/widgets/home_topbar.dart';
 import 'package:mobile_app/features/home/presentation/widgets/upcoming_sessions/upcoming_sessions_card.dart';
+import 'package:mobile_app/shared/widgets/refresh/app_refresh_view.dart';
 
 const double _kDateRowHeight = 50;
 // Trigger a window extension when the scroll gets this close to the bottom.
@@ -21,7 +24,9 @@ const double _kExtendThreshold = 500;
 
 /// The single home body: topbar (streak/points), the "upcoming sessions" card
 /// when the member has reservations, and the day-grouped schedule board under a
-/// pinned date bar. Pull-to-refresh + refetch-on-return; the pinned date bar
+/// pinned date bar. Pull-to-refresh (the shared [AppRefresh] — identity /
+/// capabilities / branding, theme, profile, and this board) + refetch-on-return;
+/// the pinned date bar
 /// highlights the current day (measured, so variable day heights stay in sync)
 /// and jumps to a day on tap; scrolling to the bottom extends the window.
 class HomeBody extends StatefulWidget {
@@ -110,19 +115,21 @@ class _HomeBodyState extends State<HomeBody> {
     setState(() => _currentDayIndex = index);
   }
 
-  Future<void> _refresh() async {
+  /// The shared pull: identity + capabilities + branding, theme, the shared
+  /// profile, and this screen's own board + reservations — all awaited.
+  Future<void> _refresh() {
     final bloc = context.read<HomeBloc>();
-    bloc.add(const HomeRefreshRequested());
-    await bloc.stream
-        .firstWhere((s) => !s.isRefreshing)
-        .timeout(const Duration(seconds: 20), onTimeout: () => bloc.state);
+    return AppRefresh.forScreen(
+      context,
+      screen: () => dispatchRefresh(bloc, HomeRefreshRequested.new),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocBuilder<HomeBloc, HomeState>(
       builder: (context, state) {
-        return RefreshIndicator(
+        return AppRefreshView(
           onRefresh: _refresh,
           child: CustomScrollView(
             controller: _vertical,

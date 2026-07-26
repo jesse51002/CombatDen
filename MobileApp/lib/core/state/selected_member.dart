@@ -106,6 +106,43 @@ class SelectedMember extends ChangeNotifier {
     await _persist();
   }
 
+  /// Re-record the CURRENT selection's gym branding and capability flags from
+  /// a fresh identity read — the pull-to-refresh counterpart to [select].
+  ///
+  /// The capability flags and the gym branding ride the identity read, which
+  /// otherwise runs exactly once per session in the auth gate; without this a
+  /// staff-side change (a gym turning its rank ladder off, renaming itself,
+  /// uploading a new logo) only reached the member on a relaunch.
+  ///
+  /// Deliberately CANNOT move [memberId] or [gymId]: they are not parameters,
+  /// so a refresh can never switch or drop the member out from under the UI —
+  /// only the boot ladder and the explicit in-app switch choose a member. A
+  /// no-op when nothing is selected.
+  Future<void> refreshIdentity({
+    required String gymName,
+    required String firstName,
+    required String lastName,
+    String? gymAddress,
+    String? gymLogoUrl,
+    String? photoUrl,
+    required bool gymRankEnabled,
+    required bool gymHasRewards,
+    required bool gymHasVideos,
+  }) async {
+    if (_memberId == null || _gymId == null) return;
+    _gymName = gymName;
+    _firstName = firstName;
+    _lastName = lastName;
+    _gymAddress = gymAddress;
+    _gymLogoUrl = gymLogoUrl;
+    _photoUrl = photoUrl;
+    _gymRankEnabled = gymRankEnabled;
+    _gymHasRewards = gymHasRewards;
+    _gymHasVideos = gymHasVideos;
+    notifyListeners();
+    await _persist();
+  }
+
   /// The persisted ladder key from a previous session — which member to try to
   /// re-select. Read by the gate's revalidation ladder against the fresh list.
   Future<String?> restoreCandidate() async {

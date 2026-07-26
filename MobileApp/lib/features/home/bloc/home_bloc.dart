@@ -44,14 +44,20 @@ class HomeBloc extends Bloc<HomeEvent, HomeState> {
     await _fetchWindow(state.windowDays, emit);
   }
 
+  /// Completes `event.done` in a `finally` — including on the early return —
+  /// so a pull-to-refresh awaits the real fetch rather than a state emission.
   Future<void> _onRefreshRequested(
     HomeRefreshRequested event,
     Emitter<HomeState> emit,
   ) async {
-    if (_gymId == null || _memberId == null) return;
-    emit(state.copyWith(isRefreshing: true, clearError: true));
-    await _fetchWindow(state.windowDays, emit, keepContent: true);
-    emit(state.copyWith(isRefreshing: false));
+    try {
+      if (_gymId == null || _memberId == null) return;
+      emit(state.copyWith(isRefreshing: true, clearError: true));
+      await _fetchWindow(state.windowDays, emit, keepContent: true);
+      emit(state.copyWith(isRefreshing: false));
+    } finally {
+      event.done?.complete();
+    }
   }
 
   Future<void> _onExtendRequested(

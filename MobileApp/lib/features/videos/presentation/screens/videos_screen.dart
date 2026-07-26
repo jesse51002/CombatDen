@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/refresh/app_refresh.dart';
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/core/utils/number_format.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
@@ -18,6 +20,8 @@ import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpe
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
+import 'package:mobile_app/shared/widgets/refresh/app_refresh_view.dart';
+import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
@@ -58,23 +62,41 @@ class _VideosScaffold extends StatelessWidget {
 
   final ScrollController? captureController;
 
+  /// The shared pull: identity + capabilities + branding, theme, the shared
+  /// profile, and the current tab's feed — all awaited.
+  Future<void> _refresh(BuildContext context) {
+    final bloc = context.read<VideosBloc>();
+    return AppRefresh.forScreen(
+      context,
+      screen: () => dispatchRefresh(bloc, VideosRefreshRequested.new),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return AppScreenScaffold(
-      horizontalPadding: AppScreenHorizontalPadding.none,
-      bottomNav: AppBottomNavBar(
-        selected: AppBottomNavTab.videos,
-        tabs: gymNavTabs(),
-      ),
-      child: SingleChildScrollView(
-        controller: captureController,
-        padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: const [
-            _Topbar(),
-            _Body(),
-          ],
+    return SelectedMemberScope(
+      builder: (context) => AppScreenScaffold(
+        horizontalPadding: AppScreenHorizontalPadding.none,
+        bottomNav: AppBottomNavBar(
+          selected: AppBottomNavTab.videos,
+          tabs: gymNavTabs(),
+        ),
+        child: AppRefreshView(
+          onRefresh: () => _refresh(context),
+          child: SingleChildScrollView(
+            controller: captureController,
+            // A gym whose feed is still empty renders shorter than the
+            // viewport — that page must still accept the pull.
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: const [
+                _Topbar(),
+                _Body(),
+              ],
+            ),
+          ),
         ),
       ),
     );

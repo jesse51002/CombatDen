@@ -98,7 +98,9 @@ note is deleted.
   so the topbar streak/points, the rank block, and every feature that needs
   retention data read the **same** profile. Refetch it (silent
   `MemberProfileRefreshRequested`) on reserve/cancel, redeem, the celebration, app
-  foreground, and a member switch. Never spin up a second profile fetch.
+  foreground, a pull-to-refresh on any tab (the shared `AppRefresh` owns that
+  leg — a screen must not dispatch it a second time), and a member switch. Never
+  spin up a second profile fetch.
 - **Everything resets on a member switch.** `app_shell.dart` re-keys its whole
   subtree on `ThemeRuntime.activeDesignId` + `selectedMember.memberId`, so
   switching profiles re-inflates a fresh `MemberProfileBloc` and a fresh Home,
@@ -201,7 +203,10 @@ note is deleted.
   `true` when absent** (an older payload, or a disk cache written by an older
   build): hiding a real feature is worse than showing an empty one. `reset()`
   returns them to `true`, so a signed-out app never carries the last gym's
-  shape into the next member's boot. What each one gates:
+  shape into the next member's boot. A **pull-to-refresh on any tab re-reads
+  them** (and the branding beside them) through `SelectedMember.refreshIdentity`
+  — see *Refresh, no polling* — so a staff-side toggle lands without a
+  relaunch. What each one gates:
   - `gymRankEnabled` — the Profile tab's whole rank block (see *The Profile tab
     has two shapes*), the `InfoBar` belt tile, the post-class rank card, the
     `RankProgressBloc` fetch, and the "and rank" clause in `SignOutDialog`.
@@ -466,9 +471,44 @@ them as mandatory:
   destination render an empty state. The mirror rule is the UNKNOWN case: when
   a flag is missing, default to showing — an empty surface is recoverable, an
   invisible feature is not.
-- **Refresh, no polling.** Pull-to-refresh (home / rewards / videos / profile) +
-  refetch-on-tab-focus; a foreground return drives the profile refetch and the
-  celebration check. No timers.
+- **Refresh, no polling.** Pull-to-refresh on all four tabs + refetch-on-tab-
+  focus; a foreground return drives the profile refetch and the celebration
+  check. No timers. **A pull is ONE shared action** — `AppRefresh`
+  (`core/refresh/app_refresh.dart`), wrapped by `AppRefreshView`
+  (`shared/widgets/refresh/`) on every tab, never a per-screen indicator. Four
+  legs, run concurrently and each guarded so one failure can't sink the others,
+  awaited together so the spinner tracks real completion:
+  1. **Identity → capabilities + branding.** Re-reads `GET /member/members` and
+     updates the CURRENT selection's gym name / logo / address and its three
+     capability flags in place, via `SelectedMember.refreshIdentity`. That read
+     otherwise runs exactly ONCE per session in the gate, so before this a gym
+     toggling `is_rank_enabled` in the CRM only reached the member on a
+     relaunch. **The selection ladder is never re-run** — `refreshIdentity`
+     cannot take a member id, and a member missing from the fresh list (staff
+     archived them) leaves the last-known identity standing: stale data is
+     recoverable, silently acting as a different member is not.
+  2. **Theme** — `GymThemeHydration().applyForGym`, so a CRM theme change lands
+     without a relaunch either.
+  3. **The shared `MemberProfileBloc`** (rank, points, streak, week strip).
+  4. **The screen's own bloc**, when it owns anything the profile doesn't.
+  Nothing is surfaced from the pull itself: each leg's failure mode is already
+  designed (the screens keep last-good content and render their own error /
+  retry states).
+  Two rules when adding a tab or a scroll view under one: the scrollable needs
+  `physics: const AlwaysScrollableScrollPhysics()` or a page shorter than the
+  viewport refuses the drag, and the tab root wraps itself in
+  `SelectedMemberScope` so new capability flags re-compose the page that is
+  actually on screen (the shell re-keys on member id alone, which a refresh
+  never changes).
+- **A refresh event is awaited through its `RefreshSignal`, never a delay.**
+  Every `*RefreshRequested` event carries an optional POSITIONAL
+  `RefreshSignal` (`core/refresh/refresh_signal.dart`) that its handler
+  completes in a `finally`; `dispatchRefresh(bloc, XRefreshRequested.new)`
+  awaits it. Watching the state stream instead is not equivalent — a handler
+  that early-returns or re-emits an equal state emits nothing, and the
+  indicator would hang to its timeout. The field is positional and optional so
+  every fire-and-forget `const XRefreshRequested()` call site stays valid, and
+  it is excluded from `props`.
 - **No placeholder creator avatars.** The served video feed carries no
   `channel_avatar_url` today — the field arrives as an **empty string**, not
   null. Every video card therefore resolves it through the one shared rule,
@@ -814,6 +854,7 @@ lib/
 │   ├── constants/                  # env_constants.dart (dotenv keys)
 │   ├── errors/                     # exceptions.dart (Network / Server / Forbidden)
 │   ├── network/                    # api_client.dart (JWT dio + 401 refresh + 403 guard)
+│   ├── refresh/                    # app_refresh.dart (the ONE pull action) + refresh_signal.dart
 │   └── state/                      # selected_member.dart (app-wide member identity)
 ├── features/
 │   └── <feature>/

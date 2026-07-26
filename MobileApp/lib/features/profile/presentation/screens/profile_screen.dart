@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/refresh/app_refresh.dart';
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
@@ -18,6 +20,8 @@ import 'package:mobile_app/features/profile/presentation/widgets/rankless/rankle
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
+import 'package:mobile_app/shared/widgets/refresh/app_refresh_view.dart';
+import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 // Bottom scroll padding to clear the persistent bottom nav.
@@ -43,21 +47,39 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Ranks off ⇒ no rank graph, so don't build the bloc or fire its fetch:
-    // the backend answers `points: []` for a rank-off gym, and that is a round
-    // trip feeding a spinner nobody sees.
-    if (!selectedMember.gymRankEnabled) return const _RanklessProfile();
-    return BlocProvider<RankProgressBloc>(
-      create: (_) => RankProgressBloc(
-        repository: MemberRankProgressRepository(apiClient: ApiClient()),
-      )..add(const RankProgressLoadRequested()),
-      child: const _ProfileScaffold(),
+    // Wrapped so a pull that flips `gymRankEnabled` re-chooses the shape then
+    // and there — the founder-visible half of the bug this refresh exists for.
+    // Flipping ranks ON also mounts the bloc below and fires its first load.
+    return SelectedMemberScope(
+      builder: (context) {
+        // Ranks off ⇒ no rank graph, so don't build the bloc or fire its
+        // fetch: the backend answers `points: []` for a rank-off gym, and that
+        // is a round trip feeding a spinner nobody sees.
+        if (!selectedMember.gymRankEnabled) return const _RanklessProfile();
+        return BlocProvider<RankProgressBloc>(
+          create: (_) => RankProgressBloc(
+            repository: MemberRankProgressRepository(apiClient: ApiClient()),
+          )..add(const RankProgressLoadRequested()),
+          child: const _ProfileScaffold(),
+        );
+      },
     );
   }
 }
 
 class _ProfileScaffold extends StatelessWidget {
   const _ProfileScaffold();
+
+  /// The shared pull. The profile leg already re-reads rank, points, streak
+  /// and the week strip, so this screen's own leg is only the rank-progress
+  /// GRAPH — the one thing on this page the shared profile doesn't carry.
+  Future<void> _refresh(BuildContext context) {
+    final bloc = context.read<RankProgressBloc>();
+    return AppRefresh.forScreen(
+      context,
+      screen: () => dispatchRefresh(bloc, RankProgressRefreshRequested.new),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,17 +89,23 @@ class _ProfileScaffold extends StatelessWidget {
         selected: AppBottomNavTab.rank,
         tabs: gymNavTabs(),
       ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.only(bottom: _kBottomScrollPadding),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          spacing: DesignConstants.spacingBig,
-          children: const [
-            ProfileTopbar(),
-            ProfileStreakHero(),
-            _ProfileBody(),
-          ],
+      child: AppRefreshView(
+        onRefresh: () => _refresh(context),
+        child: SingleChildScrollView(
+          // An ungraded member at a rank-enabled gym gets a short page (no
+          // rank block) — it must still take the pull.
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: _kBottomScrollPadding),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: DesignConstants.spacingBig,
+            children: const [
+              ProfileTopbar(),
+              ProfileStreakHero(),
+              _ProfileBody(),
+            ],
+          ),
         ),
       ),
     );
@@ -120,6 +148,11 @@ class _ProfileBody extends StatelessWidget {
 class _RanklessProfile extends StatelessWidget {
   const _RanklessProfile();
 
+  /// The shared pull. This shape owns NO data beyond the shared profile — the
+  /// hero, week strip and facts all read it — so there is no screen leg, and
+  /// nothing is dispatched twice.
+  Future<void> _refresh(BuildContext context) => AppRefresh.forScreen(context);
+
   @override
   Widget build(BuildContext context) {
     return AppScreenScaffold(
@@ -128,20 +161,28 @@ class _RanklessProfile extends StatelessWidget {
         selected: AppBottomNavTab.rank,
         tabs: gymNavTabs(),
       ),
-      child: CustomScrollView(
-        slivers: const [
-          SliverToBoxAdapter(child: ProfileTopbar()),
-          // Fills whatever the topbar left of the viewport, and grows past it
-          // once the level-up carousel renders — so the streak block is
-          // CENTRED in the space the rank block vacated instead of stranded at
-          // the top of a short scroll.
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: RanklessProfileBody(
-              bottomPadding: _kBottomScrollPadding,
+      child: AppRefreshView(
+        onRefresh: () => _refresh(context),
+        child: CustomScrollView(
+          // This page is deliberately viewport-sized (`SliverFillRemaining`
+          // with no scroll body), so it has NO overscroll of its own — without
+          // this the pull would be dead on the one tab most likely to be
+          // rank-off.
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: const [
+            SliverToBoxAdapter(child: ProfileTopbar()),
+            // Fills whatever the topbar left of the viewport, and grows past it
+            // once the level-up carousel renders — so the streak block is
+            // CENTRED in the space the rank block vacated instead of stranded at
+            // the top of a short scroll.
+            SliverFillRemaining(
+              hasScrollBody: false,
+              child: RanklessProfileBody(
+                bottomPadding: _kBottomScrollPadding,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

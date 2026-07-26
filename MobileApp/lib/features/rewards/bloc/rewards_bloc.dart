@@ -25,6 +25,7 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
       : _repository = repository,
         super(const RewardsState()) {
     on<RewardsLoadRequested>(_onLoadRequested);
+    on<RewardsRefreshRequested>(_onRefreshRequested);
     on<RewardsRedeemRequested>(_onRedeemRequested);
   }
 
@@ -40,6 +41,43 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
     if (gymId == null || memberId == null) return;
 
     emit(state.copyWith(status: RewardsStatus.loading, clearError: true));
+    await _fetch(gymId: gymId, memberId: memberId, emit: emit);
+  }
+
+  /// Pull-to-refresh: the same fetch as a load, minus the flip to `loading`
+  /// that would blank the grids under the spinner. Completes `event.done` in a
+  /// `finally` so the pull awaits the real fetch.
+  Future<void> _onRefreshRequested(
+    RewardsRefreshRequested event,
+    Emitter<RewardsState> emit,
+  ) async {
+    try {
+      final gymId = _gymId;
+      final memberId = _memberId;
+      if (gymId == null || memberId == null) return;
+
+      await _fetch(
+        gymId: gymId,
+        memberId: memberId,
+        emit: emit,
+        // Only content already on screen is worth protecting; with nothing
+        // loaded, the error state is the honest outcome.
+        keepContent: state.status == RewardsStatus.loaded,
+      );
+    } finally {
+      event.done?.complete();
+    }
+  }
+
+  /// Fetch the catalog + redemptions and emit the loaded state. When
+  /// [keepContent] is true a catalog failure keeps whatever is on screen
+  /// instead of flipping to the error state.
+  Future<void> _fetch({
+    required String gymId,
+    required String memberId,
+    required Emitter<RewardsState> emit,
+    bool keepContent = false,
+  }) async {
     try {
       final catalog =
           await _repository.listCatalog(gymId: gymId, memberId: memberId);
@@ -63,6 +101,7 @@ class RewardsBloc extends Bloc<RewardsEvent, RewardsState> {
       ));
     } catch (e, st) {
       log('RewardsBloc: load failed', error: e, stackTrace: st);
+      if (keepContent) return;
       emit(state.copyWith(
         status: RewardsStatus.error,
         errorMessage: _userMessage(e),

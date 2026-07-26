@@ -9,6 +9,7 @@ import 'package:mobile_app/features/home/data/repositories/member_classes_reposi
 import 'package:mobile_app/features/home/presentation/widgets/home_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
+import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 /// The home tab: the member's gym schedule board joined with their open
@@ -26,13 +27,17 @@ class HomeScreen extends StatelessWidget {
         classesRepository: MemberClassesRepository(apiClient: apiClient),
         historyRepository: MemberClassHistoryRepository(apiClient: apiClient),
       )..add(const HomeLoadRequested()),
-      child: AppScreenScaffold(
-        horizontalPadding: AppScreenHorizontalPadding.none,
-        bottomNav: AppBottomNavBar(
-          selected: AppBottomNavTab.home,
-          tabs: gymNavTabs(),
+      // Re-composes when a pull brings back new capability flags — the tab set
+      // is derived from them.
+      child: SelectedMemberScope(
+        builder: (context) => AppScreenScaffold(
+          horizontalPadding: AppScreenHorizontalPadding.none,
+          bottomNav: AppBottomNavBar(
+            selected: AppBottomNavTab.home,
+            tabs: gymNavTabs(),
+          ),
+          child: const HomeBody(),
         ),
-        child: const HomeBody(),
       ),
     );
   }

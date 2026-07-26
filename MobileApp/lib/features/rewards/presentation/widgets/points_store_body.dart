@@ -3,6 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/refresh/app_refresh.dart';
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_event.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
@@ -16,6 +18,8 @@ import 'package:mobile_app/features/rewards/presentation/widgets/rewards_topbar.
 import 'package:mobile_app/features/rewards/presentation/widgets/store_grid/store_grid.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
+import 'package:mobile_app/shared/widgets/refresh/app_refresh_view.dart';
+import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 /// Points Store body: the live catalog grid over the per-member chrome. A
@@ -39,6 +43,18 @@ class PointsStoreBody extends StatelessWidget {
           ),
         ),
       );
+  }
+
+  /// The shared pull: identity + capabilities + branding, theme, the shared
+  /// profile (which owns the points balance above), and this screen's catalog
+  /// + redemptions — all awaited. The profile leg is the balance refresh, so
+  /// nothing here dispatches it a second time.
+  Future<void> _refresh(BuildContext context) {
+    final bloc = context.read<RewardsBloc>();
+    return AppRefresh.forScreen(
+      context,
+      screen: () => dispatchRefresh(bloc, RewardsRefreshRequested.new),
+    );
   }
 
   void _onRedeemError(BuildContext context, String message) {
@@ -65,27 +81,36 @@ class PointsStoreBody extends StatelessWidget {
               _onRedeemError(context, state.redeemError!),
         ),
       ],
-      child: AppScreenScaffold(
-        horizontalPadding: AppScreenHorizontalPadding.none,
-        bottomNav: AppBottomNavBar(
-          selected: AppBottomNavTab.reward,
-          tabs: gymNavTabs(),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            spacing: DesignConstants.spacingBig,
-            children: [
-              const RewardsTopbar(),
-              RewardsTabs(
-                active: RewardsTab.pointsStore,
-                onMyRewardsTap: () => Navigator.of(context)
-                    .pushReplacementNamed(AppRoutes.myRewards),
+      child: SelectedMemberScope(
+        builder: (context) => AppScreenScaffold(
+          horizontalPadding: AppScreenHorizontalPadding.none,
+          bottomNav: AppBottomNavBar(
+            selected: AppBottomNavTab.reward,
+            tabs: gymNavTabs(),
+          ),
+          child: AppRefreshView(
+            onRefresh: () => _refresh(context),
+            child: SingleChildScrollView(
+              // An empty catalog is shorter than the viewport; without this the
+              // page would refuse the drag exactly when a member most wants to
+              // retry.
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                spacing: DesignConstants.spacingBig,
+                children: [
+                  const RewardsTopbar(),
+                  RewardsTabs(
+                    active: RewardsTab.pointsStore,
+                    onMyRewardsTap: () => Navigator.of(context)
+                        .pushReplacementNamed(AppRoutes.myRewards),
+                  ),
+                  const _PointsHeadlineSection(),
+                  const _StoreGridSection(),
+                ],
               ),
-              const _PointsHeadlineSection(),
-              const _StoreGridSection(),
-            ],
+            ),
           ),
         ),
       ),
