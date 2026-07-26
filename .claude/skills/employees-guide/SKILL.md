@@ -413,7 +413,14 @@ no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing
 1. **`member_id` is never derived from the JWT.** `GET /api/v1/member/members` (gated by
    `verify_verified_account`, since no member is named yet) resolves the caller's email to their member
    rows **across gyms** — a LIST, because `members.email` is deliberately non-unique (§1, the family
-   case). Every other route takes the chosen `member_id` + `gym_id` explicitly.
+   case). Every other route takes the chosen `member_id` + `gym_id` explicitly. Each row also carries
+   its gym's display block **and its three CAPABILITY flags** — `gym_rank_enabled` (the stored
+   `gyms.is_rank_enabled` toggle) plus `gym_has_rewards` / `gym_has_videos`, both DERIVED from data
+   (there is no toggle for either) by mirroring the exact predicate of the member-facing read behind
+   each tab. The app picks its bottom-nav tabs from them, so they must be right at first paint and
+   survive offline — which is why they ride the once-per-boot, cached identity read rather than the
+   profile. Detail (including the served-feed drift guard) lives in `FastApiBackend/CLAUDE.md` under
+   *Member portal domain*.
 2. **Every gym-scoped route passes `gym_id`** to the gate, so a member row at an unrelated gym is a 403
    rather than a served page.
 3. **No client-selectable gate semantics.** `is_member`, `ignore_warnings`, `auto_approve`, `rejected`,
@@ -422,8 +429,11 @@ no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing
    they are judged by.
 
 **What it admits** (14 routes, all thin delegation to the SAME services the CRM uses): the caller's
-member rows; their own profile (rank progress, points balance, streak, membership cards, recent +
-pending redemptions — a projection of `MembersBillingDetailService`); their streak and class history;
+member rows; their own profile (rank progress, points balance, streak — including
+`retention.current_week_attended_weekdays`, THIS week's attended weekdays as SUNDAY-FIRST indices over
+the streak's own gym-local week, so a rank-disabled gym renders its week strip from the same call —
+membership cards, recent + pending redemptions; a projection of `MembersBillingDetailService`); their
+streak and class history;
 their gym's **schedule board**; their own **reservations** (`POST`/`DELETE .../signup`); their gym's
 **active** reward catalog and a **pending** redemption with their own points; and their personalized
 **video** feed / rotating rec / rec click.
@@ -468,7 +478,9 @@ Deep detail (the route/gate table, the cross-gym reward guard on redeem) lives i
 - **Member portal:** `FastApiBackend/src/member_portal/` — `member_portal_router.py`,
   `schema/member_portal_schema.py`, `service/member_portal_service.py`,
   `sql/member_portal_list_members.sql`. Tests:
-  `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units) and
+  `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units),
+  `test_member_portal_capabilities_db.py` (the live derivation + served-feed drift guard),
+  `test_member_portal_week_strip_db.py` (the gym-local Sunday-first week strip) and
   `FastApiBackend/tests/integration/test_member_portal_integration.py` (the live gate proof).
 - **CRM:** `CRM/lib/core/auth/employee_role.dart`, `role_policy.dart`, `CRM/lib/core/navigation/
   route_guard.dart`, `CRM/lib/core/errors/exceptions.dart` (`ForbiddenException`),

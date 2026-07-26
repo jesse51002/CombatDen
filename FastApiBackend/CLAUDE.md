@@ -1185,9 +1185,10 @@ member-self branch had:
 can't drift from the staff surface. Only THREE reads have no existing owner, and they live in
 `service/member_portal_service.py` (`MemberPortalService`, a single standalone service, flat at
 `service/`): `list_members_for_email` (`sql/member_portal_list_members.sql` — the entry point; it
-carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query),
-`get_profile` (a pure field PROJECTION of `MembersBillingDetailService.get_member_billing_detail` down
-to the member-appropriate `MemberPortalProfile` — no number is re-derived), and `get_rank_progress`
+carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query, plus the
+three GYM CAPABILITY flags below), `get_profile` (a pure field PROJECTION of
+`MembersBillingDetailService.get_member_billing_detail` down to the member-appropriate
+`MemberPortalProfile` — no number is re-derived), and `get_rank_progress`
 (the profile graph's data — `sql/member_portal_rank_progress.sql` walked in Python: one point per
 `member_activities` event, `rank_changed` resets the counter to 0 and `class_attended` increments it
 capped at `classes_needed`, the member's CURRENT per-step threshold derived with the SAME
@@ -1197,7 +1198,7 @@ disabled).
 
 | Route (prefix `/api/v1/member`) | Gate | Delegates to |
 |---|---|---|
-| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` |
+| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` (+ the gym's three capability flags) |
 | `GET /gyms/{gid}/members/{mid}` | `verify_member_self(mid, gym_id=gid)` | `MemberPortalService.get_profile` |
 | `GET …/rank-progress` | same | `MemberPortalService.get_rank_progress` |
 | `GET …/streak` | same | `StreakService` |
@@ -1211,6 +1212,52 @@ disabled).
 | `GET …/videos` | same | `VideosService.load_feed_page`, `rejected=False` hardwired, `member_id` bound to the path member |
 | `GET …/video-rec` | same | `VideosService.get_video_rec` |
 | `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
+
+**The identity read carries the gym's THREE CAPABILITY flags, and it carries them because of WHEN it
+is fetched.** `MemberPortalIdentity` gained `gym_rank_enabled` / `gym_has_rewards` / `gym_has_videos`
+alongside the existing `gym_name` / `gym_logo_url` / `gym_address` block. The app decides which
+BOTTOM NAV TABS exist from them, so they must be right at first paint and survive offline — identity
+is fetched once at boot and cached, while the profile read arrives later. They are per-GYM, so a
+family spanning gyms legitimately gets a different tab set per row.
+
+- `gym_rank_enabled` is the stored `gyms.is_rank_enabled` toggle (previously read only inside
+  `member_portal_rank_progress.sql`, never exposed).
+- **`gym_has_rewards` / `gym_has_videos` are DERIVED FROM DATA — there is no toggle for either**
+  (founder decision: the question is only whether the gym HAS any). Each **mirrors the exact
+  predicate of the member-facing read behind its tab**, so a flag can never disagree with the screen:
+  `gym_has_rewards` = one `gym_rewards` row with `is_active = TRUE` (`list_rewards.sql` as the member
+  route calls it, `include_inactive` hardwired FALSE); `gym_has_videos` = one row the SERVED feed
+  would return, i.e. the enriched-`INNER JOIN video_rag`-AND-accepted, owner-section-or-latest-
+  COMPLETED-run predicate of `src/videos/sql/videos_feed_candidate_source.sql`.
+- That served predicate is **copied, not injected** — the shared file binds ONE `gym_id` while the
+  identity read correlates per gym — so `tests/member_portal/test_member_portal_capabilities_db.py`
+  carries a **drift guard** that reads both `.sql` files off disk. Change the shared candidate source
+  and you must change the mirror in the same commit.
+- Shape: both are `EXISTS`, never `COUNT` (a boolean only needs the first row), and they live in a
+  `gym_capabilities AS MATERIALIZED` CTE over the DISTINCT matching gyms. `MATERIALIZED` is
+  load-bearing — inlined, the planner may pull the subquery into the join and re-run the whole feed
+  predicate once per MEMBER row.
+
+**The profile's retention block carries THIS WEEK's attended weekdays.**
+`BillingRetention.current_week_attended_weekdays` is a list of **SUNDAY-FIRST** weekday indices
+(0 = Sunday … 6 = Saturday), ascending, empty when the member hasn't trained this week. It exists so a
+rank-disabled gym can make the streak the profile's centrepiece without a second call to fetch and
+re-derive the whole class history for seven dots.
+
+- **One source, not a parallel definition.** `MembersBillingDetailService` now calls
+  `StreakService.get_streak_details` (not `get_streak`), so the strip and `class_streak_weeks` come
+  from the same session and the same gym-local Monday anchor and can never contradict each other on
+  screen. The re-indexing lives on `StreakService.sunday_first_attended_indices` — the service that
+  owns the strip is the one place that knows both origins. No new `.sql`: it reuses
+  `src/checkin/sql/current_week_days.sql`.
+- **Two origins, deliberately.** The WEEK is the streak's gym-local **Monday-start** week (so both
+  numbers describe the same seven days); the INDEX is **Sunday-first**, matching the member app's
+  `StreakWeekStrip` (Sunday→Saturday) and its `completedWeekdayIndices()` helper. Consequently a
+  Sunday only ever lights up as the LAST day of the current streak week, rendered in the strip's
+  first cell. `StreakResponse.current_week_days` on `GET …/streak` is UNCHANGED — still Monday-first
+  booleans; don't "align" the two, they are different contracts.
+- It rides `BillingRetention`, which the CRM member-detail response shares, so the staff surface gets
+  the field too (additive; one extra cheap indexed query on that read).
 
 **Same-gym is guarded on the DEBIT, in every redeem statement.** Both `redeem_reward.sql` and
 `redeem_reward_override.sql` carry `AND (SELECT gym_id FROM locked_reward) = (SELECT gym_id FROM

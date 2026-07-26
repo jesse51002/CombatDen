@@ -146,9 +146,10 @@ async def _add_reward(db_pool, gym: UUID, *, active: bool) -> None:
     async with db_pool.session() as session:
         await session.execute(
             text(
-                "INSERT INTO gym_rewards "
-                "(gym_id, title, point_cost, is_active) "
-                "VALUES (:g, 'ZZ Capability Reward', 10, :a)"
+                "INSERT INTO gym_rewards (gym_id, title, point_cost, "
+                "image_url, price_label, is_active) "
+                "VALUES (:g, 'ZZ Capability Reward', 10, "
+                "'https://x/r.png', '$0', :a)"
             ),
             {"g": str(gym), "a": active},
         )
