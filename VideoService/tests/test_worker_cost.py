@@ -22,7 +22,12 @@ def test_log_scrape_emits_free_search_and_embed() -> None:
     db = RoutingFakeDb()
     asyncio.run(
         WorkerCostLog(db).log_scrape(
-            "gym-1", "run-1", youtube_quota_units=900, embed_usd=0.02
+            "gym-1",
+            "run-1",
+            youtube_quota_units=912,
+            embed_usd=0.02,
+            avatar_quota_units=12,
+            channels_resolved=40,
         )
     )
 
@@ -31,7 +36,13 @@ def test_log_scrape_emits_free_search_and_embed() -> None:
 
     search = by_stage[CostStage.search.value]
     assert search["cost_usd"] == 0.0 and search["model"] is None
-    assert json.loads(search["breakdown"]) == {"youtube_quota_units": 900}
+    # The avatar pass's channels.list calls are INSIDE youtube_quota_units and
+    # broken out beside it — the ledger never carries uncounted quota.
+    assert json.loads(search["breakdown"]) == {
+        "youtube_quota_units": 912,
+        "avatar_quota_units": 12,
+        "channels_resolved": 40,
+    }
 
     embed = by_stage[CostStage.embed.value]
     assert embed["cost_usd"] == 0.02

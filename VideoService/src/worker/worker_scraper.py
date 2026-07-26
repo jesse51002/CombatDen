@@ -11,6 +11,12 @@ videos keep their content (never wiped with NULLs) and gain the surfacing query.
 The YouTube Data API is free within quota, so the scrape reports its quota usage
 (a diagnostic) and a spend of $0.
 
+After the merge comes the AVATAR pass (``worker_avatars``): one ``channels.list``
+call per ≤50 of the scrape's distinct creators fills the ones with no avatar and
+refreshes the rest (YouTube avatar URLs rotate when a creator changes their
+picture). Its calls are counted into the same ``youtube_quota_units`` the run
+reports and logs — the avatar pass is never uncounted quota.
+
 ``write_feed`` is the scrape step's ONLY feed write: it carries the previous
 completed run's rows forward FIRST (ALL rows incremental, manual-only fresh), then
 inserts every funnel candidate as a ``pending`` row ``ON CONFLICT DO NOTHING`` so a
@@ -32,6 +38,7 @@ from schema.video_output import VideoOutput
 from src.shared.database import DirectDatabasePool
 from src.shared.sql_loader import load_sql
 from src.shared.util.video_id import video_id_from_url
+from src.worker.worker_avatars import WorkerAvatarResolver
 from src.worker.worker_config import settings
 from src.worker.worker_spec import SpecData
 from src.worker.worker_transforms import (
@@ -58,10 +65,14 @@ class ScrapeResult:
     """What one scrape did: spend + quota + how much of the pool it touched."""
 
     search_usd: float  # YouTube Data API is free within quota → always 0.0
-    youtube_quota_units: int  # ~100 units per spec query (a diagnostic)
+    # The run's TOTAL quota diagnostic: ~100 units per spec query plus 1 per
+    # channels.list avatar batch.
+    youtube_quota_units: int
     results_fetched: int  # raw video items returned across all queries
     new_count: int
     updated_count: int
+    avatar_quota_units: int  # the avatar pass's share of the units above
+    channels_resolved: int  # creators whose avatar this run filled/refreshed
 
 
 class WorkerScraper:
@@ -72,16 +83,27 @@ class WorkerScraper:
         self,
         db_pool: DirectDatabasePool,
         youtube_client: WorkerYouTubeClient,
+        avatars: WorkerAvatarResolver,
     ) -> None:
         self._db = db_pool
         self._youtube = youtube_client
+        self._avatars = avatars
 
     async def scrape(self, spec: SpecData) -> ScrapeResult:
-        """Fetch every spec query and merge-upsert the results into ``video``."""
+        """Fetch every spec query, merge-upsert the results into ``video``, then
+        fill/refresh the creator avatars of the channels that scrape surfaced."""
         queries = spec.queries
         if not queries:
             logger.warning("gym %s has no queries — nothing to scrape", spec.gym_id)
-            return ScrapeResult(0.0, 0, 0, 0, 0)
+            return ScrapeResult(
+                search_usd=0.0,
+                youtube_quota_units=0,
+                results_fetched=0,
+                new_count=0,
+                updated_count=0,
+                avatar_quota_units=0,
+                channels_resolved=0,
+            )
 
         sem = asyncio.Semaphore(settings.worker_scrape_concurrency)
         per_query = await asyncio.gather(
@@ -92,13 +114,20 @@ class WorkerScraper:
         fresh = build_outputs(hits)
 
         new_count, updated_count = await self._merge(fresh)
-        quota_units = len(queries) * QUOTA_UNITS_PER_SEARCH
+        # AFTER the merge: the avatar write fans out by channel_url, so the rows
+        # this scrape just inserted must already exist to be covered by it.
+        avatars = await self._avatars.refresh_for_scrape(fresh)
+        quota_units = (
+            len(queries) * QUOTA_UNITS_PER_SEARCH + avatars.quota_units
+        )
         logger.info(
-            "gym %s scrape: %d fetched, %d new / %d updated; YouTube ~%d quota units (free)",
+            "gym %s scrape: %d fetched, %d new / %d updated, %d avatars; "
+            "YouTube ~%d quota units (free)",
             spec.gym_id,
             results_fetched,
             new_count,
             updated_count,
+            avatars.channels_resolved,
             quota_units,
         )
         return ScrapeResult(
@@ -107,6 +136,8 @@ class WorkerScraper:
             results_fetched=results_fetched,
             new_count=new_count,
             updated_count=updated_count,
+            avatar_quota_units=avatars.quota_units,
+            channels_resolved=avatars.channels_resolved,
         )
 
     async def _search_query(self, query: str, sem: asyncio.Semaphore) -> list:

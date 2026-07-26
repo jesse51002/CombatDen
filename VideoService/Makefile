@@ -1,4 +1,4 @@
-.PHONY: worker test gym-check sync-gyms sync-gyms-prod enrich-templates
+.PHONY: worker test gym-check sync-gyms sync-gyms-prod enrich-templates backfill-avatars
 
 # `python -m pytest` (not the `pytest` console script) survives stale .venv
 # shebangs left over from the CustomYoutubeService -> VideoService rename.
@@ -56,6 +56,20 @@ enrich-templates:
 	poetry run python -m scripts.enrich_templates.run $(ARGS)
 # Smoke-test the whole enrich->embed->sidecar pipeline on ONE video before the
 # full paid run:  make enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"
+
+# One-time backfill: give every pooled creator a channel avatar, and upgrade the
+# legacy @handle channel URLs to the canonical /channel/UC… id form on the way.
+# Pass 1 recovers each handle channel's real id via videos.list (~231 calls) and
+# rewrites its rows; pass 2 fills the avatars via channels.list (~236 calls),
+# reusing the worker's WorkerAvatarResolver. ~467 quota units total, $0 (the
+# YouTube Data API is free within quota), no re-scrape, no LLM call. Resumable and
+# idempotent — both passes derive their targets from the current table state, so a
+# crashed or rate-limited run just re-runs. Needs YOUTUBE_API_KEY; targets the DB
+# in ENV_FILE (default .env; ENV_FILE=.env.prod for prod).
+# Smoke-test first:  make backfill-avatars ARGS="--limit 5"
+#   make backfill-avatars
+backfill-avatars:
+	poetry run python -m scripts.backfill_avatars.run $(ARGS)
 
 # The pool scrape + per-gym scan are no longer standalone scripts: they are the
 # background `worker` (see the `worker` target above), which self-schedules the

@@ -9,6 +9,11 @@ into deduped ``VideoOutput``s. Videos leave here untagged (``tag=None``, empty
 disciplines and fetches the transcript lazily (from Apify) only for the videos it
 actually enriches.
 
+The creator-avatar parsers live here too — ``channels.list`` items → avatars, and
+the inverse ``channel_id_from_url`` that recovers a channel id from a stored
+canonical ``/channel/UC…`` URL. Both are pure; the I/O around them is
+``worker_avatars.WorkerAvatarResolver``.
+
 A class-less concern module by design (pure functions) — the house exception to
 "no loose module-level functions", exactly like the scan/roster mappers.
 """
@@ -23,14 +28,24 @@ from schema.video_output import VideoOutput
 
 WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
 CHANNEL_URL = "https://www.youtube.com/channel/{channel_id}"
+# The inverse of CHANNEL_URL: the id inside a canonical /channel/UC… URL. This is
+# what makes a `channel_id` COLUMN unnecessary — the id is always recoverable from
+# the stored URL, so the pool never carries a second copy of it.
+_CHANNEL_ID_IN_URL = re.compile(r"/channel/([A-Za-z0-9_-]+)")
 # ISO-8601 duration as YouTube reports it (``PT1H2M3S`` / ``PT5M30S`` / ``PT45S``,
 # rarely with a leading day component) → seconds.
 _ISO8601_DURATION = re.compile(
     r"^P(?:(?P<days>\d+)D)?"
     r"(?:T(?:(?P<hours>\d+)H)?(?:(?P<minutes>\d+)M)?(?:(?P<seconds>\d+)S)?)?$"
 )
-# Thumbnail resolutions best → worst; the first present one is used.
-_THUMBNAIL_PREFERENCE = ("maxres", "standard", "high", "medium", "default")
+# Video thumbnail resolutions best → worst; the first present one is used.
+VIDEO_THUMBNAIL_PREFERENCE = ("maxres", "standard", "high", "medium", "default")
+# Channel AVATAR resolutions best → worst. A channel's snippet only ever carries
+# `high` (800×800), `medium` (240×240) and `default` (88×88) — there is no
+# maxres/standard for an avatar, so it needs its own preference tuple. `high` is
+# preferred: the member UI renders the avatar in a small circle but on a 3x
+# display, and YouTube serves every size from the same CDN at the same cost.
+AVATAR_THUMBNAIL_PREFERENCE = ("high", "medium", "default")
 
 
 @dataclass(frozen=True)
@@ -98,16 +113,68 @@ def _parse_duration(value: object) -> int | None:
     return total or None
 
 
-def _best_thumbnail(thumbnails: object) -> str:
-    """The highest-resolution thumbnail URL from a snippet's ``thumbnails`` map,
-    or empty string when none is present."""
+def best_thumbnail(thumbnails: object, preference: Sequence[str]) -> str:
+    """The best thumbnail URL from a snippet's ``thumbnails`` map, picking the
+    first key present in ``preference`` (best → worst), or empty string when none
+    is present. Shared by the video thumbnail and the channel avatar, which have
+    different resolution keys — hence the explicit preference."""
     if not isinstance(thumbnails, dict):
         return ""
-    for key in _THUMBNAIL_PREFERENCE:
+    for key in preference:
         entry = thumbnails.get(key)
         if isinstance(entry, dict) and entry.get("url"):
             return str(entry["url"])
     return ""
+
+
+def channel_id_from_url(channel_url: str) -> str:
+    """The channel id inside a canonical ``/channel/UC…`` URL, or '' when the URL
+    is the legacy ``@handle`` form (which carries no id) or empty.
+
+    The pool stores the channel URL, not the id, so this is how every later pass
+    — the scrape's avatar refresh, the one-time backfill — gets an id back out of
+    a stored row without a dedicated column.
+    """
+    match = _CHANNEL_ID_IN_URL.search(channel_url or "")
+    return match.group(1) if match else ""
+
+
+def parse_channel_avatars(items: Sequence[dict]) -> dict[str, str]:
+    """``channels.list`` items → ``{channel_id: avatar_url}``.
+
+    An item with no id, or whose snippet carries no usable thumbnail, is skipped
+    entirely rather than mapped to '': storing an empty avatar would be a no-op at
+    best and, through the empty-guard in the upsert, indistinguishable from "not
+    resolved yet".
+    """
+    avatars: dict[str, str] = {}
+    for item in items:
+        channel_id = item.get("id")
+        if not isinstance(channel_id, str) or not channel_id:
+            continue
+        snippet = item.get("snippet") or {}
+        avatar = best_thumbnail(
+            snippet.get("thumbnails"), AVATAR_THUMBNAIL_PREFERENCE
+        )
+        if avatar:
+            avatars[channel_id] = avatar
+    return avatars
+
+
+def parse_video_channel_ids(items: Sequence[dict]) -> dict[str, str]:
+    """``videos.list`` items → ``{video_id: channel_id}``.
+
+    The one-time avatar backfill uses this to recover the real channel id for the
+    legacy ``@handle``-form rows, which is what lets it rewrite them to the
+    canonical id-form URL. Items missing either id are skipped.
+    """
+    channel_ids: dict[str, str] = {}
+    for item in items:
+        video_id = youtube_item_id(item)
+        channel_id = (item.get("snippet") or {}).get("channelId")
+        if video_id and isinstance(channel_id, str) and channel_id:
+            channel_ids[video_id] = channel_id
+    return channel_ids
 
 
 def parse_youtube_items(
@@ -138,8 +205,9 @@ def parse_youtube_items(
                 url=WATCH_URL.format(video_id=video_id),
                 title=snippet.get("title") or search_snippet.get("title") or "",
                 description=snippet.get("description") or "",
-                thumbnail_url=_best_thumbnail(
-                    snippet.get("thumbnails") or search_snippet.get("thumbnails")
+                thumbnail_url=best_thumbnail(
+                    snippet.get("thumbnails") or search_snippet.get("thumbnails"),
+                    VIDEO_THUMBNAIL_PREFERENCE,
                 ),
                 channel_name=(
                     snippet.get("channelTitle")
@@ -149,7 +217,10 @@ def parse_youtube_items(
                 channel_url=(
                     CHANNEL_URL.format(channel_id=channel_id) if channel_id else ""
                 ),
-                channel_avatar_url="",  # the API's snippet carries no avatar
+                # A search / videos snippet carries no avatar — it is resolved
+                # per CHANNEL by the scrape's avatar pass (worker_avatars), which
+                # runs after the merge and writes it onto every row of the channel.
+                channel_avatar_url="",
                 view_count=_to_int(stats.get("viewCount")),
                 like_count=_to_int(stats.get("likeCount")),
                 duration_seconds=_parse_duration(content.get("duration")),

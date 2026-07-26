@@ -22,17 +22,19 @@ flowchart TB
     direction TB
     s_scan["1st · SCAN — global sweep, per-gym batches, TEXT-ONLY<br/>targets: enriched rows (video under strike ceiling) in each gym's latest non-failed run, EITHER arm — (A) a 'pending' row's first verdict, OR (B) the feed_update RE-SCAN: an automatic row re-judged in place once a 'feed_update' spec version has settled ≥ 1h<br/>loads that gym's LATEST spec AT SCAN TIME · batches of 12 · judges the summary + genre/disciplines/facets (no thumbnail — enrich folded it into the summary)<br/>verdict UPDATE guarded on curation_type ≠ 'manual' (an owner's explicit keep/reject is never overwritten) · stamps scanned_at so the same feed_update never re-fires the row<br/>strike: a batch's LLM failure bumps every video in it and leaves them pending (no default-to-rejected)"]
     s_enrich["2nd, if scan had no work · ENRICH — global, gym-agnostic sweep<br/>targets: videos with NO video_rag row yet, under the strike ceiling<br/>(pending/accepted rows of each gym's latest non-failed run) ∪ ALL owner-section rows<br/>lazy Apify transcript fetch (a miss → placeholder, not a strike) → cache onto video<br/>ONE multimodal call → tag + disciplines + summary + facets · batch-embed summaries → insert video_rag<br/>strike: a hard multimodal/embed failure"]
-    s_scrape["3rd, if scan+enrich had no work · SCRAPE — per-gym, quota-bound<br/>the ONLY step that opens video_run · bounded by per-gym (2/24h) + system (5/24h) rolling run caps<br/>selects the due gym (no in-flight run) → YouTube Data API v3 search+details → merge-upsert the pool<br/>funnel (tier1 query+discipline overlap, tier2 RAG probe) → write_feed:<br/>carries the prior completed run forward FIRST, then inserts candidates as 'pending' (ON CONFLICT DO NOTHING)"]
+    s_scrape["3rd, if scan+enrich had no work · SCRAPE — per-gym, quota-bound<br/>the ONLY step that opens video_run · bounded by per-gym (2/24h) + system (5/24h) rolling run caps<br/>selects the due gym (no in-flight run) → YouTube Data API v3 search+details → merge-upsert the pool<br/>then the CREATOR-AVATAR pass: channels.list ≤50 ids per call (1 quota unit each, ~12/run) fills AND refreshes the scrape's channels — a yt3.ggpht URL rotates when a creator changes their picture<br/>written by channel_url, never video_id (the avatar is per-CHANNEL, stored per video) · capped by worker_avatar_max_batches (40) · a 403 degrades to no avatar, never fails the run<br/>funnel (tier1 query+discipline overlap, tier2 RAG probe) → write_feed:<br/>carries the prior completed run forward FIRST, then inserts candidates as 'pending' (ON CONFLICT DO NOTHING)"]
     s_scan -->|"no scan targets (pending or feed_update re-scan)"| s_enrich
     s_enrich -->|"no un-enriched targets"| s_scrape
   end
 
   EnrichTemplates["🛠️ make enrich-templates (one-time, PAID script)<br/>reuses WorkerEnricher.enrich_one — the same multimodal+embed unit<br/>enriches the ~18.9k unique template pool videos ONCE<br/>writes the untracked-local video_rag/ sidecar (base64-packed float32 embeddings)"]
 
-  Cost["🧾 Cost ledger — cost_log, attributed per step<br/>every row: source='video' · stage · model · cost_usd · breakdown<br/>scrape — search FREE (quota diagnostic) + embed (tier-2 probe), keyed that gym + run<br/>enrich — transcript + enrich + embed, POOL-LEVEL (gym_id/run_id NULL — a swept video is shared across gyms)<br/>scan — one scan row per gym per sweep, keyed that gym + its latest run"]
+  BackfillAvatars["🛠️ make backfill-avatars (one-time, quota-only script)<br/>pass 1: videos.list recovers each legacy @handle channel's real id (~231 calls) → rewrite its rows to the canonical /channel/UC… URL<br/>pass 2: channels.list fills the avatars (~236 calls), REUSING WorkerAvatarResolver — one channels.list impl, one avatar write path<br/>~467 quota units · $0 · no re-scrape · resumable from table state (a completed run is a no-op)"]
+
+  Cost["🧾 Cost ledger — cost_log, attributed per step<br/>every row: source='video' · stage · model · cost_usd · breakdown<br/>scrape — search FREE (quota diagnostic: the run TOTAL, search.list + the avatar pass's channels.list, avatar share broken out) + embed (tier-2 probe), keyed that gym + run<br/>enrich — transcript + enrich + embed, POOL-LEVEL (gym_id/run_id NULL — a swept video is shared across gyms)<br/>scan — one scan row per gym per sweep, keyed that gym + its latest run"]
 
   DB["🗄️ Shared Supabase Postgres<br/>resource_locks · video_run · gym_video_spec(_latest)<br/>video pool (failure_count strikes) · video_rag (pgvector vector(3072) · halfvec HNSW halfvec_cosine_ops) · gym_video_feed · cost_log"]
-  YouTube["📺 YouTube Data API v3<br/>search.list discovery + videos.list metadata (free within ~10k units/day)"]
+  YouTube["📺 YouTube Data API v3<br/>search.list discovery + videos.list metadata + channels.list creator avatars (free within ~10k units/day)"]
   Apify["🎞️ Apify · supreme_coder/youtube-transcript-scraper<br/>transcripts ONLY · lazy BATCHED fetch at enrich (~$0.0005/transcript + $0.001/actor start)"]
   LLM["🤖 Gemini — enrich (multimodal) · scan (text-only) · embed<br/>embed = gemini-embedding-001 → video_rag.embedding vector(3072)"]
 
@@ -47,6 +49,9 @@ flowchart TB
   Cost -->|"insert cost_log rows"| DB
   EnrichTemplates -.->|"reuses the enrich step's per-video unit"| Steps
   EnrichTemplates -.->|"reads the pool · writes the sidecar (import_yaml then seeds video_rag)"| DB
+  BackfillAvatars -.->|"reuses the scrape step's avatar resolver"| Steps
+  BackfillAvatars -.->|"one-time: upgrade channel_url · fill channel_avatar_url"| DB
+  BackfillAvatars -.->|"videos.list ids · channels.list avatars"| YouTube
 
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef data fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
@@ -55,6 +60,6 @@ flowchart TB
   class WorkerLoop svc;
   class YouTube,Apify,LLM ext;
   class DB,Cost data;
-  class Legend,EnrichTemplates tool;
+  class Legend,EnrichTemplates,BackfillAvatars tool;
   style Tick fill:#dff0e6,stroke:#2f8f53;
   style Steps fill:#dff0e6,stroke:#2f8f53;
