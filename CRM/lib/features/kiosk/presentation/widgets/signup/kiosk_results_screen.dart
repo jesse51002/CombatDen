@@ -6,8 +6,8 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_foot.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_result_row.dart';
@@ -43,7 +43,7 @@ class KioskResultsScreen extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final allCreated = state.allCreated;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.results,
           title: allCreated
               ? 'You\'re all set'

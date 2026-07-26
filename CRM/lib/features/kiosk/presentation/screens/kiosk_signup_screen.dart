@@ -17,6 +17,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_match_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_waiver_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_paying_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
@@ -32,7 +33,6 @@ import 'package:crm/features/member_details/data/repositories/member_repository.
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
-import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_block.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 /// The member-facing SELF-SERVE SIGNUP lane, mounted by `KioskScreen`'s view
@@ -166,7 +166,7 @@ class _PlanBlockOverlay extends StatelessWidget {
       buildWhen: (prev, cur) => prev.planBlockActive != cur.planBlockActive,
       builder: (context, state) {
         if (state.planBlockActive == null) return const SizedBox.shrink();
-        return const FlowPlanBlock();
+        return const KioskPlanBlock();
       },
     );
   }

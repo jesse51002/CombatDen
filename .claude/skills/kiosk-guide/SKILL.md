@@ -480,8 +480,10 @@ reasons, and they are different rules with different scopes:
 | `alreadyOnPlan` | per PLAN — this exact recurring plan is already held | `You have this` | **yes** |
 
 **One popup serves both**
-(`membership_flow/presentation/widgets/flow_plan_block.dart`, `FlowPlanBlock`)
-and **one blocked visual serves both** (`FlowPlanCard`'s
+(`presentation/widgets/signup/kiosk_plan_block.dart`, `KioskPlanBlock` — the
+popup is KIOSK-ONLY, because it carries the auto-return countdown and the
+lane's member-voice wording; the desk has neither)
+and **one blocked visual serves both** (the SHARED `FlowPlanCard`'s
 `blocked` state: `Opacity(0.45)`, the tag pinned top-LEFT over the hero because
 the top-right belongs to the select mark, the select mark dropped entirely, and
 the card still **tappable** so the tap opens the answer instead of a silent
@@ -1246,11 +1248,19 @@ composition instead — see the abandon confirm in §2.)
 
 ### 8.1a A signup step's TOP BAND is pinned, exactly like its footer
 
-`FlowStage` (the signup lane's copy of `KioskStage`) pins a `header` to the
-top of the fold the same way it pins a
-`footer` to the bottom, and `FlowStepScaffold` puts the step rail, the
-screen head (title + one answering line) and an optional identity strip in it.
-The body scrolls beneath.
+`KioskStage` pins a `header` to the top of the fold the same way it pins a
+`footer` to the bottom, and the shared `FlowStepScaffold` puts the step rail,
+the screen head (title + one answering line) and an optional identity strip in
+it. The body scrolls beneath.
+
+**The stage is the HOST's, not the shared set's.** `FlowStepScaffold` assembles
+those bands into a `FlowShellParts` and hands them to a `shell` builder;
+`KioskStepScaffold` (`presentation/widgets/signup/kiosk_step_scaffold.dart`) is
+the kiosk's binding of it — the shell is `KioskStage` and the rail is read off
+`KioskSignupCubit` through `kioskRailIndex`. The desk binds the same scaffold
+to its dialog body and its own step spine. A full-screen kiosk and a staff
+dialog are exactly where the two surfaces part company, so the shared module
+owns no stage at all.
 
 **The reason is correctness, not tidiness.** The plan step is walked once per
 training person and the waiver run once per person per document, so "who is
@@ -1294,7 +1304,8 @@ notice passes `onRetry: null` — its optional "Try again" has no meaning here.
 **The plan step confirms the pick, and returns to the top after one.** Tapping a
 card low in a tall grid otherwise gives no feedback and strands the member at
 the bottom, so on a pick `KioskPlanPickStep` scrolls its body back to the top
-(the scaffold threads a `bodyController` into `FlowStage`'s pinned scroll view)
+(the scaffold threads a `bodyController` through `FlowShellParts` into
+`KioskStage`'s pinned scroll view)
 and surfaces `FlowPlanPickedBanner` there — a prominent "YOU'VE PICKED {plan}"
 confirmation that names the membership in words (the pinned identity strip
 already says WHO, so the banner never repeats the person). In a group each
@@ -1704,7 +1715,7 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   (the decline ladder at a narrower scope); an ALL-failed start still goes to the
   decline popup. See §11.6.
 
-- **The two plan-block reasons and their ONE popup.** `FlowPlanBlock` over the
+- **The two plan-block reasons and their ONE popup.** `KioskPlanBlock` over the
   plan grid, `presentation/kiosk_plan_block_copy.dart` as the reason→words map,
   `FlowPlanCard`'s `blocked` + `blockedLabel` state
   (`Already used` / `You have this`), the plan step's `FlowInlineNotice`
@@ -1723,7 +1734,8 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   + `flow_roster_row` + `kiosk_person_adder`,
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
   `kiosk_payer_waiver_step`, and `flow_review_group_panel` +
-  `flow_person_block` + `flow_money_labels`. `kiosk_signup_optional_step`
+  `flow_person_block` over the `FlowPersonView`s `kiosk_flow_views.dart`
+  builds. `kiosk_signup_optional_step`
   serves BOTH the payer's D1a and every payee's E1a (one widget, parameterized
   by the active person; the fields live in `kiosk_optional_fields`). See §11.5
   for the group's own money rules.
@@ -1736,7 +1748,8 @@ the moment they tap to check in), while greetings use `kioskFirstName`
   `KioskMatchSearch(forPayer: true)`), all seating through the one
   `_seatPayer`. See §3.
 
-- **The pinned step band.** `FlowStage`'s `header` + `fillBody` slots,
+- **The pinned step band.** `KioskStage`'s `header` + `fillBody` slots (handed
+  in as `FlowShellParts` by `KioskStepScaffold`),
   `FlowStepScaffold`'s `identity`, and the one
   `membership_flow/presentation/chrome/flow_who_for.dart` element the plan,
   waiver and card steps share. See §8.1a.
@@ -2392,7 +2405,7 @@ Rules the screen holds:
   (`_buildStartRequest` / `_startItems` over
   `KioskSignupState.isBeingCharged` → `retryMemberIds` / `canRetryStart` —
   the ONE "who does the next request carry" predicate, shared with
-  `everyPayeeLinked`, the waiver run, `flow_money_labels` and (inverted)
+  `everyPayeeLinked`, the waiver run, `kiosk_money_view` and (inverted)
   `alreadyStarted`
   (§11.5) — / `pay`'s three-way split / `_enterResults` /
   `_mergeStartResults` / `nextFromResults` (live on BOTH branches, §11.6) /
@@ -2409,9 +2422,14 @@ Rules the screen holds:
   The lane's widgets live in TWO places, and the prefix says which:
   every `flow_*` name below is in the SHARED module
   (`features/membership_flow/presentation/` — `chrome/` for the step
-  scaffold, rail, foot, form panel, detail group, who-for, stage and
-  buttons; `widgets/` for the rest), because the desk wizard renders the
-  same component at its own scale (§8.1b); every `kiosk_*` name is
+  scaffold, shell contract, rail, foot, form panel, detail group, who-for and
+  buttons; `models/` for the view models a host fills; `widgets/` for the
+  rest), because the desk wizard renders the
+  same component at its own scale (§8.1b). **Every shared component is
+  data in, callbacks out** — none takes `KioskSignupState` or reads
+  `KioskSignupCubit` off the context, which is what makes it renderable by a
+  second surface at all (`kiosk_forbidden_imports_test.dart` bans the import
+  outright). Every `kiosk_*` name is
   kiosk-only and stays under
   `features/kiosk/presentation/widgets/signup/` — the steps, the screens,
   the copy files and the confirms. The chrome (rail, three-slot foot,
@@ -2426,7 +2444,7 @@ Rules the screen holds:
   replacement notice, the plan step's already-held-membership notice, and the
   partial receipt's "the ones marked Started are paid for"),
   `kiosk_entry_choice_step` + `kiosk_identify_step` (the front door),
-  `flow_plan_block` (the ONE blocked-plan popup, over
+  `kiosk_plan_block` (the ONE blocked-plan popup — kiosk-only, over
   `presentation/kiosk_plan_block_copy.dart`'s reason → title / body / glyph /
   card-tag map),
   `kiosk_card_step` + `flow_secure_strip` + `kiosk_card_facts` (wrapping the
@@ -2444,8 +2462,8 @@ Rules the screen holds:
   `kiosk_match_step` + `kiosk_match_card` + `kiosk_match_search`,
   `kiosk_payer_waiver_step`, `flow_review_group_panel` + `flow_person_block`
   (which marks an already-started person, §11.5),
-  and `flow_money_labels` (the by-person attribution of a preview line, via
-  its `stripe_price_id`); the payer gate's `kiosk_payer_match_step` +
+  and `presentation/kiosk_money_view.dart` (the by-person attribution of a
+  preview line, via its `stripe_price_id`); the payer gate's `kiosk_payer_match_step` +
   `kiosk_payer_pick_step` over the shared `kiosk_name_row`; the roster's
   `flow_row_action` (Edit + trash) and `kiosk_remove_confirm`; the pinned
   `flow_who_for`; and `flow_proration_note` (the part-period line, §11.4).
@@ -2453,6 +2471,14 @@ Rules the screen holds:
   member copy, mirroring `kiosk_blocked_copy.dart`.
   `presentation/kiosk_name_format.dart` — `kioskFirstName` + `kioskMaskedEmail`,
   the two display transforms the kiosk shares.
+  The lane's four SEAM files onto the shared module, all kiosk-side:
+  `presentation/kiosk_rail_index.dart` (`kioskRailIndex` — which rung a
+  `KioskSignupStep` lights), `presentation/kiosk_flow_views.dart` and
+  `presentation/kiosk_money_view.dart` (`KioskSignupState` → the shared
+  `presentation/models/` view models, and the ONE place the masking and
+  "whose record is this" rules are applied), and
+  `presentation/widgets/signup/kiosk_step_scaffold.dart` (`KioskStage` as the
+  lane's shell).
 - `data/kiosk_session_store.dart` (fate-shared persistence),
   `data/kiosk_server_clock.dart` (the HTTP `Date` read).
 - `presentation/kiosk_screen.dart` — the mounted surface: header, the cross-faded
@@ -2481,12 +2507,17 @@ staff start-memberships wizard will:
   import (§3).
 - `config/membership_flow_scale.dart` + `membership_flow_theme.dart` — the
   role→token ramp and the `InheritedWidget` that hands it down (§8.1b).
-- `presentation/chrome/` — `flow_step_scaffold`, `flow_rail`, `flow_foot`,
-  `flow_form_panel`, `flow_detail_group`, `flow_who_for`, `flow_stage`,
-  `flow_buttons`.
+- `presentation/chrome/` — `flow_step_scaffold`, `flow_shell` (the
+  `FlowShellParts` a host's shell places), `flow_rail`, `flow_foot`,
+  `flow_form_panel`, `flow_detail_group`, `flow_who_for`, `flow_buttons`.
+- `presentation/models/` — the plain data every shared component takes instead
+  of a surface's state: `flow_person_view` (+ `FlowPersonRole`),
+  `flow_plan_summary`, `flow_money_view`, `flow_signed_waiver_view`. Each host
+  builds them from its own state — the kiosk in
+  `presentation/kiosk_flow_views.dart` + `presentation/kiosk_money_view.dart`.
 - `presentation/widgets/` — everything a step composes: `flow_field_box`,
   `flow_field_pair`, `flow_plan_card`, `flow_plan_picked_banner`,
-  `flow_plan_block`, `flow_money_panel`, `flow_money_labels`, `flow_buy_row`,
+  `flow_money_panel`, `flow_buy_row`,
   `flow_card_chip`, `flow_result_row`, `flow_inline_notice`,
   `flow_secure_strip`, `flow_consent_check`, `flow_roster_row`,
   `flow_row_action`, `flow_person_block`, `flow_review_side_panel`,

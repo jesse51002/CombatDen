@@ -8,6 +8,7 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_rail_index.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_step.dart';
@@ -28,7 +29,6 @@ import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_rail.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_proration_note.dart';
@@ -240,7 +240,7 @@ void main() {
         cubit.continueToPlans();
         await pump(tester, const KioskPlanPickStep(), size: size);
 
-        for (final label in kFlowGroupSteps) {
+        for (final label in kKioskGroupSteps) {
           expect(find.text(label), findsOneWidget, reason: '$label at $size');
         }
         expect(

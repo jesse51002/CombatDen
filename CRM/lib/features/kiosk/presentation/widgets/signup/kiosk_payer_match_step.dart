@@ -6,9 +6,9 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_card.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// "Is this you?" — the person who started this signup already has an account
@@ -24,6 +24,7 @@ class KioskPayerMatchStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<KioskSignupCubit>();
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.matchCandidate != cur.matchCandidate ||
@@ -32,7 +33,7 @@ class KioskPayerMatchStep extends StatelessWidget {
       builder: (context, state) {
         final match = state.matchCandidate;
         if (match == null) return const SizedBox.shrink();
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.payerMatch,
           title: 'Is this you?',
           // On the identify route they already told us they have an account;
@@ -42,7 +43,7 @@ class KioskPayerMatchStep extends StatelessWidget {
                   'created.'
               : 'You already have an account here. If it\'s you, we\'ll use '
                   'it instead of making a second one.',
-          foot: const FlowFoot(onPrimary: null),
+          foot: FlowFoot(onPrimary: null, onEscape: cubit.abandon),
           child: FlowFormPanel(
             children: [
               KioskMatchCard(match: match),

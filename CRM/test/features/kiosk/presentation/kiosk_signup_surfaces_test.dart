@@ -19,6 +19,7 @@ import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_entry_choic
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_identify_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
@@ -52,7 +53,6 @@ import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
-import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_block.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_picked_banner.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_result_row.dart';
@@ -528,7 +528,7 @@ void main() {
           plans: [_plan(), _trialPlan()],
         );
         cubit.selectPlan('plan-trial');
-        await pump(tester, const FlowPlanBlock(), size: size);
+        await pump(tester, const KioskPlanBlock(), size: size);
 
         expect(find.text('You\'ve already had a trial'), findsOneWidget);
         expect(
@@ -583,7 +583,7 @@ void main() {
         KioskPlanBlockReason.alreadyOnPlan,
       );
 
-      await pump(tester, const FlowPlanBlock());
+      await pump(tester, const KioskPlanBlock());
       expect(find.text('You already have this membership'), findsOneWidget);
       // This popup DOES name the plan — the backend's rule is per plan, so
       // naming it describes the rule exactly.

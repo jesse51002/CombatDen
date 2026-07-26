@@ -4,11 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_person_adder.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_roster_row.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
@@ -49,7 +50,7 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
         // Continue needs BOTH a payer and at least one person training; each
         // block states its own reason below.
         final canGo = hasPayer && state.anyoneTraining && !busy;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.people,
           title: 'Anyone else joining?',
           subtitle: 'Add the people you\'re paying for — family, a partner, a '
@@ -65,6 +66,7 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
             onBack: busy || !hasPayer || state.payer.wasExisting
                 ? null
                 : cubit.back,
+            onEscape: cubit.abandon,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -75,10 +77,8 @@ class _KioskPeopleStepState extends State<KioskPeopleStep> {
                 children: [
                   for (var i = 0; i < count; i++)
                     FlowRosterRow(
-                      person: state.persons[i],
-                      index: i,
+                      person: kioskRosterPerson(state, i),
                       isGroup: state.isGroup,
-                      removable: state.canRemovePerson(i),
                       onDetails: () => cubit.editPersonDetails(i),
                       onRemove: () => cubit.askRemovePerson(i),
                       onTrainingChanged: (on) =>

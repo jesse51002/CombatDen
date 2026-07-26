@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
-/// Every signup step's system footer: a hairline band over THREE columns — the
-/// escape exiled to the far LEFT, the Back / primary pair centred, and an
+/// Every purchase step's system footer: a hairline band over THREE columns —
+/// the escape exiled to the far LEFT, the Back / primary pair centred, and an
 /// optional Skip in the mirror gutter on the right.
 ///
 /// It keeps the kiosk's one rule: the way out is along the bottom hairline,
@@ -31,20 +29,29 @@ class FlowFoot extends StatelessWidget {
   final VoidCallback? onSkip;
   final String skipLabel;
 
-  /// Ask "Start over?" before abandoning, instead of leaving on first tap.
-  /// Proportional to what is lost: only the card and review steps pass `true`,
-  /// since a confirm on an early step is a second trap for a member who
-  /// already mis-tapped.
-  final bool confirmAbandon;
+  /// Leave the flow. REQUIRED and non-null on every step: a step that could
+  /// omit its way out is a step that eventually does.
+  ///
+  /// Whether leaving ASKS first is the step's own call, made here rather than
+  /// inside the foot, and it is proportional to what is lost — only the card
+  /// and review steps confirm, since a confirm on an early step is a second
+  /// trap for somebody who already mis-tapped.
+  final VoidCallback onEscape;
+
+  /// The escape's wording, which answers the SCREEN rather than the
+  /// navigation: beside a `Sign Membership · $149.00` button "Cancel" would
+  /// read as *cancel the payment*.
+  final String escapeLabel;
 
   const FlowFoot({
     super.key,
     required this.onPrimary,
+    required this.onEscape,
     this.primaryLabel = 'Continue',
     this.onBack,
     this.onSkip,
     this.skipLabel = 'Skip for now',
-    this.confirmAbandon = false,
+    this.escapeLabel = 'Start over',
   });
 
   @override
@@ -65,7 +72,10 @@ class FlowFoot extends StatelessWidget {
             Positioned.fill(
               child: Align(
                 alignment: Alignment.centerLeft,
-                child: _EscapeGutter(confirm: confirmAbandon),
+                child: _EscapeGutter(
+                  label: escapeLabel,
+                  onEscape: onEscape,
+                ),
               ),
             ),
             Positioned.fill(
@@ -87,13 +97,11 @@ class FlowFoot extends StatelessWidget {
 }
 
 /// The far-left escape. Ghost tier, the ONLY tier used for leaving a flow.
-/// The wording answers the SCREEN, not the navigation: beside a
-/// `Sign Membership · $149.00` button "Cancel" would read as *cancel the
-/// payment*, so the signup escape is always "Start over".
 class _EscapeGutter extends StatelessWidget {
-  final bool confirm;
+  final String label;
+  final VoidCallback onEscape;
 
-  const _EscapeGutter({required this.confirm});
+  const _EscapeGutter({required this.label, required this.onEscape});
 
   @override
   Widget build(BuildContext context) {
@@ -102,17 +110,7 @@ class _EscapeGutter extends StatelessWidget {
     // the step's content rail; the tap target keeps its full padded width.
     return Transform.translate(
       offset: Offset(-scale.buttonGhostPadding.left, 0),
-      child: FlowGhostButton(
-        text: 'Start over',
-        onPressed: () {
-          final cubit = context.read<KioskSignupCubit>();
-          if (confirm) {
-            cubit.askAbandon();
-          } else {
-            cubit.abandon();
-          }
-        },
-      ),
+      child: FlowGhostButton(text: label, onPressed: onEscape),
     );
   }
 }

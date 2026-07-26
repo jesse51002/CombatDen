@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/core/utils/money.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
-import 'package:crm/features/membership_flow/domain/plan_labels.dart';
+import 'package:crm/features/membership_flow/presentation/models/flow_person_view.dart';
+import 'package:crm/features/membership_flow/presentation/models/flow_signed_waiver_view.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_buy_row.dart';
 import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 
@@ -13,24 +11,30 @@ import 'package:crm/shared/widgets/class_row/instructor_avatar.dart';
 /// already signed.
 ///
 /// `Signed today by <name>` is the receipt for the thing that has no receipt —
-/// a member who typed their name into a legal document two screens ago sees it
+/// somebody who typed their name into a legal document two screens ago sees it
 /// acknowledged before handing over a card.
 ///
-/// The address here is MASKED, like every identity line in this lane: a lobby
-/// iPad has a queue reading over the member's shoulder. The one address they
-/// must CHECK is the receipt one, which the money panel beside this states in
-/// full.
+/// The address is whatever the HOST decided this surface may print
+/// ([FlowPersonView.identityLine]); the kiosk masks it, because a lobby iPad
+/// has a queue reading over the member's shoulder. The one address they must
+/// CHECK is the receipt one, which the money panel beside this states in full.
 class FlowReviewSidePanel extends StatelessWidget {
-  final KioskSignupState state;
+  /// The one person this review is about, carrying the plan they picked.
+  final FlowPersonView person;
 
-  const FlowReviewSidePanel({super.key, required this.state});
+  /// What has been signed during this purchase, in signing order.
+  final List<FlowSignedWaiverView> signed;
+
+  const FlowReviewSidePanel({
+    super.key,
+    required this.person,
+    this.signed = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    final person = state.activePerson;
-    final plan = state.selectedPlan;
-    final price = plan?.activePrice;
+    final plan = person.plan;
     return Container(
       padding: const EdgeInsets.all(DesignConstants.paddingSmall),
       decoration: BoxDecoration(
@@ -45,25 +49,19 @@ class FlowReviewSidePanel extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           Text('YOU', style: scale.eyebrow),
-          _WhoRow(
-            name: '${person.firstName} ${person.lastName}'.trim(),
-            // Null when there is nothing to mask, which drops the line.
-            email: kioskMaskedEmail(person.email),
-          ),
+          _WhoRow(name: person.fullName, line: person.identityLine),
           Text('YOUR MEMBERSHIP', style: scale.eyebrow),
           if (plan != null)
             FlowBuyRow(
-              name: plan.planName,
-              rule: planAllowanceLabel(plan),
+              name: plan.name,
+              rule: plan.rule,
               imageUrl: plan.imageUrl,
-              amount: price == null
-                  ? null
-                  : formatMinorUnits(price.price, currency: 'USD'),
+              amount: plan.amountLabel,
             ),
-          for (final signed in state.signedWaivers)
+          for (final waiver in signed)
             FlowBuyRow(
-              name: signed.name,
-              rule: 'Signed today by ${signed.signerName}',
+              name: waiver.name,
+              rule: 'Signed today by ${waiver.signerName}',
             ),
         ],
       ),
@@ -74,15 +72,15 @@ class FlowReviewSidePanel extends StatelessWidget {
 class _WhoRow extends StatelessWidget {
   final String name;
 
-  /// Their address, already MASKED by the caller. Null drops the line.
-  final String? email;
+  /// Their address, already resolved by the host. Null drops the line.
+  final String? line;
 
-  const _WhoRow({required this.name, required this.email});
+  const _WhoRow({required this.name, required this.line});
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    final masked = email;
+    final second = line;
     return Row(
       spacing: DesignConstants.spacingMedium,
       children: [
@@ -99,9 +97,9 @@ class _WhoRow extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (masked != null)
+              if (second != null)
                 Text(
-                  masked,
+                  second,
                   style: scale.caption.copyWith(
                     color: DesignConstants.text2nd,
                   ),

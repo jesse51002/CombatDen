@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/membership_flow/presentation/widgets/flow_money_labels.dart';
+import 'package:crm/features/membership_flow/domain/name_labels.dart';
 
 /// The plan block's member-facing words — the ONE place a
 /// [KioskPlanBlockReason] becomes a sentence, mirroring

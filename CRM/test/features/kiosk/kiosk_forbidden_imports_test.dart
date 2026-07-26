@@ -67,10 +67,6 @@ void main() {
     // in place FIRST so the surface that adds it lands into a rule rather
     // than being trusted to remember one.
     'membership_flow/discounts/',
-    // Any CRM member-detail DIALOG. Those are staff tooling OVER the flow —
-    // a nested dialog that a member-facing kiosk can never open — so a shared
-    // component importing one is a component only one surface can render.
-    'features/member_details/presentation/dialogs/',
   ];
 
   /// The roots the shared component set lives under. Both are listed even
@@ -80,6 +76,30 @@ void main() {
     'lib/features/membership_flow/presentation',
     'lib/features/membership_flow/chrome',
   ];
+
+  /// Import-path fragments NO file in the membership-flow module may
+  /// reference — `domain/`, `config/` and `presentation/` alike.
+  ///
+  /// The module is what both purchase surfaces DEPEND ON, so it may never
+  /// depend on either of them. A component that takes a kiosk state type is
+  /// shared in name only: the desk cannot construct one, so it cannot render
+  /// the component, and the whole module goes back to being decoration.
+  const bannedModule = <String>[
+    // The kiosk is a HOST of this module, never a dependency of it — its
+    // cubit, its state, its copy and its own widgets all stay on its side of
+    // the seam, and reach the shared set as plain data and callbacks.
+    'package:crm/features/kiosk/',
+    // The CRM member-detail SCREEN layer — the other host's own surface, and
+    // the home of the staff tooling OVER the flow (nested dialogs a
+    // member-facing kiosk can never open). Its `data/models/` are fine and
+    // deliberate: those are the wire contract both surfaces speak.
+    'package:crm/features/member_details/presentation/',
+  ];
+
+  /// The module's root. One entry, walked recursively, so a new layer added
+  /// beside `domain/` is guarded the day it appears rather than the day
+  /// somebody remembers to list it.
+  const moduleRoots = <String>['lib/features/membership_flow'];
 
   List<File> dartFilesUnder(Iterable<String> roots) {
     return [
@@ -206,6 +226,33 @@ void main() {
           'cannot construct one, which is what keeps the no-discounts rule '
           'structural rather than a `showDiscounts: false` default). Offending '
           'imports:\n${offences.join('\n')}',
+    );
+  });
+
+  test('the membership-flow module is non-empty', () {
+    expect(
+      dartFilesUnder(moduleRoots),
+      isNotEmpty,
+      reason: 'the membership-flow module moved or was renamed — point '
+          '`moduleRoots` at wherever it lives now, or the guard below '
+          'silently protects nothing',
+    );
+  });
+
+  test('no membership-flow file imports a SURFACE', () {
+    final offences = importOffences(dartFilesUnder(moduleRoots), bannedModule);
+    expect(
+      offences,
+      isEmpty,
+      reason: 'The membership-flow module is what both purchase surfaces '
+          'depend on, so it may never depend on either of them. A shared '
+          'component that takes `KioskSignupState` (or reads '
+          '`KioskSignupCubit` off the context) is shared in NAME only — the '
+          'desk cannot construct one, so it cannot render the component. '
+          'State arrives as a plain view model from '
+          '`membership_flow/presentation/models/`, built by each host; '
+          'intent leaves as a callback. Offending imports:\n'
+          '${offences.join('\n')}',
     );
   });
 

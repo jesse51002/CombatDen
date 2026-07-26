@@ -7,9 +7,9 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_card.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// E2 — "Is this the same Ella?" The PAYEE duplicate, offered back for
@@ -35,7 +35,7 @@ class KioskMatchStep extends StatelessWidget {
         final match = state.matchCandidate;
         final searching = state.matchSearchOpen || match == null;
         final busy = state.submitting;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.match,
           title: searching
               ? 'Find them by name'
@@ -52,6 +52,7 @@ class KioskMatchStep extends StatelessWidget {
             onBack: busy ? null : cubit.back,
             onSkip: searching || busy ? null : cubit.openMatchSearch,
             skipLabel: 'Search by name instead',
+            onEscape: cubit.abandon,
           ),
           child: FlowFormPanel(
             children: searching

@@ -6,8 +6,8 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_optional_fields.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 
 /// D1a and E1a — the optional block: date of birth, address, and an emergency
@@ -100,7 +100,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
         // courtesy, the latch is the guarantee.
         final busy = state.submitting;
         final commit = payee ? _commitPayee : _commitPayer;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: payee
               ? KioskSignupStep.personDetails
               : KioskSignupStep.extraDetails,
@@ -116,6 +116,7 @@ class _KioskSignupOptionalStepState extends State<KioskSignupOptionalStep> {
             onSkip: busy
                 ? null
                 : (payee ? cubit.skipPersonDetails : _commitPayer),
+            onEscape: cubit.abandon,
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,

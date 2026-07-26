@@ -21,7 +21,7 @@ import 'package:crm/core/constants/design_constants.dart';
 /// snapshotted them in its constructor would freeze the whole flow in
 /// whichever mode it happened to be built in.
 ///
-/// It is a TYPE ramp (plus the two measures a surface's width is set by).
+/// It is a TYPE ramp (plus the one measure a surface's form width is set by).
 /// Colours, radii, spacing, icon sizes and shadows stay on [DesignConstants]
 /// at the call site — none of them changes with the reading distance.
 abstract class MembershipFlowScale {
@@ -98,15 +98,16 @@ abstract class MembershipFlowScale {
   EdgeInsets get buttonGhostPadding;
 
   /// The width a step's form panel is capped at (and centred within).
+  ///
+  /// The only measure here: the width of the whole STAGE belongs to the host's
+  /// shell (a full-screen kiosk stage, the desk's dialog), which the scaffold
+  /// is handed rather than owning.
   double get formMeasure;
-
-  /// The width the whole content stage is capped at.
-  double get stageMeasure;
 }
 
 /// The kiosk's ramp: every role resolves to its `kiosk*` token, and the two
-/// tail roles to the unprefixed shared ones (they measure the same at both
-/// distances, so there is nothing for the kiosk to step up to).
+/// eyebrow/tag roles to the unprefixed shared ones (they measure the same at
+/// both distances, so there is nothing for the kiosk to step up to).
 class _KioskFlowScale extends MembershipFlowScale {
   const _KioskFlowScale();
 
@@ -180,7 +181,4 @@ class _KioskFlowScale extends MembershipFlowScale {
 
   @override
   double get formMeasure => DesignConstants.kioskFormMeasure;
-
-  @override
-  double get stageMeasure => DesignConstants.navMaxWidth;
 }

@@ -5,8 +5,10 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_money_panel.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_review_group_panel.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_review_side_panel.dart';
@@ -36,7 +38,7 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.review,
           // Button-agnostic: the label below says what is being signed and for
           // how much, so naming it here would start lying the moment a trial
@@ -52,7 +54,8 @@ class KioskReviewStep extends StatelessWidget {
             // amount is real: never commit before the screen says what for.
             onPrimary: ready ? cubit.pay : null,
             onBack: cubit.back,
-            confirmAbandon: true,
+            // The escape CONFIRMS here — everything typed and signed would go.
+            onEscape: cubit.askAbandon,
           ),
           child: ready ? _Panels(state: state) : const _Loading(),
         );
@@ -113,12 +116,15 @@ class _Panels extends StatelessWidget {
               // A group is blocked BY PERSON — the solo panel reads as a single
               // purchase and cannot answer "who costs what" for a family.
               child: state.isGroup
-                  ? FlowReviewGroupPanel(state: state)
-                  : FlowReviewSidePanel(state: state),
+                  ? FlowReviewGroupPanel(people: kioskReviewPeople(state))
+                  : FlowReviewSidePanel(
+                      person: kioskReviewPerson(state, state.activePerson),
+                      signed: kioskSignedWaivers(state),
+                    ),
             ),
             Expanded(
               child: FlowMoneyPanel(
-                state: state,
+                money: kioskMoneyView(state),
                 contactEmail: state.payer.email,
               ),
             ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
@@ -36,8 +37,10 @@ void main() {
         ),
         home: Scaffold(
           body: SingleChildScrollView(
+            // Through the kiosk's own reader, so the mapping the live review
+            // uses is what these assertions actually exercise.
             child: FlowMoneyPanel(
-              state: _state(),
+              money: kioskMoneyView(_state()),
               contactEmail: contactEmail,
             ),
           ),

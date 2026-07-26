@@ -7,8 +7,8 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_home_columns.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 
 /// The signup lane's first screen: brand new here, or already a member. The
 /// lane is self-serve for both — an existing member finds their own name and
@@ -32,7 +32,7 @@ class KioskEntryChoiceStep extends StatelessWidget {
   Widget build(BuildContext context) {
     final cubit = context.read<KioskSignupCubit>();
     final gym = selectedGym.gymName;
-    return FlowStepScaffold(
+    return KioskStepScaffold(
       step: KioskSignupStep.entry,
       title: gym == null || gym.trim().isEmpty
           ? 'Welcome in'
@@ -43,7 +43,7 @@ class KioskEntryChoiceStep extends StatelessWidget {
       fillBody: true,
       // The decision lives in the panel, so no primary. No Back either: this
       // is step 1, and the escape answers where they came from.
-      foot: const FlowFoot(onPrimary: null),
+      foot: FlowFoot(onPrimary: null, onEscape: cubit.abandon),
       child: KioskHomeColumns(
         left: KioskHomeHalf(
           head: const KioskSectionHead(

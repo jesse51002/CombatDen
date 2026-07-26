@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_status.dart';
@@ -47,7 +48,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        FlowReviewSidePanel(state: _soloState()),
+        _soloPanel(_soloState()),
       );
 
       expect(find.text('m•••••@gmail.com'), findsOneWidget);
@@ -61,7 +62,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        FlowReviewSidePanel(state: _soloState(email: '')),
+        _soloPanel(_soloState(email: '')),
       );
 
       expect(find.textContaining('•'), findsNothing);
@@ -75,7 +76,7 @@ void main() {
         'charged do not', (tester) async {
       await pumpPanel(
         tester,
-        FlowReviewGroupPanel(state: _groupStateAfterPartial()),
+        _groupPanel(_groupStateAfterPartial()),
       );
 
       expect(find.text('Marcus Bell'), findsOneWidget);
@@ -91,7 +92,7 @@ void main() {
     testWidgets('nothing is marked before a start has landed', (tester) async {
       await pumpPanel(
         tester,
-        FlowReviewGroupPanel(state: _groupState()),
+        _groupPanel(_groupState()),
       );
 
       // The mark is derived from a LANDED response, never from a person who
@@ -106,7 +107,7 @@ void main() {
       // marking them STARTED would claim a membership they never bought.
       await pumpPanel(
         tester,
-        FlowReviewGroupPanel(state: _groupStateAfterPartial(payerTrains: false)),
+        _groupPanel(_groupStateAfterPartial(payerTrains: false)),
       );
 
       expect(find.text('STARTED'), findsOneWidget);
@@ -115,6 +116,17 @@ void main() {
     });
   });
 }
+
+/// The panels through the kiosk's own readers, so the mapping the live review
+/// uses is what these assertions exercise — not a hand-built fixture that
+/// could mask a masking or marking regression in it.
+FlowReviewSidePanel _soloPanel(KioskSignupState state) => FlowReviewSidePanel(
+      person: kioskReviewPerson(state, state.activePerson),
+      signed: kioskSignedWaivers(state),
+    );
+
+FlowReviewGroupPanel _groupPanel(KioskSignupState state) =>
+    FlowReviewGroupPanel(people: kioskReviewPeople(state));
 
 MembershipPlanResponse _plan() => MembershipPlanResponse(
       planId: 'plan-1',

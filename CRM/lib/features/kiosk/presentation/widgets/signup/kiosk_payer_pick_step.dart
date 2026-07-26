@@ -8,9 +8,9 @@ import 'package:crm/features/kiosk/presentation/kiosk_name_format.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 
@@ -41,7 +41,7 @@ class KioskPayerPickStep extends StatelessWidget {
       builder: (context, state) {
         final candidates = state.payerCandidateIndexes;
         final payer = state.payerOrNull;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.payerPick,
           title: 'Who\'s paying?',
           subtitle: payer == null
@@ -60,6 +60,7 @@ class KioskPayerPickStep extends StatelessWidget {
             // The decision is a row in the list, so the foot has no primary.
             onPrimary: null,
             onBack: state.submitting ? null : cubit.back,
+            onEscape: cubit.abandon,
           ),
           child: FlowFormPanel(
             children: [

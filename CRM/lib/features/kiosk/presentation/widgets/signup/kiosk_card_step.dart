@@ -7,10 +7,10 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_facts.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_secure_strip.dart';
@@ -85,7 +85,7 @@ class _KioskCardStepState extends State<KioskCardStep> {
           prev.cardAttempt != cur.cardAttempt,
       builder: (context, state) {
         final payerName = _payerName(state);
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.card,
           title: 'Your card',
           // In a group the "active person" is whoever signed last, so a plan
@@ -100,7 +100,9 @@ class _KioskCardStepState extends State<KioskCardStep> {
             primaryLabel: 'Review',
             onPrimary: _complete && !_tokenizing ? _review : null,
             onBack: _tokenizing ? null : cubit.back,
-            confirmAbandon: true,
+            // Real work would die here, so leaving ASKS first — the card and
+            // the review are the only two steps that confirm.
+            onEscape: cubit.askAbandon,
           ),
           child: FlowFormPanel(
             children: [

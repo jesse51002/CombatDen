@@ -17,9 +17,10 @@ import 'package:crm/features/membership_flow/domain/plan_labels.dart';
 /// A [blocked] card is closed, not missing: dimmed, tagged over its hero, and
 /// with no select mark — it can never become the pick. It stays TAPPABLE on
 /// purpose, so the tap opens the answer instead of a greyed-out dead end (the
-/// two block rules live in `flow_plan_block.dart`). ONE blocked visual, two
-/// labels: only [blockedLabel] varies by reason, because the consequence is
-/// identical either way.
+/// rules are `domain/plan_rules.dart`'s gates; what the tap OPENS is the
+/// host's, since the kiosk's popup carries an auto-return countdown the desk
+/// has no use for). ONE blocked visual, two labels: only [blockedLabel] varies
+/// by reason, because the consequence is identical either way.
 class FlowPlanCard extends StatelessWidget {
   final MembershipPlanResponse plan;
   final bool selected;

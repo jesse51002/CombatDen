@@ -3,13 +3,10 @@ import 'package:intl/intl.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
-import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
-import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/domain/name_labels.dart';
+import 'package:crm/features/membership_flow/presentation/models/flow_money_view.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
-import 'package:crm/features/membership_flow/presentation/widgets/flow_money_labels.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_proration_note.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_two_charges_note.dart';
 
@@ -17,11 +14,10 @@ import 'package:crm/features/membership_flow/presentation/widgets/flow_two_charg
 /// card, to which address — then what happens next month.
 ///
 /// Every figure here is a field of the preview response, in minor units,
-/// formatted only at render. The one piece of arithmetic is the due-today sum
-/// on [KioskSignupState.dueTodayMinorUnits]; nothing here derives a price from
-/// a plan row.
+/// formatted only at render. Nothing on this panel derives a price from a plan
+/// row, and nothing here does arithmetic — the host hands it the answer.
 class FlowMoneyPanel extends StatelessWidget {
-  final KioskSignupState state;
+  final FlowMoneyView money;
 
   /// Where payment mail reaches the payer. Empty drops the line entirely.
   ///
@@ -33,7 +29,7 @@ class FlowMoneyPanel extends StatelessWidget {
 
   const FlowMoneyPanel({
     super.key,
-    required this.state,
+    required this.money,
     required this.contactEmail,
   });
 
@@ -57,16 +53,15 @@ class FlowMoneyPanel extends StatelessWidget {
           Text('DUE TODAY', style: scale.eyebrow),
           Text(
             formatMinorUnits(
-              state.dueTodayMinorUnits,
-              currency: state.currency,
+              money.dueTodayMinorUnits,
+              currency: money.currency,
             ),
             style: scale.display,
           ),
-          _Lines(state: state),
-          if (state.chargedProrated)
-            FlowProrationNote(until: state.prorationUntil),
-          if (state.chargedTwiceToday) const FlowTwoChargesNote(),
-          FlowCardChip(brand: state.cardBrand, last4: state.cardLast4),
+          _Lines(money: money),
+          if (money.prorated) FlowProrationNote(until: money.prorationUntil),
+          if (money.chargedTwiceToday) const FlowTwoChargesNote(),
+          FlowCardChip(brand: money.cardBrand, last4: money.cardLast4),
           // An email is required at the details step, but a payer adopted from
           // the gym's own records can carry none — so the line is DROPPED
           // rather than printed with a trailing empty address.
@@ -77,7 +72,7 @@ class FlowMoneyPanel extends StatelessWidget {
                 color: DesignConstants.text2nd,
               ),
             ),
-          _Then(state: state),
+          _Then(money: money),
         ],
       ),
     );
@@ -88,36 +83,29 @@ class FlowMoneyPanel extends StatelessWidget {
 /// invoice's lines first, then whatever is due now on the recurring side.
 ///
 /// Each amount is the invoice line's own `amount` — exactly what the backend
-/// charges, since nothing in a kiosk cart can ever reduce a line below it. A
-/// group's lines are labelled BY PERSON through `flowLineLabel`; only the
-/// label is derived, never the money.
+/// charges. A group's lines are labelled BY PERSON by the host; only the label
+/// is ever derived, never the money.
 class _Lines extends StatelessWidget {
-  final KioskSignupState state;
+  final FlowMoneyView money;
 
-  const _Lines({required this.state});
+  const _Lines({required this.money});
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    final lines = <PreviewInvoiceLine>[
-      ...?state.preview?.oneTime?.lines,
-      ...?state.preview?.dueNow?.lines,
-    ];
-    if (lines.isEmpty) return const SizedBox.shrink();
+    if (money.lines.isEmpty) return const SizedBox.shrink();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        for (final line in lines)
+        for (final line in money.lines)
           Row(
             spacing: DesignConstants.spacingMedium,
             children: [
               Expanded(
                 child: Text(
-                  flowLineLabel(state, line) ??
-                      line.description ??
-                      'Membership',
+                  line.label,
                   style: scale.caption.copyWith(
                     color: DesignConstants.text2nd,
                   ),
@@ -126,7 +114,10 @@ class _Lines extends StatelessWidget {
                 ),
               ),
               Text(
-                formatMinorUnits(line.amount, currency: state.currency),
+                formatMinorUnits(
+                  line.amountMinorUnits,
+                  currency: money.currency,
+                ),
                 style: scale.caption,
               ),
             ],
@@ -140,31 +131,31 @@ class _Lines extends StatelessWidget {
 /// bills, straight off the preview's recurring half. A purely one-time cart
 /// has no recurring half, so nothing is claimed at all.
 class _Then extends StatelessWidget {
-  final KioskSignupState state;
+  final FlowMoneyView money;
 
-  const _Then({required this.state});
+  const _Then({required this.money});
 
   static final DateFormat _next = DateFormat('d MMMM y');
 
   @override
   Widget build(BuildContext context) {
     final scale = MembershipFlowTheme.of(context);
-    final recurring = state.preview?.recurring;
+    final recurring = money.recurring;
     if (recurring == null) return const SizedBox.shrink();
-    final at = recurring.nextPaymentAt;
-    final cycle = _cycleWord(state);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingSmall,
       children: [
         Text(
-          'Then ${formatMinorUnits(recurring.total, currency: state.currency)}'
-          ' each $cycle',
+          'Then ${formatMinorUnits(
+            recurring.totalMinorUnits,
+            currency: money.currency,
+          )} each ${recurring.cycleWord}',
           style: scale.label,
         ),
         Text(
-          _detail(at),
+          _detail(recurring),
           style: scale.caption.copyWith(
             color: DesignConstants.text2nd,
           ),
@@ -175,39 +166,18 @@ class _Then extends StatelessWidget {
 
   /// Who recurs and from when. In a group the names matter: a one-off pack
   /// does not recur for the child who got it.
-  String _detail(DateTime? at) {
+  String _detail(FlowRecurringView recurring) {
     const tail = 'On the same card. Cancel any time at the front desk — no '
         'notice period.';
+    final at = recurring.nextPaymentAt;
     final when = at == null ? null : _next.format(at.toLocal());
-    final names = state.isGroup ? flowRecurringNames(state) : const <String>[];
-    final who = names.isEmpty ? null : flowNameList(names);
+    final who =
+        recurring.names.isEmpty ? null : flowNameList(recurring.names);
     if (who != null && when != null) {
       return '$who, from $when. $tail';
     }
     if (who != null) return '$who. $tail';
     if (when != null) return 'Next charge $when. $tail';
     return tail;
-  }
-
-  /// The recurring plan's own billing unit, so "each month" is never asserted
-  /// about a weekly or yearly plan. It reads the FIRST recurring plan in the
-  /// cart, not the active person's — at the review nobody is active, and a
-  /// non-training payer has no plan at all.
-  String _cycleWord(KioskSignupState state) {
-    final plan = _recurringPlan(state);
-    if (plan == null) return 'cycle';
-    final unit = plan.durationUnit?.displayLabel.toLowerCase();
-    final amount = plan.durationAmount ?? 1;
-    if (unit == null || unit == 'unknown') return 'cycle';
-    return amount == 1 ? unit : '$amount ${unit}s';
-  }
-
-  MembershipPlanResponse? _recurringPlan(KioskSignupState state) {
-    for (final person in state.persons) {
-      if (!person.training) continue;
-      final plan = state.planById(person.selectedPlanId);
-      if (plan?.planType == PlanType.recurring) return plan;
-    }
-    return null;
   }
 }

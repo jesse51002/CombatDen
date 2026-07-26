@@ -5,9 +5,9 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
@@ -78,7 +78,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
         builder: (context, state) {
           final picked = state.activePerson.selectedPlanId;
           final pickedPlan = state.planById(picked);
-          return FlowStepScaffold(
+          return KioskStepScaffold(
             step: KioskSignupStep.plans,
             title: _title(state),
             subtitle: _subtitle(state),
@@ -101,6 +101,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
               // roster — see `KioskSignupCubit.skipPlanForPerson`.
               onSkip: state.isGroup ? cubit.skipPlanForPerson : null,
               skipLabel: 'Skip',
+              onEscape: cubit.abandon,
             ),
             child: state.plansLoading && state.plans.isEmpty
                 ? const _Loading()

@@ -5,9 +5,9 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/utils/validators.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_field_box.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_field_pair.dart';
 
@@ -93,13 +93,19 @@ class _KioskSignupDetailsStepState extends State<KioskSignupDetailsStep> {
   @override
   Widget build(BuildContext context) {
     final show = _submitted;
-    return FlowStepScaffold(
+    // Nothing is written until the NEXT step commits, so leaving here needs no
+    // confirm: there is nothing yet to lose.
+    final cubit = context.read<KioskSignupCubit>();
+    return KioskStepScaffold(
       step: KioskSignupStep.details,
       title: 'Let\'s get you started',
       subtitle: 'Two minutes, and you can train today.',
       // Step 1 has no Back — home is where they came from, and the escape in
       // the left gutter already answers that.
-      foot: FlowFoot(onPrimary: _valid ? _continue : null),
+      foot: FlowFoot(
+        onPrimary: _valid ? _continue : null,
+        onEscape: cubit.abandon,
+      ),
       child: FlowFormPanel(
         children: [
           FlowFieldPair(

@@ -8,8 +8,8 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_step_scaffold.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/features/membership_flow/presentation/widgets/flow_sign_panel.dart';
@@ -113,7 +113,7 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
       },
       builder: (context, state) {
         final controller = _controller;
-        return FlowStepScaffold(
+        return KioskStepScaffold(
           step: KioskSignupStep.waivers,
           title: _title(state),
           subtitle: _subtitle(state),
@@ -134,6 +134,7 @@ class _KioskWaiverStepState extends State<KioskWaiverStep> {
                 ? () => cubit.signWaiver(signerName: _signerName.text)
                 : null,
             onBack: state.submitting ? null : cubit.back,
+            onEscape: cubit.abandon,
           ),
           child: controller == null
               ? FlowWaiverStatus(

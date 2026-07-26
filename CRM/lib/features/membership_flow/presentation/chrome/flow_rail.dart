@@ -4,40 +4,14 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 
-/// The SOLO signup's step labels — the 6-step template the rail renders while
-/// the roster holds only the payer.
-const List<String> kFlowSoloSteps = [
-  'You',
-  'Details',
-  'Plan',
-  'Waiver',
-  'Card',
-  'Pay',
-];
-
-/// The GROUP template (founder ruling 8): a second person on the roster makes
-/// "People" a step of its own and re-labels the rail to seven.
-///
-/// The people step is ALWAYS visited, even solo ("It's just me" → Plans), so
-/// what a second person changes is the LABELLING, never whether the rail
-/// renders — mind that when mapping a step onto its rung index.
-const List<String> kFlowGroupSteps = [
-  'You',
-  'Details',
-  'People',
-  'Plans',
-  'Waivers',
-  'Card',
-  'Pay',
-];
-
 /// "Where am I in the signup" — a horizontal numbered rail across the top of
 /// every step, built from the `KioskAppSteps` disc laid on its side with
 /// hairline connectors. A completed step swaps its numeral for a check; the
 /// current step's disc carries a soft halo.
 ///
-/// [steps] is passed rather than derived so one widget serves both templates —
-/// [kFlowSoloSteps] / [kFlowGroupSteps].
+/// [steps] is passed rather than derived so one widget serves every spine: the
+/// kiosk's 6-rung solo / 7-rung group templates and the desk's own, each owned
+/// by the surface that walks them.
 ///
 /// It SCALES rather than clips on a narrow fold: the 7-rung group template can
 /// out-measure a short fold, and clipping would lose exactly the rungs the

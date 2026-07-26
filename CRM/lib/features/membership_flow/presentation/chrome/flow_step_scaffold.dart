@@ -1,16 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'package:crm/core/constants/design_constants.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
-import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
 import 'package:crm/features/membership_flow/presentation/chrome/flow_rail.dart';
-import 'package:crm/features/membership_flow/presentation/chrome/flow_stage.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_shell.dart';
 
-/// Every signup step wears the same bands: the step rail, the screen head (one
-/// title + one answering line), an optional "who is this for" strip, and the
-/// step's own content.
+/// Every purchase step wears the same bands: the step rail, the screen head
+/// (one title + one answering line), an optional "who is this for" strip, and
+/// the step's own content.
 ///
 /// It exists so no step re-derives its own chrome — a step laying out its own
 /// rail is one refactor away from disagreeing with its neighbours about which
@@ -19,10 +16,17 @@ import 'package:crm/features/membership_flow/presentation/chrome/flow_stage.dart
 /// The whole top band is PINNED: rail, title and identity stay on the fold
 /// while the content scrolls beneath them. That is a correctness control on the
 /// plan, waiver and card steps, not decoration — the cost of losing it is the
-/// wrong plan bought for the wrong child, or a card on the wrong profile.
+/// wrong plan bought for the wrong child, or a card on the wrong profile. The
+/// scaffold only ASSEMBLES those bands; [shell] is the host's, and holding them
+/// on the fold is the shell's side of the contract.
 class FlowStepScaffold extends StatelessWidget {
-  /// Which step this is — the rail lights the matching rung.
-  final KioskSignupStep step;
+  /// The rail's template — the step labels this surface walks. Passed rather
+  /// than derived so one scaffold serves both templates and both surfaces.
+  final List<String> railSteps;
+
+  /// Which rung of [railSteps] is lit. The host owns the mapping, because it
+  /// is the host's own step spine being mapped.
+  final int railIndex;
 
   final String title;
 
@@ -31,7 +35,7 @@ class FlowStepScaffold extends StatelessWidget {
   final String? subtitle;
 
   /// The pinned `FlowWhoFor` strip, on the steps that are ABOUT one person.
-  /// Null on the steps that are about the signup as a whole.
+  /// Null on the steps that are about the purchase as a whole.
   final Widget? identity;
 
   /// The step's body — usually a `FlowFormPanel`.
@@ -40,21 +44,25 @@ class FlowStepScaffold extends StatelessWidget {
   /// The pinned `FlowFoot`.
   final Widget foot;
 
-  /// Hand [child] the height that is LEFT instead of scrolling it — see
-  /// [FlowStage.fillBody]. The waiver steps opt in so their reading box can
-  /// fill the fold and scroll inside itself.
+  /// See [FlowShellParts.fillBody]. The waiver steps opt in so their reading
+  /// box can fill the fold and scroll inside itself.
   final bool fillBody;
 
-  /// Drives the scrolling body so a step can return it to the top — the plan
-  /// step scrolls back up after a pick. See [FlowStage.bodyScrollController].
+  /// See [FlowShellParts.bodyController].
   final ScrollController? bodyController;
+
+  /// The HOST's shell — a full-screen kiosk stage, or the desk's dialog body.
+  /// It receives the assembled bands and decides what holds them.
+  final FlowShellBuilder shell;
 
   const FlowStepScaffold({
     super.key,
-    required this.step,
+    required this.railSteps,
+    required this.railIndex,
     required this.title,
     required this.child,
     required this.foot,
+    required this.shell,
     this.subtitle,
     this.identity,
     this.fillBody = false,
@@ -63,87 +71,26 @@ class FlowStepScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FlowStage(
-      footer: foot,
-      fillBody: fillBody,
-      bodyScrollController: bodyController,
-      header: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          const _Rail(),
-          _Head(title: title, subtitle: subtitle),
-          ?identity,
-        ],
+    return shell(
+      context,
+      FlowShellParts(
+        fillBody: fillBody,
+        bodyController: bodyController,
+        footer: foot,
+        body: child,
+        header: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          spacing: DesignConstants.spacingLarge,
+          children: [
+            Center(child: FlowRail(steps: railSteps, current: railIndex)),
+            _Head(title: title, subtitle: subtitle),
+            ?identity,
+          ],
+        ),
       ),
-      child: child,
     );
   }
-}
-
-/// The rail, reading its template + rung straight off the cubit so a step
-/// never passes them by hand.
-class _Rail extends StatelessWidget {
-  const _Rail();
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<KioskSignupCubit, KioskSignupState>(
-      buildWhen: (prev, cur) =>
-          prev.step != cur.step || prev.isGroup != cur.isGroup,
-      builder: (context, state) {
-        final group = state.isGroup;
-        return Center(
-          child: FlowRail(
-            steps: group ? kFlowGroupSteps : kFlowSoloSteps,
-            current: flowRailIndex(state.step, isGroup: group),
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// Which rung of the rail a [KioskSignupStep] lights.
-///
-/// The two templates differ by ONE rung (ruling 8): the solo rail has no
-/// "People" of its own, so its roster steps light the rung the member is
-/// heading INTO rather than one already finished — a rail must never sit on a
-/// completed step.
-///
-/// The templates are fixed at 6 solo / 7 group and no step adds a rung: a step
-/// still about WHO this person is (the entry fork, the identify search, the
-/// payer match) shares the rung they are standing on rather than advertising
-/// progress they have not made.
-int flowRailIndex(KioskSignupStep step, {required bool isGroup}) {
-  return switch (step) {
-    KioskSignupStep.entry ||
-    KioskSignupStep.identify ||
-    KioskSignupStep.details =>
-      0,
-    KioskSignupStep.extraDetails || KioskSignupStep.payerMatch => 1,
-    KioskSignupStep.people ||
-    KioskSignupStep.personDetails ||
-    KioskSignupStep.match ||
-    KioskSignupStep.payerPick =>
-      2,
-    KioskSignupStep.plans => isGroup ? 3 : 2,
-    KioskSignupStep.waivers => isGroup ? 4 : 3,
-    KioskSignupStep.card => isGroup ? 5 : 4,
-    // Review / Paying / Results / Declined / Welcome are ONE act from the
-    // member's side, so they share the final "Pay" rung: the rail must not
-    // imply a step exists between reviewing and paying.
-    KioskSignupStep.review ||
-    KioskSignupStep.paying ||
-    KioskSignupStep.results ||
-    KioskSignupStep.declined ||
-    KioskSignupStep.welcome =>
-      isGroup ? 6 : 5,
-    // The stop screen draws no rail (a terminal is not a step), so this value
-    // is never used; it stays in range rather than throwing.
-    KioskSignupStep.stop => 0,
-  };
 }
 
 /// The screen head: one title, and at most one line answering it.

@@ -17,10 +17,14 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 /// can never be re-scaled without the other's — the failure this set exists to
 /// prevent is a screen whose headline moved and whose buttons did not.
 ///
-/// That scale lookup is what separates it from the kiosk's own
-/// `kiosk_buttons.dart`: the check-in lane names the `kiosk*` tokens directly
-/// because it is kiosk-only and never renders at a second scale. Under
-/// `MembershipFlowScale.kiosk()` the two sets resolve to identical metrics.
+/// **The two sets are a deliberate split, not a duplicate.** This one reads
+/// the SCALE, so it can render at either surface's size; the kiosk's own
+/// `kiosk_buttons.dart` pins the `kiosk*` tokens directly, for the lanes that
+/// are kiosk-only and never render at a second scale (the check-in lane, the
+/// terminal screens, the signup's own kiosk-only overlays). Both are thin
+/// wrappers over the same shared `AppPrimaryButton` / `AppOutlineButton`, so
+/// the split is wiring rather than logic, and under
+/// `MembershipFlowScale.kiosk()` the two resolve to identical metrics.
 
 /// The flow's primary action — the brand gradient CTA at the surface's scale.
 ///
