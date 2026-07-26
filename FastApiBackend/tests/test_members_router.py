@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException, status
 
+from src.emails.schema.emails_schema import InviteOutcome
 from src.main import app
 from src.members.members_exceptions import MemberNotFoundError
 from src.members.schema.members_billing_schema import (
@@ -22,6 +23,7 @@ from src.members.schema.members_crm_members_list_schema import (
     MembersListTotalCounts,
     MembersListView,
 )
+from src.members.schema.members_schema import MemberCreateResult
 from src.memberships.memberships_schema import PayerInvoiceChange
 from src.payments.payments_exceptions import PaymentsStripeError
 from tests.conftest import make_member_row
@@ -32,13 +34,16 @@ def test_create_member_returns_201(client, auth_headers, fake_gym_id):
     member_id = str(uuid4())
     mgmt = MagicMock()
     mgmt.create_member = AsyncMock(
-        return_value=MembersBillingProfileResponse(
-            member_id=member_id,
-            gym_id=fake_gym_id,
-            first_name="Ada",
-            last_name="Lovelace",
-            email="ada@example.com",
-            stripe_customer_id="cus_test123",
+        return_value=MemberCreateResult(
+            member=MembersBillingProfileResponse(
+                member_id=member_id,
+                gym_id=fake_gym_id,
+                first_name="Ada",
+                last_name="Lovelace",
+                email="ada@example.com",
+                stripe_customer_id="cus_test123",
+            ),
+            invite=InviteOutcome.queued,
         ),
     )
     app.container.members_management_service.override(mgmt)
@@ -50,6 +55,7 @@ def test_create_member_returns_201(client, auth_headers, fake_gym_id):
                 "first_name": "Ada",
                 "last_name": "Lovelace",
                 "email": "ada@example.com",
+                "send_invite": False,
             },
             headers=auth_headers,
         )
@@ -58,9 +64,13 @@ def test_create_member_returns_201(client, auth_headers, fake_gym_id):
 
     assert response.status_code == 201
     body = response.json()
-    assert body["member_id"] == member_id
+    # The create response nests the member alongside the invite outcome, so
+    # staff are told what actually happened to the invite they were asked
+    # about rather than just that the row was written.
+    assert body["member"]["member_id"] == member_id
     # Every member is created with a Stripe customer.
-    assert body["stripe_customer_id"] == "cus_test123"
+    assert body["member"]["stripe_customer_id"] == "cus_test123"
+    assert body["invite"] == InviteOutcome.queued.value
     mgmt.create_member.assert_awaited_once()
 
 
@@ -69,18 +79,21 @@ def test_create_member_persists_contact_fields(client, auth_headers, fake_gym_id
     member_id = str(uuid4())
     mgmt = MagicMock()
     mgmt.create_member = AsyncMock(
-        return_value=MembersBillingProfileResponse(
-            member_id=member_id,
-            gym_id=fake_gym_id,
-            first_name="Ada",
-            last_name="Lovelace",
-            email="ada@example.com",
-            phone="+1-555-0100",
-            address="1 Tatami Way",
-            emergency_contact_name="Grace Hopper",
-            emergency_contact_phone="+1-555-0199",
-            emergency_contact_email="grace@example.com",
-            stripe_customer_id="cus_test123",
+        return_value=MemberCreateResult(
+            invite=InviteOutcome.not_requested,
+            member=MembersBillingProfileResponse(
+                member_id=member_id,
+                gym_id=fake_gym_id,
+                first_name="Ada",
+                last_name="Lovelace",
+                email="ada@example.com",
+                phone="+1-555-0100",
+                address="1 Tatami Way",
+                emergency_contact_name="Grace Hopper",
+                emergency_contact_phone="+1-555-0199",
+                emergency_contact_email="grace@example.com",
+                stripe_customer_id="cus_test123",
+            ),
         ),
     )
     app.container.members_management_service.override(mgmt)
@@ -98,6 +111,7 @@ def test_create_member_persists_contact_fields(client, auth_headers, fake_gym_id
                 "emergency_contact_phone": "+1-555-0199",
                 "emergency_contact_email": "grace@example.com",
                 "photo_url": "https://cdn.example.com/ada.png",
+                "send_invite": False,
             },
             headers=auth_headers,
         )
@@ -105,7 +119,7 @@ def test_create_member_persists_contact_fields(client, auth_headers, fake_gym_id
         app.container.members_management_service.reset_override()
 
     assert response.status_code == 201
-    body = response.json()
+    body = response.json()["member"]
     assert body["phone"] == "+1-555-0100"
     assert body["address"] == "1 Tatami Way"
     assert body["emergency_contact_name"] == "Grace Hopper"
