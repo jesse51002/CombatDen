@@ -1,9 +1,10 @@
 # LandingPage
 
-The CombatDen marketing site. A **modular** React-via-CDN + Babel-standalone build (no bundler). Two
-pages at the repo root — `index.html` (landing, 8 sections) and `pricing.html` — each loads the
-modular `.jsx` files under `hifi/` via `<script type="text/babel" src=…>` and renders inside a
-`<ThemeProvider>`.
+The CombatDen marketing site. A **modular** React-via-CDN + Babel-standalone build (no bundler). Three
+pages at the repo root — `index.html` (landing, 8 sections), `ai.html` (the agent layer, 6 sections)
+and `pricing.html` — each loads the modular `.jsx` files under `hifi/` via
+`<script type="text/babel" src=…>`. `index.html` renders inside a `<ThemeProvider>`; `ai.html` does
+not, because nothing it renders consumes the (dormant) theme store.
 
 ## No assumptions
 
@@ -19,13 +20,15 @@ This file is a living document — exactly like a skill, it must track reality. 
 - `hifi/theme-store.jsx` — the stateful global theme: `THEMES`, the hardcoded `THEME_ASSETS` dict, `ThemeProvider`, `useTheme`, `ThemeSwitcher`.
 - `hifi/copy.jsx` — `COPY`: all marketing/section strings (mirrors `contents.md`).
 - `hifi/chrome.jsx` — shared chrome: `GWButton`, `GWNav`, `GWDisclaimer`.
-- `hifi/footer.jsx` — `FooterSection` (shared by both pages; Google Form POST + Calendly open).
+- `hifi/footer.jsx` — `FooterSection` (shared by all three pages; Google Form POST + Calendly open). Optional `headline` and `background` props: the AI page closes on its own line and needs a transparent footer so its fixed motif layer shows through.
 - `hifi/mocks/` — `phone-mock.jsx` (`PhoneFrame` device shell + the theme-driven `PhoneMock`/`GymAppScreen`; the hero defines its own `ScreenshotPhone` around `PhoneFrame` for real screenshots), `theme-preview.jsx` (prop-driven `ThemePreview` card, no longer rendered on the page).
-- `hifi/sections/` — one file per section: `hero`, `what-it-is`, `brand`, `feed`, `recs`, `loyalty`, `why`, `pricing-table`.
+- `hifi/sections/` — one file per section: `hero`, `what-it-is`, `brand`, `feed`, `recs`, `loyalty`, `why`, `pricing-table`, plus the AI page's `ai-hero`, `ai-problem`, `ai-how`, `ai-proof`, `ai-employee`.
+- `hifi/motif.js` — the AI page's 3D motif. **The one non-JSX file under `hifi/`**: three.js ships as an ES module, so this loads as `<script type="module">` alongside the Babel bundle instead of through it. It exports `window.CDMotif.init()`, which `ai.html` calls from a `useEffect` after mount, because it measures real section geometry that doesn't exist before the first render. It finds its hosts by data attribute (`[data-motif-hero]`, `[data-motif-section]`), never by class, so sections can be renamed or reordered without touching it.
+- `comps/` — standalone design comps and motif studies. **Working files, not pages.** They lived at the repo root while being built, where the non-recursive `*.html` deploy glob *would* have shipped them publicly; `comps/` is out of that glob's reach and is also named in `EXCLUDE_PREFIXES` as a second guard.
 
 **Load order matters** — there is no module system; files share globals via `window`. Order is `ds → theme-store → copy → chrome → footer → mocks → sections → inline render`. When you add a file, wire it into the HTML in dependency order (anything it references must load first). Each file ends with `window.X = …` / `Object.assign(window, {…})`.
 
-**Don't move paths.** `deploy/upload.py` uploads root `*.html` (non-recursive), the root single-file globs `robots.txt`, `sitemap.xml`, and `llms.txt`, plus `hifi/**/*` and `assets/**/*`, and excludes the internal-only `one_pager/` (legacy `onepager/` is also in the guard). Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). The three root text files (`robots.txt`/`sitemap.xml`/`llms.txt`) are each matched by name, so a NEW root file of another kind would be silently dropped — add its own glob to `INCLUDE_GLOBS` if it must ship. Move any of these and deploy globbing silently drops files.
+**Don't move paths.** Note the deploy glob for pages is **non-recursive root `*.html`**: any new `.html` left at the root ships to the public site, and any page moved into a subdirectory silently stops shipping. `deploy/upload.py` uploads root `*.html` (non-recursive), the root single-file globs `robots.txt`, `sitemap.xml`, and `llms.txt`, plus `hifi/**/*` and `assets/**/*`, and excludes the internal-only `one_pager/` (legacy `onepager/` is also in the guard). Keep pages at root, JSX under `hifi/`, and any image the JSX references under `assets/` (landing images live in `assets/landing/`). The three root text files (`robots.txt`/`sitemap.xml`/`llms.txt`) are each matched by name, so a NEW root file of another kind would be silently dropped — add its own glob to `INCLUDE_GLOBS` if it must ship. Move any of these and deploy globbing silently drops files.
 
 **`one_pager/` is the internal-only print-sheet leave-behind**, never deployed: `one_pager.html` (a static, self-contained 8.5×11in print/PDF sheet ported from the Claude Design comp — Geist fonts, an Export-PDF `window.print()` button, no React/theme/animation), its `img/` screenshots, and `one_pager.md` (the contents record, mirrors `contents.md`). No `INCLUDE_GLOB` matches it today (root `*.html` is non-recursive), and `EXCLUDE_PREFIXES` guards it regardless. Keep it out of the deploy globs.
 

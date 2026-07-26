@@ -1,0 +1,432 @@
+<title>AI Page — Motif Options</title>
+
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --bg-alt: #eef1f6;
+    --surface: #ffffff;
+    --ink: #16181d;
+    --ink-soft: #565b66;
+    --ink-faint: #878d99;
+    --line: rgba(20,22,30,0.09);
+    --line-soft: rgba(20,22,30,0.06);
+    --accent: #2A67BD;
+    --accent-dark: #1F5099;
+    --accent-soft: #E8F0FB;
+    --sans: "Geist", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* This page deliberately renders only CombatDen's existing light system —
+     the production landing page has no dark theme, so matching it exactly
+     (not inverting) is the correct fidelity here, not an oversight. */
+
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+
+  .page-head {
+    max-width: 640px;
+    margin: 0 0 40px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 500;
+    margin: 0 0 10px;
+  }
+
+  h1 {
+    font-size: 28px;
+    font-weight: 650;
+    letter-spacing: -0.01em;
+    margin: 0 0 10px;
+    text-wrap: balance;
+  }
+
+  .page-head p {
+    font-size: 15px;
+    line-height: 1.55;
+    color: var(--ink-soft);
+    margin: 0;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 22px;
+    box-shadow: 0 1px 2px rgba(20,22,30,0.04), 0 12px 28px rgba(20,22,30,0.05);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .panel-head {
+    padding: 22px 22px 16px;
+  }
+
+  .panel-name {
+    font-size: 18px;
+    font-weight: 650;
+    margin: 0 0 4px;
+    letter-spacing: -0.005em;
+  }
+
+  .panel-tag {
+    font-size: 12.5px;
+    color: var(--ink-soft);
+    margin: 0;
+    line-height: 1.4;
+  }
+
+  .swatch {
+    margin: 0 16px;
+    height: 260px;
+    border-radius: 14px;
+    background: var(--bg);
+    border: 1px solid var(--line-soft);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .panel-foot {
+    padding: 16px 22px 22px;
+    font-size: 12px;
+    color: var(--ink-faint);
+    line-height: 1.5;
+  }
+
+  .panel-foot b { color: var(--ink-soft); font-weight: 550; }
+
+  /* ---------- D. The Counterweight ---------- */
+
+  .cw-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .cw-label {
+    font-family: var(--mono);
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    fill: var(--ink-faint);
+  }
+
+  .cw-readout {
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    fill: var(--accent-dark);
+  }
+
+  .cw-weight-drop {
+    animation: cw-drop 4.5s ease-in-out infinite;
+  }
+
+  @keyframes cw-drop {
+    0%   { transform: translateY(-46px); opacity: 0; }
+    12%  { opacity: 1; }
+    28%  { transform: translateY(0); }
+    34%  { transform: translateY(-4px); }
+    40%, 100% { transform: translateY(0); }
+  }
+
+  /* ---------- B. The Slip ---------- */
+
+  .slip-wrap {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .slip {
+    position: absolute;
+    width: 190px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    box-shadow: 0 1px 1px rgba(20,22,30,0.03), 0 6px 16px rgba(20,22,30,0.06);
+    padding: 12px 14px 14px;
+  }
+
+  .slip::after {
+    content: '';
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: -3px;
+    height: 6px;
+    background-image: radial-gradient(circle, var(--bg) 2px, transparent 2.2px);
+    background-size: 9px 6px;
+    background-repeat: repeat-x;
+  }
+
+  .slip-1 { transform: rotate(-2deg) translate(-16px, 34px); z-index: 1; opacity: 0.9; }
+  .slip-2 { transform: rotate(1.4deg) translate(6px, 10px); z-index: 2; opacity: 0.96; }
+  .slip-3 { transform: rotate(-0.6deg) translate(-4px, -16px); z-index: 3; }
+
+  .slip-head {
+    font-family: var(--mono);
+    font-size: 8.5px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 6px;
+  }
+
+  .slip-body {
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ink);
+    margin: 0 0 12px;
+  }
+
+  .slip-mark {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    transform: rotate(3deg);
+    background: var(--surface);
+    border: 1.5px solid var(--accent);
+    color: var(--accent-dark);
+    border-radius: 8px;
+    padding: 3px 7px;
+    font-family: var(--mono);
+    font-size: 8px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .slip-well {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    width: 26px;
+    height: 20px;
+    border-radius: 6px;
+    border: 1.5px dashed rgba(42,103,189,0.4);
+  }
+
+  /* ---------- C. Blue Pencil ---------- */
+
+  .bp-wrap {
+    position: absolute;
+    inset: 0;
+    padding: 26px 22px 20px;
+  }
+
+  .bp-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    grid-template-rows: repeat(3, 1fr);
+    gap: 5px;
+    height: 100%;
+    position: relative;
+  }
+
+  .bp-cell {
+    background: var(--surface);
+    border: 1px solid var(--line-soft);
+    border-radius: 5px;
+  }
+  .bp-cell.filled { background: var(--accent-soft); }
+  .bp-cell.dim { background: var(--bg-alt); border-color: var(--line-soft); }
+
+  .bp-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+  }
+
+  .bp-ring {
+    position: absolute;
+    border: 1.75px solid var(--accent);
+    border-radius: 45% 55% 52% 48% / 55% 48% 52% 45%;
+  }
+
+  .bp-bracket {
+    position: absolute;
+    border-top: 1.75px solid var(--accent);
+    border-bottom: 1.75px solid var(--accent);
+    border-left: 1.75px solid var(--accent);
+  }
+  .bp-bracket.right {
+    border-left: none;
+    border-right: 1.75px solid var(--accent);
+  }
+
+  .bp-leader {
+    position: absolute;
+    height: 1.5px;
+    background: var(--accent);
+  }
+  .bp-leader::after {
+    content: '';
+    position: absolute;
+    right: -2px;
+    top: -1.5px;
+    width: 4px;
+    height: 4px;
+    border-radius: 50%;
+    background: var(--accent);
+  }
+
+  .bp-note {
+    position: absolute;
+    font-family: var(--mono);
+    font-size: 8px;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--accent-dark);
+    white-space: nowrap;
+  }
+
+  .bp-flag {
+    position: absolute;
+    width: 5px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 0 2px 2px 0;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cw-weight-drop { animation: none; transform: translateY(0); opacity: 1; }
+  }
+</style>
+
+<div class="wrap">
+
+  <div class="page-head">
+    <p class="eyebrow">AI agent page — motif options</p>
+    <h1>Three devices, side by side.</h1>
+    <p>Same palette, same type, same cards, only the recurring graphic device changes. No recommendation, pick one to move forward with.</p>
+  </div>
+
+  <div class="grid">
+
+    <!-- D. The Counterweight -->
+    <div class="panel">
+      <div class="panel-head">
+        <p class="panel-name">The Counterweight</p>
+        <p class="panel-tag">A beam balance. Task-weights pile onto the agent's side while yours stays light.</p>
+      </div>
+      <div class="swatch">
+        <div class="cw-wrap">
+          <svg width="260" height="190" viewBox="0 0 260 190">
+            <!-- rotating group: beam + drops + pans, tilted toward the agent (right) side -->
+            <g transform="rotate(8 130 110)">
+              <line x1="30" y1="110" x2="230" y2="110" stroke="var(--ink-faint)" stroke-width="2" stroke-linecap="round"></line>
+              <line x1="31" y1="110" x2="31" y2="124" stroke="var(--line)" stroke-width="1.5"></line>
+              <line x1="21" y1="124" x2="41" y2="124" stroke="var(--line)" stroke-width="1.5" stroke-linecap="round"></line>
+              <line x1="229" y1="110" x2="229" y2="124" stroke="var(--line)" stroke-width="1.5"></line>
+              <line x1="219" y1="124" x2="239" y2="124" stroke="var(--line)" stroke-width="1.5" stroke-linecap="round"></line>
+            </g>
+            <!-- fulcrum -->
+            <polygon points="130,98 121,118 139,118" fill="var(--ink-faint)"></polygon>
+            <!-- settled weights, agent side -->
+            <circle cx="229" cy="141" r="7" fill="var(--accent)"></circle>
+            <circle cx="227" cy="129" r="7" fill="var(--accent)"></circle>
+            <circle cx="230" cy="117" r="7" fill="var(--accent)"></circle>
+            <!-- looping weight drop -->
+            <circle class="cw-weight-drop" cx="228" cy="105" r="7" fill="var(--accent)"></circle>
+            <!-- labels -->
+            <text x="31" y="170" text-anchor="middle" class="cw-label">You</text>
+            <text x="229" y="170" text-anchor="middle" class="cw-label">Agent</text>
+            <text x="130" y="20" text-anchor="middle" class="cw-readout">−1 from your side</text>
+          </svg>
+        </div>
+      </div>
+      <div class="panel-foot">Argues <b>"lighter load, not replaced"</b> — the beam tips toward the agent's side, but it's capped, it can never invert.</div>
+    </div>
+
+    <!-- B. The Slip -->
+    <div class="panel">
+      <div class="panel-head">
+        <p class="panel-name">The Slip</p>
+        <p class="panel-tag">A perforated slip of drafted work, paired with an approval stamp or an empty well.</p>
+      </div>
+      <div class="swatch">
+        <div class="slip-wrap">
+          <div class="slip slip-1">
+            <p class="slip-head">6:10 AM · Member</p>
+            <p class="slip-body">Found 3 at-risk members.</p>
+            <div class="slip-well"></div>
+          </div>
+          <div class="slip slip-2">
+            <p class="slip-head">7:15 AM · Competition</p>
+            <p class="slip-body">Flagged a fall program launch.</p>
+            <div class="slip-well"></div>
+          </div>
+          <div class="slip slip-3">
+            <p class="slip-head">6:40 AM · Member</p>
+            <p class="slip-body">Messaged each of them.</p>
+            <div class="slip-mark">✓ Approved</div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-foot">Argues <b>"nothing runs without you"</b> — the empty approval well repeats the trust point as a shape.</div>
+    </div>
+
+    <!-- C. Blue Pencil -->
+    <div class="panel">
+      <div class="panel-head">
+        <p class="panel-name">Blue Pencil</p>
+        <p class="panel-tag">A fixed markup alphabet that lands on real gym artifacts, never on empty background.</p>
+      </div>
+      <div class="swatch">
+        <div class="bp-wrap">
+          <div class="bp-grid">
+            <div class="bp-cell dim"></div><div class="bp-cell filled"></div><div class="bp-cell dim"></div><div class="bp-cell"></div><div class="bp-cell filled"></div>
+            <div class="bp-cell filled"></div><div class="bp-cell"></div><div class="bp-cell dim"></div><div class="bp-cell filled"></div><div class="bp-cell"></div>
+            <div class="bp-cell"></div><div class="bp-cell filled"></div><div class="bp-cell dim"></div><div class="bp-cell dim"></div><div class="bp-cell filled"></div>
+            <div class="bp-overlay">
+              <div class="bp-ring" style="left:2%; top:2%; width:17%; height:29%;"></div>
+              <div class="bp-bracket" style="left:41%; top:36%; width:16px; height:64%;"></div>
+              <div class="bp-leader" style="left:calc(41% + 16px); top:68%; width:14%;"></div>
+              <div class="bp-note" style="left:calc(41% + 16px + 14%); top:63%;">Slow week</div>
+              <div class="bp-flag" style="left:0; top:36%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="panel-foot">Argues <b>it watches *your* gym</b>, not gyms in general — the mark always sits on real content.</div>
+    </div>
+
+  </div>
+</div>

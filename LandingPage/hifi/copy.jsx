@@ -17,6 +17,7 @@ const COPY = {
   nav: {
     links: [
       { label: 'Home', href: 'index.html' },
+      { label: 'AI', href: 'ai.html' },
       { label: 'Themes', href: 'https://themes.combatden.net' },
       { label: 'Pricing', href: 'pricing.html' },
     ],
@@ -119,6 +120,66 @@ const COPY = {
       { label: 'Your own app on the App Store', vals: [false, true, true, true] },
       { label: 'Number of locations', vals: ['1', '1', 'Up to 3', '4+'] },
     ],
+  },
+
+  // AI page (ai.html) ---------------------------------------------------------
+  // Every number and example below is illustrative, not measured usage. The stat
+  // cards and the day log are mock furniture in the same sense as the phone mocks
+  // on the landing page: they show the shape of the thing, not a customer's data.
+  ai: {
+    hero: {
+      headline: 'Your gym software should be working harder than you are.',
+      subline: 'Supercharge your gym with a 24/7 AI employee.',
+    },
+    problem: {
+      statement: "Software shouldn't wait for you to do everything.",
+      body: 'CombatDen AI takes what you have and puts it on autopilot.',
+    },
+    how: {
+      steps: [
+        { key: 'monitor', name: 'Monitor', text: 'Watches members, compares gyms, and tracks industry.' },
+        { key: 'plan', name: 'Plan', text: 'Message at-risk members, marketing pushes, seasonal discounts.' },
+        { key: 'execute', name: 'Execute', text: 'Approve it once, and it runs on its own from there.' },
+      ],
+    },
+    proof: {
+      heading: 'Four things it never stops working on.',
+      cards: [
+        { key: 'chat', tag: 'Chat', num: '9', numLabel: 'requests handled this week',
+          action: "Asked for last month's revenue by plan, answered in 12 seconds",
+          secondary: [['Avg response', '8s'], ['Actions taken', '6'], ['Reports pulled', '3']],
+          status: 'Waiting on your next question' },
+        { key: 'member', tag: 'Member', num: '$400', numLabel: 'in retention saved this month',
+          action: 'Found 5 at-risk members, messaged each, 3 came back',
+          secondary: [['Members flagged', '12'], ['Check-ins sent', '8'], ['Win-backs', '3']],
+          status: "Reviewing this week's attendance" },
+        { key: 'competition', tag: 'Competition', num: '4', numLabel: 'competitor signals caught this week',
+          action: 'Nearby gym posted a fall program launch, flagged as a seasonal trend',
+          secondary: [['Promos tracked', '2'], ['Posts reviewed', '18'], ['Events flagged', '1']],
+          status: "Reading this week's posts" },
+        { key: 'growth', tag: 'Growth', num: '3', numLabel: 'campaign ideas drafted',
+          action: 'Slow week detected in August, drafted a "bring a friend" promo',
+          secondary: [['Ideas drafted', '3'], ['Trends found', '5'], ['Seasons planned', '2']],
+          status: "Drafting next month's promo" },
+      ],
+    },
+    // Deliberately never reuses a §4 example. A repeated story reads as filler.
+    employee: {
+      lede: 'An employee',
+      trail: 'that never sleeps.',
+      log: [
+        { time: '6:10 AM', tag: 'revenue', text: 'Found 2 members training without an active plan on file.' },
+        { time: '7:15 AM', tag: 'reputation', text: 'Matched a new five-star review to a member, recommended a thank-you discount.' },
+        { time: '9:00 AM', tag: 'chat', text: 'Answered "who’s overdue on payment" in 9 seconds.' },
+        { time: '11:30 AM', tag: 'competition', text: "Caught a competitor's fall sale, recommended you run one too." },
+        { time: '2:45 PM', tag: 'schedule', text: "Flagged Tuesday's 6pm class, underfilled three weeks running." },
+        { time: '4:15 PM', tag: 'member', text: 'Found 4 members overdue on their promotions.' },
+        { time: '6:00 PM', tag: 'growth', text: 'Spotted a seasonal opening for a New Year kickoff challenge.' },
+        { time: '9:20 PM', tag: 'industry', text: 'Benchmarked your pricing against gyms your size nearby.' },
+        { time: '11:50 PM', tag: 'chat', text: "Compiled today's flags into tomorrow's summary, ready before you open the CRM." },
+      ],
+    },
+    footerHeadline: 'Supercharge your gym.',
   },
 
   // §8 Footer ----------------------------------------------------------------

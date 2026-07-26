@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Motif study — rounded tube forms</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #f3f5f8;
+    --surface: #ffffff;
+    --ink: #16181d;
+    --muted: #5b6270;
+    --line: #e4e8ee;
+    --accent: #2A67BD;
+    --accent-dark: #1F5099;
+    --accent-soft: #E8F0FB;
+    --maxw: 1180px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "Geist", system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- hero ---------- */
+  .hero {
+    position: relative;
+    min-height: 88vh;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    border-bottom: 1px solid var(--line);
+  }
+  .hero__stage { position: absolute; inset: 0; z-index: 1; }
+  .hero__stage canvas { display: block; width: 100%; height: 100%; }
+  .hero__glow {
+    position: absolute;
+    z-index: 0;
+    width: 820px; height: 820px;
+    right: -160px; top: 50%;
+    transform: translateY(-50%);
+    background: radial-gradient(circle, rgba(42,103,189,0.18) 0%, rgba(42,103,189,0.06) 42%, rgba(42,103,189,0) 68%);
+    pointer-events: none;
+  }
+  .hero__content { position: relative; z-index: 2; max-width: 620px; }
+  .eyebrow {
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 20px;
+  }
+  h1 {
+    font-size: clamp(38px, 5.4vw, 62px);
+    line-height: 1.04; letter-spacing: -0.028em; font-weight: 600;
+    margin: 0 0 20px; text-wrap: balance;
+  }
+  .hero__sub {
+    font-size: clamp(17px, 1.7vw, 20px);
+    line-height: 1.5; color: var(--muted);
+    margin: 0 0 32px; max-width: 30em;
+  }
+  .btn {
+    display: inline-block; background: var(--accent); color: #fff;
+    text-decoration: none; font-weight: 500; font-size: 15px;
+    padding: 13px 22px; border-radius: 10px;
+  }
+  .btn:hover { background: var(--accent-dark); }
+
+  /* ---------- gallery ---------- */
+  .section { padding: 88px 0; }
+  .section__head { margin-bottom: 40px; max-width: 720px; }
+  .section__head h2 {
+    font-size: clamp(26px, 3vw, 36px);
+    letter-spacing: -0.022em; font-weight: 600; margin: 0 0 12px;
+  }
+  .section__head p { color: var(--muted); font-size: 17px; line-height: 1.55; margin: 0; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 16px; overflow: hidden;
+    display: flex; flex-direction: column;
+  }
+  .tile__stage {
+    position: relative; aspect-ratio: 4 / 3;
+    background:
+      radial-gradient(circle at 50% 48%, rgba(42,103,189,0.12) 0%, rgba(42,103,189,0) 62%),
+      var(--surface);
+  }
+  .tile__stage canvas { display: block; width: 100%; height: 100%; }
+  .tile__meta { border-top: 1px solid var(--line); padding: 16px 18px 18px; }
+  .tile__name { font-size: 15px; font-weight: 600; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .tile__desc { font-size: 13.5px; line-height: 1.5; color: var(--muted); margin: 0; }
+  .tag {
+    display: inline-block;
+    font-family: "Geist Mono", ui-monospace, monospace;
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 3px 7px; border-radius: 5px; margin-bottom: 10px;
+  }
+
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .strip .tile__stage { aspect-ratio: 1 / 1; }
+
+  .note {
+    margin-top: 48px; padding: 22px 24px;
+    border: 1px solid var(--line); border-radius: 14px;
+    background: var(--surface);
+    font-size: 14.5px; line-height: 1.6; color: var(--muted);
+    max-width: 760px;
+  }
+  .note strong { color: var(--ink); font-weight: 600; }
+
+  footer { border-top: 1px solid var(--line); padding: 40px 0 72px; }
+  footer p { color: var(--muted); font-size: 13.5px; margin: 0; }
+
+  @media (max-width: 980px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+    .strip { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 620px) {
+    .grid, .strip { grid-template-columns: 1fr; }
+    .hero { min-height: 76vh; }
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero__glow" aria-hidden="true"></div>
+  <div class="hero__stage" id="stage-hero" aria-hidden="true"></div>
+  <div class="wrap">
+    <div class="hero__content">
+      <p class="eyebrow">Motif study</p>
+      <h1>Your gym software should be working harder than you are.</h1>
+      <p class="hero__sub">One continuous tube, bent and closed on itself. No corners, no caps, nothing to join.</p>
+      <a class="btn" href="#shapes">See the shapes</a>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="shapes">
+  <div class="wrap">
+    <div class="section__head">
+      <h2>Shape candidates, inflated</h2>
+      <p>Everything here is at balloon thickness, and everything is built from closed tubes only. The single-path forms are one loop bent and swept fat. The ball and globe are several loops sharing a centre, passing through each other rather than joining.</p>
+    </div>
+    <div class="grid">
+      <article class="tile">
+        <div class="tile__stage" data-shape="ball" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Ball</span>
+          <p class="tile__name">Three great circles</p>
+          <p class="tile__desc">A sphere implied by the fewest loops that can imply one. Inflated they nearly touch, so it reads as a solid ball with slots cut into it.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="globe" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Globe</span>
+          <p class="tile__name">Circles plus latitudes</p>
+          <p class="tile__desc">Two horizontal rings added, so it reads as a globe rather than an orbit. Denser, and the extra rings cost the silhouette some clarity.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">One stroke</span>
+          <p class="tile__name">Soft cube</p>
+          <p class="tile__desc">A cube traced in a single unbroken path. Inflated this far the corners nearly meet, so it reads as a knot of eight lobes rather than a cube.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="knot" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Trefoil</span>
+          <p class="tile__name">Overlapping loop</p>
+          <p class="tile__desc">Passes through itself three times and fuses into one lumpy body at this thickness. The most alive of the set.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="triangle" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Rounded triangle</span>
+          <p class="tile__name">Bent wire</p>
+          <p class="tile__desc">Three fat corners, three short runs. Holds its silhouette better than the others when inflated, because it has so few turns.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="ring" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Ring</span>
+          <p class="tile__name">Plain loop</p>
+          <p class="tile__desc">A doughnut once inflated. The hole is the only feature, so everything depends on keeping it open.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="coil" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Coil</span>
+          <p class="tile__name">Wound loop</p>
+          <p class="tile__desc">Six wraps around a ring. At balloon thickness the wraps merge and it turns into a ribbed torus, which is either a nice surprise or a lost shape.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="blob" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <span class="tag">Wander</span>
+          <p class="tile__name">Loose loop</p>
+          <p class="tile__desc">No symmetry, just a closed path drifting through space. Friendliest and least engineered of everything here.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.18"></div>
+        <div class="tile__meta">
+          <span class="tag">Reference</span>
+          <p class="tile__name">Soft cube, not inflated</p>
+          <p class="tile__desc">The previous thickness, kept here so the jump to balloon is visible side by side rather than remembered.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="border-top:1px solid var(--line);">
+  <div class="wrap">
+    <div class="section__head">
+      <h2>Thickness</h2>
+      <p>Same soft cube four ways. This dial decides whether it reads as wire, tube, or balloon.</p>
+    </div>
+    <div class="strip">
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.07"></div>
+        <div class="tile__meta">
+          <p class="tile__name">Wire</p>
+          <p class="tile__desc">Thin. Still a drawing.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.14"></div>
+        <div class="tile__meta">
+          <p class="tile__name">Tube</p>
+          <p class="tile__desc">Reads as an object.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.22"></div>
+        <div class="tile__meta">
+          <p class="tile__name">Fat</p>
+          <p class="tile__desc">Inflated. Corners swallow the runs.</p>
+        </div>
+      </article>
+      <article class="tile">
+        <div class="tile__stage" data-shape="frame" data-radius="0.3"></div>
+        <div class="tile__meta">
+          <p class="tile__name">Balloon</p>
+          <p class="tile__desc">Form collapses into mass.</p>
+        </div>
+      </article>
+    </div>
+
+    <div class="note">
+      <strong>Where this would live:</strong> one large shape drifting behind the hero, one small one anchoring the final CTA, nothing in between. The proof cards and the employee log stay flat. If it appears in every section it stops being a motif and becomes wallpaper, which is how most three.js landing pages fail.
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap"><p>Study file. Not wired into any page.</p></div>
+</footer>
+
+<script type="importmap">
+{ "imports": { "three": "https://unpkg.com/three@0.169.0/build/three.module.js" } }
+</script>
+<script type="module">
+import * as THREE from "three";
+
+const ACCENT = 0x2a67bd;
+const ACCENT_DARK = 0x1f5099;
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/*
+  Every form is one closed path swept into a tube. Closed means no end caps, and a
+  Catmull-Rom spline through the path means no corner is ever a corner: the curve
+  eases through each turn instead of meeting at an angle. Nothing is assembled, so
+  there is nothing to joint.
+*/
+function closedTube(points, radius, tension) {
+  const curve = new THREE.CatmullRomCurve3(points, true, "catmullrom", tension ?? 0.5);
+  return new THREE.TubeGeometry(curve, Math.max(220, points.length * 26), radius, 26, true);
+}
+
+/* Inserts each edge's midpoint so the straight runs stay straight and only the turns round off. */
+function withMidpoints(corners) {
+  const out = [];
+  for (let i = 0; i < corners.length; i++) {
+    const a = corners[i];
+    const b = corners[(i + 1) % corners.length];
+    out.push(a.clone(), a.clone().lerp(b, 0.5));
+  }
+  return out;
+}
+
+/*
+  Sphere built out of tubes rather than surface: a set of great circles sharing one
+  centre. Each circle is its own closed tube, so the ball is still made of nothing but
+  rounded loops. They pass through each other at the poles instead of joining.
+*/
+function tubeSphere(radius, meridians, latitudes) {
+  const R = 1.35;
+  const out = [];
+
+  for (let i = 0; i < meridians; i++) {
+    const ring = new THREE.TorusGeometry(R, radius, 24, 160);
+    ring.rotateY((i / meridians) * Math.PI);
+    out.push(ring);
+  }
+
+  /* Latitude rings sit at a height and shrink to match the sphere's cross section there. */
+  (latitudes || []).forEach((y) => {
+    const r = Math.sqrt(Math.max(R * R - y * y, 0.0001));
+    const ring = new THREE.TorusGeometry(r, radius, 24, 160);
+    ring.rotateX(Math.PI / 2);
+    ring.translate(0, y, 0);
+    out.push(ring);
+  });
+
+  return out;
+}
+
+function buildGeometry(kind, radius) {
+  switch (kind) {
+    /* Three great circles. The fewest loops that still read as a ball. */
+    case "ball":
+      return tubeSphere(radius, 3, []);
+
+    /* Meridians plus two latitude rings, so it reads as a globe rather than an orbit. */
+    case "globe":
+      return tubeSphere(radius, 3, [0.62, -0.62]);
+
+    /* Trefoil: TorusKnotGeometry is already a swept tube, no seams to worry about. */
+    case "knot":
+      return new THREE.TorusKnotGeometry(1.0, radius, 320, 26, 2, 3);
+
+    /* Six turns around a ring, closing exactly where it started. */
+    case "coil":
+      return new THREE.TorusKnotGeometry(1.0, radius, 620, 22, 1, 6);
+
+    case "ring":
+      return new THREE.TorusGeometry(1.15, radius, 26, 200);
+
+    /*
+      A Hamiltonian cycle on the cube: visits all eight corners, returns to the
+      start, and every consecutive pair differs in exactly one axis, so the path
+      only ever runs along a real cube edge.
+    */
+    case "frame": {
+      const c = [
+        V(-1, -1, -1), V(1, -1, -1), V(1, 1, -1), V(-1, 1, -1),
+        V(-1, 1, 1), V(1, 1, 1), V(1, -1, 1), V(-1, -1, 1)
+      ].map((p) => p.multiplyScalar(1.05));
+      return closedTube(withMidpoints(c), radius, 0.5);
+    }
+
+    case "triangle": {
+      const c = [V(0, 1.35, 0.25), V(-1.25, -0.8, -0.3), V(1.25, -0.75, 0.2)];
+      return closedTube(withMidpoints(c), radius, 0.5);
+    }
+
+    /* Fixed offsets rather than random, so the shape is the same on every load. */
+    case "blob":
+    default: {
+      const wobble = [0.22, -0.34, 0.18, -0.12, 0.3, -0.26, 0.14, -0.2];
+      const pts = wobble.map((w, i) => {
+        const a = (i / wobble.length) * Math.PI * 2;
+        const r = 1.25 + w;
+        return V(Math.cos(a) * r, Math.sin(a) * r * 0.85, Math.sin(a * 2 + w * 4) * 0.8);
+      });
+      return closedTube(pts, radius, 0.5);
+    }
+  }
+}
+
+function makeScene(host, opts) {
+  const kind = opts.shape || "frame";
+  const radius = opts.radius || 0.14;
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+  camera.position.set(0, 0, 6.6);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.setClearAlpha(0);
+  host.appendChild(renderer.domElement);
+
+  const group = new THREE.Group();
+  group.position.x = opts.offsetX || 0;
+  scene.add(group);
+
+  /* Some forms are one loop, some are several sharing a centre. Treat both as a list. */
+  const built = buildGeometry(kind, radius);
+  const geos = Array.isArray(built) ? built : [built];
+
+  const material = new THREE.MeshPhysicalMaterial({
+    color: ACCENT,
+    roughness: 0.2,
+    metalness: 0.0,
+    clearcoat: 1,
+    clearcoatRoughness: 0.12,
+    sheen: 0.6,
+    sheenColor: new THREE.Color(0x9fc2ef)
+  });
+
+  /*
+    Normalise every form to the same visual size so the grid compares shape, not scale.
+    Measured across all loops, including any pushed off centre, not just the first.
+    */
+  let extent = 0;
+  geos.forEach((g) => {
+    g.computeBoundingSphere();
+    const bs = g.boundingSphere;
+    extent = Math.max(extent, bs.center.length() + bs.radius);
+    group.add(new THREE.Mesh(g, material));
+  });
+  group.scale.setScalar((opts.scale || 1) * (1.75 / extent));
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0xd7e2f2, 1.5));
+  const key = new THREE.DirectionalLight(0xffffff, 2.8);
+  key.position.set(3.5, 5, 6);
+  scene.add(key);
+  const rim = new THREE.DirectionalLight(ACCENT_DARK, 1.9);
+  rim.position.set(-5, -2, -4);
+  scene.add(rim);
+
+  function resize() {
+    const w = host.clientWidth;
+    const h = host.clientHeight;
+    if (!w || !h) return;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  resize();
+  new ResizeObserver(resize).observe(host);
+
+  group.rotation.set(0.42, 0.6, 0.1);
+
+  let running = false;
+  let raf = 0;
+  let t = 0;
+
+  function frame() {
+    t += 0.004;
+    group.rotation.y += 0.0024;
+    group.rotation.x = 0.42 + Math.sin(t * 0.7) * 0.16;
+    group.position.y = Math.sin(t * 0.9) * 0.11;
+    renderer.render(scene, camera);
+    raf = requestAnimationFrame(frame);
+  }
+
+  function start() { if (!running) { running = true; frame(); } }
+  function stop() { running = false; cancelAnimationFrame(raf); }
+
+  if (reduceMotion) {
+    renderer.render(scene, camera);
+  } else {
+    new IntersectionObserver((entries) => {
+      entries.forEach((e) => (e.isIntersecting ? start() : stop()));
+    }, { rootMargin: "120px" }).observe(host);
+  }
+}
+
+const hero = document.getElementById("stage-hero");
+if (hero) {
+  const wide = window.innerWidth > 900;
+  makeScene(hero, {
+    shape: "ball",
+    radius: 0.3,
+    scale: wide ? 1.15 : 0.8,
+    offsetX: wide ? 2.5 : 0
+  });
+}
+
+document.querySelectorAll(".tile__stage[data-shape]").forEach((el) => {
+  makeScene(el, {
+    shape: el.dataset.shape,
+    radius: el.dataset.radius ? parseFloat(el.dataset.radius) : 0.14
+  });
+});
+</script>
+</body>
+</html>
