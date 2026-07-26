@@ -219,28 +219,26 @@ worker:
    enrich-templates ARGS="--limit 1 --root /tmp/enrich_smoke"` runs the whole
    enrich→embed→sidecar pipeline on ONE video (into a throwaway root) to prove it
    works before the full paid run.
-4. **Backfill the creator avatars** (`make backfill-avatars`) — a **one-time**,
-   $0 (quota-only) run that gives the pre-existing pool what the worker's avatar
-   pass now gives every new scrape. Two passes, both derived from current table
-   state and therefore resumable + idempotent: **pass 1** recovers each legacy
-   `@handle` channel's real id via `videos.list?id=<one of its videos>` →
-   `snippet.channelId` (grouped per CHANNEL, ~231 calls for 11,502 handle channels —
-   not per row) and rewrites its rows to the canonical `/channel/UC…` URL, which
-   permanently removes the legacy handle data; **pass 2** fills the avatars via
-   `channels.list?id=` (~236 calls), reusing the worker's `WorkerAvatarResolver`
-   outright so there is ONE `channels.list` implementation and ONE avatar write path.
-   ~467 quota units total against a 10,000/day budget, no re-scrape, no LLM call. A
-   channel some sibling row already knows the avatar for is copied with no API call.
-   `--limit N` caps the channels per pass for a smoke test; `ENV_FILE` picks the DB.
-   It cooperates with the import guards above: those block a re-import of the legacy
-   YAML from downgrading an upgraded URL or blanking a filled avatar, while still
-   allowing the upgrade itself, so `make sync-gyms` can never undo it.
-5. **The content worker** (`make worker` → `python -m src.worker.run`) — the
+4. **The content worker** (`make worker` → `python -m src.worker.run`) — the
    decoupled scrape / enrich / scan step worker (cleanup → finalize → one drained
    step per tick), detailed in the next section. It **replaced** the old standalone
    `scripts/scraper` + `scripts/scan` jobs (both deleted, along with
    `src/classification`); it writes through its own `src/worker/sql/`, not
    `VideoDbWriter`.
+
+---
+
+## Writing to the `videos/` YAML pool
+
+The pool is the **seed's source of truth** — `make sync-gyms` (→
+`scripts.import_yaml`) loads all ~23k files into the `video` table, so anything
+resolved into that table only survives a `supabase db reset` if it is also written
+back into the YAML. If you ever have to write to the pool: it is **untracked by git
+and a symlink into the root checkout shared by every worktree**, so there is no
+undo. Do a surgical line-level edit of only the keys you mean to change (never a
+full re-dump — `VideoOutput` is `extra="ignore"`, so a re-dump silently drops
+anything unmodelled), verify the rewrite re-parses and differs in exactly those
+fields, and write atomically (temp file in the same dir → `os.replace`).
 
 ---
 

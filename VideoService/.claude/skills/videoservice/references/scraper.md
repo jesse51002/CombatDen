@@ -112,10 +112,10 @@ against the ~2,500 that run spends on `search.list`. `worker_avatar_max_batches`
 a batch is logged and dropped — the run never fails over an avatar, and an
 unresolved avatar just stays empty (the member UI omits it).
 
-The pre-existing pool is filled once by `make backfill-avatars` (see
-`VideoService/CLAUDE.md` — it also upgrades the legacy `@handle` channel URLs to
-the canonical `/channel/UC…` id form, which is why the pool needs no `channel_id`
-column: the id is always recoverable from the stored URL).
+Every pool row already carries a resolved avatar and a canonical `/channel/UC…`
+channel URL — this per-scrape pass is the ongoing path that keeps both current.
+The pool still needs no `channel_id` column: the id is always recoverable from
+the stored `/channel/UC…` URL by regex (`worker_transforms.channel_id_from_url`).
 
 ### Funnel
 

@@ -160,7 +160,6 @@ All run via **`poetry run`** (never bare `python3` / `.venv/bin/*`):
 ```bash
 make gym-check GYM_ID=all          # validate gym files round-trip the Gym model
 make sync-gyms GYM_ID=all          # load authored gym YAML -> SQL (idempotent; runs the import below)
-make backfill-avatars              # ONE-TIME: fill creator avatars + upgrade legacy @handle channel URLs (~467 quota units, $0)
 poetry run python -m scripts.import_yaml.run   # one-time cutover: pool + feeds + cost log -> SQL
 make worker                        # run the background worker (cleanup → finalize → one drained step: scan → enrich → scrape)
 ```
@@ -176,15 +175,8 @@ drains whichever heavy step has work (scan, else enrich, else scrape), and the
 scrape step in particular picks up a gym on its own once a spec save / feed
 curation / weekly floor makes that gym due.
 
-`make backfill-avatars` is the one-time pool repair the worker's per-scrape avatar
-pass does not cover retroactively: pass 1 recovers each legacy `@handle` channel's
-real id via `videos.list` and rewrites its rows to the canonical `/channel/UC…`
-form, pass 2 fills the avatars via `channels.list`. Both derive their targets from
-current table state, so it is resumable and a completed run is a no-op;
-`ARGS="--limit 5"` smoke-tests it for a few quota units.
-
 Env in `.env`: `DATABASE_URL` (the scripts + worker), plus `YOUTUBE_API_KEY`
-(worker discovery + metadata + creator avatars, and the avatar backfill) and `APIFY_TOKEN` (worker transcript fetches, at
+(worker discovery + metadata + creator avatars) and `APIFY_TOKEN` (worker transcript fetches, at
 enrich), and the model keys (`GEMINI_API_KEY` for enrich/scan, `OPENAI_API_KEY`
 for embeddings).
 

@@ -38,11 +38,6 @@ def route(sql: str) -> str:
         ("SET transcript", "cache_transcripts"),
         ("SET tag", "update_tags"),
         ("SET channel_avatar_url", "update_channel_avatar"),
-        ("SET channel_url", "update_channel_url"),
-        ("ARRAY_AGG(video_id ORDER BY video_id)", "handle_channels"),
-        # Must precede channel_avatar_state: the backfill's target query also
-        # aggregates with bool_or(channel_avatar_url ...).
-        ("AS known_avatar", "avatar_targets"),
         ("bool_or(channel_avatar_url", "channel_avatar_state"),
         ("INSERT INTO video (", "upsert_video"),
         ("FROM video\nWHERE video_id = ANY(:ids)", "existing_videos"),

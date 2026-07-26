@@ -139,6 +139,17 @@ def channel_id_from_url(channel_url: str) -> str:
     return match.group(1) if match else ""
 
 
+def _https(url: str) -> str:
+    """Normalise a resolved avatar URL's scheme to ``https``. YouTube's API has
+    been observed to occasionally hand back an avatar thumbnail as ``http://``;
+    ``yt3.ggpht.com`` serves the same content on both schemes, so rewriting is
+    safe, and an ``http://`` image would otherwise be blocked as mixed content in
+    any web client (the CRM, the member portal)."""
+    if url.startswith("http://"):
+        return "https://" + url[len("http://") :]
+    return url
+
+
 def parse_channel_avatars(items: Sequence[dict]) -> dict[str, str]:
     """``channels.list`` items → ``{channel_id: avatar_url}``.
 
@@ -157,7 +168,7 @@ def parse_channel_avatars(items: Sequence[dict]) -> dict[str, str]:
             snippet.get("thumbnails"), AVATAR_THUMBNAIL_PREFERENCE
         )
         if avatar:
-            avatars[channel_id] = avatar
+            avatars[channel_id] = _https(avatar)
     return avatars
 
 

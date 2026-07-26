@@ -161,6 +161,26 @@ def test_store_skips_empty_avatars() -> None:
     ]
 
 
+def test_resolve_normalises_http_avatar_to_https() -> None:
+    """A rare http:// thumbnail from the API must never be stored as-is — it
+    would render as mixed content in a web client."""
+    db = RoutingFakeDb()
+    youtube = FakeYouTube(
+        channels={
+            "UCa": {
+                "id": "UCa",
+                "snippet": {
+                    "thumbnails": {"high": {"url": "http://yt3.ggpht.com/UCa"}}
+                },
+            }
+        }
+    )
+
+    avatars, _ = asyncio.run(_resolver(db, youtube).resolve(["UCa"]))
+
+    assert avatars == {"UCa": "https://yt3.ggpht.com/UCa"}
+
+
 def test_store_by_url_is_the_single_write_path() -> None:
     """The backfill reuses this, so it must accept stored channel_urls directly."""
     db = RoutingFakeDb()
