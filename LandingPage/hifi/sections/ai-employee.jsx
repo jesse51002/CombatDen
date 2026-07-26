@@ -11,17 +11,10 @@
 // stacking, transitions and the hue ramp cannot be expressed as inline styles. This
 // file owns the copy, the timing and which card is active.
 //
-// The eight @<tag> hues are the ONE deliberate exception to DESIGN.md's One-Accent
-// Rule: they are agent handles, not brand. Matched oklch lightness and chroma so
-// they read as a single categorical set, and chosen to dodge both palette
-// anti-references (no mint/teal wellness green, no indigo/violet AI slop).
+// The @<tag> hues come from AGENT_HUES in ds.jsx, shared with the §4 cards so the
+// same channel is the same colour in both places.
 //
 // Carries [data-motif-section]. Exports AiEmployeeSection to window.
-
-const AI_LOG_HUES = {
-  chat: 258, member: 218, competition: 18, growth: 72,
-  revenue: 145, reputation: 300, schedule: 45, industry: 180,
-};
 
 const AI_DECK_HOLD = 3500;      // ms a card stays in front
 const AI_DECK_HOLD_FIRST = 2500; // the first deal is quicker, so the idea lands fast
@@ -98,7 +91,7 @@ function AiEmployeeSection() {
                 <li
                   key={entry.time + entry.tag}
                   className={`cd-log__card${deck ? cls : ''}`}
-                  style={{ '--hue': AI_LOG_HUES[entry.tag] ?? 258 }}
+                  style={{ '--hue': AGENT_HUES[entry.tag] ?? 258 }}
                 >
                   <div className="cd-log__meta">
                     <span className="cd-log__time">{entry.time}</span>

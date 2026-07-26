@@ -16,6 +16,19 @@ colors:
   accent-soft: "#E8F0FB"
   accent-glow: "rgba(42,103,189,0.18)"
   cyan-glow: "oklch(0.72 0.15 215 / 0.13)"
+  error: "#C0392B"
+  shadow-ambient: "rgba(20,22,50,0.2)"
+  shadow-ambient-mid: "rgba(20,22,50,0.22)"
+  shadow-ambient-strong: "rgba(20,22,50,0.3)"
+  mock-bezel: "#c7cbd2"
+  mock-screen: "#000"
+  mock-screen-edge: "rgba(0,0,0,0.85)"
+  mock-island: "#0a0a0c"
+  mock-caption: "rgba(40,44,54,0.42)"
+  mock-caption-scrim: "rgba(12,12,16,0.72)"
+  mock-icon-shadow: "rgba(0,0,0,0.18)"
+  mock-icon-shadow-soft: "rgba(0,0,0,0.2)"
+  media-placeholder: "#d8dbe0"
 typography:
   hero:
     fontFamily: "'Schibsted Grotesk', sans-serif"
@@ -61,6 +74,9 @@ rounded:
   card-large: "28px"
   panel: "26px"
   pill: "999px"
+  bubble: "14px"
+  bubble-tail: "4px"
+  bubble-tail-sm: "3px"
 spacing:
   hairline: "8px"
   tight: "16px"
@@ -158,11 +174,50 @@ mocks* so the app can wear any brand.
 - **Line** (`rgba(20,22,30,0.09)`) / **Line Soft** (`rgba(20,22,30,0.06)`): hairline borders and
   table row rules.
 
+### System
+- **Error** (`#C0392B`): the one system red, used only for the submit-failure line in the footer
+  form. Not part of the one-accent brand palette; kept as narrow and rare as possible (see §5
+  Inputs).
+
+### Shadow-ambient (the `rgba(20,22,50,…)` tint)
+A third neutral-shadow base, distinct from the `line`/`card-border` family (`rgba(20,22,x,…)` on a
+`,30`/`,40` base): `rgba(20,22,50,…)` is the tint used for **standalone drop shadows that aren't
+part of the full layered card-shadow recipe** (§4) — a scrolled dropdown panel, a footer-card drop,
+a raised table row. Three opacities are in use: **Shadow Ambient** (`rgba(20,22,50,0.2)`, the same
+value the card-soft shadow's wide layer uses), **Shadow Ambient Mid** (`rgba(20,22,50,0.22)`, the
+footer booking card's drop), and **Shadow Ambient Strong** (`rgba(20,22,50,0.3)`, the same value the
+panel-frosted shadow's wide layer uses — also the mobile nav dropdown and the pricing panel's own
+shadow).
+
+### Mock/device chrome (phone mockups, `hero.jsx` / `feed.jsx` / `recs.jsx` / `mocks/`)
+The phone mockups (the hero's `ScreenshotPhone`, the theme-driven `PhoneMock`/`PhoneFrame`, the §4
+feed's `RealPhone`, the §5 `RecVideoPhone`, and `ThemePreview`) share a small palette of
+device-chrome greys that are deliberately **not** brand colors — they read as hardware, not UI:
+- **Mock Bezel** (`#c7cbd2`): the device frame/bezel background behind the screen cutout.
+- **Mock Screen** (`#000`) / **Mock Screen Edge** (`rgba(0,0,0,0.85)`): the screen's own background
+  and its inset bezel-edge shadow, shared by every phone frame.
+- **Mock Island** (`#0a0a0c`): the dynamic-island fill, and (reused) the hero screenshot phones'
+  content backdrop before an image has loaded.
+- **Mock Caption** (`rgba(40,44,54,0.42)`) / **Mock Caption Scrim** (`rgba(12,12,16,0.72)`): the
+  striped media-placeholder's caption text tint and the dark bottom-scrim behind on-screen caption
+  text in `ThemePreview`'s hero tile.
+- **Mock Icon Shadow** (`rgba(0,0,0,0.18)`) / **Mock Icon Shadow Soft** (`rgba(0,0,0,0.2)`): the
+  drop shadow under the circular play-button glyphs inside phone mocks and feed thumbnails.
+- **Media Placeholder** (`#d8dbe0`): the flat fill behind a video thumbnail before its image has
+  loaded (`feed.jsx`'s `RThumb`).
+
 ### Named Rules
 
 **The One-Accent Rule.** The site has one blue. Tints (`accent-soft`), the gradient partner
 (`accent-dark`), and the glows are all derived from it. Do not introduce a second brand color.
-The exception is the **mock surfaces**, which take a gym's theme accent so the app reads as theirs.
+There are exactly two exceptions. The **mock surfaces** take a gym's theme accent so the app reads as
+theirs. And the AI page's **agent handles** (`AGENT_HUES` in `ds.jsx`) carry eight hues at matched
+oklch lightness and chroma: `chat` 258, `member` 218, `competition` 18, `growth` 72, `revenue` 145,
+`reputation` 300, `schedule` 45, `industry` 180. These are channel identity, not brand, and they let a
+reader tell at a glance which job the agent switched to. The same handle is the same hue in both
+places it appears (the §4 card titles and the §5 log tags), which is the whole point of the set, so
+add a hue there and nowhere else. The hues deliberately dodge both palette anti-references: no
+mint/teal wellness green, no indigo/violet AI slop.
 
 **The Gradient-On-Actions Rule.** Primary buttons, featured pricing CTA, agent marks, and the small
 brand pills carry the `accent → accent-dark` vertical gradient. Flat-blue fills look unfinished next
@@ -260,12 +315,22 @@ surfaces are the soft white gradient, not glass.
 
 ### Inputs (`footer.jsx`)
 - White surface, 1px line border, radius 12. Focus: accent border + a 3px soft accent ring. One
-  accent; no separate error red beyond the small system red used for the submit-failure line.
+  accent; no separate error red beyond the small system red (`error`, `#C0392B`) used for the
+  submit-failure line.
+
+### Feed prompt bubbles (`feed.jsx` `FFBubble`, the "Not this one" callout)
+- Chat-style bubbles with one sharp corner mimicking a speech-bubble tail: radius 14 on three
+  corners + a 4px tail corner for the main prompt bubble (`bubble` / `bubble-tail`), radius 12
+  (the existing button/input radius) + a 3px tail corner for the smaller "Not this one" callout
+  (`bubble-tail-sm`).
 
 ### Phone mock (`mocks/phone-mock.jsx`) — theme-driven
 - Device frame (soft metal gradient bezel, dynamic island) around `GymAppScreen`. The screen reads
   the **global active theme**: its accent re-tints the UI and its image (from `THEME_ASSETS`) fills
-  the hero video tile. A theme change re-skins every single-device mock at once.
+  the hero video tile. A theme change re-skins every single-device mock at once. Bezel, screen, and
+  dynamic-island colors are the mock/device-chrome greys documented in §2 (`mock-bezel`,
+  `mock-screen`, `mock-screen-edge`, `mock-island`); they're shared by every phone mock on the page
+  (hero, §4 feed, §5 recs) so all device frames read as the same hardware.
 
 ### Theme preview (`mocks/theme-preview.jsx`) — prop-driven
 - A flat app-screen card in a *given* brand theme. Prop-driven so the §3 rail can show many brands

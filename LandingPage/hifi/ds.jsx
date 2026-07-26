@@ -104,6 +104,17 @@ function useIsMobile(q = MOBILE_Q) {
   return m;
 }
 
+// The agent's channels, as hues. This is the ONE documented exception to
+// DESIGN.md's One-Accent Rule: these are agent handles, not brand. Matched oklch
+// lightness and chroma so they read as a single categorical set, and chosen to
+// dodge both palette anti-references (no mint/teal wellness green, no
+// indigo/violet AI slop). Shared, because the AI page names the same channels in
+// two places (the §4 cards and the §5 log) and they have to agree.
+const AGENT_HUES = {
+  chat: 258, member: 218, competition: 18, growth: 72,
+  revenue: 145, reputation: 300, schedule: 45, industry: 180,
+};
+
 // Scroll reveal. Elements marked `data-reveal` start 20px low and transparent and
 // settle once they scroll into view, at the same reveal point as every other
 // animation (IN_VIEW_MARGIN). Stagger a group by setting `--rd` per element.
@@ -140,4 +151,4 @@ function useReveal(rootRef) {
   }, []);
 }
 
-Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN, useIsMobile, MOBILE_Q, useReveal });
+Object.assign(window, { GW, BRAND, gwRgba, GWDotGrid, GWGlow, useVideoInView, IN_VIEW_MARGIN, useIsMobile, MOBILE_Q, useReveal, AGENT_HUES });

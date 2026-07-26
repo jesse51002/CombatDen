@@ -223,8 +223,13 @@ lives in the Execute card rather than in a section of its own.
 - **Growth** — 3 campaign ideas drafted. "Slow week detected in August, drafted a 'bring a friend'
   promo." Ideas drafted 3, trends found 5, seasons planned 2. Status: drafting next month's promo.
 
-_How it's displayed:_ a 2×2 grid of cards, each with a big accent numeral that counts up once the
-section reveals, a "detected X, did Y" line, secondary figures, and a live status with a pulsing dot.
+_How it's displayed:_ a 2×2 grid of cards. Each is titled with the channel's handle (`@chat`,
+`@member`, `@competition`, `@growth`) in that channel's hue, so the four are distinguishable at a
+glance and the §5 log is already legible by the time you reach it. Under it: a numeral that counts up
+and then keeps re-counting on a loop (phase-shifted per card, so only one is ever mid-count), the unit
+it counts set as part of the same statement rather than as a caption, a small diagram encoding that
+card's own numbers, a two-beat "saw X, so did Y" list, secondary figures, and a live status with a
+pulsing dot.
 Competition deliberately covers promos, marketing and events rather than price tracking, which is
 one-dimensional and rarely changes.
 

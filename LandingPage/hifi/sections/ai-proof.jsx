@@ -230,8 +230,13 @@ function AiProofSection() {
           gap: isMobile ? 14 : 20,
         }}>
           {c.cards.map((card, i) => (
-            <article key={card.key} className="cd-stat" data-reveal style={{ '--cd': `${i * 1.5}s`, '--rd': `${i * 90}ms` }}>
-              <div className="cd-stat__cat">{card.tag}</div>
+            <article key={card.key} className="cd-stat" data-reveal
+              style={{ '--cd': `${i * 1.5}s`, '--rd': `${i * 90}ms`, '--hue': AGENT_HUES[card.key] }}>
+              {/* The card's title, and the same handle the §5 log uses for this
+                  channel. Naming it the same way in both places, in the same hue,
+                  is what makes the log legible later: by then you already know
+                  what @member means. */}
+              <h3 className="cd-stat__cat">@{card.key}</h3>
 
               <div className="cd-stat__row">
                 <AiStatNum raw={card.num} live={live} index={i} />
