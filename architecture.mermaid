@@ -21,8 +21,10 @@ flowchart TB
   subgraph TS_api["🎨 ThemeService · READ API"]
     direction TB
     TSa_api["read API<br/>/apps/{id}/styles"]
-    TSa_pkg["ThemeFlutter pkg<br/>(client SDK)"]
+    TSa_pkg["ThemeFlutter pkg<br/>(Dart client SDK)"]
+    TSa_react["ThemeReact pkg + browser<br/>(web client SDK · theme-react)"]
     TSa_pkg -. "reads" .-> TSa_api
+    TSa_react -. "reads" .-> TSa_api
   end
 
   %% ---------- VIDEO SERVICE: creation vs api (separate) ----------
