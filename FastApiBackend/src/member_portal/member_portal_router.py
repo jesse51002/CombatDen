@@ -174,8 +174,18 @@ async def list_my_members(
         "the SAME gym-local week ``class_streak_weeks`` is measured on, so "
         "the strip and the streak number can never disagree — and a "
         "rank-disabled gym can render the streak as the profile's centrepiece "
-        "without a second call. Gated by ``verify_member_self`` on the path "
-        "gym."
+        "without a second call.\n\n"
+        "``latest_promotion`` is the member's most recent rank change with "
+        "BOTH belts already resolved (``old_rank_name`` / ``new_rank_name`` "
+        "and ``old_image_url`` / ``new_image_url``, every field nullable), so "
+        "the app's promotion animation never has to remember or infer a "
+        "previous rank. ``activity_id`` is the watermark key — show the "
+        "animation once per new id. It is DECOUPLED from any class: "
+        "promotions are staff-driven, minutes to days after a class and often "
+        "in bulk, so nothing attributes one to an attendance. ``null`` for a "
+        "member who has never had a rank change; null image URLs on a row "
+        "written before the payload carried them (fall back to the themed "
+        "belt). Gated by ``verify_member_self`` on the path gym."
     ),
     responses={
         200: {"description": "Profile returned"},

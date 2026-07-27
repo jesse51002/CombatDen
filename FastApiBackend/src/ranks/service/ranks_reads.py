@@ -152,9 +152,9 @@ class RanksReads(RanksBase):
         Reuses the domain's one leaf-advance rule (``RanksBase._next_leaf``
         over the ``main_rank_num_order`` ladder + the gym's EFFECTIVE
         sub-rank count) rather than deriving "next rank" a second time, and
-        resolves the image with the same precedence the current leaf uses:
-        the target leaf's ``sub_rank_image_overrides[sub_index]`` if
-        present, else the main rank's ``image_url``.
+        resolves the image through the domain's one image rule
+        (``RanksBase._leaf_image_url`` — the leaf's override, else the main
+        rank's ``image_url``).
 
         Args:
             gym_id: The member's gym.
@@ -182,13 +182,7 @@ class RanksReads(RanksBase):
             # No next leaf: top of the ladder, or no ranks configured.
             return None
 
-        if leaf_index is not None:
-            override = (rank.sub_rank_image_overrides or {}).get(
-                str(leaf_index),
-            )
-            if override:
-                return override
-        return rank.image_url
+        return self._leaf_image_url(rank, leaf_index)
 
     @staticmethod
     def _ready_row(

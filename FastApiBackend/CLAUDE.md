@@ -1186,9 +1186,10 @@ can't drift from the staff surface. Only THREE reads have no existing owner, and
 `service/member_portal_service.py` (`MemberPortalService`, a single standalone service, flat at
 `service/`): `list_members_for_email` (`sql/member_portal_list_members.sql` — the entry point; it
 carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query, plus the
-three GYM CAPABILITY flags below), `get_profile` (a pure field PROJECTION of
+three GYM CAPABILITY flags below), `get_profile` (a field PROJECTION of
 `MembersBillingDetailService.get_member_billing_detail` down to the member-appropriate
-`MemberPortalProfile` — no number is re-derived), and `get_rank_progress`
+`MemberPortalProfile` — no number is re-derived — plus the one block the CRM detail does
+not carry, `latest_promotion`, see below), and `get_rank_progress`
 (the profile graph's data — `sql/member_portal_rank_progress.sql` walked in Python: one point per
 `member_activities` event, `rank_changed` resets the counter to 0 and `class_attended` increments it
 capped at `classes_needed`, the member's CURRENT per-step threshold derived with the SAME
@@ -1258,6 +1259,32 @@ re-derive the whole class history for seven dots.
   booleans; don't "align" the two, they are different contracts.
 - It rides `BillingRetention`, which the CRM member-detail response shares, so the staff surface gets
   the field too (additive; one extra cheap indexed query on that read).
+
+**The profile also carries `latest_promotion` — the member app's promotion animation.** The app plays
+an old-belt → new-belt animation ONCE per new promotion, driven by its OWN local watermark (the same
+seed-silently-on-null pattern as its celebration watermark), so the backend's whole job is to answer
+"what is the member's latest rank change, and what did BOTH belts look like". `MemberPortalPromotion`
+carries `activity_id` (**the watermark key** — an opaque immutable id, not a timestamp, which two rows
+can share and which is fragile to precision across the wire), `promoted_at` (display only), and
+`old_rank_name` / `new_rank_name` / `old_image_url` / `new_image_url` — every field nullable.
+
+- **It hosts on the PROFILE, and it is member-portal-PRIVATE.** The celebration screen already loads
+  the profile, so a dedicated route would buy nothing; and unlike the week strip it does NOT ride
+  `BillingRetention` — `MembersBillingDetailService` and the CRM member-detail card are untouched.
+  `MemberPortalService.get_latest_promotion` is one extra indexed read
+  (`sql/member_portal_latest_promotion.sql`), scoped by `member_id` alone, which is already gym-safe
+  (`member_activities` carries the composite FK `(member_id, gym_id)`).
+- **Both belts come out of the activity's own SNAPSHOT, never a live `gym_ranks` join.** `image_url` /
+  `sub_rank_image_overrides` are user-writable, so a live lookup would let a gym re-uploading belt art
+  retroactively rewrite what a past promotion looked like. The write side is
+  `src/ranks/sql/insert_rank_activity.sql` (see the `ranks-guide` skill for the eight-key payload and
+  the one `RanksBase._leaf_image_url` rule that resolves each URL).
+- **It DEGRADES, it never fails.** A row written before the payload carried images has no such key, and
+  `->>` yields NULL exactly as it does for a JSON null — the client falls back to its themed belt.
+  Nothing is backfilled. `null` for a member who has never had a rank change.
+- **Decoupled from any class, deliberately.** Promotions are staff-driven from the ready-to-promote
+  board, minutes to days after a class and often in bulk, so there is no honest way to attribute one to
+  a specific attendance — nothing here joins attendance, and the copy reads "You've been promoted".
 
 **Same-gym is guarded on the DEBIT, in every redeem statement.** Both `redeem_reward.sql` and
 `redeem_reward_override.sql` carry `AND (SELECT gym_id FROM locked_reward) = (SELECT gym_id FROM

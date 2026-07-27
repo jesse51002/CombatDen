@@ -73,6 +73,39 @@ class RanksBase:
         return effective_sub_count(sub_rank_type, rank.sub_rank_count)
 
     @staticmethod
+    def _leaf_image_url(
+        rank: RankResponse | None,
+        sub_index: int | None,
+    ) -> str | None:
+        """The belt image of ONE leaf — the domain's single image rule.
+
+        Precedence: the leaf's ``sub_rank_image_overrides[sub_index]`` when
+        present, else the main rank's ``image_url``. Mirrors the SQL form
+        ``COALESCE(sub_rank_image_overrides ->> sub_index, image_url)`` used
+        by member-details. Every Python caller resolves a belt image through
+        THIS method — the next-leaf read and the promotion snapshot — so
+        there is one rule, not two.
+
+        Args:
+            rank: The main rank the leaf belongs to (``None`` = unassigned).
+            sub_index: The leaf's sub-position, or ``None`` on a subless
+                rank / a ``'none'`` gym.
+
+        Returns:
+            The leaf's belt image URL, or ``None`` when there is no rank or
+            the resolved leaf carries no image.
+        """
+        if rank is None:
+            return None
+        if sub_index is not None:
+            override = (rank.sub_rank_image_overrides or {}).get(
+                str(sub_index),
+            )
+            if override:
+                return override
+        return rank.image_url
+
+    @staticmethod
     def _next_leaf(
         ladder: list[RankResponse],
         rank_id: UUID | None,

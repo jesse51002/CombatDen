@@ -15,6 +15,10 @@ existing owner:
    to the member-appropriate ``MemberPortalProfile``. A field projection, not
    business logic: every number is computed by
    ``MembersBillingDetailService``, so the two surfaces can never disagree.
+   It additionally attaches ``latest_promotion``, the member's most recent
+   ``rank_changed`` activity with BOTH belts resolved — a member-portal-only
+   read (the CRM member detail is untouched) that rides the profile because
+   the app already loads it on the screen that celebrates.
 3. ``get_rank_progress`` — the profile graph's data: the member's progress
    toward their next rank over time, walked from their ``member_activities``.
    The per-step ``classes_needed`` denominator uses the SAME derivation as the
@@ -34,6 +38,7 @@ from src.member_portal.schema.member_portal_schema import (
     MemberPortalIdentity,
     MemberPortalIdentityListResponse,
     MemberPortalProfile,
+    MemberPortalPromotion,
     MemberRankProgressResponse,
     RankProgressPoint,
 )
@@ -109,6 +114,12 @@ class MemberPortalService:
     async def get_profile(self, member_id: UUID) -> MemberPortalProfile:
         """Project the member's CRM detail down to the portal profile.
 
+        Every number comes from ``MembersBillingDetailService`` and is only
+        re-shaped here. The one thing the CRM detail does not carry is
+        ``latest_promotion`` — the member's most recent rank change with both
+        belts resolved, read here so the app's promotion animation needs no
+        extra round trip and no memory of the previous rank.
+
         Args:
             member_id: The member, already proven to BE the caller.
 
@@ -121,6 +132,7 @@ class MemberPortalService:
         detail = await self._billing_detail_service.get_member_billing_detail(
             member_id,
         )
+        latest_promotion = await self.get_latest_promotion(member_id)
         return MemberPortalProfile(
             member_id=detail.member_id,
             gym_id=detail.gym_id,
@@ -130,10 +142,53 @@ class MemberPortalService:
             personal_info=detail.personal_info,
             retention=detail.retention,
             rank=detail.rank,
+            latest_promotion=latest_promotion,
             memberships=detail.memberships,
             recently_redeemed_rewards=detail.recently_redeemed_rewards,
             pending_redemptions=detail.pending_redemptions,
         )
+
+    async def get_latest_promotion(
+        self,
+        member_id: UUID,
+    ) -> MemberPortalPromotion | None:
+        """The member's most recent rank change, both belts resolved.
+
+        Reads the newest ``rank_changed`` ``member_activities`` row and maps
+        its snapshotted payload straight through — the belts are NOT looked up
+        live against ``gym_ranks``, because that table's image columns are
+        user-writable and re-uploading belt art must not rewrite what a past
+        promotion looked like.
+
+        Degrades rather than fails on an older row: an activity written before
+        the payload carried images yields ``None`` for both URLs (the client
+        falls back to its themed belt). Nothing is backfilled.
+
+        Args:
+            member_id: The member, already proven to BE the caller. Scoping by
+                the member alone is gym-safe — ``member_activities`` carries a
+                composite FK on ``(member_id, gym_id)`` and a member row
+                belongs to exactly one gym.
+
+        Returns:
+            The latest rank change, or ``None`` for a member who has never
+            had one.
+        """
+        sql = load_sql(SQL_DIR / "member_portal_latest_promotion.sql")
+        async with self._db_pool.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(sql), {"member_id": str(member_id)}
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+
+        if row is None:
+            return None
+        return MemberPortalPromotion(**dict(row))
 
     async def get_rank_progress(
         self,
