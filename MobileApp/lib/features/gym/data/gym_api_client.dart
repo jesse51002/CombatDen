@@ -35,7 +35,7 @@ class GymApiClient {
   /// `GET /gyms/{gymId}` — the gym's whole content detail.
   Future<GymDetail> fetchDetail() async {
     try {
-      final response = await _dio.get<dynamic>('/gyms/$gymId');
+      final response = await _dio.get<dynamic>('/presets/templates/$gymId');
       final data = response.data;
       if (data is Map) {
         return GymDetail.fromJson(Map<String, dynamic>.from(data));

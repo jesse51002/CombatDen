@@ -45,14 +45,14 @@ class VideoApiClient {
   // Page size for a single genre's full "view all" list.
   static const int _kTagLimit = 100;
 
-  /// `GET /gyms/{gymId}/videos/preview` — the home feed in ONE request: each
+  /// `GET /presets/templates/{gymId}/videos/preview` — the home feed in ONE request: each
   /// genre is sampled individually (top [_kPreviewPerTag]) server-side, so no
   /// genre is starved by pagination. Flattened to a list; the selectors
   /// re-group it into per-tag carousels.
   Future<List<Video>> fetchPreview() async {
     try {
       final response = await _dio.get<dynamic>(
-        '/gyms/$gymId/videos/preview',
+        '/presets/templates/$gymId/videos/preview',
         queryParameters: {'per_tag': _kPreviewPerTag},
       );
       final data = response.data;
@@ -72,13 +72,13 @@ class VideoApiClient {
     }
   }
 
-  /// `GET /gyms/{gymId}/videos?video_type=…` — every video for one genre, for a
+  /// `GET /presets/templates/{gymId}/videos?video_type=…` — every video for one genre, for a
   /// carousel's "view all" screen (its own request so it isn't capped to the
   /// home preview's per-genre sample).
   Future<List<Video>> fetchTag(String tag) async {
     try {
       final response = await _dio.get<dynamic>(
-        '/gyms/$gymId/videos',
+        '/presets/templates/$gymId/videos',
         queryParameters: {'video_type': tag, 'limit': _kTagLimit},
       );
       final data = response.data;
