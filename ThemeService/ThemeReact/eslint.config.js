@@ -50,7 +50,7 @@ export default tseslint.config(
             {
               group: ['**/app/**', '../app/*', '../../app/*'],
               message:
-                'src/lib is app-agnostic. App-specific values arrive as arguments to ThemeRuntime.initialize, never as an import. See ../ThemeFlutter/CLAUDE.md "Hard rules".',
+                'src/lib is app-agnostic. App-specific values arrive as arguments to initializeTheme / <ThemeProvider>, never as an import. See ../ThemeFlutter/CLAUDE.md "Hard rules".',
             },
           ],
         },

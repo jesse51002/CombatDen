@@ -12,6 +12,25 @@ and the boundary between them is load-bearing:
   in `localStorage`, and exposes brand-overridable resolvers. It is
   **runtime + resolvers only** — no screens, no bundled assets. This is the
   package `package.json` describes and what the `dist/` bundles contain.
+
+  Its layout mirrors `../ThemeFlutter/lib/` one-to-one, and every file names the
+  Dart file it ports from in its header:
+
+  | here | ThemeFlutter |
+  | --- | --- |
+  | `runtime.ts` | `customization_runtime.dart` |
+  | `store/themeStore.ts`, `store/locator.ts` | `customization_service.dart`, `service_locator.dart` |
+  | `store/stylesPager.ts` | `data/styles_pager.dart` |
+  | `store/persistence.ts` | the `SharedPreferences` half of `customization_service.dart` |
+  | `api/client.ts` | `data/customization_api_client.dart` |
+  | `models/` | `data/models/*.dart` |
+  | `theme/resolvers.ts` | `theme/theme_{color,image,font,text,icon}.dart` |
+  | `theme/color.ts` | `dart:ui`'s `Color` |
+  | `theme/{themeDerivation,engineTokens,assetWarmer,fontLoader}.ts` | the matching `theme/*.dart` |
+  | `react/` | *(no counterpart — Flutter uses `ListenableBuilder`)* |
+  | `motion/` | `theme/animation/*.dart` |
+
+  `src/lib/index.ts` is the ONLY export surface; nothing else is importable.
 - **`src/app/`** — the **standalone theme browser**: the public, unauthenticated
   page that pages ThemeService's catalog and previews each design inside a phone
   frame. It is a *consumer* of `src/lib`, exactly as `../../CRM` is a consumer of
@@ -50,9 +69,9 @@ packages are the same runtime in two languages.
 
 - **The library is app-agnostic by construction.** `src/lib/` must NEVER import
   from `src/app/`. The only app-specific inputs are the arguments passed into
-  `ThemeRuntime.initialize` (`appId`, `designId`, the five `expected*` slot
-  lists). If you need an app constant, take it as a parameter or add it to
-  `EngineTokens` — never reach into the app.
+  `initializeTheme` / `<ThemeProvider>` (`appId`, `designId`, the five
+  `expected*` slot lists). If you need an app constant, take it as a parameter
+  or add it to `EngineTokens` — never reach into the app.
   - **Enforced:** `eslint.config.js` Gate 1. `npm run lint` fails on it.
 - **Brand values resolve LIVE.** Colours, fonts, images, text and icons come from
   the loaded theme via the resolvers. The only hardcoded values are the CombatDen
@@ -67,6 +86,20 @@ packages are the same runtime in two languages.
   (`--gw-*` / `--adm-*` versus `--sc-*`), and neither imports the other.
   - **Enforced:** `eslint.config.js` Gates 2a and 2b.
 
+## `<ThemeProvider>` is a gate, not a value carrier
+
+The store is a **module singleton**, exactly as `get_it` is on the Flutter side.
+The theme does NOT flow down through React context: every hook reads the
+singleton through `useSyncExternalStore`. `<ThemeProvider>` does exactly two
+things — kick `initializeTheme` and hold its children back until the bootstrap
+settles (the analogue of the `FutureBuilder` in CRM's
+`live_theme_preview_tab.dart`).
+
+That is deliberate, and it is what lets the **non-hook resolvers**
+(`themeColor`, `themeToken`, `themeText`, `themeImageSrc`, …) work identically
+outside a component — which a token module needs. If you find yourself adding a
+context so a value can reach somewhere, the resolver already reaches there.
+
 ## Two things that will bite
 
 - **`letterSpacing` ports as `px`, never `em`.** Flutter's `letterSpacing` is an
@@ -78,7 +111,17 @@ packages are the same runtime in two languages.
 - **`getSnapshot()` must return a cached reference.** `useSyncExternalStore`
   throws "The result of getSnapshot should be cached" and loops forever if the
   store returns a fresh object literal per call. Build one frozen snapshot inside
-  `notify()` and return the same reference until the next change.
+  `notify()` and return the same reference until the next change. Both
+  `ThemeStore` and `StylesPager` do; `src/lib/__tests__/themeStore.test.ts` and
+  `stylesPager.test.ts` each pin it.
+- **`eslint-plugin-react-hooks` v7 turns on the React Compiler rules, and
+  `--max-warnings 0` makes every one of them fatal.** `set-state-in-effect`,
+  `set-state-in-render`, `refs` (no ref writes during render) and `purity` are
+  all errors here, so three familiar patterns are unavailable: writing a ref in
+  the render body, `setState` in an effect to reset derived state, and adjusting
+  state during render. The replacements this package uses are a lazy
+  `useState(() => new Thing())` initialiser (`useStylesPager`) and a `key`
+  remount to reset (`ThemedImage`).
 
 ## The dev server port is pinned on purpose
 
@@ -115,7 +158,12 @@ Run from this directory, or from `..` via the `react-*` Makefile targets.
 - `npm run dev` — the app on `:8080`. **Needs `cd .. && make api` running.**
 - `npm run typecheck` — `tsc -b`. Strict; part of the gate.
 - `npm run lint` — eslint, `--max-warnings 0`. Carries the three architecture gates.
-- `npm run test` — vitest.
+- `npm run test` — vitest, configured by `vitest.config.ts` (kept separate from
+  the app's `vite.config.ts`). Runs on **jsdom**, because the fallback ladder is
+  defined in terms of `localStorage` and the asset warmer in terms of `Image`.
+  `src/lib/__tests__/setup.ts` installs an in-memory `Storage` when the
+  environment's is unusable — Node 22+ ships its own `globalThis.localStorage`
+  that is `undefined` without `--localstorage-file` and shadows jsdom's.
 - `npm run build` — app bundle, then the ES + UMD library bundles, then types.
 
 **All four of typecheck / lint / test / build must be clean before committing.**
