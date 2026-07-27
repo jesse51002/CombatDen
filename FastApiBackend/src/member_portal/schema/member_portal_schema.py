@@ -91,14 +91,26 @@ class MemberPortalIdentityListResponse(BaseModel):
 
 
 class MemberPortalPromotion(BaseModel):
-    """The member's most recent rank change, both belts fully resolved.
+    """The member's most recent rank change, when it was a PROMOTION.
 
     This is what the app's promotion animation runs on. It shows the
     animation ONCE per new promotion, driven by its own local "promotion
     watermark" (the same seed-silently-on-null pattern as the existing
-    celebration watermark), so the server's job is only to answer *what is
-    the latest rank change and what did BOTH belts look like* — the client
+    celebration watermark), so the server's job is only to answer *has the
+    member just moved up, and what did BOTH belts look like* — the client
     never has to remember or infer a previous rank.
+
+    **Only a real promotion reaches here.** ``member_activities`` records
+    every rank change faithfully — staff corrections, demotions and
+    unassignments included — but the copy reads "You've been promoted", so
+    the server surfaces a change only when the new leaf ranks strictly ABOVE
+    the old one (a higher main rank on the gym's ladder, or a higher
+    sub-index within the same main rank). A demotion, a lateral correction,
+    an unassignment, or a change too thin to prove all serialize as ``null``,
+    indistinguishable from "this member has never been promoted", and the app
+    simply does not celebrate. Only the newest change is ever considered — a
+    promotion later corrected downward stays buried rather than
+    re-celebrating a belt the member no longer holds.
 
     **Decoupled from any class.** Promotions are staff-driven from the
     ready-to-promote board, minutes to days after a class and often in bulk,
@@ -118,8 +130,10 @@ class MemberPortalPromotion(BaseModel):
             (``Blue Belt`` / ``Blue Belt · 2 Stripes``). ``None`` when there
             was no previous leaf — the member's first assignment, or the
             gym's lowest-rank backfill.
-        new_rank_name: The display name of the leaf the member moved TO.
-            ``None`` when the change was an unassignment.
+        new_rank_name: The display name of the leaf the member moved TO. The
+            field stays nullable for wire compatibility, but a promotion
+            always has a TO leaf — an unassignment never surfaces at all — so
+            in practice it is present whenever the block is.
         old_image_url: The belt image of the FROM leaf, snapshotted at the
             moment of the change (the source columns are user-writable, so a
             live lookup would let new belt art rewrite an old promotion).
@@ -128,8 +142,11 @@ class MemberPortalPromotion(BaseModel):
             the client falls back to its themed belt.
         new_image_url: The belt image of the TO leaf, same snapshot rule.
 
-    A note on scope: this is the latest rank CHANGE. Staff corrections and
-    demotions are recorded as ``rank_changed`` too and therefore surface here.
+    A note on scope: only the FROM side is genuinely optional. A first
+    assignment — staff giving a rank-less member their first belt, or the
+    gym's lowest-rank backfill — has no leaf to have come from, so it arrives
+    with the old side null and the app renders an arrival rather than an
+    animation out of nothing.
     """
 
     activity_id: UUID

@@ -16,9 +16,10 @@ existing owner:
    business logic: every number is computed by
    ``MembersBillingDetailService``, so the two surfaces can never disagree.
    It additionally attaches ``latest_promotion``, the member's most recent
-   ``rank_changed`` activity with BOTH belts resolved — a member-portal-only
-   read (the CRM member detail is untouched) that rides the profile because
-   the app already loads it on the screen that celebrates.
+   ``rank_changed`` activity with BOTH belts resolved — and ONLY when that
+   change actually moved them UP the ladder. A member-portal-only read (the
+   CRM member detail is untouched) that rides the profile because the app
+   already loads it on the screen that celebrates.
 3. ``get_rank_progress`` — the profile graph's data: the member's progress
    toward their next rank over time, walked from their ``member_activities``.
    The per-step ``classes_needed`` denominator uses the SAME derivation as the
@@ -116,9 +117,10 @@ class MemberPortalService:
 
         Every number comes from ``MembersBillingDetailService`` and is only
         re-shaped here. The one thing the CRM detail does not carry is
-        ``latest_promotion`` — the member's most recent rank change with both
-        belts resolved, read here so the app's promotion animation needs no
-        extra round trip and no memory of the previous rank.
+        ``latest_promotion`` — the member's most recent rank change, when it
+        was a promotion, with both belts resolved. Read here so the app's
+        promotion animation needs no extra round trip and no memory of the
+        previous rank.
 
         Args:
             member_id: The member, already proven to BE the caller.
@@ -152,13 +154,24 @@ class MemberPortalService:
         self,
         member_id: UUID,
     ) -> MemberPortalPromotion | None:
-        """The member's most recent rank change, both belts resolved.
+        """The member's most recent rank change, if it was a PROMOTION.
 
         Reads the newest ``rank_changed`` ``member_activities`` row and maps
         its snapshotted payload straight through — the belts are NOT looked up
         live against ``gym_ranks``, because that table's image columns are
         user-writable and re-uploading belt art must not rewrite what a past
         promotion looked like.
+
+        The rank log records every change, demotions and staff corrections
+        included, so the read filters to changes that moved the member
+        strictly UP the ladder (a higher ``main_rank_num_order``, or a higher
+        sub-index within the same main rank). Anything else — a demotion, a
+        lateral correction, an unassignment, a leaf whose rank has since been
+        deleted, or a legacy row too thin to prove — yields ``None``, exactly
+        as if there had been no promotion, so the app stays quiet rather than
+        congratulating a member on a step backwards. Only the NEWEST change is
+        considered; an earlier promotion is never reached back for. The rule
+        itself lives in the SQL, where the ladder order is.
 
         Degrades rather than fails on an older row: an activity written before
         the payload carried images yields ``None`` for both URLs (the client
@@ -171,8 +184,7 @@ class MemberPortalService:
                 belongs to exactly one gym.
 
         Returns:
-            The latest rank change, or ``None`` for a member who has never
-            had one.
+            The latest rank change when it was a promotion, else ``None``.
         """
         sql = load_sql(SQL_DIR / "member_portal_latest_promotion.sql")
         async with self._db_pool.session() as session:

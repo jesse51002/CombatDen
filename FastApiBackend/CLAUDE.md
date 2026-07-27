@@ -1286,7 +1286,7 @@ re-derive the whole class history for seven dots.
 **The profile also carries `latest_promotion` — the member app's promotion animation.** The app plays
 an old-belt → new-belt animation ONCE per new promotion, driven by its OWN local watermark (the same
 seed-silently-on-null pattern as its celebration watermark), so the backend's whole job is to answer
-"what is the member's latest rank change, and what did BOTH belts look like". `MemberPortalPromotion`
+"has the member just moved UP, and what did BOTH belts look like". `MemberPortalPromotion`
 carries `activity_id` (**the watermark key** — an opaque immutable id, not a timestamp, which two rows
 can share and which is fragile to precision across the wire), `promoted_at` (display only), and
 `old_rank_name` / `new_rank_name` / `old_image_url` / `new_image_url` — every field nullable.
@@ -1297,14 +1297,38 @@ can share and which is fragile to precision across the wire), `promoted_at` (dis
   `MemberPortalService.get_latest_promotion` is one extra indexed read
   (`sql/member_portal_latest_promotion.sql`), scoped by `member_id` alone, which is already gym-safe
   (`member_activities` carries the composite FK `(member_id, gym_id)`).
-- **Both belts come out of the activity's own SNAPSHOT, never a live `gym_ranks` join.** `image_url` /
-  `sub_rank_image_overrides` are user-writable, so a live lookup would let a gym re-uploading belt art
-  retroactively rewrite what a past promotion looked like. The write side is
+- **ONLY A REAL PROMOTION SURFACES, and the filter is READ-SIDE ONLY.** `rank_changed` is logged for
+  every rank change — staff corrections, demotions and unassignments included — so the newest one is
+  not automatically something to celebrate. The read returns the newest change only when the new leaf
+  ranks **strictly above** the old one, comparing the leaf pair *(main rank ladder position,
+  sub-index)* left to right: a higher `gym_ranks.main_rank_num_order` wins outright (that column IS
+  the ladder — see `list_ranks.sql`, `RanksBase._next_leaf`, `backfill_lowest_rank.sql`), else a
+  higher `sub_index` within the same main rank (a stripe). Everything else yields **no row**, which
+  serializes as the same `null` a never-promoted member gets, so the app just stays quiet: a
+  demotion, a lateral/no-op correction, an unassignment (no TO leaf at all), a leaf whose rank has
+  since been DELETED from the ladder (position unknowable ⇒ unprovable), and a **legacy 4-key row**
+  whose main rank did not change (no sub-indices ⇒ a stripe promotion and a stripe demotion are
+  indistinguishable). Legacy rows that DID change main rank are still fully provable from their rank
+  ids and do surface. A **first assignment** (`old_rank_id` NULL — the lowest-rank backfill, or staff
+  giving a rank-less member their first belt) has no FROM leaf to be above and DOES surface, as an
+  arrival the app renders without a from-side. Only the **newest** change is ever considered — a
+  promotion later corrected downward stays buried rather than re-celebrating a belt the member no
+  longer holds. **Do not "fix" the writer**: `src/ranks/sql/insert_rank_activity.sql` must keep
+  logging every change (it is the audit trail AND the `rank_changed` progress anchor); celebration is
+  decided here, on the read.
+- **Everything the app RENDERS comes out of the activity's own SNAPSHOT, never a live `gym_ranks`
+  join.** `image_url` / `sub_rank_image_overrides` are user-writable, so a live lookup would let a gym
+  re-uploading belt art retroactively rewrite what a past promotion looked like. The write side is
   `src/ranks/sql/insert_rank_activity.sql` (see the `ranks-guide` skill for the eight-key payload and
-  the one `RanksBase._leaf_image_url` rule that resolves each URL).
+  the one `RanksBase._leaf_image_url` rule that resolves each URL). `gym_ranks` IS joined now, for
+  exactly one thing the payload does not carry — `main_rank_num_order`, the ladder position the
+  promotion test compares — and for nothing that reaches the wire. The tradeoff is that re-ordering
+  the ladder can change whether an OLD change still reads as a promotion; that beats comparing
+  against a ladder that no longer exists.
 - **It DEGRADES, it never fails.** A row written before the payload carried images has no such key, and
   `->>` yields NULL exactly as it does for a JSON null — the client falls back to its themed belt.
-  Nothing is backfilled. `null` for a member who has never had a rank change.
+  Nothing is backfilled. `null` for a member who has never had a rank change, and the identical `null`
+  when the newest change was not a promotion.
 - **Decoupled from any class, deliberately.** Promotions are staff-driven from the ready-to-promote
   board, minutes to days after a class and often in bulk, so there is no honest way to attribute one to
   a specific attendance — nothing here joins attendance, and the copy reads "You've been promoted".
