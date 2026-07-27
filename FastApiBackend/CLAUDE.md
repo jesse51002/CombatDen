@@ -941,12 +941,12 @@ VideoService CLAUDE.md). DI provider: `video_feed_refine_runner` (Singleton, inj
 
 **`VideosService` (`videos_service.py`) is a PURE-DELEGATING domain FACADE** — composes `VideoFeedService`,
 `VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`,
-`VideoRecsService`, and `VideoRecClickService`; every method is a one-liner to a concern
+`VideoRecsService`, `VideoRecClickService`, and `VideoClickService`; every method is a one-liner to a concern
 (no business logic in the facade, and no business logic in the router either). Exposes: `load_latest_spec`,
 `load_gym_spec` (the legacy `GymVideoSpecView` — pure delegation to
 `VideoSpecService.load_latest_gym_view`, which owns the `disciplines`→`gym_type` projection),
 `save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
-`get_video_rec`, `record_rec_click`, plus all feed operations
+`get_video_rec`, `record_rec_click`, `record_video_click`, plus all feed operations
 (`load_feed_preview` — the windowed per-genre "All" preview, `load_pool_videos` — used by the presets
 template preview, `load_feed_page` — which takes the optional `member_id`,
 `load_owner_videos`, owner add/remove/keep). The conversational agent uses it for
@@ -970,7 +970,8 @@ listing is the only read that shows an un-enriched owner video). The `video_run.
 (the VideoService worker sets it; the backend has no worker-control surface — the worker derives its
 own due gym from timestamps already in the schema, so there is nothing to enqueue and no status route).
 
-**RAG read surface — single rotating-category rec + optional personalized feed + rec-click.**
+**RAG read surface — single rotating-category rec + optional personalized feed + BOTH click writers
+(the idempotent rec click and the append-only feed click).**
 
 The per-member RAG profile is **ONE LLM-written summary + ONE embedding stored on the `members` row**
 (`video_profile_summary` / `video_profile_embedding` / `video_profile_embedding_model` /
@@ -1032,6 +1033,23 @@ first (the feed's guarded read is `verify_and_load_embedding`).
   + `rec_id`); on the first click it fires `MemberVideoProfileRefreshRunner.start`. A repeat click is
   idempotent (`clicked=false`, no re-stamp/re-log/re-fire); an unknown rec for this member+gym raises
   `RecNotFoundError` → 404.
+- **`VideoClickService`** (`video_click_service.py`) — `record_click(gym_id, member_id, video_id)`:
+  the FEED counterpart, for every open the member chose themselves (the hero, a genre carousel, a
+  genre list, the profile's level-up carousel). Without it the taste profile would learn only from
+  what the system already recommended and discard every self-chosen video. It **APPENDS** a
+  `video_clicked` activity through the SAME shared insert (`rec_id` bound NULL — nothing recommended
+  the open), then fires the same `MemberVideoProfileRefreshRunner.start`. Two rules define it, and
+  both are deliberate:
+  - **Append-only — NO dedup, no idempotency key.** A repeat open logs a second row, because a
+    re-watch is real signal. This is the exact opposite of the rec click and must not be "fixed";
+    `tests/videos/test_video_rag_db.py::test_feed_click_logs_a_row_every_time` locks it.
+  - **The video id is caller-supplied, so it is GUARDED** against the served feed first
+    (`video_click_feed_check.sql`, which injects the shared
+    `videos_feed_candidate_source.sql` as its `candidate_source`, so the guard can never drift from
+    the feed the member was shown). Anything else raises `VideoNotInFeedError` → 404, never a logged
+    activity. Firing the refresh per tap is NOT too hot: the runner coalesces per member and
+    `refresh_if_due` no-ops inside `video_profile_refresh_cooldown_days`, so a burst of taps costs at
+    most one paid build per cooldown window.
 - **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget,
   **per-member-coalesced** runner (a `ClassVar` task set + done-callback + `drain()` in the `main.py`
   lifespan, plus `ClassVar` in-flight + dirty **member** sets — the same coalescing shape as
@@ -1051,6 +1069,8 @@ never a separate abstraction (there is no mood-bucket map). Member activity writ
 (`MemberVideoRec` (`rec_id` / `category: VideoGenre` / `video: GymVideoCard`) and `VideoRecClickResponse`
 — there is no `RecCandidate` wrapper; the card already carries its `video_id`); the profile summary
 schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
+`schema/video_click_schema.py` (`MemberVideoClickResponse` — just the echoed
+`video_id`; a feed click has no rec row to report on). SQL:
 `sql/member_profile_load.sql` / `member_profile_source.sql` / `member_profile_update.sql`,
 `videos_load_feed_page.sql` (THE unified feed + rec read), `videos_load_owner_videos.sql` (the ungated
 owner listing), `videos_load_feed_preview.sql` (the windowed per-genre "All" preview),
@@ -1058,7 +1078,9 @@ owner listing), `videos_load_feed_preview.sql` (the windowed per-genre "All" pre
 source, injected as the `candidate_source` template variable via `load_sql` into BOTH
 `videos_load_feed_page.sql` and `videos_load_feed_preview.sql`, so the serve predicate lives in one place),
 `video_recs_served_count.sql`, `video_recs_record_insert.sql` (`RETURNING rec_id`),
-`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`.
+`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`
+(SHARED by both click writers, so their rows are identical to the taste-profile read) /
+`video_click_feed_check.sql` (the served-feed guard on the video-scoped click).
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -1138,7 +1160,7 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 (defined before `video_feed_service`, which reads the embedding), `video_feed_service`
 (defined before `video_recs_service`, which delegates the rec candidate query to it),
 `member_video_profile_refresh_runner`, `video_recs_service`,
-`video_rec_click_service`, `video_agent_service`, `videos_service`.
+`video_rec_click_service`, `video_click_service`, `video_agent_service`, `videos_service`.
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 
@@ -1213,6 +1235,7 @@ disabled).
 | `GET …/videos` | same | `VideosService.load_feed_page`, `rejected=False` hardwired, `member_id` bound to the path member |
 | `GET …/video-rec` | same | `VideosService.get_video_rec` |
 | `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
+| `POST …/videos/{video_id}/click` | same | `VideosService.record_video_click` (append-only) |
 
 **The identity read carries the gym's THREE CAPABILITY flags, and it carries them because of WHEN it
 is fetched.** `MemberPortalIdentity` gained `gym_rank_enabled` / `gym_has_rewards` / `gym_has_videos`

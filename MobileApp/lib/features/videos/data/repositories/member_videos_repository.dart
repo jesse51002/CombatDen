@@ -7,7 +7,8 @@ import 'package:mobile_app/features/videos/data/models/member_video_rec.dart';
 import 'package:mobile_app/features/videos/data/models/video_genre.dart';
 
 /// Repository for the member's video surface — the personalized gym feed, the
-/// single rotating-category recommendation, and recording a rec open (click).
+/// single rotating-category recommendation, and recording an open (click) of
+/// either a recommendation or a video picked out of the feed.
 ///
 /// Layered per convention: Bloc → MemberVideosRepository → ApiClient →
 /// backend. Every route is scoped to the selected member; the bloc threads
@@ -97,6 +98,39 @@ class MemberVideosRepository {
     } catch (e, st) {
       log('recordRecClick failed', error: e, stackTrace: st);
       throw ServerException('Failed to record the click: $e');
+    }
+  }
+
+  /// `POST /api/v1/member/gyms/{gymId}/members/{memberId}/videos/{videoId}/click`
+  /// — record the member opening a video they picked out of the FEED (the
+  /// hero, a carousel, a genre list, the profile's level-up carousel). Logs a
+  /// `video_clicked` activity server-side, which is what the taste profile
+  /// learns from; without it personalization would only ever see the videos
+  /// the system itself recommended.
+  ///
+  /// **Append-only, never deduped** — two opens of the same video log two
+  /// rows, because a re-watch is real signal. That is deliberately the
+  /// opposite of [recordRecClick], which is idempotent per served rec, so a
+  /// rec open must post THAT route and not this one.
+  ///
+  /// Best-effort: the caller fire-and-forgets so a failure never blocks the
+  /// YouTube launch.
+  Future<void> recordVideoClick({
+    required String gymId,
+    required String memberId,
+    required String videoId,
+  }) async {
+    try {
+      await _apiClient.post<Map<String, dynamic>>(
+        '/api/v1/member/gyms/$gymId/members/$memberId/videos/$videoId/click',
+      );
+    } on ServerException {
+      rethrow;
+    } on NetworkException {
+      rethrow;
+    } catch (e, st) {
+      log('recordVideoClick failed', error: e, stackTrace: st);
+      throw ServerException('Failed to record the video click: $e');
     }
   }
 }

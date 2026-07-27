@@ -50,7 +50,11 @@ class _RecView extends StatelessWidget {
     // Record the open FIRST: the bloc fire-and-forgets the click (it never
     // emits and never throws), so it can't delay or block the launch.
     context.read<VideoRecBloc>().add(const VideoRecOpened());
-    final opened = await openVideoFor(context, card);
+    // reportOpen: false — the rec click above ALREADY logs this open's
+    // `video_clicked` activity (and stamps the served rec). Letting
+    // openVideoFor report it as a feed open too would log one tap twice and
+    // double-weight it in the taste profile.
+    final opened = await openVideoFor(context, card, reportOpen: false);
     // Close only once the video is actually on its way out. Popping first
     // would drop the member back onto the previous screen with nothing but a
     // snackbar when the launch fails — and no way back to the rec.

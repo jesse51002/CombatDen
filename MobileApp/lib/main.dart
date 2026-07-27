@@ -26,9 +26,12 @@ import 'package:mobile_app/features/stats/presentation/screens/points_screen.dar
 import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
+import 'package:mobile_app/features/videos/bloc/video_click_bloc.dart';
+import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/screens/tag_videos_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/features/videos/presentation/screens/videos_screen.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_click_scope.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:mobile_app/shared/themes/app_theme.dart';
 
@@ -101,6 +104,15 @@ class _MobileAppRootState extends State<MobileAppRoot> {
   /// via `BlocProvider(create:)`) so `ApiClient.onUnauthorized` can drive it.
   late final LoginBloc _loginBloc = LoginBloc(authRepository: AuthRepository());
 
+  /// The one app-lifetime video-click reporter, provided above BOTH navigators
+  /// via [VideoClickScope] so every video surface — the videos tab, a genre
+  /// list, the profile's level-up carousel — reports an open without wiring a
+  /// reporter of its own. Owned here (not via `BlocProvider(create:)`) for the
+  /// same reason [_loginBloc] is: it outlives every route.
+  late final VideoClickBloc _videoClickBloc = VideoClickBloc(
+    repository: MemberVideosRepository(apiClient: ApiClient()),
+  );
+
   @override
   void initState() {
     super.initState();
@@ -114,6 +126,7 @@ class _MobileAppRootState extends State<MobileAppRoot> {
   void dispose() {
     ApiClient.onUnauthorized = null;
     _loginBloc.close();
+    _videoClickBloc.close();
     super.dispose();
   }
 
@@ -127,14 +140,19 @@ class _MobileAppRootState extends State<MobileAppRoot> {
     return ListenableBuilder(
       listenable: ThemeRuntime.changes,
       builder: (context, _) {
-        return MaterialApp(
-          title: 'CombatDen',
-          theme: AppTheme.forCanvas(),
-          debugShowCheckedModeBanner: false,
-          onGenerateRoute: _onGenerateRoute,
-          home: BlocProvider<LoginBloc>.value(
-            value: _loginBloc,
-            child: AuthGate(onGenerateRoute: _onGenerateRoute),
+        // Above MaterialApp so BOTH navigators' routes (the shell's nested one
+        // and the root one) sit under the click reporter.
+        return VideoClickScope(
+          bloc: _videoClickBloc,
+          child: MaterialApp(
+            title: 'CombatDen',
+            theme: AppTheme.forCanvas(),
+            debugShowCheckedModeBanner: false,
+            onGenerateRoute: _onGenerateRoute,
+            home: BlocProvider<LoginBloc>.value(
+              value: _loginBloc,
+              child: AuthGate(onGenerateRoute: _onGenerateRoute),
+            ),
           ),
         );
       },

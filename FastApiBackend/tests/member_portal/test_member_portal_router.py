@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 from schema.member_reward_redemption import RewardRedemptionStatus
 from schema.video import VideoGenre
 
@@ -58,6 +59,7 @@ from src.rewards.schema.rewards_schema import (
     RewardListResponse,
     RewardResponse,
 )
+from src.videos.schema.video_click_schema import MemberVideoClickResponse
 from src.videos.schema.video_recs_schema import (
     MemberVideoRec,
     VideoRecClickResponse,
@@ -66,6 +68,7 @@ from src.videos.schema.videos_schema import GymVideoCard
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
+from src.videos.service.video_click_service import VideoNotInFeedError
 from src.videos.service.video_rec_click_service import RecNotFoundError
 
 
@@ -834,6 +837,97 @@ def test_video_feed_rejects_both_genre_filters(
 
     assert resp.status_code == 400
     videos_service_mock.load_feed_page.assert_not_awaited()
+
+
+def test_feed_video_click_delegates_and_gates(
+    client, auth_headers, auth_mock, videos_service_mock, fake_gym_id, fake_member_id
+):
+    videos_service_mock.record_video_click = AsyncMock(
+        return_value=MemberVideoClickResponse(video_id="yt123")
+    )
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/yt123/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"video_id": "yt123"}
+    videos_service_mock.record_video_click.assert_awaited_once_with(
+        UUID(fake_gym_id), UUID(fake_member_id), "yt123"
+    )
+    auth_mock.verify_member_self.assert_awaited_once_with(
+        UUID(fake_member_id),
+        auth_mock.get_current_user.return_value,
+        gym_id=UUID(fake_gym_id),
+    )
+
+
+def test_feed_video_click_is_append_only_never_deduped(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """Two opens of the SAME video must reach the service TWICE.
+
+    A re-watch is real taste signal, so the route holds no idempotency of its
+    own — this locks the rule most likely to be "fixed" into a dedup later.
+    """
+    videos_service_mock.record_video_click = AsyncMock(
+        return_value=MemberVideoClickResponse(video_id="yt123")
+    )
+    url = f"{_base(fake_gym_id, fake_member_id)}/videos/yt123/click"
+
+    assert client.post(url, headers=auth_headers).status_code == 200
+    assert client.post(url, headers=auth_headers).status_code == 200
+
+    assert videos_service_mock.record_video_click.await_count == 2
+
+
+def test_feed_video_click_404s_a_video_outside_the_feed(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    videos_service_mock.record_video_click = AsyncMock(
+        side_effect=VideoNotInFeedError("Video not found in this gym's feed")
+    )
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/notmine/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 404
+
+
+def test_feed_video_click_rejects_a_malformed_video_id(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """A non-YouTube-shaped id is a 422 at the edge — never a logged activity."""
+    videos_service_mock.record_video_click = AsyncMock()
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/bad%20id!/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422
+    videos_service_mock.record_video_click.assert_not_awaited()
+
+
+def test_feed_video_click_is_refused_for_another_members_id(
+    client, auth_headers, auth_mock, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """When the gate rejects, nothing is logged — the service is never reached."""
+    auth_mock.verify_member_self = AsyncMock(
+        side_effect=HTTPException(status_code=403, detail="Not your member")
+    )
+    videos_service_mock.record_video_click = AsyncMock()
+
+    resp = client.post(
+        f"{_base(fake_gym_id, uuid4())}/videos/yt123/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 403
+    videos_service_mock.record_video_click.assert_not_awaited()
 
 
 def test_video_rec_returns_the_pick(

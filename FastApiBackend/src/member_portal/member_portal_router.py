@@ -32,7 +32,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
@@ -73,6 +73,7 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth, security
+from src.videos.schema.video_click_schema import MemberVideoClickResponse
 from src.videos.schema.video_recs_schema import (
     MemberVideoRec,
     VideoRecClickResponse,
@@ -85,6 +86,7 @@ from src.videos.service.member_video_profile_refresh_runner import (
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
+from src.videos.service.video_click_service import VideoNotInFeedError
 from src.videos.service.video_rec_click_service import RecNotFoundError
 from src.videos.service.videos_service import VideosService
 
@@ -828,6 +830,77 @@ async def list_my_gym_videos(
         ) from None
 
     return GymVideosFeed(total=total, limit=limit, offset=offset, videos=page)
+
+
+@member_portal_router.post(
+    "/gyms/{gym_id}/members/{member_id}/videos/{video_id}/click",
+    response_model=MemberVideoClickResponse,
+    summary="Record the member opening a video from their feed",
+    description=(
+        "Logs a ``video_clicked`` member activity for a video the member "
+        "opened themselves — the feed hero, a genre carousel, a genre list, "
+        "the profile's level-up carousel. Without it the taste profile "
+        "(``member_profile_source.sql``) would learn only from videos the "
+        "system recommended and discard every video the member chose.\n\n"
+        "**Append-only: there is deliberately NO dedup.** Two opens of the "
+        "same video log TWO rows, because a re-watch is real signal. That is "
+        "the opposite of ``…/video-rec/{rec_id}/click``, which stamps the "
+        "served rec row and is therefore idempotent — post THAT one when the "
+        "member opens their recommendation, and this one for every other "
+        "open, never both for the same tap.\n\n"
+        "The video must be one the gym's feed actually serves (the same "
+        "served predicate ``GET …/videos`` uses); anything else is a 404, so "
+        "an arbitrary id can never be logged."
+    ),
+    responses={
+        200: {"description": "Click logged"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not this member, or the member is at another gym"},
+        404: {"description": "Member not found, or video not in this gym's feed"},
+    },
+)
+@inject
+async def click_my_gym_video(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    video_id: Annotated[
+        str,
+        Path(
+            max_length=64,
+            # Mirrors the video table's video_id_format check (a YouTube id),
+            # so a malformed id is a clean 422 instead of a wasted round trip.
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> MemberVideoClickResponse:
+    """Record the member opening a video they picked out of the feed."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
+
+    try:
+        return await videos_service.record_video_click(
+            gym_id, member_id, video_id
+        )
+    except VideoNotInFeedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Member-portal video click failed: member_id=%s, video_id=%s",
+            member_id,
+            video_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record the video click",
+        ) from None
 
 
 @member_portal_router.get(

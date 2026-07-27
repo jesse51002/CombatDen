@@ -680,6 +680,28 @@ launch path or an in-app player.
 - **A failed launch is visible**: `openVideoFor` captures the
   `ScaffoldMessenger` **before** the await and shows a SnackBar when nothing
   handled the intent — never a dead tap.
+- **Every open is REPORTED, and reported exactly ONCE.** A `video_clicked`
+  activity is what the member's video-taste profile learns from
+  (`member_profile_source.sql`), so an unreported open is a video the member
+  chose that personalization throws away. Two writers exist and they must never
+  both fire for one tap:
+  - **Feed opens** (hero, carousels, a genre list, the profile's level-up
+    carousel) are reported by `openVideoFor` itself — it dispatches
+    `VideoOpenedFromFeed` to the app-lifetime `VideoClickBloc` reached through
+    `VideoClickScope` (an `InheritedWidget` mounted above `MaterialApp` in
+    `main.dart`, so BOTH navigators' routes sit under it). That is why no feed
+    call site wires a reporter of its own. `VideoClickScope.maybeOf` returns
+    null outside the shell, so a widget test or the capture harness opens the
+    video and simply reports nothing.
+  - **The recommendation** is reported by its own rec-scoped route
+    (`VideoRecOpened` → `recordRecClick`), which additionally stamps the served
+    rec row. So `VideoReccScreen` passes **`openVideoFor(..., reportOpen:
+    false)`** — without it one tap would write two rows and double-weight the
+    taste profile.
+  - The report is **append-only server-side** (a re-watch is real signal), and
+    **fire-and-forget** here: dispatching is synchronous and `VideoClickBloc`
+    swallows its own failures, emits nothing, and never throws, so a slow or
+    failing report can never delay the launch or surface an error.
 - **The rec screen records, then launches, then closes.** "Watch" dispatches
   `VideoRecOpened` first (the bloc fire-and-forgets the click, so it can't
   delay the launch), then launches, and pops **only on success** — a failed
@@ -1063,7 +1085,8 @@ Scoped / significant dependencies:
     (`features/videos/presentation/widgets/video_link_helpers.dart`:
     `videoUriFor` / `launchVideoFor` / `openVideoFor`, always
     `LaunchMode.externalApplication` so the YouTube app takes it when
-    installed and the browser otherwise). See *Videos open on YouTube*.
+    installed and the browser otherwise; `openVideoFor` also reports the open
+    to the member portal). See *Videos open on YouTube*.
 
   Android 11+ package visibility means these intents silently fail unless
   `android/app/src/main/AndroidManifest.xml`'s `<queries>` block declares a

@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/videos/bloc/video_click_event.dart';
 import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_click_scope.dart';
 
 /// Where a video card plays: YouTube, outside the app.
 ///
@@ -45,10 +47,32 @@ Future<bool> launchVideoFor(GymVideoCard card) async {
 /// Open [card] on YouTube and, when that fails, tell the member instead of
 /// leaving a dead tap. Returns whether the video was opened.
 ///
+/// The open is also REPORTED to the member portal (a `video_clicked` activity)
+/// through the app-lifetime [VideoClickScope], so the member's taste profile
+/// learns from every video they picked themselves and not only from the one
+/// the system recommended. The report is dispatched to a bloc BEFORE the
+/// launch is awaited — dispatching is synchronous and the bloc swallows its own
+/// failures, so a slow or failing report can never delay the launch or surface
+/// an error. Outside the app shell (widget tests, the capture harness) the
+/// scope is absent and nothing is reported.
+///
+/// Pass `reportOpen: false` when the caller already reports this open through
+/// another route — the recommendation screen posts the rec-scoped click, which
+/// logs the same activity, so reporting here as well would log one tap twice.
+///
 /// The messenger is captured before the await, so no [BuildContext] crosses
 /// the async gap.
-Future<bool> openVideoFor(BuildContext context, GymVideoCard card) async {
+Future<bool> openVideoFor(
+  BuildContext context,
+  GymVideoCard card, {
+  bool reportOpen = true,
+}) async {
   final messenger = ScaffoldMessenger.of(context);
+  // Only an openable card is a real open — a card with neither url nor id
+  // launches nothing, so it is not taste signal either.
+  if (reportOpen && videoUriFor(card) != null) {
+    VideoClickScope.maybeOf(context)?.add(VideoOpenedFromFeed(card.videoId));
+  }
   final opened = await launchVideoFor(card);
   if (opened) return true;
   messenger

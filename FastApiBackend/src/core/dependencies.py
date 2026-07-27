@@ -195,6 +195,7 @@ from src.videos.service.member_video_profile_service import (
     MemberVideoProfileService,
 )
 from src.videos.service.video_agent.video_agent_service import VideoAgentService
+from src.videos.service.video_click_service import VideoClickService
 from src.videos.service.video_feed_refine_runner import (
     VideoFeedRefineRunner,
 )
@@ -571,6 +572,14 @@ class DependencyInjector(containers.DeclarativeContainer):
         db_pool=db_pool,
         refresh_runner=member_video_profile_refresh_runner,
     )
+    # Record a FEED click (any video the member picked themselves): guard the
+    # id against the served feed, APPEND a video_clicked activity (no dedup --
+    # a repeat open is real signal), then fire the same profile refresh.
+    video_click_service = providers.Factory(
+        VideoClickService,
+        db_pool=db_pool,
+        refresh_runner=member_video_profile_refresh_runner,
+    )
     # Facade: composes feed + spec + RAG sub-services. Template catalog reads are
     # in PresetsTemplateService; showcase reads are in ThemeShowcaseService.
     videos_service = providers.Factory(
@@ -581,6 +590,7 @@ class DependencyInjector(containers.DeclarativeContainer):
         feed_refiner=video_feed_refiner,
         recs_service=video_recs_service,
         click_service=video_rec_click_service,
+        video_click_service=video_click_service,
     )
     # Theme: branded class/reward cards for the showcase surface.
     theme_showcase_service = providers.Factory(

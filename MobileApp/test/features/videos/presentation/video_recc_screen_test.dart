@@ -10,8 +10,10 @@ import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
 import 'package:mobile_app/features/videos/data/models/member_video_rec.dart';
 import 'package:mobile_app/features/videos/data/models/video_genre.dart';
+import 'package:mobile_app/features/videos/bloc/video_click_bloc.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_click_scope.dart';
 
 import '../../../helpers/fake_url_launcher.dart';
 
@@ -37,6 +39,7 @@ final MemberVideoRec _rec = const MemberVideoRec(
 void main() {
   late _MockVideosRepository repository;
   late FakeUrlLauncher launcher;
+  late VideoClickBloc clickBloc;
 
   setUp(() async {
     SharedPreferences.setMockInitialValues(<String, Object>{});
@@ -65,9 +68,18 @@ void main() {
         recId: any(named: 'recId'),
       ),
     ).thenAnswer((_) async {});
+    when(
+      () => repository.recordVideoClick(
+        gymId: any(named: 'gymId'),
+        memberId: any(named: 'memberId'),
+        videoId: any(named: 'videoId'),
+      ),
+    ).thenAnswer((_) async {});
+    clickBloc = VideoClickBloc(repository: repository);
   });
 
   tearDown(() async {
+    await clickBloc.close();
     await selectedMember.reset();
   });
 
@@ -80,10 +92,17 @@ void main() {
     addTearDown(tester.view.reset);
 
     final navigator = GlobalKey<NavigatorState>();
+    // Mounted exactly as the app shell mounts it (above the navigator), so the
+    // "logs the open once" test really exercises the live wiring: without the
+    // scope, openVideoFor would have nothing to report to and the test would
+    // pass for the wrong reason.
     await tester.pumpWidget(
-      MaterialApp(
-        navigatorKey: navigator,
-        home: const Scaffold(body: Center(child: Text('behind'))),
+      VideoClickScope(
+        bloc: clickBloc,
+        child: MaterialApp(
+          navigatorKey: navigator,
+          home: const Scaffold(body: Center(child: Text('behind'))),
+        ),
       ),
     );
     unawaited(
@@ -141,6 +160,32 @@ void main() {
       expect(find.text("Couldn't open the video"), findsOneWidget);
       // Still there to retry — a failed launch never eats the recommendation.
       expect(find.text('Watch'), findsOneWidget);
+    });
+
+    testWidgets('logs the open exactly ONCE — the rec route, not the feed one',
+        (tester) async {
+      // The rec screen dispatches its own rec click AND calls openVideoFor,
+      // which now reports feed opens. Only the rec-scoped route may fire, or
+      // one tap would write two `video_clicked` rows and double-weight the
+      // member's taste profile.
+      await pumpRec(tester);
+      await tester.tap(find.text('Watch'));
+      await tester.pumpAndSettle();
+
+      verify(
+        () => repository.recordRecClick(
+          gymId: 'gym-1',
+          memberId: 'member-1',
+          recId: 'rec-1',
+        ),
+      ).called(1);
+      verifyNever(
+        () => repository.recordVideoClick(
+          gymId: any(named: 'gymId'),
+          memberId: any(named: 'memberId'),
+          videoId: any(named: 'videoId'),
+        ),
+      );
     });
   });
 }

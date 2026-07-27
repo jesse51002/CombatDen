@@ -82,13 +82,14 @@ be called directly from routes:
   delegates commit to **`VideoSpecAuthoring`** (not directly to `VideoSpecService`).
 
 **`VideosService` (`service/videos_service.py`) is the domain FACADE** — it composes
-**six** concern services: `VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`,
-`VideoFeedRefiner`, `VideoRecsService`, and `VideoRecClickService`
+**seven** concern services: `VideoFeedService`, `VideoSpecService`, `VideoSpecAuthoring`,
+`VideoFeedRefiner`, `VideoRecsService`, `VideoRecClickService`, and `VideoClickService`
 (it does NOT inject `VideoQueryGenerator` directly; query gen is an internal of
 `VideoSpecAuthoring`). Key methods: `load_latest_spec`, `save_accepted_spec` (→
 `VideoSpecAuthoring.commit`), `refine_from_feed` (→ `VideoFeedRefiner`), `get_video_rec`
-+ `record_rec_click` (→ the RAG read surface — `VideoRecsService` / `VideoRecClickService`;
-the single rotating-category member rec + the click record, deep detail in
++ `record_rec_click` + `record_video_click` (→ the RAG read surface — `VideoRecsService` /
+`VideoRecClickService` / `VideoClickService`; the single rotating-category member rec, the
+idempotent rec-click record, and the APPEND-ONLY feed-click record, deep detail in
 `FastApiBackend/CLAUDE.md`, out of scope here), plus all feed operations
 (`load_feed_preview`, `load_pool_videos`, `load_feed_page` — the unified served
 feed, enriched-AND-accepted only, which also backs the member rec at `limit=1` —
@@ -124,7 +125,8 @@ DI providers (videos domain, spec/agent + feed-refine): `litellm_client`, `video
 `video_agent_service`, `videos_service` (facade). There is no worker-status provider — the backend has
 no worker-control surface at all (not even read-only status; the worker is fully self-scheduling). (The
 domain also wires the RAG read surface — `member_video_profile_service`, `video_feed_service`,
-`video_recs_service`, `video_rec_click_service`, `member_video_profile_refresh_runner` — out of scope
+`video_recs_service`, `video_rec_click_service`, `video_click_service`,
+`member_video_profile_refresh_runner` — out of scope
 for this skill; see `FastApiBackend/CLAUDE.md`.)
 DI providers (presets domain): `presets_service`, `presets_template_service`.
 DI providers (theme domain): `theme_showcase_service`, `theme_showcase_defaults_service`.
