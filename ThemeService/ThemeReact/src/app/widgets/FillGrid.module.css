@@ -1,0 +1,12 @@
+/* Styles for ./FillGrid.tsx (ports CRM/lib/shared/widgets/fill_grid.dart). */
+
+.grid {
+  display: grid;
+  /*
+   * `crossAxisAlignment: CrossAxisAlignment.start` on the Dart widget's rows:
+   * cards keep their natural height instead of stretching to the tallest cell
+   * in the row.
+   */
+  align-items: start;
+  width: 100%;
+}

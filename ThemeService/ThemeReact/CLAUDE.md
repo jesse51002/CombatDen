@@ -36,6 +36,25 @@ and the boundary between them is load-bearing:
   frame. It is a *consumer* of `src/lib`, exactly as `../../CRM` is a consumer of
   `theme_flutter`.
 
+  Like the library, it is a PORT — of the CRM's theme surfaces and the landing
+  page's chrome — and every file names the Dart (or JSX) file it ports from in
+  its header:
+
+  | here | ports |
+  | --- | --- |
+  | `tokens/gw.ts`, `chrome/` | `LandingPage/hifi/{ds,chrome,copy}.jsx` |
+  | `tokens/adminTokens.ts` | `CRM/lib/core/constants/design_constants.dart`, LIGHT half only |
+  | `browser/ThemeBrowser.tsx` | `.../member_app/theme_tab/live_theme_preview_tab.dart` |
+  | `browser/Library{View,Card}.tsx` | `.../themes_library/library_{view,card}.dart` |
+  | `browser/Theme{Grid,Card,SearchBar,PreviewPane}.tsx` | the matching `.../theme_tab/theme_*.dart` |
+  | `browser/selectedStyle.ts` | the THEME half of `CRM/lib/core/state/selected_gym.dart` |
+  | `widgets/` | `CRM/lib/shared/widgets/*.dart` |
+  | `showcase/` | `CRM/lib/showcase/` |
+
+  Nothing gated on `selectedGym.gymId != null` ports: this browser has no gym,
+  no auth and no write path, so the admin's "set as app theme" / "edit gym name"
+  actions and the gym-identity plumbing are deliberately absent, not missing.
+
 **NOT to be confused with `..` (ThemeService itself)** — that is the Python
 pipeline which *generates* the configs this package *consumes*. Different
 language, different toolchain (poetry vs npm); they share only the HTTP contract
@@ -84,7 +103,15 @@ packages are the same runtime in two languages.
   NAMES with different VALUES — `radiusBig` is **12** in the chrome and **32** in
   the showcase. They are separate modules, separate CSS-variable namespaces
   (`--gw-*` / `--adm-*` versus `--sc-*`), and neither imports the other.
-  - **Enforced:** `eslint.config.js` Gates 2a and 2b.
+  - **Enforced:** `eslint.config.js` Gates 2a and 2b. Those gates match the
+    IMPORT STRING, so a token module's filename is part of the enforcement —
+    rename one and add the new spelling to the gate in the same change.
+- **The chrome's tokens live twice, and the test keeps them honest.**
+  `src/app/tokens/` is the source of truth (the ported `GWNav` / `GWButton` keep
+  their verbatim inline `style={{}}` objects and read it directly);
+  `src/app/styles/tokens.css` republishes the same values as CSS variables for
+  every CSS Module. `src/app/__tests__/tokens.test.ts` parses the sheet and
+  fails if the two drift.
 
 ## `<ThemeProvider>` is a gate, not a value carrier
 
@@ -100,7 +127,7 @@ That is deliberate, and it is what lets the **non-hook resolvers**
 outside a component — which a token module needs. If you find yourself adding a
 context so a value can reach somewhere, the resolver already reaches there.
 
-## Two things that will bite
+## Things that will bite
 
 - **`letterSpacing` ports as `px`, never `em`.** Flutter's `letterSpacing` is an
   absolute logical pixel value that does NOT scale with font size; CSS `em` does.
@@ -120,8 +147,27 @@ context so a value can reach somewhere, the resolver already reaches there.
   all errors here, so three familiar patterns are unavailable: writing a ref in
   the render body, `setState` in an effect to reset derived state, and adjusting
   state during render. The replacements this package uses are a lazy
-  `useState(() => new Thing())` initialiser (`useStylesPager`) and a `key`
-  remount to reset (`ThemedImage`).
+  `useState(() => new Thing())` initialiser (`useStylesPager`), a `key` remount
+  to reset (`ThemedImage`), and a **ref callback** wherever Dart reaches for
+  `addPostFrameCallback` or a `GlobalKey` — it fires at commit with the node in
+  hand, so it may write a ref and measure/scroll (`useElementSize`, the
+  centre-once anchors in `LibraryView` / `ThemeGrid`).
+- **CSS scroll anchoring fights a collapsing header.** The library's title
+  collapses out of the flow as the page scrolls; Chrome compensates for that
+  height change by moving the scroll offset, which shoves it straight back
+  across the collapse threshold and flickers. `src/app/styles/base.css` turns
+  anchoring off for the document, and that line is load-bearing — the Flutter
+  original cannot hit this because its collapsing chrome sits OUTSIDE the
+  scrollable.
+- **A `.css` import returns `''` under vitest, `?raw` included.** `test.css`
+  defaults to false, so the CSS plugin hands back an empty module and an
+  assertion against it passes vacuously. `src/app/__tests__/tokens.test.ts`
+  reads the sheet off disk with `node:fs` instead.
+- **An app test is typechecked by `tsconfig.app.json`, not `tsconfig.test.json`.**
+  The test project reaches its subject through a project REFERENCE, which
+  resolves via emitted declarations, and the app project is `noEmit` — so an app
+  test there fails with TS6307. `tsconfig.test.json` excludes `src/app/**` for
+  that reason; the app project's own `include` already covers them.
 
 ## The dev server port is pinned on purpose
 

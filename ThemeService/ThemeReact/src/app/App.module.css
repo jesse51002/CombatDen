@@ -1,0 +1,53 @@
+/* Styles for ./App.tsx — the page shell around the nav + the browser module. */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  /*
+   * `min-height`, not `height`: the library scrolls the DOCUMENT (see
+   * ./browser/LibraryView.module.css), while the phone view is a fixed split
+   * that must fit the leftover viewport exactly. `min-height` gives both — the
+   * flex child takes the leftover space when content is short and the page
+   * grows when the grid is long.
+   */
+  min-height: 100dvh;
+}
+
+.main {
+  /*
+   * The shell → browser contract. The phone view is a fixed split that must fit
+   * the leftover viewport exactly, so it needs to subtract the shell's own
+   * chrome from `100dvh` (see ./browser/ThemeBrowser.module.css `.phone`).
+   * Custom properties inherit, so publishing the gutter here is what lets the
+   * two responsive values below stay in ONE place.
+   */
+  --app-bottom-gutter: var(--adm-space-big);
+
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  /* `GW.maxW` / `DesignConstants.navMaxWidth` — the nav's own measure. */
+  max-width: var(--adm-nav-max-width);
+  margin-inline: auto;
+  /* Matches GWNav's desktop gutter, so the chrome and the grid share an edge. */
+  padding: 0 var(--adm-padding-big) var(--app-bottom-gutter);
+}
+
+@media (max-width: 768px) {
+  .main {
+    --app-bottom-gutter: var(--adm-space-large);
+
+    /* GWNav's own mobile gutter is 20px. */
+    padding-inline: 20px;
+  }
+}
+
+.loading {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  padding-block: var(--adm-padding-big);
+}

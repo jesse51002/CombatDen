@@ -1,0 +1,58 @@
+/*
+ * Styles for ./ThemeGrid.tsx (ports CRM/lib/features/members/presentation/
+ * widgets/member_app/theme_tab/theme_grid.dart).
+ */
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-large);
+  min-height: 0;
+  height: 100%;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--adm-h2-size);
+  font-weight: var(--adm-h2-weight);
+  letter-spacing: var(--adm-h2-tracking);
+  color: var(--adm-ink);
+}
+
+/* `Expanded` — the list takes the leftover height and scrolls inside it. */
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  /* Room for the active row's 3px border and the card shadow. */
+  padding: 2px;
+}
+
+/*
+ * `separatorBuilder: SizedBox(height: spacingMedium)` — a positioned list has
+ * no `spacing:`, so Dart spells the gap as a separator. A flex column has one.
+ */
+.rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+.row {
+  display: flex;
+}
+
+.message {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.messageText {
+  margin: 0;
+  text-align: center;
+  font-size: var(--adm-p-size);
+  font-weight: var(--adm-p-weight);
+  letter-spacing: var(--adm-p-tracking);
+  color: var(--adm-text-2nd);
+}

@@ -1,0 +1,44 @@
+/*
+ * Styles for ./PhoneFrame.tsx (ports CRM/lib/shared/widgets/phone_frame.dart).
+ * All geometry numbers are inline in the component — they are device
+ * measurements, not tokens, and the contain-fit needs them in JS anyway.
+ */
+
+/*
+ * The measured box: takes whatever the caller gives it, and the phone is
+ * centred and scaled inside. `Center` + `FittedBox`, in that order.
+ */
+.fit {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/*
+ * Device body (frame). Laid out at TRUE size — so the child measures exactly as
+ * it would on a device — then scaled about its centre to fit.
+ */
+.body {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform-origin: center;
+  background: var(--adm-device-body);
+  box-shadow: 0 12px 32px 2px var(--adm-device-shadow);
+}
+
+/* Screen. `ClipRRect` — the child is clipped to the rounded screen. */
+.screen {
+  position: absolute;
+  overflow: hidden;
+  background: var(--adm-device-body);
+}
+
+/* Dynamic island, centred over the top bezel. */
+.island {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--adm-device-body);
+}

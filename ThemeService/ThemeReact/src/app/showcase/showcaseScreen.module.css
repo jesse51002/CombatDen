@@ -1,0 +1,92 @@
+/*
+ * Styles for ./showcaseScreen.tsx — the seven PLACEHOLDER surfaces.
+ *
+ * Every colour and font here arrives as an inline value resolved from the live
+ * theme; this file only lays them out. It declares no design tokens of its own
+ * on purpose: the island's `--sc-*` token system is the next agent's, and it
+ * must never borrow the surrounding chrome's `--gw-*` / `--adm-*` values, which
+ * share token NAMES with different VALUES (eslint.config.js Gates 2a/2b).
+ *
+ * The layout is sized in the phone's own logical pixels (390×844) because that
+ * is the box ../widgets/PhoneFrame.tsx renders it into at 1:1 before scaling.
+ */
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  width: 100%;
+  height: 100%;
+  /* Clears the dynamic island, as the frame's MediaQuery inset does in Dart. */
+  padding: calc(var(--phone-status-inset, 52px) + 24px) 28px 40px;
+  text-align: center;
+}
+
+.logo {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.title {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+
+.body {
+  margin: 0;
+  max-width: 300px;
+  font-size: 15px;
+  line-height: 1.5;
+  opacity: 0.75;
+}
+
+.swatches {
+  display: flex;
+  gap: 12px;
+}
+
+.swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.chip {
+  display: block;
+  width: 44px;
+  height: 44px;
+  /* Border colour comes in inline, from the theme's ink. */
+  border: 1px solid;
+  border-radius: 12px;
+}
+
+.chipLabel {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+.cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 16px 24px;
+  border-radius: 16px;
+  font-size: 16px;
+  font-weight: 700;
+}

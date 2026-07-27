@@ -1,0 +1,120 @@
+/*
+ * Styles for ./LibraryCard.tsx (ports CRM/lib/features/members/presentation/
+ * widgets/themes_library/library_card.dart).
+ */
+
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-card);
+  background: var(--adm-card);
+  box-shadow: var(--adm-card-shadow);
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}
+
+/* `_kHeroAspect = 3 / 2`, `BoxFit.contain` — art is letterboxed, never cropped. */
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 3 / 2;
+  background: var(--adm-ground);
+}
+
+.heroPlaceholder {
+  color: var(--adm-text-3rd);
+}
+
+.heroImage {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-small);
+  padding: var(--adm-padding-small);
+}
+
+/*
+ * Two lines of h2, so every card's title block is the same height whether the
+ * title wraps to one line or two (`DesignConstants.rewardCardTitleHeight`).
+ * `Align(alignment: Alignment.topCenter)` — a one-line title sits at the top of
+ * the band, not centred in it.
+ */
+.titleBand {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  height: var(--adm-reward-card-title-height);
+}
+
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font-size: var(--adm-h2-size);
+  font-weight: var(--adm-h2-weight);
+  letter-spacing: var(--adm-h2-tracking);
+  color: var(--adm-ink);
+}
+
+/*
+ * `letterSpacing: 0.08 * DesignConstants.h3.fontSize` — the ONE proportional
+ * letter-spacing in the ported surfaces, so this is the one that ports as `em`.
+ */
+.category {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: 0.08em;
+  color: var(--adm-text-2nd);
+}
+
+/* Same convention as the reward card's price pill. */
+.activePill {
+  position: absolute;
+  top: var(--adm-space-medium);
+  right: var(--adm-space-medium);
+  display: flex;
+  align-items: center;
+  gap: var(--adm-space-tiny);
+  padding: var(--adm-space-small) var(--adm-space-medium);
+  border-radius: var(--adm-radius-small);
+  background: var(--adm-sapphire);
+  color: var(--adm-on-accent);
+  font-size: var(--adm-p-small-size);
+  font-weight: var(--adm-p-small-bold-weight);
+  letter-spacing: var(--adm-p-small-tracking);
+}

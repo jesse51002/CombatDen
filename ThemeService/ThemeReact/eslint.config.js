@@ -67,8 +67,12 @@ export default tseslint.config(
         {
           patterns: [
             {
+              // Both spellings of the token modules are listed on purpose: the
+              // pattern is matched against the IMPORT STRING, so a rename that
+              // changed only the case would silently open the gate.
               group: [
                 '**/tokens/gw',
+                '**/tokens/adminTokens',
                 '**/tokens/admin-tokens',
                 '**/chrome/**',
                 '**/browser/**',
@@ -93,7 +97,7 @@ export default tseslint.config(
         {
           patterns: [
             {
-              group: ['**/showcase/showcase-tokens'],
+              group: ['**/showcase/showcaseTokens', '**/showcase/showcase-tokens'],
               message:
                 'ShowcaseTokens belong to the phone-frame island. Chrome uses GW / admin-tokens; the values behind the shared names differ.',
             },

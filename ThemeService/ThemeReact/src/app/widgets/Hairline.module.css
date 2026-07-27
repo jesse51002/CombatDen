@@ -1,0 +1,15 @@
+/* Styles for ./Hairline.tsx (ports CRM/lib/shared/widgets/hairline.dart). */
+
+.horizontal {
+  height: 1px;
+  width: 100%;
+  flex: none;
+  background: var(--adm-divider);
+}
+
+.vertical {
+  width: 1px;
+  align-self: stretch;
+  flex: none;
+  background: var(--adm-divider);
+}

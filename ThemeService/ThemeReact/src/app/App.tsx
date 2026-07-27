@@ -1,89 +1,56 @@
-import {
-  DEFAULTS,
-  ThemeProvider,
-  resolveBackendBaseUrl,
-  resolveThemeBaseUrl,
-  rgba,
-  themeToken,
-  toCss,
-  useActiveDesign,
-  useThemeConfig,
-  useThemeMode,
-} from 'theme-react';
+// The standalone theme browser's shell.
+//
+// Ports the composition ../../../../CRM/lib/main_theme_browser.dart performs:
+// the landing page's sticky nav (ported verbatim in ./chrome/) over the
+// theme-browser module (./browser/ThemeBrowser.tsx), with the customization
+// engine booted around both.
+//
+// <ThemeProvider> is the `FutureBuilder<void>(future: _engineReady, …)` at
+// live_theme_preview_tab.dart:172 — the gate that holds the preview back until
+// the runtime has settled. It carries NO value: every hook below reads the
+// module-singleton store directly (see ../../CLAUDE.md).
 
+import { ThemeProvider, loadFontFamily } from 'theme-react';
+
+import styles from './App.module.css';
+import { ThemeBrowser } from './browser/ThemeBrowser';
+import { INITIAL_URL_THEME } from './browser/themeUrl';
+import { GWNav } from './chrome/GWNav';
 import { APP_ID, SEED_DESIGN_ID } from './config';
+import { ADM } from './tokens/adminTokens';
+import { AppSpinner } from './widgets/AppSpinner';
 
-// SCAFFOLD. The real shell — GWNav + the library grid + the phone preview —
-// lands in the next phases. This renders the LIVE theme through the library so
-// the toolchain, the alias, the env plumbing AND the runtime are provably
-// working end to end.
-
-/** The palette roles worth eyeballing: the base ones plus the orphan tokens. */
-const SWATCHES = ['primary', 'background', 'text', 'accent', 'card', 'popup', 'divider'];
-
-/** Visible magenta — a swatch in this colour means the role did not resolve. */
-const UNRESOLVED = rgba(255, 0, 255);
+// Geist is the CHROME's typeface (the CRM's `baseFont`, the landing page's
+// `GW.sans`) — not a theme slot, so nothing in the runtime will fetch it. The
+// same Google Fonts injection the theme's own font slots use loads it once.
+// The theme's fonts are loaded separately, by `useThemeFontFamily`.
+loadFontFamily(ADM.fontFamily);
 
 export function App() {
-  const themeBaseUrl = resolveThemeBaseUrl();
-  const backendBaseUrl = resolveBackendBaseUrl();
-
   return (
-    <main>
-      <h1>ThemeReact</h1>
-      <dl>
-        <dt>App</dt>
-        <dd>{APP_ID}</dd>
-        <dt>Seed design</dt>
-        <dd>{SEED_DESIGN_ID}</dd>
-        <dt>ThemeService</dt>
-        <dd>
-          {themeBaseUrl}
-          {themeBaseUrl === DEFAULTS.themeBaseUrl ? ' (default)' : ''}
-        </dd>
-        <dt>FastApiBackend</dt>
-        <dd>
-          {backendBaseUrl}
-          {backendBaseUrl === DEFAULTS.backendBaseUrl ? ' (default)' : ''}
-        </dd>
-      </dl>
-      <ThemeProvider appId={APP_ID} designId={SEED_DESIGN_ID} fallback={<p>Loading theme…</p>}>
-        <ThemePeek />
-      </ThemeProvider>
-    </main>
+    <div className={styles.app}>
+      <GWNav />
+      <main className={styles.main}>
+        <ThemeProvider
+          appId={APP_ID}
+          // The design the engine boots on: the deep-linked one, else the seed.
+          // A previous visit's sticky selection outranks both (ThemeStore's
+          // fallback ladder), which ThemeBrowser corrects back on mount.
+          designId={INITIAL_URL_THEME ?? SEED_DESIGN_ID}
+          fallback={<CenteredSpinner />}
+        >
+          <ThemeBrowser />
+        </ThemeProvider>
+      </main>
+    </div>
   );
 }
 
-function ThemePeek() {
-  const { id, name } = useActiveDesign();
-  const mode = useThemeMode();
-  const config = useThemeConfig();
-
-  if (config === null) {
-    return <p>No theme loaded. Is ThemeService running (cd ThemeService &amp;&amp; make api)?</p>;
-  }
-
+/** Ports `_CenteredSpinner` (live_theme_preview_tab.dart:308-324). */
+function CenteredSpinner() {
   return (
-    <section>
-      <h2>{name ?? 'Unnamed design'}</h2>
-      <p>
-        {id ?? '—'} · {mode} · {Object.keys(config.colors).length} colour slots ·{' '}
-        {Object.keys(config.images).length} images · {Object.keys(config.icons).length} icons
-      </p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        {SWATCHES.map((key) => (
-          <div key={key} style={{ width: 96 }}>
-            <div
-              style={{
-                height: 48,
-                borderRadius: 4,
-                backgroundColor: toCss(themeToken(key, UNRESOLVED)),
-              }}
-            />
-            <small>{key}</small>
-          </div>
-        ))}
-      </div>
-    </section>
+    <div className={styles.loading}>
+      <AppSpinner size={ADM.spinnerSizeLarge} strokeWidth={2} />
+    </div>
   );
 }

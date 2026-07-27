@@ -22,5 +22,12 @@
     "types": ["vite/client", "vitest/globals"]
   },
   "include": ["src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"],
+  // The APP's tests are typechecked by tsconfig.app.json, whose `include`
+  // (`src/app`) already covers them. They cannot be checked here: this project
+  // reaches its subject through a project REFERENCE, which resolves via emitted
+  // declarations, and the app project is `noEmit` — so an app test importing
+  // `../widgets/FillGrid` would fail with TS6307. The library's tests are
+  // unaffected; tsconfig.lib.json emits declarations.
+  "exclude": ["src/app/**"],
   "references": [{ "path": "./tsconfig.lib.json" }]
 }

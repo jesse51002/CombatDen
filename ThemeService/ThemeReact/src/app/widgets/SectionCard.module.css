@@ -1,0 +1,7 @@
+/* Styles for ./SectionCard.tsx (ports CRM/lib/shared/widgets/section_card.dart). */
+
+.card {
+  padding: var(--adm-padding-big);
+  border-radius: var(--adm-radius-big);
+  background: var(--adm-card);
+}
