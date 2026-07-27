@@ -39,6 +39,27 @@ skips only its transitive dependents — every other node still resolves
 and is written. The writer assembles whatever resolved into
 `output.yaml` and totals what the run cost.
 
+### Watching a run happen
+
+A run is **timed and observable**. Every node is measured with
+`perf_counter` from the moment it acquires the concurrency semaphore (its
+own work, not its wait), and the whole run is timed end to end; both are
+logged on every run, sink or no sink — so "how long does a run take" is now
+a question with an answer.
+
+`Pipeline.run()` also takes an optional `progress` sink. Given one it
+narrates itself — run started, each level, each node's start / finish
+(with its elapsed) / failure (with the error), and the run total with its
+cost. Given none (what the CLI passes) nothing is emitted and the run is
+byte-for-byte what it always was.
+
+Because the **executor** owns iteration, that is where every emission lives:
+the modules carry no progress code at all. The sink is an interface
+(`src/executor/progress_sink.py`) over a plain Pydantic event
+(`src/executor/progress_event.py`) — the pipeline core stays
+transport-agnostic and knows nothing of HTTP or SSE. The `studio` app is
+the one implementation today (see *The studio* below).
+
 The whole graph, conceptually (which roots and per-slot nodes appear
 depends entirely on what the app's `app.yaml` declares):
 

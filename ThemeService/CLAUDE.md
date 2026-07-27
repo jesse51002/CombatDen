@@ -119,11 +119,45 @@ only makes sense for one app, push back — it belongs in YAML.
 ## Async everywhere
 
 Every service and module method is `async`. The pipeline core is provider- and
-transport-agnostic and is expected to move behind a FastAPI app later; the CLI
-is just one entrypoint over the async core. Do not introduce blocking I/O — use
-async clients (`litellm.acompletion` / `litellm.aimage_generation`) and
-`await` everything. Keep modules independently awaitable so they
-can be gathered concurrently later without a refactor.
+transport-agnostic; the CLI (`src/cli.py`) and the studio app
+(`src/studio/`, see below) are two entrypoints over the same async core. Do
+not introduce blocking I/O — use async clients (`litellm.acompletion` /
+`litellm.aimage_generation`) and `await` everything. Keep modules
+independently awaitable so they can be gathered concurrently later without a
+refactor.
+
+### Watching a run: the progress sink
+
+`Pipeline.run()` takes an optional `progress: ProgressSink | None`. Given
+one, the run reports itself as it happens; given none (the CLI's default),
+nothing is emitted and the run behaves exactly as it always has.
+
+- `src/executor/progress_event.py` — `ProgressEventKind` (run started /
+  level started / node started / node finished / node failed / run
+  finished) and the `ProgressEvent` model that carries them.
+- `src/executor/progress_sink.py` — the `ProgressSink` ABC. It lives beside
+  the executor, **not** in `src/shared/interfaces/` (that holds the
+  *provider* contracts — LLM, image generation, fonts, icons); a sink is an
+  observer, not a provider.
+
+Two rules hold the design together:
+
+- **The sink is an interface, never a transport.** The executor knows
+  nothing about HTTP, SSE, JSON or FastAPI; it hands a Pydantic model to
+  whatever it was given. Anything wire-shaped belongs in the caller
+  (`src/studio/`), never here.
+- **A sink must not raise.** An emit failure would abort a paid run over a
+  display concern. Swallow and log inside the sink.
+
+Every node is timed with `perf_counter` from the moment it acquires the
+concurrency semaphore (its own work, not its queueing), and the run total is
+timed end to end. Both are **logged whether or not a sink is passed** — that
+is the package's only timing instrumentation, and it is how anyone knows what
+a run actually costs in wall-clock time.
+
+`ProgressEvent.image_slot` is set only on the per-slot image nodes (read off
+the built node set, so it stays app-agnostic). It is what lets a watcher know
+`final_images/<slot>.png` just landed and can be displayed.
 
 ---
 
@@ -138,6 +172,15 @@ models, or touch threading/concurrency — the **executor** owns iteration
 and is the only place parallelism may later be added (a bounded gather),
 with zero module changes. A module that loops slots or returns a
 "set of everything" is the smell; push that loop up into the executor.
+
+**Progress is the same rule.** Because the executor owns iteration, it is
+also the only place that can know a level started, a node started, a node
+took 4.2 s, or the whole run took six minutes — so *all* progress
+emission lives in `src/executor/orchestrator.py` and **no module carries
+any progress code**. Do not add a callback, a listener, or a "notify"
+parameter to a node or a sub-service; if something isn't observable from
+the executor, that is a signal about where the loop lives, not a reason
+to reach into a module.
 
 ### A module's `run()` returns its full output
 

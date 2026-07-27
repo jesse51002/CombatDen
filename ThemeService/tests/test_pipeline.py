@@ -11,6 +11,38 @@ import pytest
 import yaml
 from PIL import Image
 
+from schema import (
+    AbsolutePath,
+    AppFormat,
+    ColorOutput,
+    ColorRole,
+    Complexity,
+    Customization,
+    ExpansionKind,
+    OklchColor,
+    Output,
+    RunCost,
+)
+from src.core.errors import PipelineError, ProviderError
+from src.core.run_context import RunContext
+from src.executor import orchestrator
+from src.executor.orchestrator import Pipeline, PipelineResult
+from src.executor.progress_event import ProgressEvent, ProgressEventKind
+from src.executor.progress_sink import ProgressSink
+from src.executor.seed import build_seed
+from src.executor.writer import (
+    APP_PROVENANCE_NAME,
+    CUSTOMIZATION_PROVENANCE_NAME,
+    Writer,
+)
+from src.modules.colors.color_models import LLMSlotResponse
+from src.modules.fonts.font_models import LLMFontResponse
+from src.modules.icons.icon_models import LLMIconPrompt, LLMIconResponse
+from src.modules.images.image_models import ImageComplexity, ImagePrompt
+from src.modules.texts.text_models import LLMTextResponse
+from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
+from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
+
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -25,35 +57,6 @@ def _load_script(rel_path: str) -> ModuleType:
     spec.loader.exec_module(module)
     return module
 
-from schema import (
-    AbsolutePath,
-    AppFormat,
-    ColorOutput,
-    ColorRole,
-    Complexity,
-    Customization,
-    ExpansionKind,
-    OklchColor,
-    Output,
-    RunCost,
-)
-from src.core.errors import PipelineError
-from src.core.run_context import RunContext
-from src.executor import orchestrator
-from src.executor.orchestrator import Pipeline, PipelineResult
-from src.executor.seed import build_seed
-from src.executor.writer import (
-    APP_PROVENANCE_NAME,
-    CUSTOMIZATION_PROVENANCE_NAME,
-    Writer,
-)
-from src.modules.colors.color_models import LLMSlotResponse
-from src.modules.fonts.font_models import LLMFontResponse
-from src.modules.icons.icon_models import LLMIconPrompt, LLMIconResponse
-from src.modules.images.image_models import ImageComplexity, ImagePrompt
-from src.modules.texts.text_models import LLMTextResponse
-from src.shared.interfaces.google_fonts_catalog import GoogleFontMetadata
-from src.shared.interfaces.icon_set_catalog import IconSetCatalogEntry
 
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
@@ -520,6 +523,182 @@ def test_pipeline_run_assembles_valid_output(tmp_path, monkeypatch):
         # The removed style/dependency provenance fields are gone.
         assert not hasattr(img, "adherent")
         assert not hasattr(img, "dependency_usage")
+
+
+# --- progress: the executor's optional observer (Task: live runs) ---------
+
+
+class _RecordingSink(ProgressSink):
+    """Keeps every event in emission order — the whole sink contract."""
+
+    def __init__(self) -> None:
+        self.events: list[ProgressEvent] = []
+
+    async def emit(self, event: ProgressEvent) -> None:
+        self.events.append(event)
+
+
+def _kinds(sink: _RecordingSink) -> list[ProgressEventKind]:
+    return [e.kind for e in sink.events]
+
+
+def test_run_emits_a_full_progress_stream(tmp_path, monkeypatch):
+    """A run given a sink narrates itself: started → per level → per node
+    (start + finish, each with its own elapsed) → finished with the total
+    elapsed, the run cost and the slots generated."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    sink = _RecordingSink()
+
+    result = asyncio.run(Pipeline().run(ctx, progress=sink))
+
+    kinds = _kinds(sink)
+    assert kinds[0] is ProgressEventKind.RUN_STARTED
+    assert kinds[-1] is ProgressEventKind.RUN_FINISHED
+    assert ProgressEventKind.NODE_FAILED not in kinds
+
+    start = sink.events[0]
+    assert start.app_id == ctx.app.id and start.run_id == ctx.run_id
+    # colour + font + text + icon + category roots, then one image node.
+    assert start.total_nodes == 6
+    assert start.total_levels == 2
+
+    levels = [
+        e for e in sink.events if e.kind is ProgressEventKind.LEVEL_STARTED
+    ]
+    assert [e.level for e in levels] == [0, 1]
+    assert levels[0].level_nodes == sorted(
+        ["color", "font", "text", "icon", "category"]
+    )
+    assert levels[1].level_nodes == ["hero"]
+
+    started = [
+        e for e in sink.events if e.kind is ProgressEventKind.NODE_STARTED
+    ]
+    finished = [
+        e for e in sink.events if e.kind is ProgressEventKind.NODE_FINISHED
+    ]
+    # Every node reported exactly once at each end.
+    assert sorted(e.node for e in started) == sorted(
+        ["color", "font", "text", "icon", "category", "hero"]
+    )
+    assert sorted(e.node for e in finished) == sorted(
+        e.node for e in started
+    )
+    for event in finished:
+        assert event.ok is True
+        assert event.error is None
+        # Timed with perf_counter: a real, non-negative measurement.
+        assert event.elapsed_seconds is not None
+        assert event.elapsed_seconds >= 0.0
+
+    # image_slot is set ONLY on the per-slot image nodes — that is what
+    # lets a watcher know final_images/<slot>.png just landed.
+    assert {e.node for e in started if e.image_slot is not None} == {"hero"}
+    assert next(e for e in started if e.node == "hero").image_slot == "hero"
+    assert (
+        next(e for e in finished if e.node == "hero").image_slot == "hero"
+    )
+
+    end = sink.events[-1]
+    assert end.elapsed_seconds is not None and end.elapsed_seconds >= 0.0
+    assert end.cost == pytest.approx(result.total_cost)
+    assert end.cost == pytest.approx(
+        _FAKE_LLM_COST + _FAKE_IMAGE_COST + _FAKE_BG_COST + _FAKE_ICON_COST
+    )
+    assert end.generated == sorted(result.generated)
+
+
+def test_run_reports_a_failed_node_and_still_finishes(tmp_path, monkeypatch):
+    """A node that fails is reported as NODE_FAILED with the error, and the
+    run still reaches RUN_FINISHED — the executor's fault tolerance is
+    unchanged by the observer."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+
+    class _BrokenImageGen(_FakeImageGen):
+        async def generate(self, prompt, dest, *, model, quality):
+            raise ProviderError("provider said no")
+
+    monkeypatch.setattr(
+        orchestrator, "LiteLLMImageGenerator", lambda: _BrokenImageGen()
+    )
+    sink = _RecordingSink()
+
+    result = asyncio.run(Pipeline().run(ctx, progress=sink))
+
+    failed = [
+        e for e in sink.events if e.kind is ProgressEventKind.NODE_FAILED
+    ]
+    assert [e.node for e in failed] == ["hero"]
+    assert failed[0].ok is False
+    assert failed[0].image_slot == "hero"
+    assert "provider said no" in (failed[0].error or "")
+    assert failed[0].elapsed_seconds is not None
+    # No NODE_FINISHED for the node that failed; the run still completes.
+    assert "hero" not in [
+        e.node
+        for e in sink.events
+        if e.kind is ProgressEventKind.NODE_FINISHED
+    ]
+    assert _kinds(sink)[-1] is ProgressEventKind.RUN_FINISHED
+    # And the rest of the run was still written (fault tolerance intact).
+    assert result.output.image_set.images == {}
+    assert set(result.output.color_set.colors) == {
+        c.id for c in ctx.app.colors
+    }
+
+
+def test_watching_a_run_does_not_change_what_it_produces(
+    tmp_path, monkeypatch
+):
+    """Observing is free: the same run with and without a sink assembles the
+    same Output. The no-sink default reaches for nothing (``_emit(None, …)``
+    is a no-op), so the CLI path is untouched."""
+    watched_ctx = _run_ctx(tmp_path / "watched")
+    plain_ctx = _run_ctx(tmp_path / "plain")
+    for ctx in (watched_ctx, plain_ctx):
+        _patch_services(
+            monkeypatch,
+            [c.id for c in ctx.app.colors],
+            [f.id for f in ctx.app.fonts],
+            [t.id for t in ctx.app.texts],
+            [i.id for i in ctx.app.icons],
+        )
+
+    watched = asyncio.run(
+        Pipeline().run(watched_ctx, progress=_RecordingSink())
+    )
+    plain = asyncio.run(Pipeline().run(plain_ctx))
+
+    # Only the per-run absolute asset paths differ; everything else matches.
+    assert watched.generated == plain.generated
+    assert watched.output.color_set == plain.output.color_set
+    assert watched.output.font_set == plain.output.font_set
+    assert watched.output.text_set == plain.output.text_set
+    assert watched.output.category == plain.output.category
+    assert set(watched.output.image_set.images) == set(
+        plain.output.image_set.images
+    )
+
+    # The optional sink really is optional — no sink, no emit, no error.
+    asyncio.run(
+        Pipeline._emit(
+            None, ProgressEvent(kind=ProgressEventKind.RUN_FINISHED)
+        )
+    )
 
 
 def test_writer_round_trips_provenance_and_output(tmp_path, monkeypatch):
