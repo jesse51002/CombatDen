@@ -1,0 +1,2697 @@
+<title>CombatDen layout and motion formats</title>
+
+<style>
+/* ============================================================
+   Specimen catalog. Two inks on cool paper.
+   The page is designed; the wireframes deliberately are not.
+   ============================================================ */
+:root {
+  --paper:        #E8E7EE;
+  --paper-raised: #F5F4F9;
+  --paper-sunk:   #DEDCE6;
+  --ink:          #15131E;
+  --muted:        #5B586D;
+  --faint:        #86829A;
+  --spot:         #4B2FD6;
+  --spot-wash:    rgba(75, 47, 214, .09);
+  --rule:         #C9C6D6;
+  --rule-soft:    #D9D7E1;
+
+  /* Wireframe family: neutral on purpose. No hue bias.
+     A layout that needs a palette to read is a theme, not a layout. */
+  --wire-canvas:  #FBFBFB;
+  --wire-edge:    #B4B2BC;
+  --wire-fill:    #CFCFD3;
+  --wire-fill-2:  #DEDEE1;
+  --wire-strong:  #A9A9AF;
+  --wire-action:  #6E6E77;
+  --wire-x:       #E2E2E5;
+  --wire-rule:    #E4E4E7;
+
+  --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  --shell: 1240px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper:        #111017;
+    --paper-raised: #191723;
+    --paper-sunk:   #0B0A10;
+    --ink:          #EFEDF6;
+    --muted:        #9591A8;
+    --faint:        #736F86;
+    --spot:         #A492FF;
+    --spot-wash:    rgba(164, 146, 255, .13);
+    --rule:         #2C2939;
+    --rule-soft:    #232030;
+
+    --wire-canvas:  #17161C;
+    --wire-edge:    #3A3944;
+    --wire-fill:    #34333C;
+    --wire-fill-2:  #26252D;
+    --wire-strong:  #4A4954;
+    --wire-action:  #6D6C7A;
+    --wire-x:       #222128;
+    --wire-rule:    #24232B;
+  }
+}
+
+:root[data-theme="dark"] {
+  --paper:        #111017;
+  --paper-raised: #191723;
+  --paper-sunk:   #0B0A10;
+  --ink:          #EFEDF6;
+  --muted:        #9591A8;
+  --faint:        #736F86;
+  --spot:         #A492FF;
+  --spot-wash:    rgba(164, 146, 255, .13);
+  --rule:         #2C2939;
+  --rule-soft:    #232030;
+  --wire-canvas:  #17161C;
+  --wire-edge:    #3A3944;
+  --wire-fill:    #34333C;
+  --wire-fill-2:  #26252D;
+  --wire-strong:  #4A4954;
+  --wire-action:  #6D6C7A;
+  --wire-x:       #222128;
+  --wire-rule:    #24232B;
+}
+
+:root[data-theme="light"] {
+  --paper:        #E8E7EE;
+  --paper-raised: #F5F4F9;
+  --paper-sunk:   #DEDCE6;
+  --ink:          #15131E;
+  --muted:        #5B586D;
+  --faint:        #86829A;
+  --spot:         #4B2FD6;
+  --spot-wash:    rgba(75, 47, 214, .09);
+  --rule:         #C9C6D6;
+  --rule-soft:    #D9D7E1;
+  --wire-canvas:  #FBFBFB;
+  --wire-edge:    #B4B2BC;
+  --wire-fill:    #CFCFD3;
+  --wire-fill-2:  #DEDEE1;
+  --wire-strong:  #A9A9AF;
+  --wire-action:  #6E6E77;
+  --wire-x:       #E2E2E5;
+  --wire-rule:    #E4E4E7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 15px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- shell ---------- */
+.wrap { max-width: var(--shell); margin: 0 auto; padding: 0 28px 120px; }
+
+@media (min-width: 1080px) {
+  .cols { display: grid; grid-template-columns: 176px minmax(0, 1fr); gap: 48px; align-items: start; }
+}
+
+/* ---------- masthead ---------- */
+.mast { padding: 64px 0 40px; border-bottom: 1px solid var(--ink); }
+.mast h1 {
+  font-size: clamp(2.4rem, 6.2vw, 4.1rem);
+  line-height: .96;
+  letter-spacing: -.045em;
+  font-weight: 800;
+  margin: 0 0 18px;
+  text-wrap: balance;
+  max-width: 15ch;
+}
+.mast .stand {
+  font-size: 1.06rem;
+  color: var(--muted);
+  max-width: 62ch;
+  margin: 0 0 26px;
+}
+.mast .stand strong { color: var(--ink); font-weight: 650; }
+
+.meta-row {
+  display: flex; flex-wrap: wrap; gap: 8px 26px;
+  font-family: var(--mono); font-size: .72rem;
+  letter-spacing: .04em; text-transform: uppercase; color: var(--faint);
+}
+.meta-row b { color: var(--ink); font-weight: 600; }
+
+/* ---------- index rail ---------- */
+.rail { display: none; }
+@media (min-width: 1080px) {
+  .rail {
+    display: block; position: sticky; top: 24px;
+    padding-top: 46px;
+    font-family: var(--mono); font-size: .74rem; line-height: 1.5;
+  }
+  .rail h2 {
+    font-size: .68rem; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--faint); font-weight: 600; margin: 0 0 12px;
+  }
+  .rail ol { list-style: none; margin: 0 0 24px; padding: 0; }
+  .rail li { margin-bottom: 3px; }
+  .rail a {
+    color: var(--muted); text-decoration: none; display: block;
+    padding: 3px 0 3px 12px; border-left: 1px solid var(--rule);
+    transition: color .15s, border-color .15s;
+  }
+  .rail a:hover, .rail a:focus-visible { color: var(--ink); border-left-color: var(--spot); }
+  .rail a.on { color: var(--spot); border-left-color: var(--spot); }
+  .rail .n { color: var(--faint); }
+}
+
+/* ---------- thesis strip ---------- */
+.thesis { padding: 46px 0 8px; }
+.thesis .lede {
+  font-size: 1.28rem; line-height: 1.45; letter-spacing: -.012em;
+  max-width: 40ch; margin: 0 0 8px; text-wrap: balance; font-weight: 500;
+}
+.thesis p { color: var(--muted); max-width: 66ch; }
+.thesis .strip {
+  display: flex; gap: 14px; overflow-x: auto; padding: 30px 0 18px;
+  scrollbar-width: thin;
+}
+.thesis .strip figure { margin: 0; flex: none; }
+.thesis .strip figcaption {
+  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+  margin-top: 9px; letter-spacing: -.01em;
+}
+
+.math {
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  padding: 20px 0; margin: 26px 0 0;
+  display: flex; flex-wrap: wrap; gap: 12px 44px; align-items: baseline;
+}
+.math dt {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); margin-bottom: 4px;
+}
+.math dd { margin: 0; font-size: 1.45rem; font-weight: 700; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+.math .grp { min-width: 120px; }
+.math .grp.bad dd { color: var(--muted); text-decoration: line-through; text-decoration-thickness: 1px; }
+.math .note { font-size: .84rem; color: var(--muted); max-width: 34ch; align-self: center; }
+
+/* ---------- plates ---------- */
+.plate { padding: 62px 0 0; scroll-margin-top: 20px; }
+.plate-hd { border-top: 2px solid var(--ink); padding-top: 16px; margin-bottom: 22px; }
+.plate-hd .kicker {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px;
+}
+.plate-hd h2 {
+  font-size: 1.72rem; letter-spacing: -.03em; font-weight: 750; margin: 0;
+}
+.enum-key {
+  font-family: var(--mono); font-size: .82rem; color: var(--spot);
+  background: var(--spot-wash); padding: 3px 8px; border-radius: 3px;
+  letter-spacing: -.02em;
+}
+.plate-hd .path {
+  font-family: var(--mono); font-size: .72rem; color: var(--faint);
+  margin: 8px 0 0; overflow-wrap: anywhere;
+}
+.plate-hd .blurb { color: var(--muted); max-width: 64ch; margin: 12px 0 0; }
+
+/* ---------- invariant ---------- */
+.inv {
+  background: var(--paper-raised); border: 1px solid var(--rule-soft);
+  border-radius: 4px; padding: 14px 16px; margin: 20px 0 4px;
+}
+.inv h3 {
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--faint); font-weight: 600;
+  margin: 0 0 10px;
+}
+.inv ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.inv li {
+  font-family: var(--mono); font-size: .72rem; letter-spacing: -.02em;
+  border: 1px solid var(--rule); border-radius: 3px; padding: 2px 7px;
+  color: var(--ink); background: var(--paper);
+}
+.inv li .x { color: var(--faint); }
+.inv li.opt { border-style: dashed; color: var(--muted); }
+.inv p { margin: 10px 0 0; font-size: .84rem; color: var(--muted); max-width: 68ch; }
+
+/* ---------- specimen row ---------- */
+.specs {
+  display: flex; gap: 18px; overflow-x: auto;
+  padding: 26px 4px 22px; margin: 0 -4px;
+  scroll-snap-type: x proximity; scrollbar-width: thin;
+}
+.spec {
+  flex: none; margin: 0; padding: 0; border: 0; background: none;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  scroll-snap-align: start; display: block;
+}
+.spec .ph { transition: box-shadow .16s, transform .16s; }
+.spec:hover .ph { box-shadow: 0 6px 18px -8px rgba(0,0,0,.34); transform: translateY(-2px); }
+.spec:focus-visible { outline: 2px solid var(--spot); outline-offset: 6px; border-radius: 3px; }
+.spec[aria-pressed="true"] .ph { box-shadow: 0 0 0 2px var(--spot), 0 8px 22px -10px rgba(0,0,0,.4); }
+
+.spec figcaption { margin-top: 11px; width: 184px; }
+.spec .val {
+  font-family: var(--mono); font-size: .78rem; letter-spacing: -.02em;
+  font-weight: 600; color: var(--ink); display: block;
+}
+.spec[aria-pressed="true"] .val { color: var(--spot); }
+.spec .tag {
+  display: inline-block; font-family: var(--mono); font-size: .6rem;
+  letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px;
+  margin-left: 6px; padding: 1px 5px; border-radius: 2px;
+  background: var(--ink); color: var(--paper); font-weight: 600;
+}
+.spec .tag.warn { background: none; color: var(--spot); border: 1px solid var(--spot); }
+.spec .note { display: block; font-size: .78rem; color: var(--muted); line-height: 1.45; margin-top: 4px; }
+
+/* ---------- source panel ---------- */
+.src-panel { border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; background: var(--paper-raised); }
+.src-panel > header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 9px 14px; border-bottom: 1px solid var(--rule-soft);
+  font-family: var(--mono); font-size: .72rem; color: var(--muted);
+}
+.src-panel > header .who { color: var(--ink); font-weight: 600; }
+.src-panel pre {
+  margin: 0; padding: 16px 18px 20px; overflow-x: auto;
+  font-family: var(--mono); font-size: .76rem; line-height: 1.62;
+  color: var(--ink); tab-size: 2;
+}
+.copy {
+  font: inherit; font-family: var(--mono); font-size: .68rem;
+  letter-spacing: .06em; text-transform: uppercase;
+  background: none; border: 1px solid var(--rule); border-radius: 3px;
+  padding: 3px 9px; color: var(--muted); cursor: pointer;
+}
+.copy:hover { color: var(--ink); border-color: var(--ink); }
+.copy:focus-visible { outline: 2px solid var(--spot); outline-offset: 2px; }
+
+/* ---------- callouts ---------- */
+.flag {
+  border: 1px solid var(--spot); border-radius: 4px; background: var(--spot-wash);
+  padding: 13px 16px; margin: 20px 0 0; font-size: .9rem; max-width: 74ch;
+}
+.flag b { font-weight: 650; }
+.flag code { font-family: var(--mono); font-size: .86em; }
+
+/* ============================================================
+   Wireframe primitives.
+   ============================================================ */
+.ph {
+  width: 184px; height: 390px; border: 1px solid var(--wire-edge);
+  border-radius: 15px; background: var(--wire-canvas);
+  overflow: hidden; display: flex; flex-direction: column;
+}
+.ph.sm { width: 128px; height: 272px; border-radius: 11px; }
+.ph * { box-sizing: border-box; }
+
+.z { padding: 7px 8px; display: flex; flex-direction: column; gap: 5px; flex: none; }
+.z.t { gap: 3px; }
+.z.p0 { padding: 0; }
+.z.px { padding-left: 8px; padding-right: 8px; padding-top: 0; padding-bottom: 0; }
+.grow { flex: 1 1 auto; min-height: 0; }
+.r { display: flex; flex-direction: row; gap: 5px; align-items: center; }
+.r.sb { justify-content: space-between; }
+.r.c { justify-content: center; flex-direction: row; }
+.c { display: flex; flex-direction: column; gap: 4px; }
+.f1 { flex: 1 1 auto; min-width: 0; }
+
+.tx { height: 4px; border-radius: 2px; background: var(--wire-fill-2); flex: none; }
+.tx.s { height: 3px; }
+.h1 { height: 8px; border-radius: 2px; background: var(--wire-strong); flex: none; }
+.h1.b { height: 11px; }
+.h1.xl { height: 18px; }
+.w100 { width: 100%; } .w90 { width: 90%; } .w75 { width: 75%; }
+.w60 { width: 60%; } .w45 { width: 45%; } .w32 { width: 32%; } .w22 { width: 22%; }
+
+.bk { background: var(--wire-fill); border-radius: 3px; flex: none; }
+.im {
+  background: var(--wire-fill-2); border-radius: 3px; flex: none; position: relative;
+  background-image:
+    linear-gradient(to top right, transparent calc(50% - .5px), var(--wire-x) calc(50% - .5px), var(--wire-x) calc(50% + .5px), transparent calc(50% + .5px)),
+    linear-gradient(to bottom right, transparent calc(50% - .5px), var(--wire-x) calc(50% - .5px), var(--wire-x) calc(50% + .5px), transparent calc(50% + .5px));
+}
+.im.p { border-radius: 0; }
+.sq { aspect-ratio: 1; }
+.a169 { aspect-ratio: 16/9; } .a32 { aspect-ratio: 3/2; } .a43 { aspect-ratio: 4/3; }
+.a45 { aspect-ratio: 4/5; } .a916 { aspect-ratio: 9/16; }
+
+.pill { height: 11px; border-radius: 6px; background: var(--wire-fill); flex: none; min-width: 20px; }
+.pill.on { background: var(--wire-action); }
+.pill.w { flex: 1 1 auto; }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wire-fill); flex: none; }
+.dot.on { background: var(--wire-action); }
+.cta { height: 16px; border-radius: 4px; background: var(--wire-action); flex: none; }
+.cta.sm { height: 12px; }
+.rule { height: 1px; background: var(--wire-rule); flex: none; }
+.rule.h { background: var(--wire-edge); }
+.box { border: 1px solid var(--wire-rule); border-radius: 4px; }
+.tag2 { position: absolute; top: 4px; right: 4px; height: 8px; width: 20px; border-radius: 2px; background: var(--wire-action); }
+.scrim { position: absolute; inset: auto 0 0 0; padding: 6px; display: flex; flex-direction: column; gap: 3px; background: linear-gradient(to top, var(--wire-fill), transparent); }
+.rel { position: relative; }
+.ctr { align-items: center; text-align: center; }
+
+.nav {
+  height: 26px; border-top: 1px solid var(--wire-edge); display: flex; flex: none;
+  align-items: center; padding: 0 4px;
+}
+.nav > div { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.nav .lb { width: 14px; height: 2px; border-radius: 1px; background: var(--wire-fill); }
+.nav.pillbar {
+  border-top: 0; margin: 0 14px 8px; height: 24px; border-radius: 12px;
+  border: 1px solid var(--wire-edge); background: var(--wire-canvas);
+}
+.nav.nolabel .lb { display: none; }
+.spine { width: 20px; flex: none; display: flex; flex-direction: column; gap: 12px; padding-top: 2px; }
+.railcol { width: 34px; flex: none; border-right: 1px solid var(--wire-rule); display: flex; flex-direction: column; gap: 8px; padding: 6px 5px 0 0; }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <h1>Layouts you can enumerate</h1>
+    <p class="stand">
+      Thirty-four whole-screen arrangements of the CombatDen member app, written as JSX so
+      each one is readable at a glance and diffable against its siblings. Every value of an
+      enum carries <strong>exactly the same elements</strong> as the screen that ships today.
+      Only the arrangement moves.
+    </p>
+    <div class="meta-row">
+      <span>Reference implementation <b>MobileApp</b></span>
+      <span>Pivot <b>2026-07-27</b></span>
+      <span>Enums <b>7 layout &middot; 6 motion</b></span>
+      <span>Status <b>Proposal</b></span>
+    </div>
+  </header>
+
+  <div class="cols">
+
+    <nav class="rail" aria-label="Contents">
+      <h2>Layout</h2>
+      <ol>
+        <li><a href="#shell"><span class="n">01</span> Shell</a></li>
+        <li><a href="#home"><span class="n">02</span> Home</a></li>
+        <li><a href="#videos"><span class="n">03</span> Videos</a></li>
+        <li><a href="#rank"><span class="n">04</span> Rank</a></li>
+        <li><a href="#rewards"><span class="n">05</span> Rewards</a></li>
+        <li><a href="#class"><span class="n">06</span> Class</a></li>
+        <li><a href="#celebration"><span class="n">07</span> Celebration</a></li>
+      </ol>
+      <h2>Motion</h2>
+      <ol>
+        <li><a href="#motion">Personality</a></li>
+        <li><a href="#m-intro">Celebration intro</a></li>
+        <li><a href="#m-reveal">Reveal</a></li>
+        <li><a href="#m-loader">Loader</a></li>
+        <li><a href="#m-transition">Transition</a></li>
+        <li><a href="#m-count">Count-up</a></li>
+      </ol>
+      <h2>Then</h2>
+      <ol>
+        <li><a href="#wiring">Wiring</a></li>
+        <li><a href="#open">Open questions</a></li>
+      </ol>
+    </nav>
+
+    <main>
+
+      <section class="thesis">
+        <p class="lede">One enum per screen. Each value is one complete, reviewed arrangement.</p>
+        <p>
+          The alternative was composable region slots: a topbar enum crossed with a schedule
+          enum crossed with a hero enum. It is rejected because layout has no deterministic
+          accept condition. Colour resolves against WCAG and OKLCH; there is no formula for
+          &ldquo;is this arrangement good,&rdquo; so a person is the throughput ceiling and the
+          review surface has to add rather than multiply.
+        </p>
+
+        <div class="strip" role="list" aria-label="The same screen, five ways">
+          <!--HERO_STRIP-->
+        </div>
+
+        <dl class="math">
+          <div class="grp">
+            <dt>Whole-screen values</dt>
+            <dd>34</dd>
+          </div>
+          <div class="grp bad">
+            <dt>Region-slot combinations</dt>
+            <dd>15,625</dd>
+          </div>
+          <p class="note">
+            Same expressive range. One of them is reviewable by a human being.
+          </p>
+        </dl>
+      </section>
+
+      <!-- ================= 01 SHELL ================= -->
+      <section class="plate" id="shell">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Shell</h2>
+            <code class="enum-key">app_shell_format</code>
+          </div>
+          <p class="path">shared/widgets/topbar/app_topbar.dart &middot; shared/widgets/nav/app_bottom_nav_bar.dart</p>
+          <p class="blurb">
+            The chrome that frames every screen. Factored out of the per-screen enums because it
+            belongs to none of them: a shell value is reviewed once against one screen, then
+            composes without changing any body. That is additive, not multiplicative.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>GymLogo <span class="x">&times;1</span></li>
+            <li>GymName <span class="x">&times;1</span></li>
+            <li>GymSwitchChevron <span class="x">&times;1</span></li>
+            <li>StreakStat <span class="x">&times;1</span></li>
+            <li>PointsStat <span class="x">&times;1</span></li>
+            <li>RankBadge <span class="x">&times;1</span></li>
+            <li class="opt">BackButton <span class="x">&times;0..1</span></li>
+            <li>NavItem <span class="x">&times;4</span></li>
+          </ul>
+          <p>Nav order is fixed across every value. It is muscle memory, not composition.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="app_shell_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z ctr">
+                <div class="bk" style="width:34px;height:34px;align-self:center"></div>
+                <div class="h1 w45" style="align-self:center"></div>
+                <div class="tx w22" style="align-self:center"></div>
+              </div>
+              <div class="z t r sb" style="padding-top:0"><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div></div>
+              <div class="rule h"></div>
+              <div class="z grow">
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">stacked<span class="tag">shipped</span></span>
+              <span class="note">Big mark, name below, stats in a full-width bar. Costs about 180px of every screen.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><AppShell>
+  <AppTopbar>
+    <TopbarHeaderSection align="center">
+      <GymLogo size="lg" />
+      <GymName />
+      <GymSwitchChevron />
+    </TopbarHeaderSection>
+    <InfoBar layout="spread">
+      <StreakStat /><PointsStat /><RankBadge />
+    </InfoBar>
+  </AppTopbar>
+
+  <AppBottomNavBar layout="fourUp" labels>
+    <NavItem tab="home" /><NavItem tab="rank" />
+    <NavItem tab="reward" /><NavItem tab="videos" />
+  </AppBottomNavBar>
+</AppShell></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r sb">
+                <div class="bk" style="width:16px;height:16px"></div>
+                <div class="r" style="gap:3px"><div class="h1" style="width:34px"></div><div class="tx" style="width:5px"></div></div>
+                <div class="r" style="gap:3px"><div class="pill" style="width:13px"></div><div class="pill" style="width:13px"></div><div class="pill" style="width:13px"></div></div>
+              </div>
+              <div class="rule h"></div>
+              <div class="z grow">
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">compactRail</span>
+              <span class="note">One row. Buys back the vertical space the stacked mark spends, on every screen at once.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><AppShell>
+  <AppTopbar height="compact">
+    <TopbarHeaderSection align="spaceBetween" axis="horizontal">
+      <GymLogo size="sm" />
+      <Group><GymName /><GymSwitchChevron /></Group>
+      <InfoBar layout="cluster" density="tight">
+        <StreakStat /><PointsStat /><RankBadge />
+      </InfoBar>
+    </TopbarHeaderSection>
+  </AppTopbar>
+
+  <AppBottomNavBar layout="fourUp" labels>
+    <NavItem tab="home" /><NavItem tab="rank" />
+    <NavItem tab="reward" /><NavItem tab="videos" />
+  </AppBottomNavBar>
+</AppShell></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z r sb" style="padding-bottom:4px">
+                <div class="c ctr f1"><div class="h1 b w60"></div><div class="tx w75"></div></div>
+                <div class="c ctr f1"><div class="h1 b w60"></div><div class="tx w75"></div></div>
+                <div class="c ctr f1"><div class="h1 b w60"></div><div class="tx w75"></div></div>
+              </div>
+              <div class="z t r c" style="padding-top:0"><div class="bk" style="width:11px;height:11px"></div><div class="tx" style="width:38px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z grow">
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">statFirst</span>
+              <span class="note">Streak, points and rank outrank the brand mark. For a tenant whose retention story is the numbers.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><AppShell>
+  <AppTopbar>
+    <InfoBar layout="spread" emphasis="primary" position="top">
+      <StreakStat size="lg" /><PointsStat size="lg" /><RankBadge size="lg" />
+    </InfoBar>
+    <TopbarHeaderSection align="center" density="tight">
+      <GymLogo size="xs" /><GymName scale="sm" /><GymSwitchChevron />
+    </TopbarHeaderSection>
+  </AppTopbar>
+
+  <AppBottomNavBar layout="fourUp" labels>
+    <NavItem tab="home" /><NavItem tab="rank" />
+    <NavItem tab="reward" /><NavItem tab="videos" />
+  </AppBottomNavBar>
+</AppShell></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t ctr">
+                <div class="r c" style="gap:3px"><div class="bk" style="width:22px;height:22px"></div><div class="tx" style="width:5px"></div></div>
+                <div class="r c" style="gap:10px;margin-top:2px"><div class="r" style="gap:2px"><div class="dot"></div><div class="tx" style="width:11px"></div></div><div class="r" style="gap:2px"><div class="dot"></div><div class="tx" style="width:11px"></div></div><div class="r" style="gap:2px"><div class="dot"></div><div class="tx" style="width:11px"></div></div></div>
+              </div>
+              <div class="z grow">
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div></div><div class="im" style="width:44px;height:26px"></div></div>
+              </div>
+              <div class="nav pillbar nolabel"><div><div class="dot on"></div></div><div><div class="dot"></div></div><div><div class="dot"></div></div><div><div class="dot"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">markOnly<span class="tag warn">flagged</span></span>
+              <span class="note">Mark alone, stats inline, floating pill nav. The gym name stays in the tree but leaves the screen.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><AppShell>
+  <AppTopbar height="compact" rule={false}>
+    <TopbarHeaderSection align="center">
+      <GymLogo size="md" />
+      <GymName visuallyHidden />   {/* still rendered: a11y + switch target */}
+      <GymSwitchChevron />
+    </TopbarHeaderSection>
+    <InfoBar layout="inline" density="tight">
+      <StreakStat /><PointsStat /><RankBadge />
+    </InfoBar>
+  </AppTopbar>
+
+  <AppBottomNavBar layout="floatingPill" labels={false}>
+    <NavItem tab="home" /><NavItem tab="rank" />
+    <NavItem tab="reward" /><NavItem tab="videos" />
+  </AppBottomNavBar>
+</AppShell></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">stacked</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+
+        <div class="flag">
+          <b>markOnly hides the gym name.</b> The name is still in the widget tree, so the
+          invariant holds, but a white-label tenant whose entire ask is &ldquo;make it look like
+          us&rdquo; may not want its only appearance to be a screen reader. Flagged, not decided.
+        </div>
+      </section>
+
+      <!-- ================= 02 HOME ================= -->
+      <section class="plate" id="home">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Home</h2>
+            <code class="enum-key">home_format</code>
+          </div>
+          <p class="path">features/home/presentation/screens/home_screen.dart &middot; widgets/home_body/</p>
+          <p class="blurb">
+            The schedule. Opened in a hurry before class, which is the constraint every value
+            here is really competing on: how fast can a member find tonight and tap it.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>AppTopbar <span class="x">&times;1</span></li>
+            <li>UpcomingSessionsCard <span class="x">&times;1</span></li>
+            <li>ClassScheduleTitle <span class="x">&times;1</span></li>
+            <li>DateRow <span class="x">&times;1</span></li>
+            <li>DateTab <span class="x">&times;n</span></li>
+            <li>DayClassGroup <span class="x">&times;n</span></li>
+            <li>ClassListItem <span class="x">&times;n</span></li>
+            <li>ScheduleStatus <span class="x">&times;1</span></li>
+            <li>AppBottomNavBar <span class="x">&times;1</span></li>
+          </ul>
+          <p>
+            Each ClassListItem carries title, time, instructor, bookings count, thumbnail and the
+            tap into class detail. UpcomingSessionsCard appears in the booked body only, which is
+            the existing state split rather than an arrangement change.
+          </p>
+        </div>
+
+        <div class="specs" role="group" aria-label="home_format values" id="home-specs">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z t ctr" style="padding-bottom:4px"><div class="bk" style="width:26px;height:26px;align-self:center"></div><div class="h1 w45" style="align-self:center"></div></div>
+              <div class="z t r sb" style="padding-top:0"><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div></div>
+              <div class="z px" style="padding-bottom:6px"><div class="box z t" style="padding:6px"><div class="tx w32"></div><div class="r"><div class="dot"></div><div class="tx w60"></div></div><div class="r"><div class="dot"></div><div class="tx w45"></div></div></div></div>
+              <div class="z px" style="padding-bottom:5px"><div class="h1 w32"></div></div>
+              <div class="z t r px" style="padding-bottom:6px"><div class="pill on" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div></div>
+              <div class="z grow" style="padding-top:0">
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div><div class="tx s w45"></div></div><div class="im" style="width:48px;height:29px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w45"></div><div class="tx w75"></div><div class="tx s w45"></div></div><div class="im" style="width:48px;height:29px"></div></div>
+                <div class="rule"></div>
+                <div class="r"><div class="c f1"><div class="h1 w60"></div><div class="tx w90"></div><div class="tx s w45"></div></div><div class="im" style="width:48px;height:29px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">agendaList<span class="tag">shipped</span></span>
+              <span class="note">Pinned date rail over day groups. Text left, thumb right. Scans a week without leaving the screen.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><HomeScreen>
+  <AppTopbar mode="bigLogo" />
+  <UpcomingSessionsCard />
+  <ClassScheduleTitle />
+
+  <DateRow pinned scroll="horizontal">
+    <DateTab />…
+  </DateRow>
+
+  <ScheduleStatus />
+  <DayClassGroup>
+    <ClassListItem layout="textLeft-thumbRight" thumb="16:9-sm" divider />
+  </DayClassGroup>…
+
+  <AppBottomNavBar />
+</HomeScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t ctr" style="padding-bottom:4px"><div class="bk" style="width:26px;height:26px;align-self:center"></div><div class="h1 w45" style="align-self:center"></div></div>
+              <div class="z t r sb" style="padding-top:0"><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div></div>
+              <div class="z px" style="padding-bottom:6px"><div class="box z t" style="padding:6px"><div class="tx w32"></div><div class="r"><div class="dot"></div><div class="tx w60"></div></div></div></div>
+              <div class="z px" style="padding-bottom:5px"><div class="h1 w32"></div></div>
+              <div class="z t r px" style="padding-bottom:3px"><div class="pill" style="width:14px"></div><div class="pill on" style="width:44px;height:15px"></div><div class="pill" style="width:14px"></div><div class="pill" style="width:14px"></div></div>
+              <div class="r c" style="gap:3px;padding-bottom:5px"><div class="dot" style="width:4px;height:4px"></div><div class="dot on" style="width:4px;height:4px"></div><div class="dot" style="width:4px;height:4px"></div></div>
+              <div class="z grow" style="padding-top:0;gap:7px">
+                <div class="c"><div class="im a169 w100"></div><div class="h1 w60"></div><div class="tx w90"></div></div>
+                <div class="c"><div class="im a169 w100"></div><div class="h1 w45"></div><div class="tx w75"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">dayPager</span>
+              <span class="note">One day per swipe, classes as wide media cards. Trades cross-day scanning for a much stronger single day.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><HomeScreen>
+  <AppTopbar mode="bigLogo" />
+  <UpcomingSessionsCard />
+  <ClassScheduleTitle />
+
+  <DateRow pinned control="pager">
+    <DateTab />…
+  </DateRow>
+
+  <ScheduleStatus />
+  <DayClassGroup axis="page">
+    <ClassListItem layout="imageTop-metaBelow" thumb="16:9-full" />
+  </DayClassGroup>…
+
+  <AppBottomNavBar />
+</HomeScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t ctr" style="padding-bottom:4px"><div class="bk" style="width:26px;height:26px;align-self:center"></div><div class="h1 w45" style="align-self:center"></div></div>
+              <div class="z t r sb" style="padding-top:0"><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div></div>
+              <div class="z px" style="padding-bottom:6px"><div class="box z t" style="padding:6px"><div class="tx w32"></div><div class="r"><div class="dot"></div><div class="tx w60"></div></div></div></div>
+              <div class="z px" style="padding-bottom:5px"><div class="h1 w32"></div></div>
+              <div class="z t r px" style="padding-bottom:6px"><div class="pill on" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div></div>
+              <div class="z r grow" style="padding-top:0;align-items:stretch;gap:8px">
+                <div class="spine"><div class="tx s" style="width:16px"></div><div class="tx s" style="width:16px"></div><div class="tx s" style="width:16px"></div><div class="tx s" style="width:16px"></div></div>
+                <div class="c f1" style="gap:9px">
+                  <div class="r" style="gap:5px"><div class="bk" style="width:16px;height:16px;border-radius:8px"></div><div class="c f1"><div class="h1 w75"></div><div class="tx w45"></div></div></div>
+                  <div class="rule"></div>
+                  <div class="r" style="gap:5px"><div class="bk" style="width:16px;height:16px;border-radius:8px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w45"></div></div></div>
+                  <div class="rule"></div>
+                  <div class="r" style="gap:5px"><div class="bk" style="width:16px;height:16px;border-radius:8px"></div><div class="c f1"><div class="h1 w75"></div><div class="tx w45"></div></div></div>
+                  <div class="rule"></div>
+                  <div class="r" style="gap:5px"><div class="bk" style="width:16px;height:16px;border-radius:8px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w45"></div></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">timeSpine</span>
+              <span class="note">A time gutter runs the day; classes hang off their start. Reads as a real timetable when three classes stack in one evening.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><HomeScreen>
+  <AppTopbar mode="bigLogo" />
+  <UpcomingSessionsCard />
+  <ClassScheduleTitle />
+
+  <DateRow pinned scroll="horizontal">
+    <DateTab />…
+  </DateRow>
+
+  <ScheduleStatus />
+  <DayClassGroup gutter="time">
+    <ClassListItem layout="spine" thumb="avatar-sm" rule="hairline" />
+  </DayClassGroup>…
+
+  <AppBottomNavBar />
+</HomeScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r sb"><div class="r" style="gap:3px"><div class="bk" style="width:13px;height:13px"></div><div class="h1" style="width:30px"></div></div><div class="r" style="gap:3px"><div class="pill" style="width:12px"></div><div class="pill" style="width:12px"></div><div class="pill" style="width:12px"></div></div></div>
+              <div class="rel" style="flex:none"><div class="im p" style="height:98px"></div><div class="scrim"><div class="h1 b w60"></div><div class="tx w45"></div><div class="cta sm" style="width:60px;margin-top:2px"></div></div></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:5px"><div class="h1 w32"></div></div>
+              <div class="z t r px" style="padding-bottom:6px"><div class="box r" style="flex:1;padding:1px;gap:1px"><div class="pill on w"></div><div class="pill w" style="background:transparent"></div><div class="pill w" style="background:transparent"></div><div class="pill w" style="background:transparent"></div></div></div>
+              <div class="z grow" style="padding-top:0;gap:6px">
+                <div class="r sb"><div class="h1 w60"></div><div class="tx w22"></div></div>
+                <div class="rule"></div>
+                <div class="r sb"><div class="h1 w45"></div><div class="tx w22"></div></div>
+                <div class="rule"></div>
+                <div class="r sb"><div class="h1 w60"></div><div class="tx w22"></div></div>
+                <div class="rule"></div>
+                <div class="r sb"><div class="h1 w45"></div><div class="tx w22"></div></div>
+                <div class="rule"></div>
+                <div class="r sb"><div class="h1 w60"></div><div class="tx w22"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">nextUpHero<span class="tag warn">flagged</span></span>
+              <span class="note">Next class takes the top as a full-bleed hero; the rest of the week goes dense and loses its thumbnails.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><HomeScreen>
+  <AppTopbar mode="nameOnly" />
+  <UpcomingSessionsCard layout="hero" bleed />
+  <ClassScheduleTitle />
+
+  <DateRow control="segmented">
+    <DateTab />…
+  </DateRow>
+
+  <ScheduleStatus />
+  <DayClassGroup density="compact">
+    <ClassListItem layout="dense" thumb="none" rule="hairline" />
+  </DayClassGroup>…
+
+  <AppBottomNavBar />
+</HomeScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t ctr" style="padding-bottom:4px"><div class="bk" style="width:26px;height:26px;align-self:center"></div><div class="h1 w45" style="align-self:center"></div></div>
+              <div class="z t r sb" style="padding-top:0"><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div><div class="pill" style="width:34px"></div></div>
+              <div class="z t r px" style="padding-bottom:6px"><div class="pill" style="width:30px"></div><div class="pill" style="width:30px"></div><div class="pill" style="width:30px"></div><div class="pill" style="width:24px"></div></div>
+              <div class="z px" style="padding-bottom:5px"><div class="h1 w32"></div></div>
+              <div class="z t r px" style="padding-bottom:5px"><div class="pill on" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div><div class="pill" style="width:16px"></div></div>
+              <div class="z px" style="padding-bottom:4px"><div class="tx w32"></div></div>
+              <div class="z grow" style="padding-top:0">
+                <div class="r" style="gap:6px;align-items:stretch">
+                  <div class="c f1"><div class="im a43 w100"></div><div class="h1 w75"></div><div class="tx w45"></div></div>
+                  <div class="c f1"><div class="im a43 w100"></div><div class="h1 w60"></div><div class="tx w45"></div></div>
+                </div>
+                <div class="r" style="gap:6px;align-items:stretch">
+                  <div class="c f1"><div class="im a43 w100"></div><div class="h1 w60"></div><div class="tx w45"></div></div>
+                  <div class="c f1"><div class="im a43 w100"></div><div class="h1 w75"></div><div class="tx w45"></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">boardGrid</span>
+              <span class="note">Two-up cards under a sticky day header. Most classes per scroll, weakest sense of time.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><HomeScreen>
+  <AppTopbar mode="bigLogo" />
+  <UpcomingSessionsCard layout="chipStrip" />
+  <ClassScheduleTitle />
+
+  <DateRow pinned="perSection" scroll="horizontal">
+    <DateTab />…
+  </DateRow>
+
+  <ScheduleStatus />
+  <DayClassGroup layout="grid" columns={2}>
+    <ClassListItem layout="card" thumb="4:3" />
+  </DayClassGroup>…
+
+  <AppBottomNavBar />
+</HomeScreen></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">agendaList</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+
+        <div class="flag">
+          <b>nextUpHero drops the class thumbnails.</b> The image is still bound and still shows on
+          the detail screen, so no data need changes and the invariant holds. It is still the one
+          home value that removes an affordance rather than moving it. Fine in the library;
+          a separate call whether it is ever a default.
+        </div>
+      </section>
+      <!-- ================= 03 VIDEOS ================= -->
+      <section class="plate" id="videos">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Videos</h2>
+            <code class="enum-key">videos_format</code>
+          </div>
+          <p class="path">features/videos/presentation/screens/videos_screen.dart &middot; widgets/videos_feed_body.dart</p>
+          <p class="blurb">
+            The only screen already reading live tenant content. Tab labels and carousel titles
+            come down from the feed, so a value has to survive one tag or fifteen without
+            re-layout.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>AppTopbar <span class="x">&times;1</span></li>
+            <li>VideoCategoryTabs <span class="x">&times;1</span></li>
+            <li>FeaturedVideoCard <span class="x">&times;1</span></li>
+            <li>VideoCarouselSection <span class="x">&times;n</span></li>
+            <li>SectionTitle <span class="x">&times;n</span></li>
+            <li>ViewAllAction <span class="x">&times;n</span></li>
+            <li>VideoCarouselCard <span class="x">&times;n</span></li>
+            <li>FeedStatus <span class="x">&times;1</span></li>
+            <li>AppBottomNavBar <span class="x">&times;1</span></li>
+          </ul>
+          <p>One section per tag, one tab per big group present in the loaded feed, plus All. The app owns no tag vocabulary, so no value may hard-code one.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="videos_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:6px;padding-bottom:7px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:30px"></div><div class="pill" style="width:26px"></div><div class="pill" style="width:30px"></div></div>
+              <div class="z px" style="padding-bottom:8px"><div class="im a169 w100"></div><div class="h1 w75" style="margin-top:4px"></div><div class="tx w45" style="margin-top:3px"></div></div>
+              <div class="z grow px" style="gap:7px">
+                <div class="r sb"><div class="h1" style="width:44px"></div><div class="tx" style="width:20px"></div></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div></div>
+                <div class="r sb" style="margin-top:2px"><div class="h1" style="width:38px"></div><div class="tx" style="width:20px"></div></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div><div class="c" style="width:56px;flex:none"><div class="im a169 w100"></div><div class="tx w90" style="margin-top:3px"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">carouselRows<span class="tag">shipped</span></span>
+              <span class="note">Featured hero over one horizontal row per tag. Scales to any number of tags by growing downward.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><VideosScreen>
+  <AppTopbar mode="nameOnly" />
+  <VideoCategoryTabs layout="scrollingPills" />
+
+  <FeedStatus />
+  <FeaturedVideoCard size="lg" />
+
+  <VideoCarouselSection axis="horizontal">
+    <SectionTitle /><ViewAllAction />
+    <VideoCarouselCard size="md" />…
+  </VideoCarouselSection>…
+
+  <AppBottomNavBar />
+</VideosScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:6px;padding-bottom:6px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:30px"></div><div class="pill" style="width:26px"></div></div>
+              <div class="im p" style="height:96px;flex:none"></div>
+              <div class="z px" style="padding-top:5px;padding-bottom:7px"><div class="h1 b w75"></div><div class="tx w45" style="margin-top:3px"></div></div>
+              <div class="z grow px" style="gap:6px">
+                <div class="h1" style="width:44px"></div>
+                <div class="c"><div class="im a169 w100"></div><div class="h1 w60" style="margin-top:3px"></div></div>
+                <div class="c"><div class="im a169 w100"></div><div class="h1 w75" style="margin-top:3px"></div></div>
+                <div class="r sb"><div class="tx" style="width:24px"></div><div class="tx" style="width:8px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">editorialStack</span>
+              <span class="note">No horizontal scrolling anywhere. Two large cards per tag then a view-all row. Slower to browse, far easier to read.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><VideosScreen>
+  <AppTopbar mode="nameOnly" />
+  <VideoCategoryTabs layout="scrollingPills" />
+
+  <FeedStatus />
+  <FeaturedVideoCard size="poster" bleed />
+
+  <VideoCarouselSection axis="vertical" visible={2}>
+    <SectionTitle />
+    <VideoCarouselCard size="lg" />…
+    <ViewAllAction layout="row" />
+  </VideoCarouselSection>…
+
+  <AppBottomNavBar />
+</VideosScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="z t r px" style="padding-top:5px;padding-bottom:5px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:30px"></div><div class="pill" style="width:26px"></div><div class="pill" style="width:24px"></div></div>
+              <div class="rule h"></div>
+              <div class="z grow px" style="padding-top:6px;gap:6px">
+                <div class="r" style="gap:5px"><div class="h1" style="width:36px"></div><div class="rule f1"></div></div>
+                <div class="im a169 w100"></div>
+                <div class="r" style="gap:5px;align-items:stretch"><div class="c f1"><div class="im sq w100"></div><div class="tx w75" style="margin-top:3px"></div></div><div class="c f1"><div class="im sq w100"></div><div class="tx w90" style="margin-top:3px"></div></div></div>
+                <div class="r" style="gap:5px"><div class="h1" style="width:30px"></div><div class="rule f1"></div></div>
+                <div class="r" style="gap:5px;align-items:stretch"><div class="c f1"><div class="im a43 w100"></div><div class="tx w75" style="margin-top:3px"></div></div><div class="c f1"><div class="im a43 w100"></div><div class="tx w60" style="margin-top:3px"></div></div></div>
+                <div class="r" style="gap:5px;align-items:stretch"><div class="c f1"><div class="im sq w100"></div></div><div class="c f1"><div class="im sq w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">mosaic</span>
+              <span class="note">Featured spans two columns inside a mixed-size grid; tag titles become inline band rules. Highest density here.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><VideosScreen>
+  <AppTopbar mode="nameOnly" />
+  <VideoCategoryTabs layout="scrollingPills" pinned />
+
+  <FeedStatus />
+  <VideoCarouselSection layout="mosaic" columns={2}>
+    <SectionTitle layout="inlineDivider" />
+    <FeaturedVideoCard span={2} />
+    <VideoCarouselCard size="tile" />…
+    <ViewAllAction layout="tile" />
+  </VideoCarouselSection>…
+
+  <AppBottomNavBar />
+</VideosScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="z t r c px" style="padding-top:5px;padding-bottom:6px;gap:4px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:28px"></div><div class="pill" style="width:24px"></div></div>
+              <div class="z grow px" style="padding-top:0;gap:7px;overflow:hidden">
+                <div class="rel"><div class="im" style="height:120px"></div><div class="scrim"><div class="pill" style="width:26px;height:8px"></div><div class="h1 w75"></div><div class="tx w45"></div></div></div>
+                <div class="rel"><div class="im" style="height:120px"></div><div class="scrim"><div class="pill" style="width:22px;height:8px"></div><div class="h1 w60"></div><div class="tx w45"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">shortsColumn</span>
+              <span class="note">One column of tall cards, tag overlaid on each. Featured is simply the first, marked. Reads like the apps members already use for this content.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><VideosScreen>
+  <AppTopbar mode="nameOnly" />
+  <VideoCategoryTabs layout="topPills" />
+
+  <FeedStatus />
+  <VideoCarouselSection axis="vertical" layout="tall">
+    <SectionTitle layout="overlay" />
+    <FeaturedVideoCard size="tall" marked />
+    <VideoCarouselCard size="tall" />…
+    <ViewAllAction layout="inline" />
+  </VideoCarouselSection>…
+
+  <AppBottomNavBar />
+</VideosScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z r grow" style="padding-top:7px;align-items:stretch;gap:0">
+                <div class="railcol">
+                  <div class="pill on" style="width:26px"></div>
+                  <div class="pill" style="width:22px"></div>
+                  <div class="pill" style="width:26px"></div>
+                  <div class="pill" style="width:20px"></div>
+                  <div class="pill" style="width:24px"></div>
+                  <div class="pill" style="width:22px"></div>
+                </div>
+                <div class="c f1" style="gap:7px;padding-left:7px">
+                  <div class="c"><div class="im a169 w100"></div><div class="h1 w75" style="margin-top:3px"></div></div>
+                  <div class="c"><div class="im a169 w100"></div><div class="h1 w60" style="margin-top:3px"></div></div>
+                  <div class="c"><div class="im a169 w100"></div><div class="h1 w75" style="margin-top:3px"></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">tagRail</span>
+              <span class="note">Tags move to a scroll-spy rail on the left. The value that survives a large tag vocabulary, which is where the pill strip fails.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><VideosScreen>
+  <AppTopbar mode="nameOnly" />
+  <VideoCategoryTabs layout="verticalRail" scrollSpy />
+
+  <FeedStatus />
+  <FeaturedVideoCard size="md" pinned="columnTop" />
+
+  <VideoCarouselSection axis="vertical" inset="rail">
+    <SectionTitle layout="anchor" />
+    <VideoCarouselCard size="md" />…
+    <ViewAllAction layout="row" />
+  </VideoCarouselSection>…
+
+  <AppBottomNavBar />
+</VideosScreen></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">carouselRows</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+      </section>
+
+      <!-- ================= 04 RANK ================= -->
+      <section class="plate" id="rank">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Rank</h2>
+            <code class="enum-key">rank_format</code>
+          </div>
+          <p class="path">features/profile/presentation/screens/profile_screen.dart &middot; widgets/rank_summary/ &middot; widgets/next_rank/</p>
+          <p class="blurb">
+            Where am I and what is next. Only those two ranks are fetched, which quietly kills the
+            obvious-looking value: a journey timeline of past belts needs data this screen does not
+            have, so it fails the invariant on sight.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>AppTopbar <span class="x">&times;1</span></li>
+            <li>SparkleHero <span class="x">&times;1</span></li>
+            <li>RankHeader <span class="x">&times;1</span></li>
+            <li>RatingGraph <span class="x">&times;1</span></li>
+            <li>TimeframeSelector <span class="x">&times;1</span></li>
+            <li>NextRankBadge <span class="x">&times;1</span></li>
+            <li>NextRankTitle <span class="x">&times;1</span></li>
+            <li>NextRankProgress <span class="x">&times;1</span></li>
+            <li>NextRankProgressLabel <span class="x">&times;1</span></li>
+            <li>LevelUpVideosSection <span class="x">&times;1</span></li>
+            <li class="opt">SectionDivider <span class="x">&times;n</span></li>
+            <li>AppBottomNavBar <span class="x">&times;1</span></li>
+          </ul>
+          <p>SectionDivider is presentation only, so its count may vary between values. Nothing else may.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="rank_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z ctr" style="padding-top:11px;padding-bottom:11px;gap:4px">
+                <div class="tx w32" style="align-self:center"></div>
+                <div class="h1 xl w60" style="align-self:center"></div>
+                <div class="tx w45" style="align-self:center"></div>
+              </div>
+              <div class="z px" style="padding-bottom:7px;gap:6px">
+                <div class="r" style="gap:6px"><div class="bk" style="width:22px;height:22px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w45"></div></div></div>
+                <div class="r" style="gap:4px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:22px"></div><div class="pill" style="width:22px"></div></div>
+                <div class="im w100" style="height:40px"></div>
+              </div>
+              <div class="rule"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px"><div class="r" style="gap:6px"><div class="bk" style="width:20px;height:20px"></div><div class="c f1"><div class="h1 w60"></div><div class="bk" style="height:5px;border-radius:3px"></div><div class="tx w45"></div></div></div></div>
+              <div class="rule"></div>
+              <div class="z grow px" style="padding-top:7px;gap:5px">
+                <div class="h1" style="width:48px"></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">sparkleStack<span class="tag">shipped</span></span>
+              <span class="note">Streak hero, then rank summary, then next rank, then videos. Clear reading order, three scroll positions to answer one question.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ProfileScreen>
+  <AppTopbar mode="nameOnly" />
+  <SparkleHero size="lg" />
+
+  <RankSummarySection>
+    <RankHeader />
+    <TimeframeSelector layout="pills" />
+    <RatingGraph height="md" />
+  </RankSummarySection>
+
+  <SectionDivider />
+  <NextRankSection layout="badgeLeft">
+    <NextRankBadge /><NextRankTitle />
+    <NextRankProgress /><NextRankProgressLabel />
+  </NextRankSection>
+
+  <SectionDivider />
+  <LevelUpVideosSection axis="horizontal" />
+  <AppBottomNavBar />
+</ProfileScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rel" style="flex:none"><div class="im p" style="height:86px"></div><div class="scrim"><div class="tx w32"></div><div class="h1 b w60"></div></div></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:6px;gap:4px"><div class="bk w100" style="height:5px;border-radius:3px"></div><div class="tx w45"></div></div>
+              <div class="z px t r" style="padding-bottom:7px;gap:5px"><div class="bk" style="width:14px;height:14px"></div><div class="h1 w45"></div></div>
+              <div class="rule"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px;gap:5px">
+                <div class="r" style="gap:4px"><div class="pill on" style="width:22px"></div><div class="pill" style="width:22px"></div><div class="pill" style="width:22px"></div></div>
+                <div class="box" style="padding:5px"><div class="im w100" style="height:38px"></div></div>
+              </div>
+              <div class="rule"></div>
+              <div class="z grow px" style="padding-top:7px;gap:5px">
+                <div class="h1" style="width:48px"></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">beltHero</span>
+              <span class="note">Belt takes the top with the streak over it and the progress rail directly beneath. Now and next become one glance.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ProfileScreen>
+  <AppTopbar mode="nameOnly" />
+
+  <RankSummarySection layout="hero">
+    <RankHeader layout="beltBleed" />
+    <SparkleHero size="md" position="overlay" />
+    <NextRankProgress layout="rail" />
+    <NextRankProgressLabel layout="inline" />
+  </RankSummarySection>
+
+  <NextRankSection layout="badgeInline">
+    <NextRankBadge size="sm" /><NextRankTitle />
+  </NextRankSection>
+
+  <SectionDivider />
+  <TimeframeSelector layout="pills" />
+  <RatingGraph height="md" card />
+
+  <SectionDivider />
+  <LevelUpVideosSection axis="horizontal" />
+  <AppBottomNavBar />
+</ProfileScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px">
+                <div class="r" style="gap:6px;align-items:stretch">
+                  <div class="box c f1" style="padding:6px;gap:3px"><div class="tx w60"></div><div class="h1 b w75"></div></div>
+                  <div class="box c f1" style="padding:6px;gap:3px"><div class="tx w45"></div><div class="r" style="gap:4px"><div class="bk" style="width:14px;height:14px"></div><div class="h1 w60"></div></div></div>
+                </div>
+                <div class="r" style="gap:6px;align-items:stretch;margin-top:6px">
+                  <div class="box c f1" style="padding:6px;gap:3px"><div class="tx w60"></div><div class="r" style="gap:4px"><div class="bk" style="width:14px;height:14px;border-radius:7px"></div><div class="c f1" style="gap:2px"><div class="h1 w75"></div><div class="tx w45"></div></div></div></div>
+                  <div class="box c f1" style="padding:6px;gap:4px"><div class="tx w45"></div><div class="r" style="gap:3px"><div class="pill on" style="width:16px"></div><div class="pill" style="width:16px"></div></div></div>
+                </div>
+              </div>
+              <div class="im p w100" style="height:46px;flex:none"></div>
+              <div class="rule"></div>
+              <div class="z grow px" style="padding-top:7px;gap:5px">
+                <div class="h1" style="width:48px"></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">statTiles</span>
+              <span class="note">Four tiles open the screen, graph runs full bleed beneath. The dashboard read, for a tenant whose members treat training as data.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ProfileScreen>
+  <AppTopbar mode="nameOnly" />
+
+  <TileBoard columns={2}>
+    <SparkleHero size="tile" />
+    <RankHeader layout="tile" />
+    <NextRankSection layout="tile">
+      <NextRankBadge size="sm" /><NextRankTitle />
+      <NextRankProgress layout="ring" /><NextRankProgressLabel />
+    </NextRankSection>
+    <TimeframeSelector layout="tile" />
+  </TileBoard>
+
+  <RatingGraph height="lg" bleed />
+  <SectionDivider />
+  <LevelUpVideosSection axis="horizontal" />
+  <AppBottomNavBar />
+</ProfileScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z ctr" style="padding-top:10px;padding-bottom:8px;gap:5px">
+                <div style="width:76px;height:76px;border-radius:50%;border:6px solid var(--wire-fill-2);border-top-color:var(--wire-action);border-right-color:var(--wire-action);align-self:center;display:flex;align-items:center;justify-content:center">
+                  <div class="bk" style="width:26px;height:26px"></div>
+                </div>
+                <div class="h1 b w45" style="align-self:center"></div>
+                <div class="tx w60" style="align-self:center"></div>
+              </div>
+              <div class="z px t" style="padding-bottom:6px"><div class="tx w45" style="align-self:center"></div></div>
+              <div class="z px t r" style="padding-bottom:7px;gap:5px"><div class="bk" style="width:16px;height:16px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w45"></div></div></div>
+              <div class="rule"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px;gap:5px">
+                <div class="box r" style="padding:1px;gap:1px"><div class="pill on w"></div><div class="pill w" style="background:transparent"></div><div class="pill w" style="background:transparent"></div></div>
+                <div class="im w100" style="height:36px"></div>
+              </div>
+              <div class="rule"></div>
+              <div class="z grow px" style="padding-top:6px;gap:5px">
+                <div class="h1" style="width:48px"></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">progressFirst</span>
+              <span class="note">Next-rank progress becomes a large arc with the belt inside it. Answers the one question a graded member opens this screen to ask.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ProfileScreen>
+  <AppTopbar mode="nameOnly" />
+
+  <NextRankSection layout="arc">
+    <NextRankProgress layout="arc" size="xl" />
+    <NextRankBadge size="lg" position="center" />
+    <NextRankTitle align="center" />
+    <NextRankProgressLabel align="center" />
+  </NextRankSection>
+
+  <SparkleHero size="line" />
+  <RankHeader layout="row" />
+
+  <SectionDivider />
+  <TimeframeSelector layout="segmented" />
+  <RatingGraph height="md" />
+
+  <SectionDivider />
+  <LevelUpVideosSection axis="horizontal" />
+  <AppBottomNavBar />
+</ProfileScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z px" style="padding-top:8px;padding-bottom:9px;gap:6px">
+                <div class="tx" style="width:16px"></div>
+                <div class="r" style="gap:7px"><div class="bk" style="width:30px;height:30px"></div><div class="c f1" style="gap:4px"><div class="h1 b w75"></div><div class="tx w45"></div></div></div>
+              </div>
+              <div class="rule h"></div>
+              <div class="z px r" style="padding-top:5px;padding-bottom:5px;gap:6px;align-items:center">
+                <div class="im f1" style="height:22px"></div>
+                <div class="c" style="gap:3px"><div class="pill on" style="width:16px;height:8px"></div><div class="pill" style="width:16px;height:8px"></div></div>
+              </div>
+              <div class="rule h"></div>
+              <div class="z px" style="padding-top:9px;padding-bottom:9px;gap:6px">
+                <div class="tx" style="width:16px"></div>
+                <div class="r" style="gap:7px"><div class="bk" style="width:24px;height:24px"></div><div class="c f1" style="gap:4px"><div class="h1 w60"></div><div class="bk w100" style="height:5px;border-radius:3px"></div><div class="tx w45"></div></div></div>
+              </div>
+              <div class="rule"></div>
+              <div class="z grow px" style="padding-top:7px;gap:5px">
+                <div class="h1" style="width:48px"></div>
+                <div class="r" style="gap:5px;overflow:hidden"><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div><div class="c" style="width:52px;flex:none"><div class="im a169 w100"></div></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">splitRank</span>
+              <span class="note">Now over next, graph collapsed onto the seam. Clearest information architecture of the five and the least eventful to look at.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ProfileScreen>
+  <AppTopbar mode="nameOnly" />
+
+  <SplitPane half="top" label="now">
+    <RankHeader layout="beltLeft" />
+    <SparkleHero size="line" />
+  </SplitPane>
+
+  <RatingGraph height="sm" collapsible>
+    <TimeframeSelector layout="inline" />
+  </RatingGraph>
+
+  <SplitPane half="bottom" label="next">
+    <NextRankBadge size="md" /><NextRankTitle />
+    <NextRankProgress layout="bar" /><NextRankProgressLabel />
+  </SplitPane>
+
+  <SectionDivider />
+  <LevelUpVideosSection axis="horizontal" />
+  <AppBottomNavBar />
+</ProfileScreen></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">sparkleStack</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+      </section>
+      <!-- ================= 05 REWARDS ================= -->
+      <section class="plate" id="rewards">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Rewards</h2>
+            <code class="enum-key">rewards_format</code>
+          </div>
+          <p class="path">features/rewards/presentation/screens/points_store_screen.dart &middot; widgets/store_grid/ &middot; widgets/reward_card/</p>
+          <p class="blurb">
+            The points store. Reward names and images are tenant-authored, so titles run long and
+            image quality varies. Every value is really being tested on how it degrades.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>AppTopbar <span class="x">&times;1</span></li>
+            <li>RewardsTabs <span class="x">&times;1</span></li>
+            <li>PointsHeadline <span class="x">&times;1</span></li>
+            <li>RewardImageHero <span class="x">&times;n</span></li>
+            <li>RewardPriceTag <span class="x">&times;n</span></li>
+            <li>RewardTitle <span class="x">&times;n</span></li>
+            <li>RewardPointsCost <span class="x">&times;n</span></li>
+            <li>RedeemAction <span class="x">&times;n</span></li>
+            <li>RewardsLoadStatus <span class="x">&times;1</span></li>
+            <li>AppBottomNavBar <span class="x">&times;1</span></li>
+          </ul>
+          <p>One redeem action per reward. The one value that breaks that rule is called out below, and it is the reason the gate needs a rule rather than a plain diff.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="rewards_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:7px;padding-bottom:8px;gap:6px"><div class="pill on w"></div><div class="pill w"></div></div>
+              <div class="z px ctr" style="padding-bottom:8px;gap:3px"><div class="h1 xl w45" style="align-self:center"></div><div class="tx w32" style="align-self:center"></div></div>
+              <div class="z grow px" style="padding-top:0;gap:7px">
+                <div class="r" style="gap:7px;align-items:stretch">
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2"></div></div><div class="c" style="padding:5px;gap:4px"><div class="tx w90"></div><div class="tx w60"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm"></div></div></div>
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2"></div></div><div class="c" style="padding:5px;gap:4px"><div class="tx w75"></div><div class="tx w45"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm"></div></div></div>
+                </div>
+                <div class="r" style="gap:7px;align-items:stretch">
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2"></div></div><div class="c" style="padding:5px;gap:4px"><div class="tx w90"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm"></div></div></div>
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2"></div></div><div class="c" style="padding:5px;gap:4px"><div class="tx w75"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm"></div></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">cardGrid<span class="tag">shipped</span></span>
+              <span class="note">Two-up image-top cards with the price tag on the image. Long titles clamp to two lines and lose their ends.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PointsStoreScreen>
+  <AppTopbar mode="nameOnly" />
+  <RewardsTabs layout="twoUp" />
+  <PointsHeadline size="lg" />
+
+  <RewardsLoadStatus />
+  <StoreGrid columns={2}>
+    <RewardCard layout="imageTop">
+      <RewardImageHero ratio="3:2"><RewardPriceTag corner="topRight" /></RewardImageHero>
+      <RewardTitle lines={2} /><RewardPointsCost /><RedeemAction fullWidth />
+    </RewardCard>…
+  </StoreGrid>
+
+  <AppBottomNavBar />
+</PointsStoreScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:7px;padding-bottom:8px;gap:6px"><div class="pill on w"></div><div class="pill w"></div></div>
+              <div class="z px ctr" style="padding-bottom:8px;gap:3px"><div class="h1 xl w45" style="align-self:center"></div><div class="tx w32" style="align-self:center"></div></div>
+              <div class="z grow px" style="padding-top:0;gap:7px">
+                <div class="r" style="gap:6px"><div class="im sq" style="width:32px"></div><div class="c f1" style="gap:3px"><div class="h1 w90"></div><div class="tx w45"></div><div class="tx s w32"></div></div><div class="cta sm" style="width:32px"></div></div>
+                <div class="rule"></div>
+                <div class="r" style="gap:6px"><div class="im sq" style="width:32px"></div><div class="c f1" style="gap:3px"><div class="h1 w75"></div><div class="tx w60"></div><div class="tx s w32"></div></div><div class="cta sm" style="width:32px"></div></div>
+                <div class="rule"></div>
+                <div class="r" style="gap:6px"><div class="im sq" style="width:32px"></div><div class="c f1" style="gap:3px"><div class="h1 w90"></div><div class="tx w45"></div><div class="tx s w32"></div></div><div class="cta sm" style="width:32px"></div></div>
+                <div class="rule"></div>
+                <div class="r" style="gap:6px"><div class="im sq" style="width:32px"></div><div class="c f1" style="gap:3px"><div class="h1 w60"></div><div class="tx w45"></div><div class="tx s w32"></div></div><div class="cta sm" style="width:32px"></div></div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">listRows</span>
+              <span class="note">Square thumb left, action right. The title gets a full line instead of a clamp, which is the failure case the grid is papering over.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PointsStoreScreen>
+  <AppTopbar mode="nameOnly" />
+  <RewardsTabs layout="twoUp" />
+  <PointsHeadline size="lg" />
+
+  <RewardsLoadStatus />
+  <StoreGrid columns={1}>
+    <RewardCard layout="thumbLeft" rule="hairline">
+      <RewardImageHero ratio="1:1" size="sm"><RewardPriceTag layout="inline" /></RewardImageHero>
+      <RewardTitle lines={1} /><RewardPointsCost layout="inline" />
+      <RedeemAction layout="trailing" />
+    </RewardCard>…
+  </StoreGrid>
+
+  <AppBottomNavBar />
+</PointsStoreScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:7px;padding-bottom:7px"><div class="box r f1" style="padding:1px;gap:1px"><div class="pill on w"></div><div class="pill w" style="background:transparent"></div></div></div>
+              <div class="z px ctr" style="padding-bottom:8px;gap:3px"><div class="h1 xl w45" style="align-self:center"></div><div class="tx w32" style="align-self:center"></div></div>
+              <div class="grow r" style="align-items:center;gap:5px;padding:0 4px;overflow:hidden">
+                <div class="box" style="width:20px;height:120px;flex:none;opacity:.45"></div>
+                <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a45 w100" style="border-radius:0"><div class="tag2"></div></div><div class="c ctr" style="padding:6px;gap:4px"><div class="tx w90"></div><div class="tx w60"></div><div class="h1 b w45" style="align-self:center"></div></div></div>
+                <div class="box" style="width:20px;height:120px;flex:none;opacity:.45"></div>
+              </div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px"><div class="cta"></div></div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">posterDeck<span class="tag warn">gate</span></span>
+              <span class="note">A snapping deck of posters, one action pinned under it. Fewest rewards visible, strongest single reward.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PointsStoreScreen>
+  <AppTopbar mode="nameOnly" />
+  <RewardsTabs layout="segmented" />
+  <PointsHeadline size="lg" pinned />
+
+  <RewardsLoadStatus />
+  <StoreGrid layout="deck" snap>
+    <RewardCard layout="poster">
+      <RewardImageHero ratio="4:5"><RewardPriceTag corner="topRight" /></RewardImageHero>
+      <RewardTitle lines={2} align="center" /><RewardPointsCost size="lg" />
+    </RewardCard>…
+  </StoreGrid>
+  <RedeemAction fullWidth position="belowDeck" />
+
+  <AppBottomNavBar />
+</PointsStoreScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:7px;padding-bottom:7px;gap:6px"><div class="pill on w"></div><div class="pill w"></div></div>
+              <div class="z px r" style="padding-bottom:7px;gap:6px;align-items:center"><div class="h1 b" style="width:34px"></div><div class="c f1" style="gap:2px"><div class="bk w100" style="height:5px;border-radius:3px"></div></div></div>
+              <div class="rule h"></div>
+              <div class="z grow px" style="padding-top:7px;gap:6px">
+                <div class="tx" style="width:26px"></div>
+                <div class="r" style="gap:5px;align-items:stretch">
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w90"></div><div class="cta sm" style="height:9px"></div></div>
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w75"></div><div class="cta sm" style="height:9px"></div></div>
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w90"></div><div class="cta sm" style="height:9px"></div></div>
+                </div>
+                <div class="tx" style="width:32px;margin-top:2px"></div>
+                <div class="r" style="gap:5px;align-items:stretch">
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w75"></div><div class="cta sm" style="height:9px"></div></div>
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w90"></div><div class="cta sm" style="height:9px"></div></div>
+                  <div class="c f1" style="gap:3px"><div class="im rel sq w100"><div class="tag2" style="width:12px;height:6px"></div></div><div class="tx w60"></div><div class="cta sm" style="height:9px"></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">priceLadder</span>
+              <span class="note">Banded by cost, cheapest first, with the points total as a sticky affordability bar. Bands derive from data already on the card.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PointsStoreScreen>
+  <AppTopbar mode="nameOnly" />
+  <RewardsTabs layout="twoUp" />
+  <PointsHeadline size="md" pinned layout="affordanceBar" />
+
+  <RewardsLoadStatus />
+  <StoreGrid layout="banded" bandBy="pointsCost" columns={3}>
+    <BandLabel />
+    <RewardCard layout="tile" density="compact">
+      <RewardImageHero ratio="1:1"><RewardPriceTag layout="corner" /></RewardImageHero>
+      <RewardTitle lines={1} /><RewardPointsCost size="sm" /><RedeemAction size="sm" />
+    </RewardCard>…
+  </StoreGrid>
+
+  <AppBottomNavBar />
+</PointsStoreScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r c"><div class="h1" style="width:40px"></div><div class="tx" style="width:5px"></div></div>
+              <div class="z t r px" style="padding-top:6px;padding-bottom:6px"><div class="box r f1" style="padding:1px;gap:1px"><div class="pill on w"></div><div class="pill w" style="background:transparent"></div></div></div>
+              <div class="rel" style="flex:none"><div class="im p" style="height:88px"></div><div class="tag2" style="top:6px;right:6px"></div><div class="scrim"><div class="h1 b w60"></div><div class="tx w32"></div><div class="cta sm" style="margin-top:2px"></div></div></div>
+              <div class="z px r" style="padding-top:7px;padding-bottom:7px;gap:6px;align-items:baseline"><div class="h1 b" style="width:30px"></div><div class="tx w32"></div></div>
+              <div class="z grow px" style="padding-top:0;gap:6px">
+                <div class="r" style="gap:6px;align-items:stretch">
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2" style="width:14px;height:6px"></div></div><div class="c" style="padding:4px;gap:3px"><div class="tx w90"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm" style="height:9px"></div></div></div>
+                  <div class="box c f1" style="padding:0;overflow:hidden"><div class="im rel a32 w100" style="border-radius:0"><div class="tag2" style="width:14px;height:6px"></div></div><div class="c" style="padding:4px;gap:3px"><div class="tx w75"></div><div class="h1 w45" style="align-self:center"></div><div class="cta sm" style="height:9px"></div></div></div>
+                </div>
+              </div>
+              <div class="nav"><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div><div><div class="dot on"></div><div class="lb"></div></div><div><div class="dot"></div><div class="lb"></div></div></div>
+            </div>
+            <figcaption>
+              <span class="val">storefrontHero</span>
+              <span class="note">One promoted reward full bleed with its action on the image, the rest two-up beneath. The retail pattern.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PointsStoreScreen>
+  <AppTopbar mode="nameOnly" />
+  <RewardsTabs layout="segmented" />
+
+  <RewardsLoadStatus />
+  <RewardCard layout="hero" bleed>
+    <RewardImageHero ratio="16:9"><RewardPriceTag corner="topRight" /></RewardImageHero>
+    <RewardTitle lines={1} overlay /><RewardPointsCost overlay />
+    <RedeemAction overlay fullWidth />
+  </RewardCard>
+
+  <PointsHeadline size="md" layout="row" />
+  <StoreGrid columns={2}>
+    <RewardCard layout="imageTop" density="compact">…</RewardCard>…
+  </StoreGrid>
+
+  <AppBottomNavBar />
+</PointsStoreScreen></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">cardGrid</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+
+        <div class="flag">
+          <b>posterDeck is the first real test of the functional-equivalence gate.</b>
+          It lifts <code>RedeemAction</code> out of the card and pins one under the deck. Actions per
+          reward are unchanged; actions per screen are not. So the gate either counts actions per
+          data row rather than per screen, or this value is cut. Worth resolving before the gate is
+          built, because it decides whether the rule is a plain multiset diff or something with a
+          notion of binding.
+        </div>
+      </section>
+
+      <!-- ================= 06 CLASS ================= -->
+      <section class="plate" id="class">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Class detail</h2>
+            <code class="enum-key">class_format</code>
+          </div>
+          <p class="path">features/class_booking/presentation/screens/class_screen.dart &middot; widgets/class_*</p>
+          <p class="blurb">
+            One decision screen with one action. Every value is arranging the same five blocks
+            around a reserve button, and the only real variable is how far the thumb travels
+            before it can commit.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li>AppTopbar <span class="x">&times;1</span></li>
+            <li>ClassImageBanner <span class="x">&times;1</span></li>
+            <li>ClassMetaSection <span class="x">&times;1</span></li>
+            <li>ClassDetailsSection <span class="x">&times;1</span></li>
+            <li>ClassInstructorSection <span class="x">&times;1</span></li>
+            <li>ClassLocationSection <span class="x">&times;1</span></li>
+            <li>ClassReserveFooter <span class="x">&times;1</span></li>
+            <li class="opt">SectionDivider <span class="x">&times;n</span></li>
+          </ul>
+          <p>Exactly one reserve action, in every value. A layout that duplicates it for convenience has changed the screen's contract, not its arrangement.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="class_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z t r" style="gap:5px"><div class="tx" style="width:6px;height:6px"></div><div class="h1 f1" style="width:auto"></div></div>
+              <div class="rule h"></div>
+              <div class="im p w100" style="height:70px;flex:none"></div>
+              <div class="z px" style="padding-top:8px;padding-bottom:8px;gap:4px"><div class="h1 b w75"></div><div class="tx w60"></div><div class="tx w45"></div></div>
+              <div class="rule"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px;gap:3px"><div class="tx w100"></div><div class="tx w100"></div><div class="tx w75"></div></div>
+              <div class="rule"></div>
+              <div class="z px r" style="padding-top:7px;padding-bottom:7px;gap:6px"><div class="bk" style="width:22px;height:22px;border-radius:11px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w75"></div></div></div>
+              <div class="rule"></div>
+              <div class="z px grow" style="padding-top:7px;gap:3px"><div class="tx w60"></div><div class="tx w45"></div></div>
+              <div class="rule h"></div>
+              <div class="z"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">bannerStack<span class="tag">shipped</span></span>
+              <span class="note">Banner, meta, then three divided sections, action pinned. The safe read, and the longest scroll to the coach.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ClassScreen>
+  <AppTopbar mode="nameOnly" showBackButton />
+  <ClassImageBanner ratio="16:9" />
+
+  <ClassMetaSection layout="stacked" />
+  <SectionDivider />
+  <ClassDetailsSection />
+  <SectionDivider />
+  <ClassInstructorSection layout="avatarLeft" />
+  <SectionDivider />
+  <ClassLocationSection />
+
+  <ClassReserveFooter position="pinned" />
+</ClassScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="rel" style="flex:none">
+                <div class="im p" style="height:150px"></div>
+                <div style="position:absolute;top:7px;left:8px;display:flex;gap:5px;align-items:center"><div class="tx" style="width:6px;height:6px"></div><div class="h1" style="width:34px"></div></div>
+                <div class="scrim" style="padding:8px"><div class="h1 b w75"></div><div class="tx w60"></div><div class="tx w45"></div></div>
+              </div>
+              <div class="z px r" style="padding-top:8px;padding-bottom:8px;gap:6px"><div class="bk" style="width:24px;height:24px;border-radius:12px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w75"></div></div></div>
+              <div class="rule"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px;gap:3px"><div class="tx w100"></div><div class="tx w100"></div><div class="tx w75"></div></div>
+              <div class="rule"></div>
+              <div class="z px grow" style="padding-top:7px;gap:3px"><div class="tx w60"></div><div class="tx w45"></div></div>
+              <div class="rule h"></div>
+              <div class="z"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">overlayHero</span>
+              <span class="note">Meta rides the image under a scrim and the coach is promoted above the description, which is the actual reason to book at a fight gym.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ClassScreen>
+  <AppTopbar mode="nameOnly" showBackButton overlay />
+  <ClassImageBanner ratio="4:5" scrim>
+    <ClassMetaSection layout="overlay" />
+  </ClassImageBanner>
+
+  <ClassInstructorSection layout="avatarLeft" />
+  <SectionDivider />
+  <ClassDetailsSection />
+  <SectionDivider />
+  <ClassLocationSection />
+
+  <ClassReserveFooter position="pinned" />
+</ClassScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph rel" style="justify-content:flex-end">
+              <div class="im p" style="position:absolute;inset:0;border-radius:0"></div>
+              <div style="position:absolute;top:7px;left:8px;display:flex;gap:5px;align-items:center"><div class="tx" style="width:6px;height:6px"></div><div class="h1" style="width:34px"></div></div>
+              <div style="position:relative;background:var(--wire-canvas);border-top-left-radius:12px;border-top-right-radius:12px;border-top:1px solid var(--wire-edge);height:238px;display:flex;flex-direction:column">
+                <div class="r c" style="padding-top:5px"><div class="pill" style="width:24px;height:3px"></div></div>
+                <div class="z" style="padding-top:6px;padding-bottom:6px"><div class="cta"></div></div>
+                <div class="z px" style="padding-bottom:7px;gap:4px"><div class="h1 b w75"></div><div class="tx w60"></div><div class="tx w45"></div></div>
+                <div class="rule"></div>
+                <div class="z px" style="padding-top:6px;padding-bottom:6px;gap:3px"><div class="tx w100"></div><div class="tx w90"></div></div>
+                <div class="rule"></div>
+                <div class="z px r" style="padding-top:6px;padding-bottom:6px;gap:5px"><div class="bk" style="width:18px;height:18px;border-radius:9px"></div><div class="c f1"><div class="h1 w60"></div><div class="tx w75"></div></div></div>
+                <div class="rule"></div>
+                <div class="z px grow" style="padding-top:6px;gap:3px"><div class="tx w60"></div><div class="tx w45"></div></div>
+              </div>
+            </div>
+            <figcaption>
+              <span class="val">detailSheet</span>
+              <span class="note">Image is a fixed backdrop, content rises as a sheet, and reserve sits at the sheet's top edge. Shortest thumb travel of the five.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ClassScreen>
+  <AppTopbar mode="nameOnly" showBackButton overlay />
+  <ClassImageBanner layout="backdrop" fill />
+
+  <Sheet draggable initial="60%">
+    <ClassReserveFooter position="sheetTop" />
+    <ClassMetaSection layout="stacked" />
+    <SectionDivider />
+    <ClassDetailsSection />
+    <SectionDivider />
+    <ClassInstructorSection layout="avatarLeft" />
+    <SectionDivider />
+    <ClassLocationSection />
+  </Sheet>
+</ClassScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r" style="gap:5px"><div class="tx" style="width:6px;height:6px"></div><div class="h1 f1" style="width:auto"></div></div>
+              <div class="rule h"></div>
+              <div class="im p w100" style="height:62px;flex:none"></div>
+              <div class="z px" style="padding-top:7px;padding-bottom:7px;gap:4px"><div class="h1 b w75"></div><div class="r sb"><div class="tx w32"></div><div class="tx w32"></div></div></div>
+              <div class="rule h"></div>
+              <div class="z t r px" style="padding-top:0;padding-bottom:0;gap:0;align-items:stretch">
+                <div class="f1 c ctr" style="padding:6px 0;border-bottom:2px solid var(--wire-action)"><div class="tx" style="width:22px"></div></div>
+                <div class="f1 c ctr" style="padding:6px 0"><div class="tx" style="width:26px"></div></div>
+                <div class="f1 c ctr" style="padding:6px 0"><div class="tx" style="width:22px"></div></div>
+              </div>
+              <div class="rule"></div>
+              <div class="z px grow" style="padding-top:8px;gap:4px"><div class="tx w100"></div><div class="tx w100"></div><div class="tx w90"></div><div class="tx w100"></div><div class="tx w60"></div></div>
+              <div class="rule h"></div>
+              <div class="z"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">sectionTabs</span>
+              <span class="note">Details, instructor and location share one swipeable pane. Removes scrolling from the decision, hides two thirds behind a tap.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ClassScreen>
+  <AppTopbar mode="nameOnly" showBackButton />
+  <ClassImageBanner ratio="16:9" />
+  <ClassMetaSection layout="stacked" pinned />
+
+  <TabPane swipeable>
+    <ClassDetailsSection tab="details" />
+    <ClassInstructorSection tab="instructor" layout="avatarTop" />
+    <ClassLocationSection tab="location" />
+  </TabPane>
+
+  <ClassReserveFooter position="pinned" />
+</ClassScreen></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z t r" style="gap:5px"><div class="tx" style="width:6px;height:6px"></div><div class="h1 f1" style="width:auto"></div></div>
+              <div class="rule h"></div>
+              <div class="z px r" style="padding-top:8px;padding-bottom:8px;gap:6px"><div class="im sq" style="width:30px"></div><div class="c f1" style="gap:3px"><div class="h1 b w90"></div><div class="tx w60"></div></div></div>
+              <div class="z px" style="padding-top:0;padding-bottom:8px;gap:0">
+                <div class="r sb" style="padding:4px 0;border-bottom:1px solid var(--wire-rule)"><div class="tx" style="width:20px"></div><div class="tx" style="width:34px"></div></div>
+                <div class="r sb" style="padding:4px 0;border-bottom:1px solid var(--wire-rule)"><div class="tx" style="width:26px"></div><div class="tx" style="width:28px"></div></div>
+                <div class="r sb" style="padding:4px 0;border-bottom:1px solid var(--wire-rule)"><div class="tx" style="width:18px"></div><div class="tx" style="width:30px"></div></div>
+              </div>
+              <div class="z px r" style="padding-top:0;padding-bottom:5px;gap:5px"><div class="bk" style="width:14px;height:14px;border-radius:7px"></div><div class="h1 w60"></div></div>
+              <div class="z px r" style="padding-top:0;padding-bottom:7px;gap:5px"><div class="dot"></div><div class="tx w75"></div></div>
+              <div class="rule"></div>
+              <div class="z px grow" style="padding-top:7px;gap:3px"><div class="tx w100"></div><div class="tx w100"></div><div class="tx w90"></div><div class="tx w60"></div></div>
+              <div class="z px" style="padding-bottom:9px"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">specBrief</span>
+              <span class="note">No banner. A spec table and an inline action, for the member who has taken this class fifty times and wants the time and the mat.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><ClassScreen>
+  <AppTopbar mode="nameOnly" showBackButton />
+
+  <ClassMetaSection layout="specTable" columns={2}>
+    <ClassImageBanner ratio="1:1" size="thumb" position="inline" />
+  </ClassMetaSection>
+
+  <SectionDivider />
+  <ClassInstructorSection layout="row" density="compact" />
+  <ClassLocationSection layout="row" density="compact" />
+  <SectionDivider />
+  <ClassDetailsSection />
+
+  <ClassReserveFooter position="inline" />
+</ClassScreen></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">bannerStack</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+      </section>
+      <!-- ================= 07 CELEBRATION ================= -->
+      <section class="plate" id="celebration">
+        <div class="plate-hd">
+          <div class="kicker">
+            <h2>Celebration</h2>
+            <code class="enum-key">celebration_format</code>
+          </div>
+          <p class="path">shared/widgets/post_class/post_class_scaffold.dart &middot; features/stats/presentation/widgets/</p>
+          <p class="blurb">
+            One enum for all five post-class cards: streak, wins, points, rewards, rank. The body
+            slot differs per card; the arrangement around it does not. Opened at arm's length,
+            seconds after training, so it is read once and never studied.
+          </p>
+        </div>
+
+        <div class="inv">
+          <h3>Invariant &mdash; every value carries</h3>
+          <ul>
+            <li class="opt">CelebrationHeader <span class="x">&times;0..1</span></li>
+            <li>CloseAction <span class="x">&times;1</span></li>
+            <li>HeroIllustration <span class="x">&times;1</span></li>
+            <li>StatValue <span class="x">&times;1</span></li>
+            <li>StatCaption <span class="x">&times;1</span></li>
+            <li class="opt">SupportingDetail <span class="x">&times;0..1</span></li>
+            <li>PrimaryCta <span class="x">&times;1</span></li>
+          </ul>
+          <p>SupportingDetail is the per-card slot: the week strip on streak, the rewards carousel on rewards. Present or absent by card, never by layout value.</p>
+        </div>
+
+        <div class="specs" role="group" aria-label="celebration_format values">
+
+          <button class="spec" aria-pressed="true">
+            <div class="ph">
+              <div class="z r sb" style="padding-top:9px"><div class="tx" style="width:22px"></div><div class="tx" style="width:7px;height:7px"></div></div>
+              <div class="z grow ctr" style="justify-content:center;gap:9px">
+                <div class="bk" style="width:64px;height:64px;align-self:center"></div>
+                <div class="h1 xl" style="width:58px;align-self:center"></div>
+                <div class="tx" style="width:52px;align-self:center"></div>
+                <div class="r c" style="gap:4px;margin-top:3px"><div class="dot"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+              </div>
+              <div class="z" style="padding-bottom:11px"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">centerHero<span class="tag">shipped</span></span>
+              <span class="note">Everything centred, action pinned. The safest against any tenant illustration and the least memorable.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PostClassScaffold>
+  <CloseAction corner="topRight" />
+  <CelebrationHeader />
+  <Stage align="center">
+    <HeroIllustration size="lg" />
+    <StatValue size="display" />
+    <StatCaption />
+    <SupportingDetail />
+  </Stage>
+  <PrimaryCta fullWidth position="pinned" />
+</PostClassScaffold></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph rel">
+              <div class="z r sb" style="padding-top:9px"><div class="tx" style="width:22px"></div><div class="tx" style="width:7px;height:7px"></div></div>
+              <div class="z" style="padding-top:8px;gap:6px;position:relative;z-index:1">
+                <div class="h1" style="height:30px;width:110px;border-radius:3px"></div>
+                <div class="tx" style="width:64px"></div>
+                <div class="r" style="gap:4px;margin-top:3px"><div class="dot"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+              </div>
+              <div class="bk" style="position:absolute;left:20px;right:20px;bottom:-16px;height:132px;border-radius:6px"></div>
+              <div class="grow"></div>
+              <div class="z" style="padding-bottom:11px;position:relative;z-index:1"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">figureTop</span>
+              <span class="note">The earned number is the first thing read; the illustration bleeds off the bottom behind the action.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PostClassScaffold>
+  <CloseAction corner="topRight" />
+  <CelebrationHeader />
+  <Stage align="topLeading">
+    <StatValue size="displayXl" />
+    <StatCaption />
+    <SupportingDetail />
+    <HeroIllustration size="xl" bleed="bottom" behind />
+  </Stage>
+  <PrimaryCta fullWidth position="pinned" />
+</PostClassScaffold></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="z r sb" style="padding-top:9px"><div class="tx" style="width:22px"></div><div class="tx" style="width:7px;height:7px"></div></div>
+              <div class="z grow" style="justify-content:center;padding-left:14px;padding-right:14px">
+                <div class="rel" style="margin-top:22px">
+                  <div class="box c ctr" style="padding:26px 12px 14px;gap:7px;background:var(--wire-fill-2);border-color:var(--wire-edge)">
+                    <div class="h1 xl" style="width:52px;align-self:center"></div>
+                    <div class="tx" style="width:46px;align-self:center"></div>
+                    <div class="r c" style="gap:4px;margin-top:2px"><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+                  </div>
+                  <div class="bk" style="position:absolute;top:-22px;left:50%;transform:translateX(-50%);width:48px;height:48px"></div>
+                </div>
+              </div>
+              <div class="z" style="padding-bottom:11px"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">cardReveal</span>
+              <span class="note">Stat on a raised card with the illustration breaking over its top edge. Reads as collectible, which suits a rewards-led tenant.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PostClassScaffold>
+  <CloseAction corner="topRight" />
+  <CelebrationHeader />
+  <Stage align="center">
+    <Card elevated>
+      <HeroIllustration size="md" position="breakTop" />
+      <StatValue size="display" />
+      <StatCaption />
+      <SupportingDetail />
+    </Card>
+  </Stage>
+  <PrimaryCta fullWidth position="pinned" />
+</PostClassScaffold></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph">
+              <div class="rel" style="flex:none">
+                <div class="im p" style="height:176px"></div>
+                <div style="position:absolute;top:9px;right:8px" class="tx"><span></span></div>
+                <div style="position:absolute;top:9px;right:8px;width:7px;height:7px;border-radius:2px;background:var(--wire-strong)"></div>
+                <div style="position:absolute;top:9px;left:8px" class="tx w22"></div>
+              </div>
+              <div class="z grow ctr" style="justify-content:center;gap:7px">
+                <div class="h1 xl" style="width:58px;align-self:center"></div>
+                <div class="tx" style="width:50px;align-self:center"></div>
+                <div class="r c" style="gap:4px;margin-top:1px"><div class="dot"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+              </div>
+              <div class="z" style="padding-bottom:11px"><div class="cta"></div></div>
+            </div>
+            <figcaption>
+              <span class="val">splitBand</span>
+              <span class="note">Illustration band over a plain half. The only value where a very busy tenant image cannot cost the figure its contrast.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PostClassScaffold>
+  <CloseAction corner="topRight" overlay />
+  <Band half="top" fill>
+    <HeroIllustration size="lg" />
+    <CelebrationHeader position="overlay" />
+  </Band>
+  <Band half="bottom" align="center">
+    <StatValue size="display" />
+    <StatCaption />
+    <SupportingDetail />
+    <PrimaryCta fullWidth />
+  </Band>
+</PostClassScaffold></script>
+          </button>
+
+          <button class="spec" aria-pressed="false">
+            <div class="ph rel">
+              <div class="im p" style="position:absolute;inset:0;border-radius:0"></div>
+              <div style="position:absolute;top:9px;left:8px;right:8px;display:flex;justify-content:space-between;align-items:center"><div class="tx w22"></div><div style="width:7px;height:7px;border-radius:2px;background:var(--wire-strong)"></div></div>
+              <div class="grow"></div>
+              <div class="scrim" style="position:relative;padding:14px 10px 11px;gap:6px">
+                <div class="h1 xl" style="width:58px"></div>
+                <div class="tx" style="width:50px"></div>
+                <div class="r" style="gap:4px"><div class="dot"></div><div class="dot on"></div><div class="dot on"></div><div class="dot"></div><div class="dot"></div></div>
+                <div class="cta" style="margin-top:3px"></div>
+              </div>
+            </div>
+            <figcaption>
+              <span class="val">fullBleed<span class="tag warn">flagged</span></span>
+              <span class="note">Illustration fills the screen, everything else stacks on a scrim. Highest impact, and the most exposed to weak generated imagery.</span>
+            </figcaption>
+            <script type="text/plain" class="src"><PostClassScaffold>
+  <CloseAction corner="topRight" overlay />
+  <HeroIllustration size="fill" bleed="all" />
+  <Stage align="bottom" scrim>
+    <CelebrationHeader />
+    <StatValue size="display" />
+    <StatCaption />
+    <SupportingDetail density="compact" />
+    <PrimaryCta fullWidth />
+  </Stage>
+</PostClassScaffold></script>
+          </button>
+
+        </div>
+
+        <div class="src-panel"><header><span>JSX <span class="who">centerHero</span></span><button class="copy" type="button">Copy</button></header><pre></pre></div>
+
+        <div class="flag">
+          <b>fullBleed is the value that depends on the pipeline.</b> Its whole effect is carried by
+          one generated image, so it is excellent when the asset run is good and unusable when it is
+          not. That makes it a useful canary: if <code>fullBleed</code> looks wrong for a tenant, the
+          asset half needs another pass before the layout half is blamed.
+        </div>
+      </section>
+
+<style>
+/* ============================================================
+   Motion. A token, not a layout: it must not be able to break
+   any arrangement above.
+   ============================================================ */
+.motion-hd { padding: 76px 0 0; }
+.motion-hd .bar {
+  border-top: 2px solid var(--ink); padding-top: 16px;
+  display: flex; flex-wrap: wrap; gap: 14px 24px; align-items: baseline;
+  justify-content: space-between;
+}
+.motion-hd h2 { font-size: 1.72rem; letter-spacing: -.03em; font-weight: 750; margin: 0; }
+.motion-hd p { color: var(--muted); max-width: 66ch; margin: 12px 0 0; }
+
+.toggle {
+  font: inherit; font-family: var(--mono); font-size: .7rem;
+  letter-spacing: .06em; text-transform: uppercase;
+  background: none; border: 1px solid var(--ink); border-radius: 3px;
+  padding: 6px 12px; color: var(--ink); cursor: pointer;
+}
+.toggle:hover { background: var(--ink); color: var(--paper); }
+.toggle:focus-visible { outline: 2px solid var(--spot); outline-offset: 3px; }
+
+.mgroup { padding: 44px 0 0; scroll-margin-top: 20px; }
+.mgroup > header { border-top: 1px solid var(--rule); padding-top: 14px; margin-bottom: 6px; }
+.mgroup > header .kicker { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.mgroup h3 { font-size: 1.12rem; letter-spacing: -.02em; font-weight: 700; margin: 0; }
+.mgroup .path { font-family: var(--mono); font-size: .7rem; color: var(--faint); margin: 7px 0 0; overflow-wrap: anywhere; }
+.mgroup > header p { color: var(--muted); max-width: 66ch; margin: 10px 0 0; font-size: .92rem; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 16px; padding-top: 20px; }
+.tile { margin: 0; }
+.demo {
+  height: 108px; border: 1px solid var(--rule-soft); border-radius: 4px;
+  background: var(--paper-raised); position: relative; overflow: hidden;
+  display: flex; align-items: center; justify-content: center;
+}
+.tile .val { display: block; font-family: var(--mono); font-size: .76rem; font-weight: 600; letter-spacing: -.02em; margin-top: 9px; }
+.tile .tag { display: inline-block; font-family: var(--mono); font-size: .58rem; letter-spacing: .08em; text-transform: uppercase; vertical-align: 2px; margin-left: 5px; padding: 1px 5px; border-radius: 2px; background: var(--ink); color: var(--paper); font-weight: 600; }
+.tile .note { display: block; font-size: .76rem; color: var(--muted); line-height: 1.42; margin-top: 3px; }
+
+/* demo atoms */
+.d-line { height: 6px; border-radius: 3px; background: var(--wire-action); }
+.d-stack { display: flex; flex-direction: column; gap: 7px; width: 74px; }
+.d-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--spot); }
+.d-sq { width: 30px; height: 30px; border-radius: 4px; background: var(--wire-action); }
+.d-num { font-family: var(--mono); font-size: 1.5rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
+
+body.mpaused .demo *, body.mpaused .demo { animation-play-state: paused !important; }
+
+@keyframes fadeUp { 0%,8% { opacity:0; transform:translateY(9px);} 34%,92% { opacity:1; transform:none;} 100% { opacity:0; transform:translateY(9px);} }
+@keyframes scalePop { 0%,8% { opacity:0; transform:scale(.5);} 34%,92% { opacity:1; transform:none;} 100% { opacity:0; transform:scale(.5);} }
+@keyframes slideIn { 0%,8% { opacity:0; transform:translateX(-22px);} 34%,92% { opacity:1; transform:none;} 100% { opacity:0; transform:translateX(-22px);} }
+@keyframes maskWipe { 0%,8% { clip-path: inset(0 100% 0 0);} 34%,92% { clip-path: inset(0 0 0 0);} 100% { clip-path: inset(0 100% 0 0);} }
+
+.rev .d-line { animation-duration: 2.6s; animation-iteration-count: infinite; animation-timing-function: cubic-bezier(.16,1,.3,1); }
+.rev.fadeUp   .d-line { animation-name: fadeUp; }
+.rev.scalePop .d-line { animation-name: scalePop; transform-origin: left center; }
+.rev.slideIn  .d-line { animation-name: slideIn; }
+.rev.maskWipe .d-line { animation-name: maskWipe; }
+.rev .d-line:nth-child(2) { animation-delay: .09s; }
+.rev .d-line:nth-child(3) { animation-delay: .18s; }
+.rev.calm .d-line:nth-child(2) { animation-delay: .04s; }
+.rev.calm .d-line:nth-child(3) { animation-delay: .08s; }
+.rev.hype .d-line:nth-child(2) { animation-delay: .055s; }
+.rev.hype .d-line:nth-child(3) { animation-delay: .11s; }
+.rev.cine .d-line:nth-child(2) { animation-delay: .14s; }
+.rev.cine .d-line:nth-child(3) { animation-delay: .28s; }
+.rev.calm .d-line { animation-timing-function: cubic-bezier(.39,.58,.57,1); }
+.rev.cine .d-line { animation-timing-function: cubic-bezier(.22,1,.36,1); }
+</style>
+
+      <!-- ================= MOTION ================= -->
+      <section class="motion-hd" id="motion">
+        <div class="bar">
+          <h2>Motion</h2>
+          <button class="toggle" id="mtoggle" type="button" aria-pressed="true">Pause demos</button>
+        </div>
+        <p>
+          Motion stays on the pipeline side of the boundary: assets are data, layout is code. A
+          tenant's motion choice must not be able to break an arrangement, so these enums touch
+          timing and entrance only. One personality resolves the whole set; five surfaces can
+          override it where the brand actually shows.
+        </p>
+      </section>
+
+      <section class="mgroup" id="m-personality">
+        <header>
+          <div class="kicker">
+            <h3>Personality</h3>
+            <code class="enum-key">motion_personality</code>
+          </div>
+          <p class="path">shared/widgets/animation/celebration_timings.dart</p>
+          <p>
+            The same three-element reveal at four timing sets. Note what is missing:
+            no value uses an overshoot or elastic curve. The app's motion law is ease-out only, so
+            a &ldquo;hype&rdquo; built on <code>easeOutBack</code> would be a brand change smuggled in
+            as a token. Energy comes from stagger density instead.
+          </p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev fadeUp calm"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">calm</span>
+            <span class="note">220ms &middot; easeOutSine &middot; 40ms stagger &middot; 900ms count &middot; no particles</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev fadeUp"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">standard<span class="tag">shipped</span></span>
+            <span class="note">260ms &middot; easeOutQuart &middot; 90ms stagger &middot; 1400ms count &middot; 12 particles</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev fadeUp hype"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">hype</span>
+            <span class="note">200ms &middot; easeOutExpo &middot; 55ms stagger &middot; 1100ms count &middot; 20 particles</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev fadeUp cine"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">cinematic<span class="tag">exceeds cap</span></span>
+            <span class="note">420ms &middot; easeOutQuint &middot; 140ms stagger &middot; 2000ms count &middot; 8 particles</span>
+          </figure>
+        </div>
+        <div class="flag">
+          <b>cinematic breaks the 300ms per-element ceiling.</b> Both
+          <code>MobileApp/CLAUDE.md</code> and <code>PRODUCT.md</code> state ease-out, no bounce,
+          under 300ms. Either that ceiling becomes a per-personality token, or
+          <code>cinematic</code> caps at 300ms and finds its weight in stagger and count-up length
+          alone. The second keeps one motion law for the whole app and is the smaller change.
+        </div>
+      </section>
+<style>
+/* celebration intro */
+@keyframes introOrbit { 0%,6%{transform:scale(.2);opacity:0} 18%{transform:scale(1);opacity:1} 70%{transform:scale(1);opacity:1} 84%,100%{transform:scale(.2);opacity:0} }
+@keyframes introRing  { 0%,14%{transform:rotate(0deg) scale(.15);opacity:0} 34%{opacity:1} 58%{transform:rotate(300deg) scale(1);opacity:1} 78%,100%{transform:rotate(430deg) scale(.15);opacity:0} }
+@keyframes introBurst { 0%,10%{transform:translate(0,0) scale(.4);opacity:0} 22%{opacity:1} 62%,100%{transform:translate(var(--dx),var(--dy)) scale(1);opacity:0} }
+@keyframes introRise  { 0%,8%{transform:translateY(40px);opacity:0;filter:blur(4px)} 40%,84%{transform:none;opacity:1;filter:blur(0)} 100%{transform:translateY(40px);opacity:0;filter:blur(4px)} }
+@keyframes introFlip  { 0%,8%{transform:rotateY(90deg);opacity:0} 38%,86%{transform:rotateY(0);opacity:1} 100%{transform:rotateY(90deg);opacity:0} }
+
+.intro { position: relative; width: 88px; height: 88px; display: flex; align-items: center; justify-content: center; }
+.intro .core { animation: introOrbit 3s infinite cubic-bezier(.16,1,.3,1); }
+.intro .ring { position: absolute; inset: 0; animation: introRing 3s infinite cubic-bezier(.16,1,.3,1); }
+.intro .ring i { position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--spot); }
+.intro.burst .p { position: absolute; width: 6px; height: 6px; border-radius: 50%; background: var(--spot); animation: introBurst 3s infinite cubic-bezier(.16,1,.3,1); }
+.intro.rise .core { animation: introRise 3s infinite cubic-bezier(.16,1,.3,1); }
+.intro.flip .core { animation: introFlip 3s infinite cubic-bezier(.16,1,.3,1); }
+.intro.flip .fnum { font-family: var(--mono); font-size: .95rem; font-weight: 700; color: var(--ink); margin-top: 6px; font-variant-numeric: tabular-nums; }
+.intro.none .core { animation: none; }
+
+/* loader */
+@keyframes ldWave { 0%,100%{transform:translateY(0)} 40%{transform:translateY(-13px)} }
+@keyframes ldRing   { 0%{transform:scale(.35);opacity:.9} 100%{transform:scale(1.5);opacity:0} }
+@keyframes ldSweep  { 0%{transform:translateX(-100%)} 100%{transform:translateX(320%)} }
+@keyframes ldBreathe{ 0%,100%{transform:scale(.94);opacity:.75} 50%{transform:scale(1);opacity:1} }
+.ld { display: flex; gap: 9px; align-items: center; }
+.ld .d-dot { animation: ldWave 1.1s infinite cubic-bezier(.16,1,.3,1); }
+.ld .d-dot:nth-child(2) { animation-delay: .13s; }
+.ld .d-dot:nth-child(3) { animation-delay: .26s; }
+.ldring { position: relative; width: 44px; height: 44px; }
+.ldring i { position: absolute; inset: 0; border: 2px solid var(--spot); border-radius: 50%; animation: ldRing 1.5s infinite cubic-bezier(.16,1,.3,1); }
+.ldring i:nth-child(2) { animation-delay: .5s; }
+.ldbar { width: 88px; height: 6px; border-radius: 3px; background: var(--wire-fill-2); overflow: hidden; }
+.ldbar i { display: block; width: 32%; height: 100%; border-radius: 3px; background: var(--spot); animation: ldSweep 1.35s infinite cubic-bezier(.45,.05,.55,.95); }
+.ldmark { width: 40px; height: 40px; border-radius: 6px; background: var(--wire-action); animation: ldBreathe 2s infinite ease-in-out; }
+
+/* transition */
+@keyframes trFade  { 0%,10%{opacity:0} 34%,88%{opacity:1} 100%{opacity:0} }
+@keyframes trAxisIn{ 0%,10%{opacity:0;transform:translateX(26px)} 36%,88%{opacity:1;transform:none} 100%{opacity:0;transform:translateX(26px)} }
+@keyframes trAxisOut{0%,10%{opacity:1;transform:none} 36%,100%{opacity:0;transform:translateX(-26px)} }
+@keyframes trStackIn{0%,10%{transform:translateY(74px)} 40%,88%{transform:translateY(0)} 100%{transform:translateY(74px)} }
+@keyframes trStackBack{0%,10%{transform:scale(1)} 40%,88%{transform:scale(.9)} 100%{transform:scale(1)} }
+@keyframes trCut   { 0%,49%{opacity:0} 50%,100%{opacity:1} }
+.tr { position: relative; width: 54px; height: 84px; }
+.tr .pg { position: absolute; inset: 0; border-radius: 5px; border: 1px solid var(--wire-edge); background: var(--wire-canvas); }
+.tr .pg.b { background: var(--wire-fill-2); }
+.tr .pg.a { background: var(--wire-canvas); }
+.tr.fade .pg.a { animation: trFade 2.8s infinite cubic-bezier(.16,1,.3,1); }
+.tr.axis .pg.a { animation: trAxisIn 2.8s infinite cubic-bezier(.16,1,.3,1); }
+.tr.axis .pg.b { animation: trAxisOut 2.8s infinite cubic-bezier(.16,1,.3,1); }
+.tr.stack .pg.a { animation: trStackIn 2.8s infinite cubic-bezier(.16,1,.3,1); box-shadow: 0 -4px 12px -6px rgba(0,0,0,.4); }
+.tr.stack .pg.b { animation: trStackBack 2.8s infinite cubic-bezier(.16,1,.3,1); }
+.tr.cut .pg.a { animation: trCut 2.8s infinite steps(1); }
+.tr .pg .ln { position: absolute; left: 7px; right: 7px; height: 4px; border-radius: 2px; background: var(--wire-fill); }
+
+/* count-up */
+@keyframes odoRoll { 0%,4%{transform:translateY(0)} 46%,90%{transform:translateY(-90%)} 100%{transform:translateY(0)} }
+@keyframes arcSweep { 0%,6%{transform:rotate(0)} 48%,90%{transform:rotate(268deg)} 100%{transform:rotate(0)} }
+.odo { display: flex; gap: 2px; height: 30px; overflow: hidden; }
+.odo .reel { display: flex; flex-direction: column; animation: odoRoll 2.8s infinite cubic-bezier(.12,.9,.2,1); }
+.odo .reel:nth-child(2) { animation-duration: 2.8s; animation-delay: .06s; }
+.odo .reel:nth-child(3) { animation-duration: 2.8s; animation-delay: .12s; }
+.odo .reel span { height: 30px; line-height: 30px; font-family: var(--mono); font-size: 1.4rem; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.arcwrap { position: relative; width: 62px; height: 62px; display: flex; align-items: center; justify-content: center; }
+.arcwrap .track { position: absolute; inset: 0; border-radius: 50%; border: 4px solid var(--wire-fill-2); }
+.arcwrap .swp { position: absolute; inset: 0; border-radius: 50%; border: 4px solid transparent; border-top-color: var(--spot); border-right-color: var(--spot); animation: arcSweep 2.8s infinite cubic-bezier(.12,.9,.2,1); }
+
+/* sparkle */
+@keyframes spScatter { 0%,10%{opacity:0;transform:scale(.3)} 30%,80%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(.3)} }
+@keyframes spOrbit { 0%{transform:rotate(0)} 100%{transform:rotate(360deg)} }
+@keyframes spTrail { 0%{opacity:0;transform:translateX(-26px)} 30%{opacity:1} 100%{opacity:0;transform:translateX(26px)} }
+.sp { position: relative; width: 84px; height: 60px; display: flex; align-items: center; justify-content: center; }
+.sp .core2 { width: 26px; height: 26px; border-radius: 4px; background: var(--wire-action); }
+.sp i { position: absolute; width: 5px; height: 5px; border-radius: 50%; background: var(--spot); }
+.sp.scatter i { animation: spScatter 2.6s infinite cubic-bezier(.16,1,.3,1); }
+.sp.orbit .orb { position: absolute; inset: 0; animation: spOrbit 5s infinite linear; }
+.sp.orbit .orb i { top: 50%; left: 50%; margin: -2.5px; }
+.sp.trail i { animation: spTrail 1.9s infinite linear; }
+.sp.none i { display: none; }
+</style>
+
+      <section class="mgroup" id="m-intro">
+        <header>
+          <div class="kicker"><h3>Celebration intro</h3><code class="enum-key">celebration_intro</code></div>
+          <p class="path">features/stats/presentation/widgets/streak/streak_body.dart</p>
+          <p>The one-shot that plays before a post-class card settles into its stats.</p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="intro"><div class="ring" id="ring-a"></div><div class="d-sq core"></div></div></div>
+            <span class="val">orbit<span class="tag">shipped</span></span>
+            <span class="note">Icon pops, a rotating ring expands out then collapses, icon exits into the cascade.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="intro burst" id="burst-a"><div class="d-sq core"></div></div></div>
+            <span class="val">burst</span>
+            <span class="note">Particles fire out once and fade where they land. No ring, no rotation. Shortest of the five.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="intro rise"><div class="d-sq core"></div></div></div>
+            <span class="val">rise</span>
+            <span class="note">Icon rises from below with a trailing blur and settles. No particles at all.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="intro flip" style="flex-direction:column"><div class="d-sq core"></div><span class="fnum" id="flipnum">0</span></div></div>
+            <span class="val">flipCount</span>
+            <span class="note">Icon flips in on the Y axis and the count starts mid-flip, so the figure is already moving when it lands.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="intro none"><div class="d-sq core"></div></div></div>
+            <span class="val">none</span>
+            <span class="note">Card arrives settled. Stats still cascade through reveal_style.</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="mgroup" id="m-reveal">
+        <header>
+          <div class="kicker"><h3>Reveal</h3><code class="enum-key">reveal_style</code></div>
+          <p class="path">shared/widgets/animation/staggered_reveal.dart &middot; scale_reveal.dart</p>
+          <p>The per-element entrance used everywhere in the celebration stack. Stagger comes from the personality; only the entrance itself changes here.</p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev fadeUp"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">fadeUp<span class="tag">shipped</span></span>
+            <span class="note">Opacity in with a 12px lift. StaggeredReveal today.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev scalePop"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">scalePop</span>
+            <span class="note">Scale from 0.5 with opacity. ScaleReveal today, promoted to the default entrance.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev slideIn"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">slideIn</span>
+            <span class="note">Horizontal entry from the leading edge, opacity held high.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack rev maskWipe"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">maskWipe</span>
+            <span class="note">Revealed by a clip along its own axis. No transform, which keeps text pin-sharp throughout.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="d-stack"><div class="d-line" style="width:100%"></div><div class="d-line" style="width:70%"></div><div class="d-line" style="width:85%"></div></div></div>
+            <span class="val">none</span>
+            <span class="note">Present at full opacity. Stagger still orders the count-up.</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="mgroup" id="m-loader">
+        <header>
+          <div class="kicker"><h3>Loader</h3><code class="enum-key">loader_style</code></div>
+          <p class="path">shared/widgets/animation/loading_dots.dart</p>
+          <p>The waiting state. Seen on every cold feed fetch, which makes it one of the highest-frequency branded surfaces in the app.</p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="ld"><div class="d-dot"></div><div class="d-dot"></div><div class="d-dot"></div></div></div>
+            <span class="val">dots<span class="tag">shipped</span></span>
+            <span class="note">Three dots in a travelling bounce, 1100ms cycle.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="ldring"><i></i><i></i></div></div>
+            <span class="val">pulseRing</span>
+            <span class="note">A ring scales out and fades, repeating. Quieter than dots at the same frequency.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="ldbar"><i></i></div></div>
+            <span class="val">barSweep</span>
+            <span class="note">Indeterminate bar sweeping its track. The most conventional and the least branded.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="ldmark"></div></div>
+            <span class="val">logoBreathe</span>
+            <span class="note">The tenant mark breathing between 0.94 and 1.0. The only value that is white-label native, since the mark is already a slot.</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="mgroup" id="m-transition">
+        <header>
+          <div class="kicker"><h3>Transition</h3><code class="enum-key">transition_style</code></div>
+          <p class="path">not yet implemented &mdash; the app uses Flutter's default route transition</p>
+          <p>Screen to screen. This enum's first job is to make an existing default explicit rather than to add anything.</p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="tr fade"><div class="pg b"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:20px"></span></div><div class="pg a"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:24px"></span></div></div></div>
+            <span class="val">fade</span>
+            <span class="note">Cross-fade, no translation. Cheapest and the most forgiving of slow frames.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="tr axis"><div class="pg b"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:20px"></span></div><div class="pg a"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:24px"></span></div></div></div>
+            <span class="val">sharedAxis</span>
+            <span class="note">Paired slide and fade along the navigation axis. Carries direction, which the default does not.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="tr stack"><div class="pg b"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:20px"></span></div><div class="pg a"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:24px"></span></div></div></div>
+            <span class="val">cardStack</span>
+            <span class="note">Incoming screen rises over the outgoing one, which recedes. Reads as depth rather than as sequence.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="tr cut"><div class="pg b"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:20px"></span></div><div class="pg a"><span class="ln" style="top:12px"></span><span class="ln" style="top:24px;right:24px"></span></div></div></div>
+            <span class="val">none</span>
+            <span class="note">Instant cut. Fastest perceived navigation and the right answer for a dense operational tenant.</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="mgroup" id="m-count">
+        <header>
+          <div class="kicker"><h3>Count-up</h3><code class="enum-key">count_up_style</code></div>
+          <p class="path">shared/widgets/animation/count_up_text.dart</p>
+          <p>How an earned figure arrives. The single most emotionally loaded piece of motion in the app, and the one the post-class moment is built around.</p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="odo"><div class="reel"><span>0</span><span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span><span>8</span><span>2</span></div><div class="reel"><span>0</span><span>3</span><span>6</span><span>9</span><span>2</span><span>5</span><span>8</span><span>1</span><span>4</span><span>4</span></div><div class="reel"><span>0</span><span>2</span><span>4</span><span>6</span><span>8</span><span>1</span><span>3</span><span>5</span><span>7</span><span>0</span></div></div></div>
+            <span class="val">odometer<span class="tag">shipped</span></span>
+            <span class="note">Per-digit reels on a steep ease-out-expo. Digits land right to left.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><span class="d-num" id="ticker">0</span></div>
+            <span class="val">ticker</span>
+            <span class="note">Whole number re-renders through intermediate values. No per-digit motion, far cheaper to paint.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="arcwrap"><div class="track"></div><div class="swp"></div><span class="d-num" style="font-size:1rem">240</span></div></div>
+            <span class="val">sweepArc</span>
+            <span class="note">Figure holds while an arc sweeps to the value beneath it. Reads as progress rather than as a total.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><span class="d-num">240</span></div>
+            <span class="val">instant</span>
+            <span class="note">Final value on arrival. Still respects reveal_style for its entrance.</span>
+          </figure>
+        </div>
+      </section>
+
+      <section class="mgroup" id="m-sparkle">
+        <header>
+          <div class="kicker"><h3>Sparkle</h3><code class="enum-key">sparkle_style</code><span class="tag" style="font-family:var(--mono);font-size:.58rem;letter-spacing:.08em;text-transform:uppercase;padding:1px 6px;border-radius:2px;border:1px solid var(--spot);color:var(--spot)">proposed</span></div>
+          <p class="path">shared/widgets/sparkle_hero/ &middot; shared/widgets/animation/sparkle_burst.dart</p>
+          <p>
+            Not in the five surfaces confirmed for this pass. Proposed because the sparkle is a real,
+            separately branded surface here and <code>motion_personality</code> currently reaches it
+            only through a particle count. Six surface enums instead of five if it goes in.
+          </p>
+        </header>
+        <div class="tiles">
+          <figure class="tile">
+            <div class="demo"><div class="sp scatter" id="sp-scatter"><div class="core2"></div></div></div>
+            <span class="val">scatter<span class="tag">shipped</span></span>
+            <span class="note">Fixed radial scatter of 12 particles fading in over a 620ms window.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="sp orbit"><div class="orb" id="sp-orbit"></div><div class="core2"></div></div></div>
+            <span class="val">orbit</span>
+            <span class="note">Particles hold a slow orbit around the hero instead of fading in place.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="sp trail" id="sp-trail"><div class="core2"></div></div></div>
+            <span class="val">trail</span>
+            <span class="note">Particles emit along the stat's own baseline as the count runs.</span>
+          </figure>
+          <figure class="tile">
+            <div class="demo"><div class="sp none"><div class="core2"></div></div></div>
+            <span class="val">none</span>
+            <span class="note">No decorative particles. The personality's particle count is ignored.</span>
+          </figure>
+        </div>
+      </section>
+
+      <!-- ================= WIRING ================= -->
+      <section class="plate" id="wiring">
+        <div class="plate-hd">
+          <div class="kicker"><h2>Wiring</h2><code class="enum-key">lib/core/app_slots.dart</code></div>
+          <p class="blurb">
+            Layout and motion are new slot kinds on the manifest that already declares colours,
+            images, fonts, texts and icons. The shape follows that file's own convention exactly:
+            an explicit id constant, one line in the matching list, one matching declaration in
+            the service's <code>apps/&lt;app&gt;/app.yaml</code>.
+          </p>
+        </div>
+        <div class="src-panel" style="margin-top:20px">
+          <header><span>Dart <span class="who">proposed</span></span><button class="copy" type="button">Copy</button></header>
+          <pre>// ---- Layout slots ----
+static const String appShellFormat   = 'app_shell_format';
+static const String homeFormat       = 'home_format';
+static const String videosFormat     = 'videos_format';
+static const String rankFormat       = 'rank_format';
+static const String rewardsFormat    = 'rewards_format';
+static const String classFormat      = 'class_format';
+static const String celebrationFormat = 'celebration_format';
+
+static const List&lt;String&gt; expectedLayouts = [
+  appShellFormat, homeFormat, videosFormat, rankFormat,
+  rewardsFormat, classFormat, celebrationFormat,
+];
+
+// ---- Motion slots ----
+static const String motionPersonality = 'motion_personality';
+static const String celebrationIntro  = 'celebration_intro';
+static const String revealStyle       = 'reveal_style';
+static const String loaderStyle       = 'loader_style';
+static const String transitionStyle   = 'transition_style';
+static const String countUpStyle      = 'count_up_style';
+
+static const List&lt;String&gt; expectedMotion = [
+  motionPersonality, celebrationIntro, revealStyle,
+  loaderStyle, transitionStyle, countUpStyle,
+];</pre>
+        </div>
+        <p style="color:var(--muted);max-width:66ch;margin-top:18px">
+          Consumption mirrors the existing accessors. A <code>ThemeLayout.value</code> and a
+          <code>ThemeMotion.value</code> return the resolved enum with the shipped value as the
+          fallback, so an unbranded build and a tenant missing the slot both render exactly what
+          ships today. Nothing under <code>lib/</code> is changed by this document.
+        </p>
+      </section>
+
+      <!-- ================= OPEN ================= -->
+      <section class="plate" id="open">
+        <div class="plate-hd">
+          <div class="kicker"><h2>Open questions</h2></div>
+          <p class="blurb">Six decisions this pass surfaced and did not make.</p>
+        </div>
+        <ol style="max-width:70ch;padding-left:1.1em;margin-top:22px">
+          <li style="margin-bottom:16px"><b>Does posterDeck pass the gate?</b> It pins one redeem action under a deck instead of one per card. Either the check counts actions per data row rather than per screen, or the value is cut. Worth deciding before the gate is written, because it decides whether the rule is a plain multiset diff or something that understands binding.</li>
+          <li style="margin-bottom:16px"><b>Does cinematic get to break the 300ms ceiling?</b> Per-personality ceiling, or cap it and let stagger carry the weight. The second keeps one motion law.</li>
+          <li style="margin-bottom:16px"><b>Is sparkle_style in or out?</b> Six surface enums instead of five, for a surface the personality currently reaches only by particle count.</li>
+          <li style="margin-bottom:16px"><b>Do markOnly and nextUpHero ship as offerable defaults?</b> Both hold the invariant. Both hide something a tenant may specifically want visible: the gym name, and the class thumbnails.</li>
+          <li style="margin-bottom:16px"><b>How many values per screen is right?</b> Five is what this pass produced. Human review is the throughput ceiling, so library size is a cost decision, not a design one, and it should be set deliberately rather than by whatever a generation run emits.</li>
+          <li><b>Do the two home bodies stay two bodies?</b> HomeNotBookedBody and HomeBookedBody are near-identical trees differing by one card, so every home value has to be authored twice. Collapsing them to one body with a nullable card halves the authoring cost. Pre-existing duplication, not something this work introduced.</li>
+        </ol>
+      </section>
+
+      <footer style="margin-top:80px;border-top:1px solid var(--rule);padding-top:20px;font-family:var(--mono);font-size:.72rem;color:var(--faint);display:flex;flex-wrap:wrap;gap:8px 28px">
+        <span>Source <b style="color:var(--ink);font-weight:600">MobileApp/docs/layout_and_motion_formats.md</b></span>
+        <span>Wireframes are unstyled on purpose</span>
+        <span>Proposal &mdash; no app code changed</span>
+      </footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---- particle scatters that would be tedious by hand ----
+  var ring = document.getElementById('ring-a');
+  if (ring) {
+    for (var i = 0; i < 8; i++) {
+      var a = (i / 8) * Math.PI * 2;
+      var p = document.createElement('i');
+      p.style.transform = 'translate(' + (Math.cos(a) * 34).toFixed(1) + 'px,' + (Math.sin(a) * 34).toFixed(1) + 'px)';
+      ring.appendChild(p);
+    }
+  }
+  var burst = document.getElementById('burst-a');
+  if (burst) {
+    for (var j = 0; j < 10; j++) {
+      var b = (j / 10) * Math.PI * 2;
+      var q = document.createElement('div');
+      q.className = 'p';
+      q.style.setProperty('--dx', (Math.cos(b) * 36).toFixed(1) + 'px');
+      q.style.setProperty('--dy', (Math.sin(b) * 36).toFixed(1) + 'px');
+      q.style.animationDelay = (j * 0.02).toFixed(2) + 's';
+      burst.appendChild(q);
+    }
+  }
+  var scatter = [[-30,-19],[27,-22],[34,7],[-35,5],[-24,22],[22,23],[0,-27],[3,26],[-38,-6],[38,-9],[15,-15],[-16,14]];
+  var spS = document.getElementById('sp-scatter');
+  if (spS) scatter.forEach(function (pt, k) {
+    var e = document.createElement('i');
+    e.style.left = 'calc(50% + ' + pt[0] + 'px)';
+    e.style.top = 'calc(50% + ' + pt[1] + 'px)';
+    e.style.animationDelay = (k * 0.045).toFixed(3) + 's';
+    spS.appendChild(e);
+  });
+  var spO = document.getElementById('sp-orbit');
+  if (spO) for (var m = 0; m < 6; m++) {
+    var ang = (m / 6) * Math.PI * 2;
+    var o = document.createElement('i');
+    o.style.transform = 'translate(' + (Math.cos(ang) * 26).toFixed(1) + 'px,' + (Math.sin(ang) * 26).toFixed(1) + 'px)';
+    spO.appendChild(o);
+  }
+  var spT = document.getElementById('sp-trail');
+  if (spT) for (var n = 0; n < 7; n++) {
+    var t = document.createElement('i');
+    t.style.left = '50%';
+    t.style.top = 'calc(50% + ' + (16 + (n % 3) * 4) + 'px)';
+    t.style.animationDelay = (n * 0.16).toFixed(2) + 's';
+    spT.appendChild(t);
+  }
+
+  // ---- specimen selection drives its plate's source panel ----
+  function wirePlate(root) {
+    var specs = root.querySelectorAll('.spec');
+    var panel = root.querySelector('.src-panel');
+    if (!specs.length || !panel) return;
+    var pre = panel.querySelector('pre');
+    var who = panel.querySelector('.who');
+
+    function show(spec) {
+      specs.forEach(function (s) { s.setAttribute('aria-pressed', String(s === spec)); });
+      var src = spec.querySelector('.src');
+      pre.textContent = src ? src.textContent : '';
+      var val = spec.querySelector('.val');
+      who.textContent = val ? val.firstChild.textContent.trim() : '';
+    }
+
+    specs.forEach(function (spec) {
+      spec.addEventListener('click', function () { show(spec); });
+    });
+    show(root.querySelector('.spec[aria-pressed="true"]') || specs[0]);
+  }
+  document.querySelectorAll('.plate').forEach(wirePlate);
+
+  // ---- copy ----
+  document.querySelectorAll('.copy').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var pre = btn.closest('.src-panel').querySelector('pre');
+      var done = function (ok) {
+        btn.textContent = ok ? 'Copied' : 'Select and copy';
+        setTimeout(function () { btn.textContent = 'Copy'; }, 1600);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pre.textContent).then(function () { done(true); }, function () { done(false); });
+      } else { done(false); }
+    });
+  });
+
+  // ---- hero strip: the same screen, five ways (cloned from the home plate) ----
+  var strip = document.querySelector('.thesis .strip');
+  var homeSpecs = document.querySelectorAll('#home-specs .spec');
+  if (strip && homeSpecs.length) {
+    homeSpecs.forEach(function (spec) {
+      var fig = document.createElement('figure');
+      fig.setAttribute('role', 'listitem');
+      var ph = spec.querySelector('.ph').cloneNode(true);
+      ph.classList.add('sm');
+      var cap = document.createElement('figcaption');
+      cap.textContent = spec.querySelector('.val').firstChild.textContent.trim();
+      fig.appendChild(ph);
+      fig.appendChild(cap);
+      strip.appendChild(fig);
+    });
+  }
+
+  // ---- motion demos: honour reduced motion, allow opt-in ----
+  var reduce = window.matchMedia('(prefers-reduced-motion: reduce)');
+  var toggle = document.getElementById('mtoggle');
+  var tickerEl = document.getElementById('ticker');
+  var flipEl = document.getElementById('flipnum');
+  var running = !reduce.matches;
+
+  function paint(paused) {
+    document.body.classList.toggle('mpaused', paused);
+    toggle.setAttribute('aria-pressed', String(!paused));
+    toggle.textContent = paused ? 'Play demos' : 'Pause demos';
+  }
+  paint(!running);
+
+  toggle.addEventListener('click', function () {
+    running = !running;
+    paint(!running);
+  });
+
+  // JS-driven counters, paused with everything else
+  var t0 = null;
+  function frame(ts) {
+    if (running) {
+      if (t0 === null) t0 = ts;
+      var cycle = 2800;
+      var p = ((ts - t0) % cycle) / cycle;
+      var eased = p < 0.5 ? 1 - Math.pow(1 - p / 0.5, 4) : 1;
+      if (tickerEl) tickerEl.textContent = String(Math.round(eased * 240));
+      if (flipEl) flipEl.textContent = String(Math.round(eased * 12));
+    } else { t0 = null; }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // ---- rail scroll-spy ----
+  var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+  var targets = links.map(function (a) { return document.querySelector(a.getAttribute('href')); }).filter(Boolean);
+  if (targets.length && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting) return;
+        links.forEach(function (a) {
+          a.classList.toggle('on', a.getAttribute('href') === '#' + en.target.id);
+        });
+      });
+    }, { rootMargin: '-10% 0px -75% 0px' });
+    targets.forEach(function (t) { io.observe(t); });
+  }
+})();
+</script>
+
+    </main>
+  </div>
+</div>

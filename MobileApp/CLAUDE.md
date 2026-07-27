@@ -384,6 +384,14 @@ reveal + post-class celebration animations deterministically — read by
 intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
 See `tools/capture/README.md`.
 
+Also outside `lib/`, **`docs/`** holds design proposals for this app. Today that
+is `layout_and_motion_formats.md` — the proposed layout and motion enum library
+(one whole-screen layout enum per major screen, plus a motion personality and
+five per-surface motion slots), with `layout_formats_preview.html` rendering
+every value as a wireframe specimen. It is a **proposal**: nothing under `lib/`
+implements it, and `lib/core/app_slots.dart` does not yet declare layout or
+motion slots. If those slots are added, update that doc in the same change.
+
 ## Development Commands
 
 - `flutter run` — run the app in debug mode (hot reload).
