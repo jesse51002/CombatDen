@@ -32,6 +32,13 @@ export const SLOT_SINGLE_POINT = 'single_point';
 export const SLOT_POINTS_STARS_IMAGE = 'points_stars_image';
 export const SLOT_TROPHY_IMAGE = 'trophy_image';
 export const SLOT_RANK_BELT = 'rank_belt';
+// The belt of the rank ABOVE the member's current one — the pipeline derives it
+// from `rank_belt` (`apps/combatden/app.yaml`, `depends_on: rank_belt`). It is
+// generated for every theme and read by the real member app
+// (`MobileApp/lib/core/app_slots.dart`), whose Profile screen is its only
+// consumer; the preview did not render Profile, so the slot was produced and
+// then displayed nowhere.
+export const SLOT_NEXT_RANK_BELT_IMAGE = 'next_rank_belt_image';
 export const SLOT_ICON_QRCODE = 'icon_qrcode';
 
 export const EXPECTED_IMAGES: readonly string[] = Object.freeze([
@@ -43,6 +50,7 @@ export const EXPECTED_IMAGES: readonly string[] = Object.freeze([
   SLOT_POINTS_STARS_IMAGE,
   SLOT_TROPHY_IMAGE,
   SLOT_RANK_BELT,
+  SLOT_NEXT_RANK_BELT_IMAGE,
   SLOT_ICON_QRCODE,
 ]);
 

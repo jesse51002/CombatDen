@@ -45,9 +45,17 @@ export const INITIAL_URL_THEME: string | null = themeFromUrl();
  * should leave the browser, not walk back through thirty previews.
  *
  * Only the phone view carries a theme; the library clears it.
+ *
+ * **Merges** rather than rebuilding the query string. Dart could assign the
+ * whole route because `theme` was the only parameter that existed; this app
+ * also carries `?view=` (../appUrl.ts), and rebuilding from the path would
+ * erase it every time the previewed theme changed.
  */
 export function syncThemeUrl(theme: string | null): void {
-  const path = window.location.pathname;
-  const url = theme === null || theme === '' ? path : `${path}?theme=${encodeURIComponent(theme)}`;
+  const params = new URLSearchParams(window.location.search);
+  if (theme === null || theme === '') params.delete('theme');
+  else params.set('theme', theme);
+  const query = params.toString();
+  const url = query === '' ? window.location.pathname : `${window.location.pathname}?${query}`;
   window.history.replaceState(window.history.state, '', url);
 }

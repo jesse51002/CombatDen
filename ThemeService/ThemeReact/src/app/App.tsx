@@ -10,13 +10,16 @@
 // the runtime has settled. It carries NO value: every hook below reads the
 // module-singleton store directly (see ../../CLAUDE.md).
 
+import { useEffect, useState } from 'react';
 import { ThemeProvider, loadFontFamily } from 'theme-react';
 
 import styles from './App.module.css';
+import { INITIAL_URL_VIEW, syncViewUrl, type AppView } from './appUrl';
 import { ThemeBrowser } from './browser/ThemeBrowser';
 import { INITIAL_URL_THEME } from './browser/themeUrl';
 import { GWNav } from './chrome/GWNav';
 import { APP_ID, SEED_DESIGN_ID } from './config';
+import { InspectView } from './inspect/InspectView';
 import {
   EXPECTED_COLORS,
   EXPECTED_FONTS,
@@ -24,7 +27,9 @@ import {
   EXPECTED_IMAGES,
   EXPECTED_TEXT,
 } from './showcase/showcaseSlots';
+import { StudioView } from './studio/StudioView';
 import { ADM } from './tokens/adminTokens';
+import { ViewTabs } from './ViewTabs';
 import { AppSpinner } from './widgets/AppSpinner';
 
 // Geist is the CHROME's typeface (the CRM's `baseFont`, the landing page's
@@ -34,9 +39,19 @@ import { AppSpinner } from './widgets/AppSpinner';
 loadFontFamily(ADM.fontFamily);
 
 export function App() {
+  // The top-level view. A deep link opens straight onto it; from here on the
+  // address bar follows the state (../appUrl.ts), which is what lets a demo be
+  // handed over as a URL rather than a click path.
+  const [view, setView] = useState<AppView>(INITIAL_URL_VIEW);
+
+  useEffect(() => {
+    syncViewUrl(view);
+  }, [view]);
+
   return (
     <div className={styles.app}>
       <GWNav />
+      <ViewTabs view={view} onChange={setView} />
       <main className={styles.main}>
         <ThemeProvider
           appId={APP_ID}
@@ -56,7 +71,16 @@ export function App() {
           expectedIcons={EXPECTED_ICONS}
           fallback={<CenteredSpinner />}
         >
-          <ThemeBrowser />
+          {/* All three views sit INSIDE the gate: the inspector reads the
+              resolved theme, and the studio previews what it just produced,
+              so neither can render before the runtime has settled. */}
+          {view === 'inspect' ? (
+            <InspectView />
+          ) : view === 'studio' ? (
+            <StudioView />
+          ) : (
+            <ThemeBrowser />
+          )}
         </ThemeProvider>
       </main>
     </div>

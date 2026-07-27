@@ -1,0 +1,22 @@
+/* SCAFFOLD — deleted wholesale when the designed navigation lands. */
+.tabs {
+  display: flex;
+  gap: var(--adm-space-sm, 8px);
+  justify-content: center;
+  padding: var(--adm-space-sm, 8px);
+}
+
+.tab {
+  border: 1px solid var(--adm-border, rgb(0 0 0 / 12%));
+  border-radius: var(--adm-radius-small, 8px);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.tab[aria-current='page'] {
+  border-color: currentcolor;
+  font-weight: 600;
+}

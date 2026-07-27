@@ -1,0 +1,8 @@
+/* SCAFFOLD — replaced wholesale when the inspector is built. */
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  opacity: 0.6;
+}
