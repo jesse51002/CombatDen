@@ -98,6 +98,7 @@ def generate(
     attendance_times: list[datetime] | None = None,
     current_sub_index: int | None = None,
     sub_rank_type: SubRankType | None = None,
+    current_rank_image_url: str | None = None,
 ) -> list[MemberActivityCreate]:
     activities = []
     for _ in range(count):
@@ -134,6 +135,14 @@ def generate(
                     "new_rank_id": str(current_rank_id),
                     "old_rank_name": None,
                     "new_rank_name": new_rank_name,
+                    # A first assignment has no FROM leaf, so every old_* stays
+                    # None. The new_* pair is snapshotted because the member
+                    # app animates the belt off this row -- without the image
+                    # the animation has no art to show on seeded data.
+                    "old_sub_index": None,
+                    "new_sub_index": current_sub_index,
+                    "old_image_url": None,
+                    "new_image_url": current_rank_image_url,
                 },
                 time=_rank_changed_anchor_time(
                     attendance_times or [], classes_per_step

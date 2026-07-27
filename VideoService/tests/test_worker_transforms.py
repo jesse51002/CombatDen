@@ -1,12 +1,20 @@
 """Pure transforms for the worker's scrape stage: YouTube Data API items
 (search.list merged with videos.list) -> VideoOutput, incl. ISO-8601 duration
 parsing and dedup across queries. No network. Transcripts are NOT here — they are
-fetched lazily at enrich, so a scraped VideoOutput leaves with transcript=None."""
+fetched lazily at enrich, so a scraped VideoOutput leaves with transcript=None.
+
+Also covers the creator-avatar parsers that live here: channels.list items ->
+{channel_id: avatar}, videos.list items -> {video_id: channel_id}, and the
+channel_id_from_url inverse the pool relies on instead of a channel_id column."""
 
 from __future__ import annotations
 
 from src.worker.worker_transforms import (
+    CHANNEL_URL,
     build_outputs,
+    channel_id_from_url,
+    parse_channel_avatars,
+    parse_video_channel_ids,
     parse_youtube_items,
     youtube_item_id,
 )
@@ -125,3 +133,63 @@ def test_youtube_item_id_handles_both_shapes() -> None:
     assert youtube_item_id({"id": "xyz"}) == "xyz"  # videos.list
     assert youtube_item_id({"id": {"kind": "youtube#channel"}}) == ""
     assert youtube_item_id({}) == ""
+
+
+# --- creator avatars ------------------------------------------------------------
+
+
+def test_channel_id_round_trips_through_the_stored_url() -> None:
+    """The id-form URL is the pool's only record of a channel id — this inverse is
+    what makes a `channel_id` column unnecessary."""
+    url = CHANNEL_URL.format(channel_id="UC_x5XG1OV2P6uZZ5FSM9Ttw")
+    assert channel_id_from_url(url) == "UC_x5XG1OV2P6uZZ5FSM9Ttw"
+
+
+def test_channel_id_from_legacy_handle_url_is_empty() -> None:
+    # The legacy YAML pool's @handle form carries no id — which is exactly why the
+    # one-time backfill has to recover it via videos.list first.
+    assert channel_id_from_url("https://www.youtube.com/@gracieuniversity") == ""
+    assert channel_id_from_url("") == ""
+
+
+def test_parse_channel_avatars_prefers_high_then_medium_then_default() -> None:
+    items = [
+        {
+            "id": "c-high",
+            "snippet": {
+                "thumbnails": {
+                    "default": {"url": "d.jpg"},
+                    "medium": {"url": "m.jpg"},
+                    "high": {"url": "h.jpg"},
+                }
+            },
+        },
+        {"id": "c-med", "snippet": {"thumbnails": {"medium": {"url": "m2.jpg"}}}},
+        {"id": "c-def", "snippet": {"thumbnails": {"default": {"url": "d2.jpg"}}}},
+    ]
+    assert parse_channel_avatars(items) == {
+        "c-high": "h.jpg",
+        "c-med": "m2.jpg",
+        "c-def": "d2.jpg",
+    }
+
+
+def test_parse_channel_avatars_skips_unusable_items() -> None:
+    # No id, and no usable thumbnail: neither may become an empty stored avatar
+    # (indistinguishable from "not resolved yet").
+    items = [
+        {"snippet": {"thumbnails": {"high": {"url": "h.jpg"}}}},
+        {"id": "c-none", "snippet": {"thumbnails": {}}},
+        {"id": "c-nosnippet"},
+    ]
+    assert parse_channel_avatars(items) == {}
+
+
+def test_parse_video_channel_ids_maps_video_to_channel() -> None:
+    items = [
+        {"id": "v1", "snippet": {"channelId": "UCaaa"}},
+        {"id": "v2", "snippet": {"channelId": "UCbbb"}},
+        {"id": "v3", "snippet": {}},  # no channelId → skipped
+        {"snippet": {"channelId": "UCccc"}},  # no video id → skipped
+    ]
+    assert parse_video_channel_ids(items) == {"v1": "UCaaa", "v2": "UCbbb"}

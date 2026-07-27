@@ -9,6 +9,19 @@
 -- display name is Python-derived and bound as :new_rank_name (the gym's
 -- sub_rank_type drives the label). A gym with no ranks yields an empty
 -- `lowest` CTE, making the whole statement a no-op.
+--
+-- A backfill has NO "from" leaf — nobody was promoted out of anything — so
+-- every old_* key in the payload is a literal NULL. Never fabricate an old
+-- belt where there isn't one: the member app renders the from-side only when
+-- it is present.
+--
+-- The new belt image is Python-derived and bound as :new_image_url, resolved
+-- through the domain's single image rule (RanksBase._leaf_image_url — the base
+-- leaf's override, else the main rank's image) from the same ladder read that
+-- produced :new_rank_name. It is a SNAPSHOT on purpose: gym_ranks.image_url is
+-- user-writable, so re-uploading belt art must not retroactively change what a
+-- past rank change looked like. The new sub-index comes from the UPDATE's own
+-- RETURNING, so the payload records exactly the leaf that was written.
 WITH lowest AS (
     SELECT
         gr.rank_id,
@@ -32,7 +45,8 @@ backfilled AS (
       AND m.current_rank_id IS NULL
     RETURNING
         m.member_id,
-        lowest.rank_id AS new_rank_id
+        lowest.rank_id AS new_rank_id,
+        m.current_sub_index AS new_sub_index
 )
 INSERT INTO member_activities (member_id, gym_id, activity_type, activity_info)
 SELECT
@@ -43,6 +57,10 @@ SELECT
         'old_rank_id', NULL,
         'new_rank_id', b.new_rank_id,
         'old_rank_name', NULL,
-        'new_rank_name', CAST(:new_rank_name AS TEXT)
+        'new_rank_name', CAST(:new_rank_name AS TEXT),
+        'old_sub_index', NULL,
+        'new_sub_index', b.new_sub_index,
+        'old_image_url', NULL,
+        'new_image_url', CAST(:new_image_url AS TEXT)
     )
 FROM backfilled b

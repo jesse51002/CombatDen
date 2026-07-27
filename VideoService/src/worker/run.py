@@ -21,6 +21,7 @@ from src.shared.database import DirectDatabasePool
 from src.shared.services.llm_client import LiteLLMClient
 from src.shared.services.resource_lock import ResourceLock
 from src.worker.worker_apify import WorkerTranscriptClient
+from src.worker.worker_avatars import WorkerAvatarResolver
 from src.worker.worker_cleanup import WorkerCleanup
 from src.worker.worker_config import settings
 from src.worker.worker_cost_log import WorkerCostLog
@@ -43,8 +44,9 @@ EXPECTED_EMBEDDING_DIM = 3072
 
 def _build_service(db_pool: DirectDatabasePool) -> WorkerService:
     """Wire the worker's dependencies: one LLM client shared across the steps, the
-    YouTube Data API client (discovery + metadata) for the scraper, the Apify
-    transcript client (lazy fetch) for the enrich sweep, and the shared cost log."""
+    YouTube Data API client (discovery + metadata + creator avatars) for the
+    scraper and its avatar resolver, the Apify transcript client (lazy fetch) for
+    the enrich sweep, and the shared cost log."""
     llm = LiteLLMClient(
         timeout_seconds=settings.llm_request_timeout_seconds,
         num_retries=settings.llm_num_retries,
@@ -58,7 +60,9 @@ def _build_service(db_pool: DirectDatabasePool) -> WorkerService:
         db_pool=db_pool,
         resource_lock=lock,
         spec=WorkerSpec(db_pool),
-        scraper=WorkerScraper(db_pool, youtube),
+        scraper=WorkerScraper(
+            db_pool, youtube, WorkerAvatarResolver(db_pool, youtube)
+        ),
         funnel=WorkerFunnel(db_pool, llm),
         enricher=WorkerEnricher(db_pool, llm, transcript, cost_log),
         scanner=WorkerScanner(db_pool, llm, cost_log),

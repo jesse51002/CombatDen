@@ -24,6 +24,23 @@ def _step_denominator(rank: GymRankCreate) -> int:
     return rank.classes_to_next_major
 
 
+def _leaf_image_url(rank: GymRankCreate | None, sub_index: int | None) -> str | None:
+    """The belt art for one leaf: the sub-rank override when there is one,
+    else the main rank's image.
+
+    Same precedence as the backend's RanksBase._leaf_image_url
+    (COALESCE(sub_rank_image_overrides ->> sub_index, image_url)), so a seeded
+    rank_changed row snapshots the same art a real promotion would.
+    """
+    if rank is None:
+        return None
+    if sub_index is not None:
+        override = (rank.sub_rank_image_overrides or {}).get(str(sub_index))
+        if override:
+            return override
+    return rank.image_url
+
+
 def create(
     client: Client,
     gym_id: uuid.UUID,
@@ -56,5 +73,6 @@ def create(
             attendance_times=attendance_times_by_member.get(m.member_id),
             current_sub_index=m.current_sub_index,
             sub_rank_type=sub_rank_type,
+            current_rank_image_url=_leaf_image_url(rank, m.current_sub_index),
         )
         client.table("member_activities").insert([r.to_insert_dict() for r in rows]).execute()

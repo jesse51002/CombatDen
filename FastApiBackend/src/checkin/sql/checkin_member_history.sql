@@ -54,6 +54,7 @@ SELECT
     h.occurred_at,
     h.status,
     s.duration_minutes,
+    c.points_worth,
     COUNT(*) OVER () AS total_rows
 FROM history h
 JOIN gym_classes c ON c.class_id = h.class_id

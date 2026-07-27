@@ -19,6 +19,11 @@ class GymWithRole {
   final String gymId;
   final String gymName;
   final String? gymDescription;
+
+  /// The gym's street address (`gyms.address`), free text; null means the
+  /// owner hasn't set one. Editable from Settings → Gym profile.
+  final String? address;
+
   final String? logoUrl;
   final String timezone;
   final EmployeeRole role;
@@ -51,6 +56,7 @@ class GymWithRole {
     required this.role,
     required this.themePreference,
     this.gymDescription,
+    this.address,
     this.themeDesignId,
     this.stripeAccountId,
     this.logoUrl,
@@ -63,6 +69,7 @@ class GymWithRole {
       gymId: json['gym_id'] as String,
       gymName: json['gym_name'] as String,
       gymDescription: json['gym_description'] as String?,
+      address: json['address'] as String?,
       logoUrl: json['logo_url'] as String?,
       timezone: json['timezone'] as String,
       role: EmployeeRole.fromJson(json['employee_type'] as String),

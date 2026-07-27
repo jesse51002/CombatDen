@@ -27,7 +27,20 @@ CREATE TABLE video (
     thumbnail_url TEXT NOT NULL,
     channel_name TEXT NOT NULL,
     channel_url TEXT NOT NULL,
-    channel_avatar_url TEXT NOT NULL DEFAULT '',  -- empty post-scrape; backfilled at serve time
+    -- The creator's profile picture, shown beside a video's title in the member UI.
+    -- A per-CHANNEL value stored redundantly per video (the pool is flat), so every
+    -- writer fans out by channel_url, never by video_id. Two writers, both using
+    -- YouTube's `channels.list` (the only endpoint that returns an avatar): the
+    -- VideoService worker's scrape avatar pass (VideoService/src/worker/
+    -- worker_avatars.py), which fills AND refreshes the channels each scrape
+    -- surfaces, and the backend's owner-added-video path (FastApiBackend/src/videos/
+    -- service/youtube_metadata.py). Refreshing matters because a yt3.ggpht.com URL
+    -- is content-addressed: it rotates when the creator changes their picture, and a
+    -- stale URL eventually 404s. Empty means "not resolved yet" — the member UI omits
+    -- the avatar entirely rather than rendering a broken circle — and it is no longer
+    -- the steady state: VideoService's one-time `make backfill-avatars` fills the
+    -- pre-existing pool.
+    channel_avatar_url TEXT NOT NULL DEFAULT '',
     view_count INTEGER,        -- NULL when stats hidden
     like_count INTEGER,        -- NULL when likes hidden
     duration_seconds INTEGER,  -- NULL for live broadcasts

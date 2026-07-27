@@ -17,6 +17,13 @@ class GymCreateRequest(BaseModel):
 
     gym_name: str = Field(min_length=1, max_length=255)
     gym_description: str | None = None
+    # Free-text street address, OPTIONAL at onboarding: the owner may
+    # type it on the "Name Your Gym" wizard step or leave it blank and
+    # set it later in CRM Settings. Nullable on the row, so an omitted
+    # or null value simply means "no address set" — deliberately NOT in
+    # the strip/require-non-empty validator below (that guards the
+    # REQUIRED strings only), matching gym_description.
+    address: str | None = None
     timezone: str = "America/Chicago"
     owner_first_name: str = Field(min_length=1, max_length=255)
     owner_last_name: str = Field(min_length=1, max_length=255)
@@ -40,6 +47,9 @@ class GymUpdateData(BaseModel):
 
     gym_name: str | None = None
     gym_description: str | None = None
+    # Free-text street address. Nullable, like gym_description / logo_url:
+    # explicit null clears it back to "no address set".
+    address: str | None = None
     timezone: str | None = None
     # NOT NULL on the gyms row (DEFAULT 'none'), same as gym_name /
     # timezone below — explicit null is rejected, not a valid "clear".
@@ -58,8 +68,8 @@ class GymUpdateData(BaseModel):
         NULL violation (500), so reject it here as a 422. Only runs when
         the field is present in the request body (Pydantic skips
         validators on an unset default), so an absent field still means
-        "unchanged". ``gym_description`` and ``logo_url`` are genuinely
-        nullable and stay clearable via explicit null."""
+        "unchanged". ``gym_description``, ``address`` and ``logo_url`` are
+        genuinely nullable and stay clearable via explicit null."""
         if value is None:
             raise ValueError(
                 f"{info.field_name} cannot be cleared; omit the field "
@@ -82,6 +92,8 @@ class GymResponse(BaseModel):
     created_at: datetime
     gym_name: str
     gym_description: str | None
+    # Free-text street address; None = the gym hasn't set one.
+    address: str | None = None
     timezone: str
     # NOT NULL on the gyms row — every rank-enabled gym has one.
     sub_rank_type: SubRankType

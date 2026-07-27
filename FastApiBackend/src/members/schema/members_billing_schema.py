@@ -173,12 +173,38 @@ class BillingMembershipInfo(BaseModel):
 
 
 class BillingRetention(BaseModel):
-    """Member retention and engagement statistics."""
+    """Member retention and engagement statistics.
+
+    Attributes:
+        last_class: When the member last attended, if ever.
+        class_streak_weeks: Consecutive gym-local weeks with a class.
+        points_balance: The member's spendable points.
+        videos_watched: Videos the member has opened.
+        current_week_attended_weekdays: The weekdays of the CURRENT week the
+            member trained on, **SUNDAY-FIRST** (0 = Sunday, 1 = Monday, …
+            6 = Saturday), ascending, de-duplicated, empty when they have not
+            trained this week. Sunday-first because that is the origin the
+            member app's ``StreakWeekStrip`` / ``completedWeekdayIndices()``
+            render against; a Monday-first list would silently mark the wrong
+            badge. It is derived from ``StreakService.get_streak_details``, so
+            it counts exactly the ``member_attendance`` rows that
+            ``class_streak_weeks`` counts and buckets them in the GYM's
+            timezone — the strip and the streak number can never contradict
+            each other on screen.
+
+            NOTE the deliberate asymmetry: the WEEK is the streak's gym-local
+            **Monday-start** week (so both numbers describe the same seven
+            days), while the INDEX ORIGIN is Sunday-first (so the client marks
+            the right badge). Consequently a Sunday only ever lights up as the
+            LAST day of the current streak week, rendered in the strip's first
+            cell.
+    """
 
     last_class: datetime | None = None
     class_streak_weeks: int
     points_balance: int
     videos_watched: int
+    current_week_attended_weekdays: list[int] = []
 
 
 class BillingRank(BaseModel):
@@ -206,6 +232,11 @@ class BillingRank(BaseModel):
     # Classes attended since the member's last promotion — the real
     # numerator for "classes_since_rank / classes_till_next_step" progress.
     classes_since_rank: int = 0
+    # Belt image of the NEXT leaf up the ladder, resolved with the same
+    # per-sub-override-over-main precedence as ``image_url``. ``None`` at the
+    # top of the ladder (there is no next leaf) or when that leaf carries no
+    # image — clients fall back to their own art.
+    next_rank_image_url: str | None = None
 
 
 class BillingRewardCard(BaseModel):

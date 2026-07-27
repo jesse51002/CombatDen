@@ -75,6 +75,9 @@ class GymShowcase(BaseModel):
     gym_id: UUID
     classes: list[ShowcaseClassCard] = Field(default_factory=list)
     rewards: list[ShowcaseRewardCard] = Field(default_factory=list)
+    # The gym's saved ThemeService design id; the mobile app uses it to
+    # re-theme itself to the gym's branding. None until the gym picks a theme.
+    theme_design_id: str | None = None
 
 
 class ShowcaseGroupDefaults(BaseModel):

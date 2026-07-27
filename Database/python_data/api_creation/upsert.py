@@ -115,16 +115,28 @@ def find_member(
     client: Client,
     gym_id: uuid.UUID,
     email: str,
+    *,
+    first_name: str | None = None,
+    last_name: str | None = None,
 ) -> dict | None:
-    """Look up a member row by (gym_id, email)."""
-    resp = (
+    """Look up a member row by (gym_id, email [, first_name, last_name]).
+
+    ``members.email`` is deliberately non-unique (families share an inbox, and
+    the seed gives TEST_MEMBER_EMAIL to three rows), so the name filters keep
+    the lookup pinned to ONE row — without them a shared-email re-run would
+    match an arbitrary sibling and skip creating the rest.
+    """
+    query = (
         client.table("members")
         .select("*")
         .eq("gym_id", str(gym_id))
         .eq("email", email)
-        .limit(1)
-        .execute()
     )
+    if first_name is not None:
+        query = query.eq("first_name", first_name)
+    if last_name is not None:
+        query = query.eq("last_name", last_name)
+    resp = query.limit(1).execute()
     return resp.data[0] if resp.data else None
 
 

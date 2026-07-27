@@ -75,7 +75,7 @@ class FakeScraper:
 
     async def scrape(self, spec: SpecData) -> ScrapeResult:
         self.scraped.append(spec)
-        return ScrapeResult(0.0, 100, 5, 2, 3)
+        return ScrapeResult(0.0, 112, 5, 2, 3, 12, 40)
 
     async def write_feed(self, spec, run_id, candidate_ids):  # noqa: ANN001
         self.feed_writes.append((spec.gym_id, run_id, list(candidate_ids)))
@@ -91,8 +91,26 @@ class FakeCostLog:
     def __init__(self) -> None:
         self.scrape_logs: list[tuple] = []
 
-    async def log_scrape(self, gym_id, run_id, *, youtube_quota_units, embed_usd):  # noqa: ANN001
-        self.scrape_logs.append((gym_id, run_id, youtube_quota_units, embed_usd))
+    async def log_scrape(  # noqa: ANN001
+        self,
+        gym_id,
+        run_id,
+        *,
+        youtube_quota_units,
+        embed_usd,
+        avatar_quota_units=0,
+        channels_resolved=0,
+    ):
+        self.scrape_logs.append(
+            (
+                gym_id,
+                run_id,
+                youtube_quota_units,
+                embed_usd,
+                avatar_quota_units,
+                channels_resolved,
+            )
+        )
 
 
 def _service(db, lock, *, scan_work=False, enrich_work=False):
@@ -198,7 +216,11 @@ def test_scrape_when_scan_and_enrich_empty() -> None:
     assert "insert_run" in db.write_names()
     assert [s.gym_id for s in parts["scraper"].scraped] == ["gym-1"]
     assert parts["scraper"].feed_writes == [("gym-1", "run-1", ["a", "b"])]
-    assert parts["cost_log"].scrape_logs == [("gym-1", "run-1", 100, 0.01)]
+    # The logged quota is the run TOTAL (search + the avatar pass), with the
+    # avatar share broken out beside it.
+    assert parts["cost_log"].scrape_logs == [
+        ("gym-1", "run-1", 112, 0.01, 12, 40)
+    ]
 
 
 def test_scrape_drain_processes_multiple_gyms() -> None:
@@ -233,8 +255,11 @@ def test_scrape_failure_fails_run_and_logs_incurred_cost() -> None:
         asyncio.run(service._scrape_gym("gym-1"))
 
     assert "fail_run" in db.write_names()  # the run is failed, not left running
-    # the funnel embed spend (incurred before write_feed raised) is still recorded.
-    assert parts["cost_log"].scrape_logs == [("gym-1", "run-1", 100, 0.01)]
+    # the funnel embed spend (incurred before write_feed raised) is still recorded,
+    # along with the quota the scrape + avatar pass had already spent.
+    assert parts["cost_log"].scrape_logs == [
+        ("gym-1", "run-1", 112, 0.01, 12, 40)
+    ]
 
 
 def test_scrape_skipped_when_system_cap_reached() -> None:

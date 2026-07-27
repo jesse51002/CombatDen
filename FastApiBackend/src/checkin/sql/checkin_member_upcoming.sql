@@ -13,6 +13,7 @@ SELECT
     cs.original_date,
     cs.original_time,
     s.duration_minutes,
+    c.points_worth,
     CAST(NULL AS TIMESTAMPTZ) AS occurred_at
 FROM class_signups cs
 JOIN gym_classes c ON c.class_id = cs.class_id

@@ -37,6 +37,8 @@ def route(sql: str) -> str:
         ("INSERT INTO video_rag", "insert_rag"),
         ("SET transcript", "cache_transcripts"),
         ("SET tag", "update_tags"),
+        ("SET channel_avatar_url", "update_channel_avatar"),
+        ("bool_or(channel_avatar_url", "channel_avatar_state"),
         ("INSERT INTO video (", "upsert_video"),
         ("FROM video\nWHERE video_id = ANY(:ids)", "existing_videos"),
         ("INSERT INTO cost_log", "insert_cost"),
@@ -136,21 +138,26 @@ class RoutingFakeDb:
 
 
 class FakeYouTube:
-    """YouTube Data API client stand-in: programmable ``search`` + ``list_videos``.
+    """YouTube Data API client stand-in: programmable ``search`` / ``list_videos``
+    / ``list_channels``.
 
     ``search_items`` maps a query → its ``search.list`` items; ``details`` maps a
-    video id → its ``videos.list`` detail item. Records the queries searched and
-    the id batches listed."""
+    video id → its ``videos.list`` detail item; ``channels`` maps a channel id →
+    its ``channels.list`` item. Records the queries searched and the id batches
+    listed (videos and channels separately)."""
 
     def __init__(
         self,
         search_items: dict[str, list[dict]] | None = None,
         details: dict[str, dict] | None = None,
+        channels: dict[str, dict] | None = None,
     ) -> None:
         self._search_items = search_items or {}
         self._details = details or {}
+        self._channels = channels or {}
         self.searched: list[str] = []
         self.listed: list[list[str]] = []
+        self.channels_listed: list[list[str]] = []
 
     async def search(
         self, query: str, *, max_results: int, language: str
@@ -161,6 +168,10 @@ class FakeYouTube:
     async def list_videos(self, video_ids: list[str]) -> list[dict]:
         self.listed.append(list(video_ids))
         return [self._details[v] for v in video_ids if v in self._details]
+
+    async def list_channels(self, channel_ids: list[str]) -> list[dict]:
+        self.channels_listed.append(list(channel_ids))
+        return [self._channels[c] for c in channel_ids if c in self._channels]
 
 
 class FakeTranscriptClient:

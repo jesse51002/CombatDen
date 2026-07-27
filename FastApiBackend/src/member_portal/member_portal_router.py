@@ -32,7 +32,7 @@ from typing import Annotated
 from uuid import UUID
 
 from dependency_injector.wiring import Provide, inject
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
 from fastapi.security import HTTPAuthorizationCredentials
 from schema.video import VideoGenre
 
@@ -60,6 +60,7 @@ from src.member_portal.schema.member_portal_schema import (
     MemberPortalIdentityListResponse,
     MemberPortalProfile,
     MemberPortalSignupRequest,
+    MemberRankProgressResponse,
 )
 from src.member_portal.service.member_portal_service import MemberPortalService
 from src.rewards.schema.rewards_schema import (
@@ -72,6 +73,7 @@ from src.rewards.service.rewards_redemption_service import (
 )
 from src.rewards.service.rewards_service import RewardsService
 from src.shared.auth import Auth, security
+from src.videos.schema.video_click_schema import MemberVideoClickResponse
 from src.videos.schema.video_recs_schema import (
     MemberVideoRec,
     VideoRecClickResponse,
@@ -84,6 +86,7 @@ from src.videos.service.member_video_profile_refresh_runner import (
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
+from src.videos.service.video_click_service import VideoNotInFeedError
 from src.videos.service.video_rec_click_service import RecNotFoundError
 from src.videos.service.videos_service import VideosService
 
@@ -116,7 +119,15 @@ MAX_PAGE_LIMIT = 100
         "possibly across gyms. An email that is nobody's member returns an "
         "empty list (a valid state), not an error. Requires only a CONFIRMED "
         "auth account for the email claim (``verify_verified_account``); no "
-        "``member_id`` exists to scope yet."
+        "``member_id`` exists to scope yet.\n\n"
+        "Each row also carries its gym's CAPABILITY flags — "
+        "``gym_rank_enabled`` (the gym's rank toggle), ``gym_has_rewards`` "
+        "(the gym has at least one ACTIVE reward) and ``gym_has_videos`` "
+        "(the gym's feed would serve at least one video) — so the app can "
+        "decide which bottom-nav tabs to render at first paint, from cache, "
+        "without a second round trip. The latter two are DERIVED from the same "
+        "predicates ``GET …/rewards`` and ``GET …/videos`` use, so a flag can "
+        "never disagree with the screen behind the tab."
     ),
     responses={
         200: {"description": "The caller's member rows (possibly empty)"},
@@ -156,11 +167,27 @@ async def list_my_members(
     summary="The member's own profile",
     description=(
         "The app's home-screen payload: identity + contact block, retention "
-        "(points balance, class streak, last class, videos watched), rank "
-        "progress, membership cards, and recent / pending reward "
-        "redemptions. There is no separate points-balance or rank-progress "
-        "route — both live here (``retention.points_balance`` / ``rank``). "
-        "Gated by ``verify_member_self`` on the path gym."
+        "(points balance, class streak, this week's attended weekdays, last "
+        "class, videos watched), rank progress, membership cards, and recent "
+        "/ pending reward redemptions. There is no separate points-balance or "
+        "rank-progress route — both live here (``retention.points_balance`` / "
+        "``rank``). ``retention.current_week_attended_weekdays`` is the week "
+        "strip: SUNDAY-FIRST weekday indices (0 = Sunday … 6 = Saturday) over "
+        "the SAME gym-local week ``class_streak_weeks`` is measured on, so "
+        "the strip and the streak number can never disagree — and a "
+        "rank-disabled gym can render the streak as the profile's centrepiece "
+        "without a second call.\n\n"
+        "``latest_promotion`` is the member's most recent rank change with "
+        "BOTH belts already resolved (``old_rank_name`` / ``new_rank_name`` "
+        "and ``old_image_url`` / ``new_image_url``, every field nullable), so "
+        "the app's promotion animation never has to remember or infer a "
+        "previous rank. ``activity_id`` is the watermark key — show the "
+        "animation once per new id. It is DECOUPLED from any class: "
+        "promotions are staff-driven, minutes to days after a class and often "
+        "in bulk, so nothing attributes one to an attendance. ``null`` for a "
+        "member who has never had a rank change; null image URLs on a row "
+        "written before the payload carried them (fall back to the themed "
+        "belt). Gated by ``verify_member_self`` on the path gym."
     ),
     responses={
         200: {"description": "Profile returned"},
@@ -199,6 +226,56 @@ async def get_my_profile(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve your profile",
+        ) from None
+
+
+@member_portal_router.get(
+    "/gyms/{gym_id}/members/{member_id}/rank-progress",
+    response_model=MemberRankProgressResponse,
+    summary="The member's rank-progress series (the profile graph's data)",
+    description=(
+        "A time series of the member's progress toward their next rank: one "
+        "point per activity event, walked chronologically from the member's "
+        "``member_activities``. Each ``rank_changed`` resets the counter to 0 "
+        "(a promotion) and each ``class_attended`` after it adds one, capped "
+        "at ``classes_needed`` — the member's current per-step threshold from "
+        "the gym's live rank ladder (the same derivation the profile's rank "
+        "block uses). Empty (a valid 200) when the member holds no rank or the "
+        "gym has ranks disabled. Gated by ``verify_member_self`` on the path "
+        "gym."
+    ),
+    responses={
+        200: {"description": "The member's rank-progress series (possibly empty)"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not this member, or the member is at another gym"},
+        404: {"description": "Member not found"},
+    },
+)
+@inject
+async def get_my_rank_progress(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    portal_service: MemberPortalService = Depends(
+        Provide[DependencyInjector.member_portal_service]
+    ),
+) -> MemberRankProgressResponse:
+    """The member's rank-progress time series."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
+
+    try:
+        return await portal_service.get_rank_progress(member_id, gym_id)
+    except Exception:
+        logger.error(
+            "Member-portal rank-progress query failed: member_id=%s",
+            member_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve your rank progress",
         ) from None
 
 
@@ -753,6 +830,77 @@ async def list_my_gym_videos(
         ) from None
 
     return GymVideosFeed(total=total, limit=limit, offset=offset, videos=page)
+
+
+@member_portal_router.post(
+    "/gyms/{gym_id}/members/{member_id}/videos/{video_id}/click",
+    response_model=MemberVideoClickResponse,
+    summary="Record the member opening a video from their feed",
+    description=(
+        "Logs a ``video_clicked`` member activity for a video the member "
+        "opened themselves — the feed hero, a genre carousel, a genre list, "
+        "the profile's level-up carousel. Without it the taste profile "
+        "(``member_profile_source.sql``) would learn only from videos the "
+        "system recommended and discard every video the member chose.\n\n"
+        "**Append-only: there is deliberately NO dedup.** Two opens of the "
+        "same video log TWO rows, because a re-watch is real signal. That is "
+        "the opposite of ``…/video-rec/{rec_id}/click``, which stamps the "
+        "served rec row and is therefore idempotent — post THAT one when the "
+        "member opens their recommendation, and this one for every other "
+        "open, never both for the same tap.\n\n"
+        "The video must be one the gym's feed actually serves (the same "
+        "served predicate ``GET …/videos`` uses); anything else is a 404, so "
+        "an arbitrary id can never be logged."
+    ),
+    responses={
+        200: {"description": "Click logged"},
+        401: {"description": "Not authenticated"},
+        403: {"description": "Not this member, or the member is at another gym"},
+        404: {"description": "Member not found, or video not in this gym's feed"},
+    },
+)
+@inject
+async def click_my_gym_video(
+    gym_id: UUID,
+    member_id: UUID,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    video_id: Annotated[
+        str,
+        Path(
+            max_length=64,
+            # Mirrors the video table's video_id_format check (a YouTube id),
+            # so a malformed id is a clean 422 instead of a wasted round trip.
+            pattern=r"^[A-Za-z0-9_-]+$",
+        ),
+    ],
+    auth: Auth = Depends(Provide[DependencyInjector.auth]),
+    videos_service: VideosService = Depends(
+        Provide[DependencyInjector.videos_service]
+    ),
+) -> MemberVideoClickResponse:
+    """Record the member opening a video they picked out of the feed."""
+    user_payload = auth.get_current_user(credentials)
+    await auth.verify_member_self(member_id, user_payload, gym_id=gym_id)
+
+    try:
+        return await videos_service.record_video_click(
+            gym_id, member_id, video_id
+        )
+    except VideoNotInFeedError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)
+        ) from None
+    except Exception:
+        logger.error(
+            "Member-portal video click failed: member_id=%s, video_id=%s",
+            member_id,
+            video_id,
+            exc_info=True,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to record the video click",
+        ) from None
 
 
 @member_portal_router.get(

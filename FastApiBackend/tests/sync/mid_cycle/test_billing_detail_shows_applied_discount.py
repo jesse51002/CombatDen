@@ -26,6 +26,7 @@ from src.memberships.memberships_schema import (
     MemberMembershipsStartItem,
     MemberMembershipsStartRequest,
 )
+from src.ranks.service.ranks_reads import RanksReads
 from tests.helpers.cleanup import delete_member_data
 from tests.helpers.db_reads import (
     get_active_membership_item_id,
@@ -104,6 +105,7 @@ async def test_billing_detail_surfaces_active_applied_discount(
             db_pool,
             StreakService(db_pool),
             CycleCountsService(db_pool),
+            RanksReads(db_pool),
         )
         detail = await service.get_member_billing_detail(member.member_id)
 

@@ -98,7 +98,9 @@ def create_all(client: Client) -> list[GymBundle]:
         # Every seeded gym needs a Stripe Connect account so the backend can
         # create products/customers/subscriptions on its behalf. The column is
         # UNIQUE, so with one shared test account NUM_GYMS is 1.
-        gym = gyms.generate(gym_id=gym_ids[i], stripe_account_id=STRIPE_TEST_ACCOUNT_ID)
+        gym = gyms.generate(
+            gym_id=gym_ids[i], stripe_account_id=STRIPE_TEST_ACCOUNT_ID, index=i
+        )
         gym_records.append(gym)
         print(f"  {gym.gym_name}")
     client.table("gyms").upsert(

@@ -27,6 +27,10 @@ class GymSetupBloc
   int _consecutiveErrors = 0;
 
   String? _pendingGymName;
+  // Optional — stays null when the owner skipped the address field on
+  // the name step. Held here (like the name) until the owner-name step
+  // fires the create.
+  String? _pendingAddress;
   String? _pendingFirstName;
   String? _pendingLastName;
 
@@ -78,6 +82,7 @@ class GymSetupBloc
     Emitter<GymSetupState> emit,
   ) {
     _pendingGymName = event.gymName;
+    _pendingAddress = event.address;
     emit(const GymSetupOwnerNameStep());
   }
 
@@ -92,6 +97,7 @@ class GymSetupBloc
     try {
       final response = await _gymRepository.createGym(
         gymName: _pendingGymName!,
+        address: _pendingAddress,
         firstName: _pendingFirstName!,
         lastName: _pendingLastName!,
       );
