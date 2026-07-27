@@ -190,6 +190,26 @@ is a deliberate breaking change that requires migrating every existing
 
 ---
 
+## Two non-Python siblings live in here
+
+This directory is a Python package, but it also hosts the two **client runtimes**
+that consume the API it serves. Neither is Python; neither is part of the poetry
+project, the test suite, or the Docker image (both are in `.dockerignore`, and
+the `Dockerfile` only `COPY`s `src/ schema/ resources/ apps/`).
+
+- **`ThemeFlutter/`** — the `theme_flutter` Dart package. A path dep of
+  `../CRM` and `../MobileApp`.
+- **`ThemeReact/`** — the `theme-react` npm package: the same runtime for the
+  web, plus the standalone theme browser app. **npm, not poetry.** Driven by the
+  `react-*` Makefile targets (`react-install` / `react-dev` / `react-build` /
+  `react-check`); `react-dev` serves on `:8080` and needs `make api` alongside it.
+
+They share nothing with this package but the HTTP contract `make api` serves —
+no imports, no types, no toolchain. Each has its own `CLAUDE.md`; read it before
+working in there. When the API's wire shape changes, both clients are downstream.
+
+---
+
 ## Dependencies
 
 Poetry, with an in-project `.venv` (`poetry.toml`: `in-project = true`).
