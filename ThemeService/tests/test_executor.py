@@ -31,7 +31,7 @@ from schema import (
     RunCost,
     TextOutput,
 )
-from src.core.errors import GraphError
+from src.core.errors import GraphError, PipelineError
 from src.core.run_context import RunContext
 from src.executor.orchestrator import Pipeline
 from src.executor.registry import ModuleRegistry
@@ -304,6 +304,92 @@ def test_assemble_color_failure_yields_valid_empty_output(
     # Text_set defaults to empty when no text node resolved AND the app
     # declared no text slots (no logged error, no schema break).
     assert out.text_set.texts == {}
+
+
+# --- the destructive overwrite guard (Pipeline._overwrite_existing) --------
+
+
+def _finished_run(root: Path) -> Path:
+    """A finished run at ``<root>/apps/demo/Style``: output.yaml + one
+    delivered image — the artifacts an overwrite clears."""
+    run = root / "apps" / "demo" / "Style"
+    (run / "final_images").mkdir(parents=True)
+    (run / "final_images" / "hero.png").write_bytes(b"expensive bytes")
+    (run / "output.yaml").write_text("app: demo\n", encoding="utf-8")
+    return run
+
+
+def _overwrite_ctx(out_root: Path) -> RunContext:
+    """A run context targeting ``<out_root>/demo/Style`` in place."""
+    app = AppFormat.model_validate(
+        {
+            "id": "demo",
+            "display_name": "Demo",
+            "images": [{"id": "hero", "description": "a hero"}],
+            "colors": _COLORS,
+            "fonts": _FONTS,
+        }
+    )
+    return RunContext(
+        app, Customization.model_validate(_CUST), out_root, run_id="Style"
+    )
+
+
+def test_overwrite_refuses_a_run_dir_that_symlinks_out_of_the_output_root(
+    tmp_path: Path,
+) -> None:
+    """A symlinked run dir resolving into ANOTHER output root is refused —
+    nothing in the other root is touched.
+
+    This is the git-worktree shape exactly: a worktree's
+    ``apps/<app_id>/<run_id>`` entries are symlinks into the primary
+    checkout, so ``.resolve()`` lands on a directory whose grandparent is
+    *also* named ``apps``. A guard that compared that name passed, and the
+    rmtree deleted the primary checkout's real (gitignored, unrecoverable)
+    run. The guard compares path identity against this run's own
+    ``out_root`` instead, so the escape is impossible.
+    """
+    # tmp_path itself can sit behind a symlink (/tmp -> /var/tmp on some
+    # systems); resolve up front so the assertions compare like with like.
+    base = tmp_path.resolve()
+    victim = _finished_run(base / "primary")
+
+    out_root = base / "worktree" / "apps"
+    (out_root / "demo").mkdir(parents=True)
+    (out_root / "demo" / "Style").symlink_to(victim, target_is_directory=True)
+
+    ctx = _overwrite_ctx(out_root)
+    assert ctx.run_dir.is_symlink()
+    assert ctx.run_dir.resolve() == victim
+
+    with pytest.raises(PipelineError, match="outside this run's output root"):
+        Pipeline._overwrite_existing(ctx)
+
+    # The other checkout's run is untouched.
+    assert (victim / "output.yaml").read_text() == "app: demo\n"
+    assert (victim / "final_images" / "hero.png").read_bytes() == (
+        b"expensive bytes"
+    )
+
+
+def test_overwrite_clears_a_run_dir_inside_its_own_output_root(
+    tmp_path: Path,
+) -> None:
+    """The normal in-place re-run still clears its produced artifacts: a run
+    dir that really is inside the configured output root passes the guard."""
+    base = tmp_path.resolve()
+    out_root = base / "apps"
+    run = _finished_run(base)  # <base>/apps/demo/Style — inside out_root
+
+    ctx = _overwrite_ctx(out_root)
+    assert ctx.run_dir == run
+
+    Pipeline._overwrite_existing(ctx)
+
+    assert not (run / "output.yaml").exists()
+    assert not (run / "final_images" / "hero.png").exists()
+    # The emptied asset dirs are recreated, ready for the re-run.
+    assert (run / "final_images").is_dir()
 
 
 # --- expand: seed reconstruction (src/executor/seed.py) --------------------

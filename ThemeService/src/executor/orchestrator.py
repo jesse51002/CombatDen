@@ -31,7 +31,7 @@ from schema import (
 )
 from src.core.config import settings
 from src.core.errors import GraphError, PipelineError
-from src.core.run_context import OUTPUT_ROOT_DIRNAME, RunContext
+from src.core.run_context import RunContext
 from src.executor.registry import Graph, ModuleRegistry
 from src.modules.base import DependencyKind, Node
 from src.shared.interfaces.background_remover import BackgroundRemover
@@ -144,10 +144,26 @@ class Pipeline:
         no-op — nothing to clear.
 
         Two safety rails make this destructive step impossible to point at the
-        wrong place: every target is a path *derived from* ``run_ctx`` (never an
-        arbitrary path) and must resolve strictly inside the run dir; and the
-        run dir itself must sit under an ``apps`` output root. Either failing
-        aborts the run rather than deleting anything.
+        wrong place, and both are **path identity**, never a path *name*:
+
+        1. The resolved run dir must sit inside the resolved
+           ``run_ctx.out_root`` — the output root this process was actually
+           configured with.
+        2. Every target is a path *derived from* ``run_ctx`` (never an
+           arbitrary path) and must resolve strictly inside that same resolved
+           run dir.
+
+        Either failing aborts the run rather than deleting anything.
+
+        Rail 1 is identity-based because a name check is not a guard at all
+        here. In every git worktree the per-run dirs under ``apps/<app_id>/``
+        are **symlinks into the primary checkout**, so ``.resolve()`` lands on
+        a directory whose grandparent is *also* named ``apps`` — a name check
+        passes and the ``rmtree`` below deletes the other checkout's real run.
+        Those runs are gitignored (``apps/*/*/``), so nothing is recoverable.
+        Comparing against the configured root instead makes the escape
+        impossible: a run dir that resolves outside the root this process was
+        pointed at is refused, wherever it points.
         """
         asset_dirs = (
             run_ctx.image_dir,
@@ -166,11 +182,16 @@ class Pipeline:
             return
 
         run_dir = run_ctx.run_dir.resolve()
-        # ``<root>/<app_id>/<run_id>`` → the grandparent is the output root.
-        if run_dir.parent.parent.name != OUTPUT_ROOT_DIRNAME:
+        out_root = run_ctx.out_root.resolve()
+        # Identity, not name: the run dir must resolve INSIDE the output root
+        # this process was configured with. A symlinked run dir (every git
+        # worktree) resolves into the other checkout and is refused here.
+        if not run_dir.is_relative_to(out_root):
             raise PipelineError(
-                f"refusing to overwrite {run_dir}: run dir is not under an "
-                f"{OUTPUT_ROOT_DIRNAME!r} output root (safety guard)"
+                f"refusing to overwrite {run_dir}: it resolves outside this "
+                f"run's output root {out_root} (safety guard). A run dir that "
+                "is a symlink into another checkout resolves this way — clear "
+                "it from the checkout that owns it."
             )
         logger.warning(
             "overwriting existing run %s: clearing produced artifacts and "
@@ -181,8 +202,14 @@ class Pipeline:
         for path in produced:
             resolved = path.resolve()
             if run_dir not in resolved.parents:
-                # Derived paths are always inside run_dir; a target that isn't
-                # means something is wrong — skip it rather than delete it.
+                # Rail 2. Already identity-based (both sides are fully
+                # resolved, so a symlinked target lands outside and is caught)
+                # — and it now runs only once rail 1 has confirmed ``run_dir``
+                # itself is inside the configured output root. Derived paths
+                # are always inside run_dir; a target that isn't means
+                # something is wrong — skip it rather than delete it.
+                # ``in .parents`` also refuses ``resolved == run_dir``, so the
+                # run dir itself can never be the rmtree target.
                 logger.error(
                     "skipping clear of %s: outside run dir %s", resolved, run_dir
                 )
