@@ -17,6 +17,12 @@ class RewardsCarousel extends StatelessWidget {
   final ValueChanged<int> onPageChanged;
 
   static const double _featuredSize = 208;
+  // Reward photos are framed 3:2 — the ratio the store's `RewardImageHero`
+  // already uses — so a gym's uploaded artwork is cropped the same way on the
+  // store card and on this card. The featured WIDTH is unchanged; the height
+  // follows from the ratio, which is what the carousel now reserves.
+  static const double _featuredAspect = 1.5;
+  static const double _featuredHeight = _featuredSize / _featuredAspect;
   static const double _minScale = 0.56;
   // Maximum y-axis tilt (radians) applied to a page that is one slot away
   // from the active page.
@@ -25,7 +31,7 @@ class RewardsCarousel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      height: _featuredSize,
+      height: _featuredHeight,
       child: PageView.builder(
         controller: controller,
         onPageChanged: onPageChanged,
@@ -60,9 +66,10 @@ class RewardsCarousel extends StatelessWidget {
                 ),
               );
             },
-            child: _RewardCircle(
+            child: _RewardSlideImage(
               image: items[index].image,
-              size: _featuredSize,
+              width: _featuredSize,
+              height: _featuredHeight,
             ),
           );
         },
@@ -71,19 +78,29 @@ class RewardsCarousel extends StatelessWidget {
   }
 }
 
-class _RewardCircle extends StatelessWidget {
-  const _RewardCircle({required this.image, required this.size});
+/// One reward's photo, framed as a rounded rectangle on the card family's
+/// [DesignConstants.radiusBig] — the same corner `RewardCard` gives a reward in
+/// the store. The box is 3:2 for the same reason: gyms upload rectangular
+/// photos, and a square or circular frame crops the sides off every one of
+/// them.
+class _RewardSlideImage extends StatelessWidget {
+  const _RewardSlideImage({
+    required this.image,
+    required this.width,
+    required this.height,
+  });
 
   final ImageProvider image;
-  final double size;
+  final double width;
+  final double height;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: size,
-      height: size,
+      width: width,
+      height: height,
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
         border: Border.all(
           color: DesignConstants.text,
           width: DesignConstants.buttonBorderSize,

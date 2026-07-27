@@ -98,12 +98,21 @@ class MockRankStats {
     required this.nextTierLabel,
     required this.classesAttended,
     required this.classesRequired,
+    this.rankImageUrl,
   });
 
   final String rankTitle;
   final String rankSubtitle;
   final String beltAsset;
   final String nextTierLabel;
+
+  /// The member's OWN rank art (`rank.image_url` on the profile, already
+  /// resolved server-side with the sub-rank override over the main rank's
+  /// image). Preferred over the themed belt slot when present; null on the
+  /// bundled demo data, on a rank carrying no image, or when the card is
+  /// rendered without a live profile. [beltAsset] stays the bundled floor
+  /// under both.
+  final String? rankImageUrl;
 
   final int classesAttended;
   final int classesRequired;

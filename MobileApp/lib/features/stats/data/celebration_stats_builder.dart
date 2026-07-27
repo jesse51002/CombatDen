@@ -40,6 +40,10 @@ MockRankStats? buildRankStats(MemberProfile? profile) {
     rankTitle: rank.name,
     rankSubtitle: rank.subLabel ?? '',
     beltAsset: 'stat_rank_belt.png',
+    // The member's own belt art — the same field the topbar's info bar reads.
+    // Without it the card would celebrate the THEME's belt at every gym that
+    // runs its own ranks.
+    rankImageUrl: rank.imageUrl,
     nextTierLabel: '',
     classesAttended: rank.classesSinceRank,
     classesRequired: rank.classesTillNextStep,

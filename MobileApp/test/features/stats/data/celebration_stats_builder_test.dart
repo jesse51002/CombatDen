@@ -106,6 +106,35 @@ void main() {
       expect(stats.classesRequired, 50);
     });
 
+    test("carries the member's OWN belt art through to the card", () {
+      final stats = buildRankStats(_profile(
+        rank: const BillingRank(
+          rankId: 'r1',
+          name: 'Purple Belt',
+          classesToNextMajor: 60,
+          classesTillNextStep: 30,
+          imageUrl: 'https://cdn.test/purple.png',
+        ),
+      ));
+      // Dropping this is what made the card celebrate the THEME's belt at
+      // every gym that runs its own ranks.
+      expect(stats!.rankImageUrl, 'https://cdn.test/purple.png');
+      // The bundled floor under the themed slot survives alongside it.
+      expect(stats.beltAsset, 'stat_rank_belt.png');
+    });
+
+    test('leaves the belt art null when the rank carries no image', () {
+      final stats = buildRankStats(_profile(
+        rank: const BillingRank(
+          rankId: 'r1',
+          name: 'White Belt',
+          classesToNextMajor: 40,
+          classesTillNextStep: 40,
+        ),
+      ));
+      expect(stats!.rankImageUrl, isNull);
+    });
+
     test('is null when the member holds no rank', () {
       expect(buildRankStats(_profile()), isNull);
       expect(buildRankStats(null), isNull);

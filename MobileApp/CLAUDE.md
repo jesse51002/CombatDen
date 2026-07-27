@@ -219,10 +219,16 @@ note is deleted.
   function over the fresh `GET /api/v1/member/members` list): a persisted member
   still in the list **restores** silently; otherwise **1 row auto-selects**, **2+
   show the picker** ("Who's training?"), and **0 shows the no-membership state**
-  (a designed screen — signup is open, so an unknown email is reachable). An
-  **offline** identity fetch boots read-degraded from the cached `SelectedMember`
-  (+ an offline banner + retry), or shows the offline screen when nothing is
-  cached.
+  (a designed screen — signup is open, so an unknown email is reachable). The
+  identity fetch (`MemberGate._fetchMyMembers`) retries a TRANSPORT failure
+  (`NetworkException` / `TimeoutException`) up to 2 extra times (~400ms then
+  ~1200ms backoff) before giving up, staying on the branded splash the whole
+  time — a cold-start wifi radio often kills the very first socket instantly,
+  nowhere near the 30s per-attempt timeout, which is why the manual Retry
+  button always worked; this automates that. A server-reachable error (a bad
+  payload, a 500) is never retried. Only once every attempt fails does an
+  **offline** boot read-degraded from the cached `SelectedMember` (+ an
+  offline banner + retry), or show the offline screen when nothing is cached.
 - **The topbar is the identity surface — as an avatar in the trailing flank.**
   The topbar's grammar is a **centred brand block between single-glyph
   controls** (the back chevron on the leading edge), so identity is a glyph
@@ -266,8 +272,10 @@ note is deleted.
   `rankImageUrl: state.profile?.rank?.imageUrl` from the shared
   `MemberProfileBloc`; the param is optional, so a bar built without a profile
   (the class-detail `live: false` path) simply keeps the themed belt. Same idiom
-  as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile — don't invent a
-  third. **A failed load falls back, it does NOT collapse — but that rule is
+  as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile and
+  `RankBody._Belt` on the post-class rank card — **every belt in the app resolves
+  the member's own art first; don't invent a fifth rule.** **A failed load falls
+  back, it does NOT collapse — but that rule is
   about ARTWORK, at a rank-ENABLED gym.** Where the gym runs a ladder the belt
   is permanent topbar chrome, so the network `Image`'s `errorBuilder` returns
   the themed belt (an empty gap in the info bar would read as broken); that is
@@ -415,6 +423,19 @@ by adding it to that list, not by hardcoding a route in a screen's CTA.
   `AppRoutes.postClassRank` stays registered. The composition is what stops the
   normal flow ever landing there, so the preceding card's "Continue" can't
   bounce off a blank `ColoredBox`.
+- **The cards show the GYM's own art, not the theme's.** The `Mock*Stats`
+  carrier types are the prototype's shape, not its data —
+  `celebration_stats_builder.dart` fills them from the live `MemberProfile`, and
+  anything the builder drops silently reverts a card to the theme's stand-in. The
+  rank card's belt therefore carries `rankImageUrl` (`rank.image_url`) beside
+  the bundled `beltAsset` and resolves through `RankBody._Belt` — the same
+  member-art-first rule as the topbar and the profile. When adding a field to a
+  card, carry the live image URL with it.
+- **A reward photo is framed 3:2, everywhere it appears.** The celebration
+  carousel's slide (`rewards_carousel.dart`) and the store's `RewardImageHero`
+  use the same ratio and the same `radiusBig` corner, so one uploaded photo is
+  cropped identically on both surfaces. Reward art is gym-uploaded and
+  rectangular — never re-frame it square or circular.
 - **There is no videos CARD in this flow.** The app's one video card is the
   post-BOOKING recommendation (`ClassBookedScreen` → `AppRoutes.videoRecc`),
   which applies the same rule locally: with `gymHasVideos` false the booked
