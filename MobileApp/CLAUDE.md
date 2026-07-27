@@ -288,7 +288,9 @@ note is deleted.
   row), and **sign out**. The sheet opens INSTANTLY off the cached
   `selectedMember` — only the list area loads (placeholder blocks, not a
   spinner), and a failed re-fetch replaces **only** that area with a retry, so
-  the header, the email and sign-out stay usable offline.
+  the header, the email and sign-out stay usable offline. In DEBUG builds only
+  it also carries a **Developer** section — see *The two notification
+  destinations have a DEBUG-ONLY trigger*.
 - **The picker row identifies the gym, not just the person**
   (`features/member_select/presentation/widgets/member_row.dart`): the member's
   avatar + name over a gym line of logo tile + gym name. The same row is the
@@ -419,6 +421,29 @@ by adding it to that list, not by hardcoding a route in a screen's CTA.
   screen is the last card and pops home rather than opening an empty rec.
 - `RewardsCardScreen` takes an optional `repository` — the same test seam as
   `VideoReccScreen`, so no test hits a live backend.
+
+### The two notification destinations have a DEBUG-ONLY trigger
+
+Both screens a push will land a member on are unreachable by hand in the
+running app — the celebration only fires off a fresh staff check-in (and burns
+the watermark doing it), and `SummaryScreen` ("Drill of the Day") is never
+shown automatically. So the identity sheet carries a **Developer** section
+(`IdentitySheetDevSection`, the whole section wrapped in `if (kDebugMode)` so
+it is compiled out of release builds) with one row for each.
+
+- **"Post-class celebration"** calls `CelebrationDetector.fireNow` — the same
+  data path as `maybeFire` (class-history head → newest attended row →
+  payload) but it ignores the watermark and **never advances it**, so a
+  preview can't consume the real celebration. With nothing attended yet (or a
+  failed fetch) it opens on a representative fallback payload rather than
+  doing nothing. The card CHAIN is not special-cased: `celebration_flow.dart`
+  still composes it from the gym's real flags, so the preview is exactly what
+  this gym's members get.
+- **"Drill of the Day"** just pushes `AppRoutes.summary`.
+- Both **dismiss the sheet FIRST**, then push onto the `NavigatorState`
+  captured before the pop — the same host/shell navigator `_signOut` pops.
+- It previews what a member SEES on those screens. Delivery, the 24h timing
+  and cold-start deep-link routing are the FCM work, not this.
 
 ## Theme hydration
 

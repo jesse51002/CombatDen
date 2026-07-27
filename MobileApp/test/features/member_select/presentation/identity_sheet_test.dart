@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/login/bloc/login_bloc.dart';
 import 'package:mobile_app/features/login/bloc/login_event.dart';
@@ -36,8 +37,28 @@ const MemberIdentity _other = MemberIdentity(
   lastName: 'Chen',
 );
 
-Widget _host({required LoginBloc bloc, MembersLoader? loadMembers}) {
+/// Records the named routes the HOST navigator is asked to push — the sheet's
+/// dev triggers must land on it, not on their own popped route.
+class _RecordingObserver extends NavigatorObserver {
+  final List<String?> pushed = <String?>[];
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    pushed.add(route.settings.name);
+  }
+}
+
+Widget _host({
+  required LoginBloc bloc,
+  MembersLoader? loadMembers,
+  NavigatorObserver? observer,
+}) {
   return MaterialApp(
+    navigatorObservers: [?observer],
+    onGenerateRoute: (settings) => MaterialPageRoute<void>(
+      settings: settings,
+      builder: (_) => const SizedBox.shrink(),
+    ),
     home: BlocProvider<LoginBloc>.value(
       value: bloc,
       child: Scaffold(
@@ -186,6 +207,45 @@ void main() {
       await tester.tap(find.text('Sign out'));
       await tester.pumpAndSettle();
       verify(() => bloc.add(const LoginSignOutRequested())).called(1);
+    });
+
+    testWidgets('the Developer section offers both notification destinations',
+        (tester) async {
+      await tester.pumpWidget(
+        _host(bloc: bloc, loadMembers: () async => const [_current]),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      // Tests run in debug, so the `kDebugMode` section is compiled in. It is
+      // the ONLY way to reach either screen by hand: the celebration needs a
+      // real staff check-in, and the drill is never shown automatically.
+      expect(find.text('Developer'), findsOneWidget);
+      expect(find.text('Post-class celebration'), findsOneWidget);
+      expect(find.text('Drill of the Day'), findsOneWidget);
+    });
+
+    testWidgets('a dev trigger dismisses the sheet, then pushes on the HOST',
+        (tester) async {
+      final observer = _RecordingObserver();
+      await tester.pumpWidget(
+        _host(
+          bloc: bloc,
+          loadMembers: () async => const [_current],
+          observer: observer,
+        ),
+      );
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+      observer.pushed.clear();
+
+      await tester.tap(find.text('Drill of the Day'));
+      await tester.pumpAndSettle();
+
+      // Pushed onto the sheet's own route it would have opened behind the
+      // sheet and died with it.
+      expect(find.byType(IdentitySheet), findsNothing);
+      expect(observer.pushed, [AppRoutes.summary]);
     });
 
     testWidgets('the topbar avatar opens the sheet', (tester) async {

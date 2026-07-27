@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
@@ -10,9 +12,11 @@ import 'package:mobile_app/features/login/bloc/login_event.dart';
 import 'package:mobile_app/features/member_select/data/models/member_identity.dart';
 import 'package:mobile_app/features/member_select/data/repositories/member_portal_repository.dart';
 import 'package:mobile_app/features/member_select/logic/apply_member_selection.dart';
+import 'package:mobile_app/features/member_select/presentation/widgets/identity_sheet_dev_section.dart';
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_sheet_header.dart';
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_sheet_sign_out_row.dart';
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_switch_list.dart';
+import 'package:mobile_app/features/stats/data/celebration_detector.dart';
 import 'package:mobile_app/shared/widgets/dialogs/sign_out_dialog.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 import 'package:mobile_app/shared/widgets/sheets/app_bottom_sheet.dart';
@@ -123,6 +127,17 @@ class _IdentitySheetState extends State<IdentitySheet> {
     await widget.onSignOut();
   }
 
+  /// DEBUG-ONLY. Same sequence as [_signOut]: dismiss the sheet FIRST, then
+  /// open the destination on the HOST navigator — the shell's, which is the
+  /// very one this sheet's route sits on. The [NavigatorState] is captured
+  /// BEFORE the pop and outlives it, so nothing is ever pushed through the
+  /// sheet's own dead context.
+  void _devOpen(void Function(NavigatorState navigator) open) {
+    final navigator = Navigator.of(context);
+    navigator.pop();
+    open(navigator);
+  }
+
   /// The Supabase email, read defensively: the app boots Supabase
   /// best-effort, so an uninitialized client must degrade to "no email"
   /// rather than take the sheet down.
@@ -166,6 +181,23 @@ class _IdentitySheetState extends State<IdentitySheet> {
                 busy: _busy,
                 onRetry: _fetch,
                 onSelected: _switchTo,
+              ),
+            ),
+          ],
+          // DEBUG-ONLY: `kDebugMode` is a compile-time const, so the section,
+          // its divider and everything they reach are compiled out of release
+          // builds entirely.
+          if (kDebugMode) ...[
+            const SectionDivider(),
+            SubtitleSection(
+              title: 'Developer',
+              child: IdentitySheetDevSection(
+                onCelebration: () => _devOpen(
+                  (navigator) => CelebrationDetector().fireNow(navigator),
+                ),
+                onSummary: () => _devOpen(
+                  (navigator) => navigator.pushNamed(AppRoutes.summary),
+                ),
               ),
             ),
           ],
