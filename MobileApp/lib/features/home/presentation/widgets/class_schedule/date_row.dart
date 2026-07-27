@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/home/data/schedule_dates.dart';
+import 'package:mobile_app/features/home/data/schedule_generator.dart';
 import 'package:mobile_app/features/home/presentation/widgets/class_schedule/date_tab.dart';
 
 // Estimated pitch (avg pill width + gap). Only used as a fallback when the
@@ -9,19 +9,17 @@ import 'package:mobile_app/features/home/presentation/widgets/class_schedule/dat
 // exactly via Scrollable.ensureVisible.
 const double _kDateTabPitchEstimate = 120;
 
+const int _kDateTabCount = 365;
+
 class DateRow extends StatefulWidget {
   const DateRow({
     super.key,
     required this.currentDayIndex,
-    required this.dayCount,
     required this.scrollController,
     required this.onDateTap,
   });
 
   final int currentDayIndex;
-
-  /// One tab per loaded window day (grows as the board window extends).
-  final int dayCount;
   final ScrollController scrollController;
   final ValueChanged<int> onDateTap;
 
@@ -123,12 +121,12 @@ class _DateRowState extends State<DateRow> {
           left: DesignConstants.paddingBig,
           right: DesignConstants.spacingMedium,
         ),
-        itemCount: widget.dayCount,
+        itemCount: _kDateTabCount,
         separatorBuilder: (_, _) =>
             SizedBox(width: DesignConstants.spacingBig),
         itemBuilder: (context, index) => DateTab(
           key: _keyFor(index),
-          label: dayLabelForOffset(index),
+          label: formatDayLabel(index),
           isSelected: index == widget.currentDayIndex,
           onTap: () => widget.onDateTap(index),
         ),

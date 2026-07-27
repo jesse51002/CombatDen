@@ -1,90 +1,45 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/profile/data/mock_profile.dart';
 import 'package:mobile_app/shared/widgets/text/threshold_label.dart';
 
+const List<double> _kThresholdTopOffsets = [12, 80, 140];
+
 const double _kStrokeWidth = 3;
-const double _kGraphAspect = 393 / 196.5;
 
-/// Rank-progress line graph: the member's classes-into-rank sawtooth
-/// (normalized 0..1, resetting to 0 at each promotion) with the classes axis
-/// bracketed on the right edge — [classesNeeded] (the promotion line) at the
-/// top, `0` at the bottom. A too-short / empty series renders a graceful empty
-/// state instead of a blank box.
+/// Rating-over-time line graph with rank threshold annotations on the right
+/// edge.
 class RatingGraph extends StatelessWidget {
-  const RatingGraph({
-    super.key,
-    required this.series,
-    required this.classesNeeded,
-  });
-
-  /// The normalized 0..1 y-values, spaced uniformly across the width.
-  final List<double> series;
-
-  /// The next-rank threshold in classes — the value at the top of the axis.
-  final int classesNeeded;
+  const RatingGraph({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final thresholds = ratingGraphThresholds;
+    final lineColor = DesignConstants.text;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: DesignConstants.screenHorizontalPadding,
       ),
       child: AspectRatio(
-        aspectRatio: _kGraphAspect,
-        child: series.length < 2
-            ? const _GraphEmpty()
-            : _GraphPlot(series: series, classesNeeded: classesNeeded),
-      ),
-    );
-  }
-}
-
-/// The plotted line with the two classes-axis reference labels on the right.
-class _GraphPlot extends StatelessWidget {
-  const _GraphPlot({required this.series, required this.classesNeeded});
-
-  final List<double> series;
-  final int classesNeeded;
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: CustomPaint(
-            painter: _RatingGraphPainter(
-              series: series,
-              color: DesignConstants.text,
+        aspectRatio: 393 / 196.5,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _RatingGraphPainter(
+                  series: mockRatingGraphSeries,
+                  color: lineColor,
+                ),
+              ),
             ),
-          ),
+            for (var i = 0; i < thresholds.length; i++)
+              Positioned(
+                right: 0,
+                top: _kThresholdTopOffsets[i],
+                child: ThresholdLabel(label: thresholds[i]),
+              ),
+          ],
         ),
-        if (classesNeeded > 0)
-          Positioned(
-            right: 0,
-            top: 0,
-            child: ThresholdLabel(label: '$classesNeeded'),
-          ),
-        const Positioned(
-          right: 0,
-          bottom: 0,
-          child: ThresholdLabel(label: '0'),
-        ),
-      ],
-    );
-  }
-}
-
-/// Shown when the series has no plottable history (no rank / no activity yet).
-class _GraphEmpty extends StatelessWidget {
-  const _GraphEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'No rank history yet.',
-        textAlign: TextAlign.center,
-        style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
       ),
     );
   }

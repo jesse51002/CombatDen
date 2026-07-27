@@ -4,14 +4,12 @@ import 'package:mobile_app/features/home/presentation/widgets/class_schedule/dat
 class PinnedDateRowDelegate extends SliverPersistentHeaderDelegate {
   PinnedDateRowDelegate({
     required this.currentDayIndex,
-    required this.dayCount,
     required this.scrollController,
     required this.height,
     required this.onDateTap,
   });
 
   final int currentDayIndex;
-  final int dayCount;
   final ScrollController scrollController;
   final double height;
   final ValueChanged<int> onDateTap;
@@ -30,7 +28,6 @@ class PinnedDateRowDelegate extends SliverPersistentHeaderDelegate {
   ) {
     return DateRow(
       currentDayIndex: currentDayIndex,
-      dayCount: dayCount,
       scrollController: scrollController,
       onDateTap: onDateTap,
     );
@@ -39,7 +36,6 @@ class PinnedDateRowDelegate extends SliverPersistentHeaderDelegate {
   @override
   bool shouldRebuild(covariant PinnedDateRowDelegate oldDelegate) {
     return oldDelegate.currentDayIndex != currentDayIndex ||
-        oldDelegate.dayCount != dayCount ||
         oldDelegate.height != height;
   }
 }

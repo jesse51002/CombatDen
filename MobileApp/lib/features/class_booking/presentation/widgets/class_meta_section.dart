@@ -1,31 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
-import 'package:mobile_app/features/home/data/schedule_dates.dart';
-import 'package:mobile_app/shared/widgets/class_reserved_tag.dart';
+import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 
-/// Class title + reserved status + gym / date / instructor / attending block,
-/// from the real occurrence.
-///
-/// The order is deliberate: what this class IS, then where the member STANDS
-/// with it, then the facts. The reservation is the member's own relationship
-/// to the class, so it is answered before the details rather than being left
-/// to be inferred from a "Cancel reservation" button at the far end of the
-/// screen.
+/// Class title + location/time/attending block. Mirrors the
+/// `ClassMetatext` group.
 class ClassMetaSection extends StatelessWidget {
-  const ClassMetaSection({
-    super.key,
-    required this.occurrence,
-    required this.gymName,
-    this.reserved = false,
-  });
+  const ClassMetaSection({super.key, required this.detail});
 
-  final ClassOccurrence occurrence;
-  final String gymName;
-
-  /// The member holds this occurrence.
-  final bool reserved;
+  final MockClassDetail detail;
 
   @override
   Widget build(BuildContext context) {
@@ -33,40 +16,28 @@ class ClassMetaSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(occurrence.className, style: DesignConstants.h1),
-        if (reserved) const ClassReservedTag(),
-        _SpecificsBlock(occurrence: occurrence, gymName: gymName),
+        Text(detail.classData.name, style: DesignConstants.h1),
+        _SpecificsBlock(detail: detail),
       ],
     );
   }
 }
 
 class _SpecificsBlock extends StatelessWidget {
-  const _SpecificsBlock({required this.occurrence, required this.gymName});
+  const _SpecificsBlock({required this.detail});
 
-  final ClassOccurrence occurrence;
-  final String gymName;
+  final MockClassDetail detail;
 
   @override
   Widget build(BuildContext context) {
-    final date = parseIsoDate(occurrence.classDate);
-    final dayLabel = date != null
-        ? fullDayLabelForOffset(dayOffsetForDate(date))
-        : occurrence.classDate;
-    final range = formatSlotRange(
-      occurrence.resolvedClassTime,
-      occurrence.resolvedDurationMinutes,
-    );
-    final instructor = occurrence.resolvedInstructorName;
+    final cls = detail.classData;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingTiny,
       children: [
-        if (gymName.isNotEmpty) _MetaText(gymName),
-        _MetaText('$dayLabel ‧ $range'),
-        if (instructor != null && instructor.isNotEmpty)
-          _MetaText('with $instructor'),
-        _AttendingRow(count: occurrence.signupCount),
+        _MetaText(detail.location),
+        _MetaText('${detail.dateLabel} ‧ ${cls.timeRange}'),
+        if (cls.attending != null) _AttendingRow(count: cls.attending!),
       ],
     );
   }

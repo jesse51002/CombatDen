@@ -6,7 +6,6 @@ import 'package:lottie/lottie.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:theme_flutter/theme/theme_text.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/animation/scale_reveal.dart';
@@ -107,18 +106,6 @@ class _ClassBookedScreenState extends State<ClassBookedScreen>
     super.dispose();
   }
 
-  /// Hand off to the video recommendation — the one video card in a chain —
-  /// but ONLY at a gym whose feed would serve something. With no videos the
-  /// rec is an empty placeholder, so the booked screen is the last card and
-  /// ends the flow itself (pop → home) instead of chaining into nothing.
-  void _continue(BuildContext context) {
-    if (selectedMember.gymHasVideos) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.videoRecc);
-      return;
-    }
-    Navigator.of(context).pop();
-  }
-
   Widget _buildBody() {
     if (widget.captureContentOnly || _showContent) {
       return const _BookedContent();
@@ -148,7 +135,9 @@ class _ClassBookedScreenState extends State<ClassBookedScreen>
                   text: 'Continue',
                   fullWidth: true,
                   borderRadius: DesignConstants.radiusBig,
-                  onPressed: () => _continue(context),
+                  onPressed: () => Navigator.of(
+                    context,
+                  ).pushReplacementNamed(AppRoutes.videoRecc),
                 ),
               ),
             ),

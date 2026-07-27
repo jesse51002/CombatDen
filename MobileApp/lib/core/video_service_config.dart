@@ -2,14 +2,17 @@
 /// detail (classes + rewards) and the video feed.
 ///
 /// This content is served by the **FastApiBackend** under
-/// `/api/v1/presets/templates…`. The standalone VideoService that used
-/// to serve it on port 8002 no longer has an HTTP API at all: it was
-/// merged into the backend (see
+/// `/api/v1/presets/templates…`, keyed by the template id
+/// (`acro_yoga`, `boxing`, …) that `SelectedGym.gymId` already holds.
+///
+/// The standalone VideoService that used to serve this on port 8002 no
+/// longer has an HTTP API: it was merged into the backend (see
 /// `docs/Business/pivots/2026-06-24-22-videoservice-api-merged-into-backend.md`)
 /// and only its batch worker remains. Pointing at 8002 fails with a
 /// connection error, which surfaces as "Could not load gyms".
 ///
-/// The endpoints, all public (no auth):
+/// The endpoints, all public (no auth), which is what keeps this app a
+/// clean demo canvas:
 ///   GET /presets/templates                      the gym browser
 ///   GET /presets/templates/{id}                 classes + rewards
 ///   GET /presets/templates/{id}/videos/preview  the home feed
@@ -18,8 +21,7 @@
 /// Defaults to localhost (use `adb reverse tcp:8000 tcp:8000` so a
 /// device reaches the host over USB), overridable at launch with
 /// `--dart-define=VIDEO_BASE_URL=http://<host-LAN-IP>:8000/api/v1`.
-/// The define keeps its old name so existing launch configs and scripts
-/// keep working.
+/// The define keeps its old name so existing launch configs keep working.
 const String kVideoBaseUrl = String.fromEnvironment(
   'VIDEO_BASE_URL',
   defaultValue: 'http://localhost:8000/api/v1',

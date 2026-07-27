@@ -106,17 +106,6 @@ class DesignConstants {
     fallback: _fallbackText,
   );
 
-  /// Readable colour for text/glyphs painted ON the accent fill (the
-  /// celebration slide's "Ready" tag). The accent-slot twin of
-  /// [primaryButtonText], read from the same `regular_text` derivation every
-  /// base slot already ships — a derived getter, not a new slot. Falls back to
-  /// the canvas colour, the pairing every accent-toned mark already relies on.
-  static Color get accentButtonText => ThemeColor.color(
-    CombatDenSlots.accent,
-    derivation: ThemeDerivation.regularText,
-    fallback: _fallbackBackground,
-  );
-
   static Color get text2nd => ThemeColor.color(
     CombatDenSlots.text,
     derivation: ThemeDerivation.second,
