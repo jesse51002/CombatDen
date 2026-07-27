@@ -1,4 +1,5 @@
 import 'package:mobile_app/core/app_slots.dart';
+import 'package:mobile_app/core/formats/format_overrides.dart';
 import 'package:mobile_app/core/formats/motion_formats.dart';
 import 'package:mobile_app/core/formats/motion_spec.dart';
 import 'package:theme_flutter/theme/theme_text.dart';
@@ -13,6 +14,10 @@ class ThemeMotion {
   ThemeMotion._();
 
   static String? _read(String slot) {
+    // A --dart-define wins over the tenant's slot so a format can be
+    // reviewed deterministically without a themed tenant.
+    final override = FormatOverrides.read(slot);
+    if (override != null) return override;
     final value = ThemeText.value(slot, fallback: '');
     return value.isEmpty ? null : value;
   }

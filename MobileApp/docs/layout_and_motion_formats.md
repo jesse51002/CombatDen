@@ -95,6 +95,52 @@ layout that assumes them is a bug.
 
 ---
 
+## How to switch formats and validate one
+
+A format is selected from the tenant's customization slot in production,
+but that is useless for review. There are three ways to pin one
+deterministically, highest precedence first.
+
+**1. Run the app with a flag.** The fastest way to see a real, fully
+themed screen. Same mechanism as the existing `--dart-define=VIDEO_BASE_URL`.
+
+```sh
+flutter run --dart-define=SHELL_FORMAT=compactRail
+flutter run --dart-define=SHELL_FORMAT=markOnly \
+            --dart-define=MOTION_PERSONALITY=calm
+```
+
+Flag names are the slot id upper-cased: `SHELL_FORMAT`, `HOME_FORMAT`,
+`VIDEOS_FORMAT`, `RANK_FORMAT`, `REWARDS_FORMAT`, `CLASS_FORMAT`,
+`CELEBRATION_FORMAT`, `MOTION_PERSONALITY`, `CELEBRATION_INTRO`,
+`REVEAL_STYLE`, `LOADER_STYLE`, `TRANSITION_STYLE`, `COUNT_UP_STYLE`.
+An unrecognised value falls back to the shipped arrangement rather than
+breaking the screen, so a typo is harmless.
+
+**2. Generate the preview sheet.** Renders every value of an enum to a
+PNG side by side, with no emulator and no backends running.
+
+```sh
+flutter test --tags golden --update-goldens --run-skipped
+# writes test/goldens/shell_<value>.png, one per enum value
+```
+
+Each panel labels its own enum value. Read these for *arrangement*
+only: assets are stubbed to grey placeholder blocks and the brand font
+is not fetched, so type and artwork are not represented.
+
+**3. Set the slot on the tenant.** The production path. Put the value in
+the tenant's resolved text slots (`app_shell_format: compactRail`) and
+the app picks it up on next launch with no rebuild.
+
+**And to prove a format did not break the contract:**
+
+```sh
+flutter test          # the invariant gates; must stay green
+```
+
+---
+
 # Layout enums
 
 ## 3.1 `app_shell_format`
