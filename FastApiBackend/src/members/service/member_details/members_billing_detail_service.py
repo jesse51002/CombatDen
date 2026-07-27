@@ -11,6 +11,7 @@ from schema.membership_plan import PlanType
 from sqlalchemy import text
 
 import src.shared.db_schema_path  # noqa: F401
+from src.checkin.schema.checkin_schema import StreakResult
 from src.checkin.service.cycle_counts_service import CycleCountsService
 from src.checkin.service.streak_service import StreakService
 from src.members import SQL_DIR
@@ -38,6 +39,7 @@ from src.members.service.member_details.members_billing_grouper import (
 from src.members.service.member_details.members_billing_supplementary import (
     MembersBillingSupplementary,
 )
+from src.ranks.service.ranks_reads import RanksReads
 from src.shared.database import DirectDatabasePool
 from src.shared.membership_status import (
     is_membership_overdue,
@@ -57,6 +59,9 @@ class MembersBillingDetailService:
         db_pool: Injected database connection pool.
         streak_service: Injected streak calculation service.
         cycle_counts_service: Injected per-cycle class-usage service.
+        ranks_reads: Injected ranks read concern — the ONE owner of the
+            leaf-advance rule, used here for the next leaf's belt image so
+            "next rank" is never derived a second time.
     """
 
     def __init__(
@@ -64,8 +69,10 @@ class MembersBillingDetailService:
         db_pool: DirectDatabasePool,
         streak_service: StreakService,
         cycle_counts_service: CycleCountsService,
+        ranks_reads: RanksReads,
     ) -> None:
         self._db_pool = db_pool
+        self._ranks_reads = ranks_reads
         self._grouper = MembersBillingGrouper()
         self._streak_service = streak_service
         self._cycle_counts_bridge = MemberDetailsCycleCountsBridge(
@@ -107,7 +114,15 @@ class MembersBillingDetailService:
             member_id,
         )
         await supplementary.load()
-        streak_weeks = await self._streak_service.get_streak(member_id, gym_id)
+        # ``get_streak_details``, not ``get_streak``: the retention block now
+        # carries the CURRENT week's attended weekdays alongside the week
+        # count, and this is the ONE call that derives both from the same
+        # session and the same gym-local Monday anchor. Deriving the strip
+        # anywhere else would be a second definition of "an attended class"
+        # that could disagree with the number rendered beside it.
+        streak = await self._streak_service.get_streak_details(
+            member_id, gym_id
+        )
 
         # The query returns the viewed member + every member they PAY FOR
         # (paid_by_member_id) so `pays_for` (the freeze-impact roster) can see
@@ -136,6 +151,7 @@ class MembersBillingDetailService:
         overview = self._grouper.build_membership_overview(overview_ctx)
 
         pays_for = self._build_pays_for(member_id, all_membership_rows)
+        next_rank_image_url = await self._fetch_next_rank_image(target_row)
 
         return self._build_response(
             member_id=member_id,
@@ -149,7 +165,7 @@ class MembersBillingDetailService:
             pays_for=pays_for,
             redeemed_rewards=supplementary.redeemed_rewards,
             pending_redemptions=supplementary.pending_redemptions,
-            streak_weeks=streak_weeks,
+            streak=streak,
             # Per-payer semantics: the QUERIED member's own row carries what
             # THEY pay monthly (the sync writes each payer's own total; a
             # member who pays nothing reads 0).
@@ -157,6 +173,32 @@ class MembersBillingDetailService:
                 target_row["total_monthly_recurring_price"] or 0
             ),
             today=today,
+            next_rank_image_url=next_rank_image_url,
+        )
+
+    async def _fetch_next_rank_image(self, target_row: dict) -> str | None:
+        """Belt image of the leaf ABOVE the member's current leaf.
+
+        Delegates to ``RanksReads.next_leaf_image_url`` — the ranks domain
+        owns the leaf-advance rule (next sub-position within the main rank,
+        else the base leaf of the next main rank), so the member's "next
+        rank" art can never disagree with what a promotion would actually
+        award. Skipped entirely for an unranked member (their rank block is
+        ``None`` anyway), so it costs nothing there.
+
+        Args:
+            target_row: The queried member's profile row.
+
+        Returns:
+            The next leaf's belt image URL, or None at the top of the
+            ladder / when the member holds no rank.
+        """
+        if target_row["rank_id"] is None:
+            return None
+        return await self._ranks_reads.next_leaf_image_url(
+            target_row["gym_id"],
+            target_row["rank_id"],
+            target_row["rank_sub_index"],
         )
 
     async def _fetch_family_rows(
@@ -191,9 +233,10 @@ class MembersBillingDetailService:
         pays_for: list,
         redeemed_rewards: list,
         pending_redemptions: list[PendingRedemptionCard],
-        streak_weeks: int,
+        streak: StreakResult,
         total_monthly_recurring_price: int,
         today: date,
+        next_rank_image_url: str | None,
     ) -> MemberBillingDetailResponse:
         """Assemble the final MemberBillingDetailResponse."""
         return MemberBillingDetailResponse(
@@ -225,11 +268,20 @@ class MembersBillingDetailService:
             memberships=grouped,
             retention=BillingRetention(
                 last_class=target_row["last_class"],
-                class_streak_weeks=streak_weeks,
+                class_streak_weeks=streak.weeks,
                 points_balance=(target_row["points_balance"] or 0),
                 videos_watched=0,
+                # Sunday-first (0 = Sunday) because that is the origin the
+                # member app's week strip renders against; the WEEK is still
+                # the streak's gym-local Monday-start week, so both numbers
+                # describe the same seven days.
+                current_week_attended_weekdays=(
+                    StreakService.sunday_first_attended_indices(
+                        streak.current_week_days
+                    )
+                ),
             ),
-            rank=self._build_rank(target_row),
+            rank=self._build_rank(target_row, next_rank_image_url),
             recently_redeemed_rewards=redeemed_rewards,
             pending_redemptions=pending_redemptions,
             card_on_file=self._build_card_on_file(target_row),
@@ -459,7 +511,11 @@ class MembersBillingDetailService:
             exp_year=exp_year,
         )
 
-    def _build_rank(self, target_row: dict) -> BillingRank | None:
+    def _build_rank(
+        self,
+        target_row: dict,
+        next_rank_image_url: str | None,
+    ) -> BillingRank | None:
         """Build the BillingRank leaf for the queried member.
 
         The member's leaf = their main rank (``rank_name``) + sub-index;
@@ -476,6 +532,8 @@ class MembersBillingDetailService:
 
         Args:
             target_row: The queried member's profile row.
+            next_rank_image_url: Belt image of the NEXT leaf (resolved by
+                the ranks domain), or None at the top of the ladder.
 
         Returns:
             BillingRank when the member has a current rank, else None.
@@ -504,6 +562,7 @@ class MembersBillingDetailService:
             classes_to_next_major=classes_to_next_major,
             classes_till_next_step=classes_till_next_step,
             classes_since_rank=target_row["rank_classes_since"],
+            next_rank_image_url=next_rank_image_url,
         )
 
     def _derive_account_status(

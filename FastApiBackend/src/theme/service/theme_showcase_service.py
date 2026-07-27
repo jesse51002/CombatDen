@@ -85,3 +85,23 @@ class ThemeShowcaseService:
                 .all()
             )
         return [ShowcaseRewardCard.model_validate(dict(r)) for r in rows]
+
+    async def load_theme_design_id(self, gym_id: UUID) -> str | None:
+        """The gym's saved ThemeService design id (None until one is chosen).
+
+        The mobile app re-themes itself to the gym's branding from this id;
+        every employee role reads it too. A missing gym yields None (the
+        caller's employment/membership at the gym is verified at the router
+        layer before this runs)."""
+        sql = load_sql(SQL_DIR / "theme_load_gym_design_id.sql")
+        async with self._db.session() as session:
+            row = (
+                (
+                    await session.execute(
+                        text(sql), {"gym_id": str(gym_id)}
+                    )
+                )
+                .mappings()
+                .fetchone()
+            )
+        return row["theme_design_id"] if row else None

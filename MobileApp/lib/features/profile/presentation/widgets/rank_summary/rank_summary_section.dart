@@ -1,16 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/profile/data/mock_profile.dart';
+import 'package:mobile_app/features/profile/data/models/billing_rank.dart';
 import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/rank_header.dart';
-import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/rating_graph.dart';
-import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/timeframe_selector.dart';
+import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/rank_progress_graph.dart';
 
-/// "Gold III / 250 rating / +134" rank header, the rating-over-time graph,
-/// and the 1W/1M/1Y/ALL timeframe selector underneath.
+/// The member's belt + rank name, over the rank-progress graph and its
+/// timeframe selector. Rendered only when the member holds a rank; the header
+/// reads the live [BillingRank] while the graph is driven by its own
+/// RankProgressBloc.
 class RankSummarySection extends StatelessWidget {
-  const RankSummarySection({super.key, required this.profile});
+  const RankSummarySection({super.key, required this.rank});
 
-  final MockProfile profile;
+  final BillingRank rank;
 
   @override
   Widget build(BuildContext context) {
@@ -20,12 +21,11 @@ class RankSummarySection extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         RankHeader(
-          rankTitle: profile.rankTitle,
-          rankSubtitle: profile.rankSubtitle,
-          rankBadgeAsset: profile.rankBadgeLargeAsset,
+          imageUrl: rank.imageUrl,
+          rankTitle: rank.name,
+          rankSubtitle: rank.subLabel,
         ),
-        const RatingGraph(),
-        const TimeframeSelector(),
+        const RankProgressGraph(),
       ],
     );
   }

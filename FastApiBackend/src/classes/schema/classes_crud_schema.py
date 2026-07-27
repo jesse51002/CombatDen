@@ -286,6 +286,14 @@ class EffectiveClassInstanceResponse(BaseModel):
             default); None when no instructor is assigned.
         resolved_instructor_name: ``first_name last_name`` for the resolved
             instructor (None when unassigned or not found).
+        class_description: The class's description text
+            (``gym_classes.class_description``); None when the class has none.
+        resolved_instructor_bio: The resolved instructor's public bio
+            (``gym_employees.employee_public_description``); None when
+            unassigned, not found, or the instructor has no bio.
+        resolved_instructor_image_url: The resolved instructor's photo URL
+            (``gym_employees.employee_pic_url``); None when unassigned, not
+            found, or the instructor has no photo.
         image_url: The class image, if any.
         points_worth: Points awarded for attending.
         is_active: The owning class's live/PAUSED flag. Only ever False on
@@ -324,6 +332,9 @@ class EffectiveClassInstanceResponse(BaseModel):
     resolved_duration_minutes: int
     resolved_instructor_id: UUID | None
     resolved_instructor_name: str | None
+    class_description: str | None = None
+    resolved_instructor_bio: str | None = None
+    resolved_instructor_image_url: str | None = None
     image_url: str
     points_worth: int
     is_active: bool

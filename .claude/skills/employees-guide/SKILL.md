@@ -89,7 +89,7 @@ Two tiers underlie almost every capability (see `CRM/lib/core/auth/role_policy.d
 | Gym config — VIEW the catalog (plans / discounts / waivers / ranks tabs + rank detail, read-only) | ✅ | ✅ | ✅ | ❌ |
 | Gym config — WRITE (create/edit/delete plans·discounts·waivers·ranks, rank enable-toggle, sub-type, reorder, seed preset) | ✅ | ✅ | ❌ | ❌ |
 | Member-app theme/showcase — CHANGE the theme (`PUT /gyms/{id}/theme`) | ✅ | ✅ | ❌ | ❌ |
-| Gym showcase/theme — READ (`GET /gyms/{id}/showcase`) | ✅ | ✅ | ✅ | ✅ |
+| Gym showcase/theme — READ (`GET /gyms/{id}/showcase`; **also any MEMBER of the gym** — now returns `theme_design_id`) | ✅ | ✅ | ✅ | ✅ |
 | Employees tab — manage staff: create / update / archive | ✅ | ✅ | ❌ | ❌ |
 | Read the employee roster (`GET /employees/{gym_id}` list — the schedule's instructor picker) | ✅ | ✅ | ✅ | ❌ |
 | Gym settings | ✅ | ✅ | ❌ | ❌ |
@@ -132,9 +132,10 @@ instructor picker (the Employees TAB itself stays owner/admin). The read/write s
 (staff, read) vs `canConfigureCatalog` (owner/admin, write); the Dashboard's overview/income cards sit
 behind `canViewGymAnalytics` (owner/admin) while `canViewDashboard` itself is staff.
 
-**Trainer** is READ-ONLY: the full schedule and every roster, the gym showcase/theme read
-(`GET /gyms/{id}/showcase` is `ALL_EMPLOYEES` — every role may READ its gym's theme), plus their own
-theme preference — nothing else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
+**Trainer** is READ-ONLY: the full schedule and every roster (`ALL_EMPLOYEES`), the gym showcase/theme
+read (`GET /gyms/{id}/showcase`, gated by `verify_gym_member_or_employee` — every employee role **AND
+any member of the gym** may READ its theme; the response now also carries `theme_design_id` so a
+member's app can re-theme), plus their own theme preference — nothing else. A trainer's `landingRoute` is `/schedule` (front desk lands on `/members`; owner/admin land on
 `/home`, the dashboard).
 
 ### Where this is enforced
@@ -165,9 +166,10 @@ like any other employee type; the DB constraint flipped from "trainer must have 
 
 Access for a trainer is still role-set-gated per route exactly like every other role — **not** a blanket
 owner/admin cut with everyone else lumped together. `src/shared/auth.py` exports `ALL_EMPLOYEES` (all
-four types) for the trainer-visible reads (full schedule, rosters, and the gym showcase/theme read
-`GET /gyms/{id}/showcase`); everything else stays `OWNER_ADMIN` or
-`STAFF`, which a trainer's `employee_type` never matches.
+four types) for the trainer-visible reads (full schedule and rosters). The gym showcase/theme read
+(`GET /gyms/{id}/showcase`) is a step wider still — gated by `verify_gym_member_or_employee` (every
+employee role **OR** any member of the gym; see §2, §6), not `ALL_EMPLOYEES`. Everything else stays
+`OWNER_ADMIN` or `STAFF`, which a trainer's `employee_type` never matches.
 
 ---
 
@@ -289,6 +291,15 @@ over the same `_resolve_employee` query:
   at *any* gym); used by endpoints with no `gym_id` (the shared image-upload proxy).
 - `verify_gym_owner` / `verify_gym_admin_or_owner` — thin wrappers over `verify_roles` with `OWNER_ONLY` /
   `OWNER_ADMIN` (the latter mirrors the DB's `is_gym_admin_or_owner` RLS function at the API layer).
+- `verify_gym_member_or_employee(gym_id, user_payload)` — the gym-LEVEL **branding** gate (the
+  theme/showcase read). Grants when the caller's verified email matches EITHER a non-archived
+  `gym_employees` row at the gym (any `employee_type`) OR any `members` row at the gym (no
+  membership-status filter). Takes NO `member_id` and confers no member-scoped access — it only answers
+  "does this verified caller belong to this gym in some capacity". It deliberately sits OUTSIDE the
+  member-scoped-surface separation (§9): a member reaches it directly with only a `gym_id`, because the
+  showcase is gym branding, not member data. Its own `src/shared/sql/auth_gym_member_or_employee.sql`
+  carries the same confirmed-account `EXISTS` (drift-guarded). **Only caller:**
+  `GET /api/v1/gyms/{id}/showcase`.
 - `verify_gym_employee_for_member(member_id, user_payload, staff_roles)` /
   `get_employee_id_for_member(member_id, user_payload, allowed)` — the member-scoped variants: resolve the
   member's gym, then run the gym-scoped check on it. **Staff-only, and they gate EVERY member-scoped route
@@ -402,7 +413,14 @@ no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing
 1. **`member_id` is never derived from the JWT.** `GET /api/v1/member/members` (gated by
    `verify_verified_account`, since no member is named yet) resolves the caller's email to their member
    rows **across gyms** — a LIST, because `members.email` is deliberately non-unique (§1, the family
-   case). Every other route takes the chosen `member_id` + `gym_id` explicitly.
+   case). Every other route takes the chosen `member_id` + `gym_id` explicitly. Each row also carries
+   its gym's display block **and its three CAPABILITY flags** — `gym_rank_enabled` (the stored
+   `gyms.is_rank_enabled` toggle) plus `gym_has_rewards` / `gym_has_videos`, both DERIVED from data
+   (there is no toggle for either) by mirroring the exact predicate of the member-facing read behind
+   each tab. The app picks its bottom-nav tabs from them, so they must be right at first paint and
+   survive offline — which is why they ride the once-per-boot, cached identity read rather than the
+   profile. Detail (including the served-feed drift guard) lives in `FastApiBackend/CLAUDE.md` under
+   *Member portal domain*.
 2. **Every gym-scoped route passes `gym_id`** to the gate, so a member row at an unrelated gym is a 403
    rather than a served page.
 3. **No client-selectable gate semantics.** `is_member`, `ignore_warnings`, `auto_approve`, `rejected`,
@@ -410,12 +428,23 @@ no role and gets nothing from `verify_roles`. Symmetrically, **staff get nothing
    server-side. This is the direct lesson of the deleted branch: a caller must never choose the gate
    they are judged by.
 
-**What it admits** (13 routes, all thin delegation to the SAME services the CRM uses): the caller's
-member rows; their own profile (rank progress, points balance, streak, membership cards, recent +
-pending redemptions — a projection of `MembersBillingDetailService`); their streak and class history;
+**What it admits** (14 routes, all thin delegation to the SAME services the CRM uses): the caller's
+member rows; their own profile (rank progress, points balance, streak — including
+`retention.current_week_attended_weekdays`, THIS week's attended weekdays as SUNDAY-FIRST indices over
+the streak's own gym-local week, so a rank-disabled gym renders its week strip from the same call —
+membership cards, recent + pending redemptions; a projection of `MembersBillingDetailService`); their
+streak and class history;
 their gym's **schedule board**; their own **reservations** (`POST`/`DELETE .../signup`); their gym's
 **active** reward catalog and a **pending** redemption with their own points; and their personalized
 **video** feed / rotating rec / rec click.
+
+**Plus one gym-LEVEL read that is NOT a `member_portal` route.** A member also reads their gym's
+branding via `GET /api/v1/gyms/{id}/showcase` (the **theme** domain, not `/api/v1/member/...`), so the
+app can re-theme itself to the gym — the response carries `theme_design_id`. That route is gated by
+`verify_gym_member_or_employee` (any employee role OR any member of the gym; §2, §6), NOT
+`verify_member_self`: it takes only a `gym_id` and returns gym branding, not member data, so it
+deliberately lives outside this domain's member-scoped separation. It is the mobile app's one call that
+isn't under the member router.
 
 **What it refuses, deliberately:**
 
@@ -449,7 +478,9 @@ Deep detail (the route/gate table, the cross-gym reward guard on redeem) lives i
 - **Member portal:** `FastApiBackend/src/member_portal/` — `member_portal_router.py`,
   `schema/member_portal_schema.py`, `service/member_portal_service.py`,
   `sql/member_portal_list_members.sql`. Tests:
-  `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units) and
+  `FastApiBackend/tests/member_portal/test_member_portal_router.py` (router units),
+  `test_member_portal_capabilities_db.py` (the live derivation + served-feed drift guard),
+  `test_member_portal_week_strip_db.py` (the gym-local Sunday-first week strip) and
   `FastApiBackend/tests/integration/test_member_portal_integration.py` (the live gate proof).
 - **CRM:** `CRM/lib/core/auth/employee_role.dart`, `role_policy.dart`, `CRM/lib/core/navigation/
   route_guard.dart`, `CRM/lib/core/errors/exceptions.dart` (`ForbiddenException`),

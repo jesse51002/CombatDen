@@ -42,6 +42,7 @@ from constants import (
     MEMBER_MAX_AGE_YEARS,
     MEMBER_MIN_AGE_YEARS,
     MEMBERS_PER_GYM,
+    TEST_MEMBER_EMAIL,
     UNIT_DAYS,
 )
 from faker import Faker
@@ -510,6 +511,8 @@ def build_plans(
     if recurring:
         family_member_idx = _form_linked_families(members, recurring)
 
+    _assign_test_member_emails(members, family_member_idx)
+
     # Everyone outside a family gets a cohort lifecycle.
     for i, member in enumerate(members):
         if i in family_member_idx:
@@ -520,6 +523,63 @@ def build_plans(
     _assign_discounts(members, discounts)
     _assign_custom_discounts(members)
     return members
+
+
+def _assign_test_member_emails(
+    members: list[MemberPlan],
+    family_member_idx: set[int],
+) -> None:
+    """Give THREE members the known test email (TEST_MEMBER_EMAIL).
+
+    The member app's identity model is a verified-email match, and
+    ``members.email`` is deliberately non-unique (families share an inbox), so
+    the known login must resolve to several rows to exercise the app's
+    multi-profile picker. Deterministic picks (lowest index each): a family
+    ROOT, that root's first linked CHILD, and an INDEPENDENT (non-family)
+    member. Runs AFTER family formation (it needs the links) and consumes no
+    randomness, so the seeded Faker/random sequences are untouched. With no
+    families formed (no recurring plan), falls back to the first three members.
+    """
+    picks: list[MemberPlan] = []
+    root = next(
+        (
+            members[i]
+            for i in sorted(family_member_idx)
+            if members[i].linked_primary_handle is None
+        ),
+        None,
+    )
+    if root is not None:
+        picks.append(root)
+        child = next(
+            (
+                m
+                for m in members
+                if m.linked_primary_handle == root.local_handle
+            ),
+            None,
+        )
+        if child is not None:
+            picks.append(child)
+    independent = next(
+        (
+            members[i]
+            for i in range(len(members))
+            if i not in family_member_idx
+        ),
+        None,
+    )
+    if independent is not None:
+        picks.append(independent)
+    # Degenerate seeds (tiny MEMBERS_PER_GYM, no families): top up from the
+    # front of the list so three rows always carry the email when possible.
+    for member in members:
+        if len(picks) >= 3:
+            break
+        if member not in picks:
+            picks.append(member)
+    for member in picks:
+        member.email = TEST_MEMBER_EMAIL
 
 
 def to_member_create(gym_id: uuid.UUID, plan: MemberPlan) -> MemberCreate:

@@ -11,17 +11,14 @@ import 'package:flutter/widgets.dart';
 /// canvas/`paintImage` without re-wrapping. Render with
 /// `Image(image: ApiImage.asset('foo.png'), …)`.
 ///
-/// `.asset` → `assets/images`, `.classAsset` → `assets/classes`,
-/// `.rewardAsset` → `assets/rewards`, `.rankAsset` → `assets/ranks`.
+/// `.asset` → `assets/images`, `.rewardAsset` → `assets/rewards`,
+/// `.rankAsset` → `assets/ranks`.
 class ApiImage {
   // Private constructor to prevent instantiation.
   ApiImage._();
 
   static ImageProvider asset(String fileName) =>
       AssetImage('assets/images/$fileName');
-
-  static ImageProvider classAsset(String fileName) =>
-      AssetImage('assets/classes/$fileName');
 
   static ImageProvider rewardAsset(String fileName) =>
       AssetImage('assets/rewards/$fileName');

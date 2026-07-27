@@ -38,6 +38,9 @@ class MemberClassHistoryRow(BaseModel):
         duration_minutes: The class's length (the CURRENT schedule
             version's — the same approximation the ended-ness split uses),
             so the card can render a start–end time range.
+        points_worth: The class's ``points_worth`` — what attending this
+            class awards (the points earned on an ``attended`` row; the
+            potential award on a reservation/no-show).
         occurred_at: The attendance row's effective start instant —
             attended rows only (None for reservations / no-shows, which
             have no attendance row to read it from).
@@ -50,6 +53,7 @@ class MemberClassHistoryRow(BaseModel):
     original_date: date
     original_time: time
     duration_minutes: int
+    points_worth: int
     occurred_at: datetime | None
     status: MemberClassHistoryStatus
 

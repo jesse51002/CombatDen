@@ -42,6 +42,7 @@ class SelectedGym extends ChangeNotifier {
   EmployeeRole? _role;
   String? _timezone;
   String? _gymName;
+  String? _address;
   String? _logoUrl;
   DateTime? _createdAt;
   String? _stripeAccountId;
@@ -51,12 +52,21 @@ class SelectedGym extends ChangeNotifier {
   /// design against this to know whether the pick is already saved.
   String? _savedThemeDesignId;
 
+  /// The saved design's catalog row, resolved by [reconcileFromCatalog] (or
+  /// promoted from the pick on save). Carries the human name the "Members see"
+  /// status line shows, and IS the style the "leave preview" revert re-selects.
+  ThemeStyle? _savedThemeStyle;
+
   // ── VideoService content selection ──
   String? _videoGymId;
 
   // ── Live theme selection (decoupled from the gym) ──
   String? _designId;
   String? _themeCategory;
+
+  /// The catalog row of the most recent pick — kept so a save can promote it
+  /// straight into [_savedThemeStyle] without waiting on another catalog pass.
+  ThemeStyle? _previewStyle;
 
   GymDetail? _detail;
   bool _isLoading = false;
@@ -76,6 +86,11 @@ class SelectedGym extends ChangeNotifier {
   /// instead (see the class doc). Updated in place by [updateGymName] when
   /// the Gym profile save commits.
   String? get gymName => _gymName;
+
+  /// The active gym's street address (`gyms.address`); null means the owner
+  /// hasn't set one. Seeded by [setActiveGym], updated by [updateAddress] when
+  /// the Gym profile save commits. Free text — the backend stores it as typed.
+  String? get address => _address;
 
   /// The active gym's uploaded brand logo URL (a CDN URL); null means the gym
   /// has no logo yet. Seeded by [setActiveGym], updated by [updateLogoUrl]
@@ -105,6 +120,18 @@ class SelectedGym extends ChangeNotifier {
   /// a theme has ever been saved). Updated in place by [updateSavedThemeDesignId]
   /// when the "Set as app theme" save commits.
   String? get savedThemeDesignId => _savedThemeDesignId;
+
+  /// The saved design's human display name, once the styles catalog has been
+  /// walked ([reconcileFromCatalog]) or a save promoted the pick. Null when no
+  /// theme is saved, or before the catalog resolves it — callers fall back to
+  /// the raw [savedThemeDesignId] so the status line is never blank.
+  String? get savedThemeName => _savedThemeStyle?.displayName;
+
+  /// The saved design's catalog row, when resolved. The "leave preview"
+  /// confirm re-selects it to drop an unsaved preview back onto what members
+  /// actually see. Null when nothing is saved (or it isn't resolved yet), in
+  /// which case the preview is simply left where it is.
+  ThemeStyle? get savedThemeStyle => _savedThemeStyle;
 
   /// The VideoService content gym id (the content key); null before first
   /// select. Drives the read-only member-app content surfaces.
@@ -149,6 +176,7 @@ class SelectedGym extends ChangeNotifier {
     required EmployeeRole role,
     required String timezone,
     required String? logoUrl,
+    String? address,
     String? savedThemeDesignId,
     String? stripeAccountId,
     DateTime? createdAt,
@@ -157,8 +185,12 @@ class SelectedGym extends ChangeNotifier {
     _gymName = displayName;
     _role = role;
     _timezone = timezone;
+    _address = address;
     _logoUrl = logoUrl;
     _savedThemeDesignId = savedThemeDesignId;
+    // The catalog row for the new gym's saved design isn't known yet — the
+    // side pane's [reconcileFromCatalog] resolves it once the styles load.
+    _savedThemeStyle = null;
     _stripeAccountId = stripeAccountId;
     _createdAt = createdAt;
     // Apply the connected account to Stripe.js. Not awaited here (setActiveGym
@@ -182,6 +214,14 @@ class SelectedGym extends ChangeNotifier {
   /// theme" save commits (NOT optimistic — only called on success).
   void updateSavedThemeDesignId(String themeDesignId) {
     _savedThemeDesignId = themeDesignId;
+    // The design just saved is the one that was previewed, so its catalog row
+    // is already in hand — promote it so the "Members see" line names the new
+    // theme immediately instead of falling back to the raw id.
+    if (_previewStyle?.id == themeDesignId) {
+      _savedThemeStyle = _previewStyle;
+    } else if (_savedThemeStyle?.id != themeDesignId) {
+      _savedThemeStyle = null; // stale — reconcileFromCatalog re-resolves it.
+    }
     notifyListeners();
   }
 
@@ -190,6 +230,14 @@ class SelectedGym extends ChangeNotifier {
   /// never the theme selection.
   void updateGymName(String gymName) {
     _gymName = gymName;
+    notifyListeners();
+  }
+
+  /// Update the active gym's street address after the Gym profile save commits
+  /// (NOT optimistic — only called on success). A null [address] clears it back
+  /// to "no address set".
+  void updateAddress(String? address) {
+    _address = address;
     notifyListeners();
   }
 
@@ -236,13 +284,16 @@ class SelectedGym extends ChangeNotifier {
     _role = null;
     _timezone = null;
     _gymName = null;
+    _address = null;
     _logoUrl = null;
     _createdAt = null;
     _savedThemeDesignId = null;
+    _savedThemeStyle = null;
     _stripeAccountId = null;
     _videoGymId = null;
     _designId = null;
     _themeCategory = null;
+    _previewStyle = null;
     _detail = null;
     _isLoading = false;
     _error = null;
@@ -258,11 +309,20 @@ class SelectedGym extends ChangeNotifier {
   /// notifying once [ThemeRuntime.selectDesign] below resolves) rather than a
   /// field on this class.
   void selectStyle(ThemeStyle style) {
+    // Held regardless of the no-op guard below, so a save can always promote
+    // the previewed row into [savedThemeStyle].
+    _previewStyle = style;
     if (_designId == style.id && _themeCategory == style.category) return;
     _designId = style.id;
     _themeCategory = style.category;
     // Drive branding; idempotent — skip when the engine is already on it.
-    if (style.id.isNotEmpty && ThemeRuntime.activeDesignId != style.id) {
+    // The `isReady` guard is load-bearing: every ThemeRuntime member throws
+    // until the engine is registered, so a pick made before (or without) the
+    // theme runtime booting would otherwise blow up rather than just record
+    // the selection.
+    if (style.id.isNotEmpty &&
+        ThemeRuntime.isReady &&
+        ThemeRuntime.activeDesignId != style.id) {
       ThemeRuntime.selectDesign(style.id);
     }
     notifyListeners();
@@ -300,17 +360,38 @@ class SelectedGym extends ChangeNotifier {
   /// overridden. Matches on the intended [designId], falling back to
   /// [ThemeRuntime.activeDesignId] (which the seed applied).
   void reconcileFromCatalog(Iterable<ThemeStyle> items) {
-    if (_themeCategory != null) return; // category known — don't override a pick
-    final target = _designId ?? ThemeRuntime.activeDesignId;
-    if (target == null || target.isEmpty) return;
-    for (final s in items) {
-      if (s.id == target) {
-        _designId = target;
-        _themeCategory = s.category;
-        notifyListeners();
-        return;
+    var changed = false;
+    // Resolve the SAVED design's catalog row — its display name feeds the
+    // "Members see" status line and its style object is what the "leave
+    // preview" revert re-selects. Deliberately OUTSIDE the category guard
+    // below: the saved design and the previewed one differ exactly when
+    // there's an unsaved preview, which is the case that needs this most.
+    final saved = _savedThemeDesignId;
+    if (saved != null && saved.isNotEmpty && _savedThemeStyle?.id != saved) {
+      for (final s in items) {
+        if (s.id == saved) {
+          _savedThemeStyle = s;
+          changed = true;
+          break;
+        }
       }
     }
+    // category known — don't override a pick
+    if (_themeCategory == null) {
+      final target = _designId ??
+          (ThemeRuntime.isReady ? ThemeRuntime.activeDesignId : null);
+      if (target != null && target.isNotEmpty) {
+        for (final s in items) {
+          if (s.id == target) {
+            _designId = target;
+            _themeCategory = s.category;
+            changed = true;
+            break;
+          }
+        }
+      }
+    }
+    if (changed) notifyListeners();
   }
 }
 

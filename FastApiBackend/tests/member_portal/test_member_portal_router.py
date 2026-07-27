@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from fastapi import HTTPException
 from schema.member_reward_redemption import RewardRedemptionStatus
 from schema.video import VideoGenre
 
@@ -29,6 +30,8 @@ from src.checkin.checkin_exceptions import (
 )
 from src.checkin.schema.checkin_history_schema import (
     MemberClassHistoryResponse,
+    MemberClassHistoryRow,
+    MemberClassHistoryStatus,
 )
 from src.checkin.schema.checkin_schema import StreakResult
 from src.checkin.schema.signup_schema import (
@@ -43,6 +46,8 @@ from src.member_portal.schema.member_portal_schema import (
     MemberPortalIdentity,
     MemberPortalIdentityListResponse,
     MemberPortalProfile,
+    MemberRankProgressResponse,
+    RankProgressPoint,
 )
 from src.members.schema.members_billing_schema import (
     BillingPersonalInfo,
@@ -54,6 +59,7 @@ from src.rewards.schema.rewards_schema import (
     RewardListResponse,
     RewardResponse,
 )
+from src.videos.schema.video_click_schema import MemberVideoClickResponse
 from src.videos.schema.video_recs_schema import (
     MemberVideoRec,
     VideoRecClickResponse,
@@ -62,6 +68,7 @@ from src.videos.schema.videos_schema import GymVideoCard
 from src.videos.service.member_video_profile_service import (
     MemberNotInGymError,
 )
+from src.videos.service.video_click_service import VideoNotInFeedError
 from src.videos.service.video_rec_click_service import RecNotFoundError
 
 
@@ -167,8 +174,27 @@ def _profile(gym_id: str, member_id: str) -> MemberPortalProfile:
             class_streak_weeks=3,
             points_balance=250,
             videos_watched=7,
+            # Sunday-first: 1 = Monday, 3 = Wednesday.
+            current_week_attended_weekdays=[1, 3],
         ),
     )
+
+
+def _identity(gym_id: str, **overrides) -> MemberPortalIdentity:
+    """One identity row with every gym-capability flag ON by default."""
+    fields = {
+        "member_id": uuid4(),
+        "gym_id": UUID(gym_id),
+        "gym_name": "Test Gym",
+        "gym_address": "1200 Combat Ave, Austin, TX 78701",
+        "gym_rank_enabled": True,
+        "gym_has_rewards": True,
+        "gym_has_videos": True,
+        "first_name": "Ada",
+        "last_name": "Lovelace",
+    }
+    fields.update(overrides)
+    return MemberPortalIdentity(**fields)
 
 
 def _reward(gym_id: str, reward_id: str) -> RewardResponse:
@@ -221,22 +247,18 @@ def test_list_my_members_uses_verified_account_gate(
 ):
     portal_service_mock.list_members_for_email = AsyncMock(
         return_value=MemberPortalIdentityListResponse(
-            members=[
-                MemberPortalIdentity(
-                    member_id=uuid4(),
-                    gym_id=UUID(fake_gym_id),
-                    gym_name="Test Gym",
-                    first_name="Ada",
-                    last_name="Lovelace",
-                )
-            ]
+            members=[_identity(fake_gym_id)]
         )
     )
 
     resp = client.get("/api/v1/member/members", headers=auth_headers)
 
     assert resp.status_code == 200, resp.text
-    assert len(resp.json()["members"]) == 1
+    members = resp.json()["members"]
+    assert len(members) == 1
+    # The gym's address rides the identity read so the app can show it +
+    # an "Open in Maps" link without a second call.
+    assert members[0]["gym_address"] == "1200 Combat Ave, Austin, TX 78701"
     auth_mock.verify_verified_account.assert_awaited()
     # Email + caller_id both come from the gate, never the client: the identity
     # query pins the caller's OWN confirmed account.
@@ -256,6 +278,68 @@ def test_list_my_members_allows_an_empty_result(
 
     assert resp.status_code == 200
     assert resp.json()["members"] == []
+
+
+def test_identity_carries_the_three_gym_capability_flags(
+    client, auth_headers, portal_service_mock, fake_gym_id
+):
+    """The app picks its bottom-nav tabs off THIS payload.
+
+    All three flags must reach the wire on the identity read — it is fetched
+    once at boot and cached, so a missing flag means a tab is wrong at first
+    paint (and stays wrong offline).
+    """
+    on_gym = str(uuid4())
+    portal_service_mock.list_members_for_email = AsyncMock(
+        return_value=MemberPortalIdentityListResponse(
+            members=[
+                _identity(fake_gym_id),
+                _identity(
+                    on_gym,
+                    gym_name="ZZ Bare Gym",
+                    gym_rank_enabled=False,
+                    gym_has_rewards=False,
+                    gym_has_videos=False,
+                ),
+            ]
+        )
+    )
+
+    resp = client.get("/api/v1/member/members", headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    by_gym = {row["gym_id"]: row for row in resp.json()["members"]}
+    assert by_gym[fake_gym_id]["gym_rank_enabled"] is True
+    assert by_gym[fake_gym_id]["gym_has_rewards"] is True
+    assert by_gym[fake_gym_id]["gym_has_videos"] is True
+    # Per-GYM, not per-caller: a family spanning gyms gets a different tab set
+    # per row.
+    assert by_gym[on_gym]["gym_rank_enabled"] is False
+    assert by_gym[on_gym]["gym_has_rewards"] is False
+    assert by_gym[on_gym]["gym_has_videos"] is False
+
+
+def test_profile_carries_the_current_week_strip_sunday_first(
+    client, auth_headers, portal_service_mock, fake_gym_id, fake_member_id
+):
+    """The week strip rides the PROFILE payload, Sunday-first.
+
+    A rank-disabled gym makes the streak the profile's centrepiece, so the
+    seven dots must come from the same call — not from a second fetch of the
+    whole class history.
+    """
+    portal_service_mock.get_profile = AsyncMock(
+        return_value=_profile(fake_gym_id, fake_member_id)
+    )
+
+    resp = client.get(_base(fake_gym_id, fake_member_id), headers=auth_headers)
+
+    assert resp.status_code == 200, resp.text
+    retention = resp.json()["retention"]
+    # 1 = Monday, 3 = Wednesday on the Sunday-first strip the member app's
+    # StreakWeekStrip renders (0 = Sunday .. 6 = Saturday).
+    assert retention["current_week_attended_weekdays"] == [1, 3]
+    assert retention["class_streak_weeks"] == 3
 
 
 # ── profile / streak / history ────────────────────────────────────
@@ -287,6 +371,55 @@ def test_get_profile_maps_missing_member_to_404(
     resp = client.get(_base(fake_gym_id, fake_member_id), headers=auth_headers)
 
     assert resp.status_code == 404
+
+
+def test_rank_progress_gates_and_returns_series(
+    client, auth_headers, auth_mock, portal_service_mock, fake_gym_id, fake_member_id
+):
+    portal_service_mock.get_rank_progress = AsyncMock(
+        return_value=MemberRankProgressResponse(
+            points=[
+                RankProgressPoint(
+                    date=date(2026, 7, 1), classes_into_rank=1, classes_needed=2
+                ),
+                RankProgressPoint(
+                    date=date(2026, 7, 8), classes_into_rank=0, classes_needed=2
+                ),
+            ]
+        )
+    )
+
+    resp = client.get(
+        f"{_base(fake_gym_id, fake_member_id)}/rank-progress", headers=auth_headers
+    )
+
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert [p["classes_into_rank"] for p in body["points"]] == [1, 0]
+    assert body["points"][0]["classes_needed"] == 2
+    portal_service_mock.get_rank_progress.assert_awaited_once_with(
+        UUID(fake_member_id), UUID(fake_gym_id)
+    )
+    auth_mock.verify_member_self.assert_awaited_once_with(
+        UUID(fake_member_id),
+        auth_mock.get_current_user.return_value,
+        gym_id=UUID(fake_gym_id),
+    )
+
+
+def test_rank_progress_allows_an_empty_series(
+    client, auth_headers, portal_service_mock, fake_gym_id, fake_member_id
+):
+    portal_service_mock.get_rank_progress = AsyncMock(
+        return_value=MemberRankProgressResponse(points=[])
+    )
+
+    resp = client.get(
+        f"{_base(fake_gym_id, fake_member_id)}/rank-progress", headers=auth_headers
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["points"] == []
 
 
 def test_get_streak_gates_and_returns_weeks_and_week_strip(
@@ -322,9 +455,31 @@ def test_get_streak_gates_and_returns_weeks_and_week_strip(
 def test_class_history_gates_and_paginates(
     client, auth_headers, auth_mock, history_service_mock, fake_gym_id, fake_member_id
 ):
+    reserved = MemberClassHistoryRow(
+        class_id=uuid4(),
+        class_name="Fundamentals",
+        image_url="https://cdn.example/f.png",
+        original_date=date(2026, 8, 1),
+        original_time=time(18, 0),
+        duration_minutes=60,
+        points_worth=55,
+        occurred_at=None,
+        status=MemberClassHistoryStatus.reserved,
+    )
+    attended = MemberClassHistoryRow(
+        class_id=uuid4(),
+        class_name="Sparring",
+        image_url="https://cdn.example/s.png",
+        original_date=date(2026, 7, 1),
+        original_time=time(19, 0),
+        duration_minutes=90,
+        points_worth=75,
+        occurred_at=datetime(2026, 7, 1, 19, 0, tzinfo=UTC),
+        status=MemberClassHistoryStatus.attended,
+    )
     history_service_mock.get_history = AsyncMock(
         return_value=MemberClassHistoryResponse(
-            upcoming=[], history=[], has_more=False
+            upcoming=[reserved], history=[attended], has_more=False
         )
     )
 
@@ -338,6 +493,11 @@ def test_class_history_gates_and_paginates(
         UUID(fake_member_id), UUID(fake_gym_id), limit=5, offset=10
     )
     auth_mock.verify_member_self.assert_awaited()
+    # points_worth rides through the response contract on both lists — the
+    # potential award on a reservation, the earned points on an attended row.
+    body = resp.json()
+    assert body["upcoming"][0]["points_worth"] == 55
+    assert body["history"][0]["points_worth"] == 75
 
 
 def test_class_history_rejects_an_out_of_range_limit(
@@ -677,6 +837,97 @@ def test_video_feed_rejects_both_genre_filters(
 
     assert resp.status_code == 400
     videos_service_mock.load_feed_page.assert_not_awaited()
+
+
+def test_feed_video_click_delegates_and_gates(
+    client, auth_headers, auth_mock, videos_service_mock, fake_gym_id, fake_member_id
+):
+    videos_service_mock.record_video_click = AsyncMock(
+        return_value=MemberVideoClickResponse(video_id="yt123")
+    )
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/yt123/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json() == {"video_id": "yt123"}
+    videos_service_mock.record_video_click.assert_awaited_once_with(
+        UUID(fake_gym_id), UUID(fake_member_id), "yt123"
+    )
+    auth_mock.verify_member_self.assert_awaited_once_with(
+        UUID(fake_member_id),
+        auth_mock.get_current_user.return_value,
+        gym_id=UUID(fake_gym_id),
+    )
+
+
+def test_feed_video_click_is_append_only_never_deduped(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """Two opens of the SAME video must reach the service TWICE.
+
+    A re-watch is real taste signal, so the route holds no idempotency of its
+    own — this locks the rule most likely to be "fixed" into a dedup later.
+    """
+    videos_service_mock.record_video_click = AsyncMock(
+        return_value=MemberVideoClickResponse(video_id="yt123")
+    )
+    url = f"{_base(fake_gym_id, fake_member_id)}/videos/yt123/click"
+
+    assert client.post(url, headers=auth_headers).status_code == 200
+    assert client.post(url, headers=auth_headers).status_code == 200
+
+    assert videos_service_mock.record_video_click.await_count == 2
+
+
+def test_feed_video_click_404s_a_video_outside_the_feed(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    videos_service_mock.record_video_click = AsyncMock(
+        side_effect=VideoNotInFeedError("Video not found in this gym's feed")
+    )
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/notmine/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 404
+
+
+def test_feed_video_click_rejects_a_malformed_video_id(
+    client, auth_headers, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """A non-YouTube-shaped id is a 422 at the edge — never a logged activity."""
+    videos_service_mock.record_video_click = AsyncMock()
+
+    resp = client.post(
+        f"{_base(fake_gym_id, fake_member_id)}/videos/bad%20id!/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 422
+    videos_service_mock.record_video_click.assert_not_awaited()
+
+
+def test_feed_video_click_is_refused_for_another_members_id(
+    client, auth_headers, auth_mock, videos_service_mock, fake_gym_id, fake_member_id
+):
+    """When the gate rejects, nothing is logged — the service is never reached."""
+    auth_mock.verify_member_self = AsyncMock(
+        side_effect=HTTPException(status_code=403, detail="Not your member")
+    )
+    videos_service_mock.record_video_click = AsyncMock()
+
+    resp = client.post(
+        f"{_base(fake_gym_id, uuid4())}/videos/yt123/click",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 403
+    videos_service_mock.record_video_click.assert_not_awaited()
 
 
 def test_video_rec_returns_the_pick(

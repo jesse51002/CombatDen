@@ -1,19 +1,38 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
-import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/class_booking/data/class_detail_args.dart';
+import 'package:mobile_app/features/home/bloc/home_bloc.dart';
+import 'package:mobile_app/features/home/bloc/home_event.dart';
+import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
+import 'package:mobile_app/features/home/data/schedule_dates.dart';
+import 'package:mobile_app/shared/widgets/class_reserved_tag.dart';
 
+/// One occurrence row on the schedule board. Taps open the class detail with
+/// the occurrence + its booked state; on return the home board refetches
+/// (a reservation may have changed).
 class ClassListItem extends StatelessWidget {
   const ClassListItem({
     super.key,
-    required this.classData,
-    this.showBookings = true,
+    required this.occurrence,
+    required this.booked,
   });
 
-  final MockClass classData;
-  final bool showBookings;
+  final ClassOccurrence occurrence;
+  final bool booked;
+
+  void _openDetail(BuildContext context) {
+    final homeBloc = context.read<HomeBloc>();
+    Navigator.of(context).pushNamed(
+      AppRoutes.classDetail,
+      arguments: ClassDetailArgs(occurrence: occurrence, booked: booked),
+    ).then((_) {
+      if (!homeBloc.isClosed) homeBloc.add(const HomeRefreshRequested());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +41,7 @@ class ClassListItem extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         InkWell(
-          onTap: () => Navigator.of(context).pushNamed(
-            AppRoutes.classDetail,
-            arguments: classData,
-          ),
+          onTap: () => _openDetail(context),
           child: Padding(
             padding: EdgeInsets.symmetric(
               horizontal: DesignConstants.screenHorizontalPadding,
@@ -36,17 +52,13 @@ class ClassListItem extends StatelessWidget {
               spacing: DesignConstants.spacingLarge,
               children: [
                 Expanded(
-                  child: _ClassInfo(
-                    classData: classData,
-                    showBookings: showBookings,
-                  ),
+                  child: _ClassInfo(occurrence: occurrence, booked: booked),
                 ),
                 ClipRRect(
-                  borderRadius: BorderRadius.circular(
-                    DesignConstants.radiusSmall,
-                  ),
+                  borderRadius:
+                      BorderRadius.circular(DesignConstants.radiusSmall),
                   child: Image(
-                    image: CachedNetworkImageProvider(classData.imageUrl),
+                    image: CachedNetworkImageProvider(occurrence.imageUrl),
                     width: 122,
                     height: 73,
                     fit: BoxFit.cover,
@@ -68,61 +80,46 @@ class ClassListItem extends StatelessWidget {
       ],
     );
   }
-
 }
 
 class _ClassInfo extends StatelessWidget {
-  const _ClassInfo({required this.classData, required this.showBookings});
-  final MockClass classData;
-  final bool showBookings;
+  const _ClassInfo({required this.occurrence, required this.booked});
+
+  final ClassOccurrence occurrence;
+  final bool booked;
 
   @override
   Widget build(BuildContext context) {
+    final range = formatSlotRange(
+      occurrence.resolvedClassTime,
+      occurrence.resolvedDurationMinutes,
+    );
+    final mentor = occurrence.resolvedInstructorName;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(classData.name, style: DesignConstants.h3),
+        Text(occurrence.className, style: DesignConstants.h3),
         Text(
-          '${classData.timeRange} (${classData.durationMinutes} min)',
+          '$range (${occurrence.resolvedDurationMinutes} min)',
           style: DesignConstants.p,
         ),
-        Text(
-          classData.mentor,
-          style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-        ),
-        if (classData.attending != null)
-          _BookedCount(count: classData.attending!),
-        if (showBookings && classData.isBooked) const _BookedConfirmation(),
+        if (mentor != null && mentor.isNotEmpty)
+          Text(
+            mentor,
+            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+          ),
+        _AttendingCount(count: occurrence.signupCount),
+        // The same mark the class detail shows — one vocabulary for
+        // "you hold this", so the board and the detail can't drift.
+        if (booked) const ClassReservedTag(),
       ],
     );
   }
 }
 
-class _BookedConfirmation extends StatelessWidget {
-  const _BookedConfirmation();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Icon(
-          Symbols.check_sharp,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.text,
-          size: DesignConstants.iconSizeXs,
-        ),
-        Text('You booked this class!', style: DesignConstants.h3),
-      ],
-    );
-  }
-}
-
-class _BookedCount extends StatelessWidget {
-  const _BookedCount({required this.count});
+class _AttendingCount extends StatelessWidget {
+  const _AttendingCount({required this.count});
   final int count;
 
   @override

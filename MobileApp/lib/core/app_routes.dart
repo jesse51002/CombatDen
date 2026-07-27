@@ -17,8 +17,13 @@ class AppRoutes {
   // Profile
   static const String profile = '/profile';
 
-  // Style picker (double-tap the home logo)
-  static const String styleSelect = '/style-select';
+  // Switch profile — re-open the "Who's training?" member picker in-app.
+  static const String memberSelect = '/member-select';
+
+  // QR check-in flow: topbar tile → scanner → pick today's class → confirm.
+  static const String checkinScanner = '/checkin/scanner';
+  static const String checkinPickClass = '/checkin/pick';
+  static const String checkinConfirm = '/checkin/confirm';
 
   // Rewards tab
   static const String myRewards = '/rewards';
@@ -27,7 +32,6 @@ class AppRoutes {
 
   // Post-class celebration flow
   static const String postClassStreak = '/post-class/streak';
-  static const String postClassWins = '/post-class/wins';
   static const String postClassPoints = '/post-class/points';
   static const String postClassRewards = '/post-class/rewards';
   static const String postClassRank = '/post-class/rank';

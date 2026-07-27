@@ -158,6 +158,20 @@ DB-URL normaliser, …) round out the suite. Round-trip every gym file with
   through `scripts/shared/video_db_writer.py` (`scripts/sql/`). The one-time
   `make enrich-templates` run is NOT a DB write path — it READS the pool and WRITES
   the untracked-local sidecar file that `import_yaml` then loads.
+- Do not un-guard **any** column in `scripts/sql/upsert_video.sql`'s
+  `ON CONFLICT … DO UPDATE SET`. The `videos/` YAML pool is **legacy** and that
+  import re-runs on every `make sync-gyms`, so an unguarded `= EXCLUDED.…` silently
+  destroys live data: 4,084 YAML files carry `tag: null` (each would wipe a paid
+  enrich-stage tag), 4,040 carry `transcript: null` (paid Apify transcripts), every
+  file carries an empty avatar, and 22,831 carry the weak `@handle`-form
+  `channel_url` while the worker writes the canonical `/channel/UC…` id form. The
+  file therefore **mirrors the worker's own merge-upsert**
+  (`src/worker/sql/worker_upsert_video.sql`) column for column — `tag` /
+  `disciplines` omitted from the SET (the enrich stage owns them), `transcript`
+  COALESCEd onto the stored one, `source_queries` UNIONed, `relevance_index` kept at
+  its best (LEAST), counts/duration COALESCEd, and the two channel columns guarded
+  so a stored value can only ever be UPGRADED, never degraded. Keep the two files in
+  agreement; if the worker's semantics change, change the import with them.
 
 ---
 
@@ -211,6 +225,20 @@ worker:
    `scripts/scraper` + `scripts/scan` jobs (both deleted, along with
    `src/classification`); it writes through its own `src/worker/sql/`, not
    `VideoDbWriter`.
+
+---
+
+## Writing to the `videos/` YAML pool
+
+The pool is the **seed's source of truth** — `make sync-gyms` (→
+`scripts.import_yaml`) loads all ~23k files into the `video` table, so anything
+resolved into that table only survives a `supabase db reset` if it is also written
+back into the YAML. If you ever have to write to the pool: it is **untracked by git
+and a symlink into the root checkout shared by every worktree**, so there is no
+undo. Do a surgical line-level edit of only the keys you mean to change (never a
+full re-dump — `VideoOutput` is `extra="ignore"`, so a re-dump silently drops
+anything unmodelled), verify the rewrite re-parses and differs in exactly those
+fields, and write atomically (temp file in the same dir → `os.replace`).
 
 ---
 
@@ -286,6 +314,7 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   opens a `video_run` (`running`),
   runs the **YouTube Data API v3** scrape (two calls per query, merge-upserted into the
   `video` pool — `source_queries` accumulate, `tag`/`disciplines`/`transcript` never wiped),
+  then runs the **creator-avatar pass** (below),
   and picks candidates via the two-tier **funnel** (tier-1 query+discipline overlap incl.
   untagged fresh scrapes with incremental exclusion, tier-2 RAG probe up to
   `scan_budget_per_run`). Then the **feed write** (`WorkerScraper.write_feed`): carry the
@@ -333,6 +362,47 @@ Two SQL passes, IN ORDER (completion beats the TTL fail):
   coalesced auto-refine that mints the `feed_update` version on a manual curation (see the
   FastApiBackend `videos` domain).
 
+### Creator avatars (`src/worker/worker_avatars.py`) — part of the scrape step
+
+**Creator avatars ARE a product feature.** The member UI shows the creator's
+circular avatar beside a video's title, and `video.channel_avatar_url` is filled by
+the worker — not left empty. Two writers exist: this pass, and the backend's
+owner-added-video path (its own `channels.list` lookup).
+
+A `search.list` / `videos.list` snippet carries the channel **id** but no avatar, so
+the scrape resolves it with a third call: `channels.list?part=snippet&id=<≤50 ids>`
+→ `snippet.thumbnails` (`high` → `medium` → `default`), **1 quota unit per call
+regardless of batch size**. The pass runs AFTER the pool merge (the rows must exist
+to be written) and writes by **`channel_url`, never by video id** — the avatar is a
+per-CHANNEL property stored redundantly on each of the channel's ~2 pool rows, so a
+video-keyed write would leave the rest of the channel stale.
+
+**It refreshes, it does not only fill.** A `yt3.ggpht.com` URL is content-addressed:
+when a creator changes their picture the old URL eventually 404s, and a dead URL
+renders worse than no avatar. So the pass re-resolves **every** channel the scrape
+touched, not only the uncovered ones. Because every gym re-scrapes at least weekly
+(the tier-3 refresh floor), a channel that still surfaces in any gym's queries is
+refreshed at least weekly at ~0 cost. The residual gap — a feed row whose channel no
+longer ranks for any query is never revisited — is accepted deliberately: closing it
+needs a per-channel `refreshed_at` timestamp the flat per-video `video` table has no
+place for, which is a schema decision (founder-ops), not a worker one.
+
+Cost + bounds: a run surfaces ~600 distinct channels → ~12 quota units, against the
+~2,500 the same run spends on `search.list`. `worker_avatar_max_batches` (40) is a
+hard ceiling on the calls one scrape may spend; when it binds, channels with NO
+avatar are resolved before ones being refreshed
+(`worker_channel_avatar_state.sql`). Those units are counted INTO the run's
+`youtube_quota_units` and broken out in the `cost_log` `search` row's breakdown
+(`avatar_quota_units`, `channels_resolved`) — the avatar pass is never uncounted
+quota. Failure posture matches the scrape's: a 403/quota error on a batch is logged
+and dropped, never raised; the attempted call is still charged.
+
+**No `channel_id` column.** The worker has the id in memory at scrape time
+(`snippet.channelId`), and every stored id-form `channel_url` yields it back by
+regex (`worker_transforms.channel_id_from_url`). A column would be a second copy of
+data already on the row, duplicated per video, needing its own migration + backfill
++ sync discipline.
+
 ### The strike / cleanup mechanic (`video.failure_count`)
 
 Hard errors only, and ONLY the expensive multimodal pass. In the enrich sweep a video whose
@@ -351,7 +421,9 @@ step deletes a video at `worker_failure_max` (3) strikes.
 Spend goes to the generic **`cost_log`** table (shared across cost-bearing systems — see
 `../Database/CLAUDE.md`), each row stamped `source='video'`, `stage`, `model` (NULL for the
 free `search` stage and the Apify `transcript` stage), `cost_usd`, and a `breakdown` map.
-Attribution differs by step: **scrape** logs `search` (free; quota-units diagnostic) +
+Attribution differs by step: **scrape** logs `search` (free; quota-units diagnostic —
+the TOTAL, `search.list` plus the avatar pass's `channels.list`, with the avatar
+share broken out as `avatar_quota_units` / `channels_resolved`) +
 `embed` (tier-2 probe), both keyed to that gym + run; **enrich** logs `transcript` +
 `enrich` + `embed` as **pool-level** rows (`gym_id` and `run_id` NULL — a swept video is
 shared across gyms, so per-gym attribution would be arbitrary); **scan** logs one `scan` row
@@ -372,13 +444,15 @@ spec version must settle before the scan sweep re-judges the gym's auto feed row
 it, threaded as the `:rescan_delay_hours` bind in `worker_scan_targets.sql`), budgets
 (`scan_budget_per_run`, `scan_batch_size`, `worker_enrich_batch_size` (64 — enrich sweep
 chunk == embed batch), `rag_probe_top_k`,
+`worker_avatar_max_batches` (40 — the hard ceiling on `channels.list` calls one
+scrape may spend on creator avatars),
 `enrich_transcript_char_budget`), concurrency (`worker_scrape_concurrency`,
 `worker_enrich_concurrency` — the scan sweep is strictly sequential, no concurrency knob), the lock/loop
 timers, the LLM client knobs the worker's `LiteLLMClient` construction sites pass down
 (`llm_request_timeout_seconds` (90), `llm_num_retries` (5), `llm_retry_backoff_seconds`
 (5, 15) — `LiteLLMClient` itself only owns the module-level *defaults* used when a
 caller builds one with no overrides), the `youtube_api_key` (YouTube Data API v3,
-discovery + metadata) + `worker_youtube_timeout_seconds` (30s), and the
+discovery + metadata + creator avatars) + `worker_youtube_timeout_seconds` (30s), and the
 Apify transcript knobs — `apify_token`, the batched actor pricing
 (`apify_transcript_cost_per_transcript_usd` $0.0005 + `apify_actor_start_cost_usd`
 $0.001), `apify_transcript_batch_size` (64), and the LONG/conservative
