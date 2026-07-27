@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 
 import 'package:flutter/widgets.dart';
@@ -8,6 +9,7 @@ import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/home/data/models/class_history.dart';
 import 'package:mobile_app/features/home/data/repositories/member_class_history_repository.dart';
 import 'package:mobile_app/features/stats/data/celebration_data.dart';
+import 'package:mobile_app/features/stats/data/celebration_rewards_gate.dart';
 import 'package:mobile_app/features/stats/data/celebration_rules.dart';
 import 'package:mobile_app/features/stats/data/celebration_watermark.dart';
 
@@ -28,15 +30,29 @@ class CelebrationDetector {
   CelebrationDetector({
     MemberClassHistoryRepository? historyRepository,
     CelebrationWatermark watermark = const CelebrationWatermark(),
+    CelebrationRewardsGate? rewardsGate,
   })  : _history = historyRepository ??
             MemberClassHistoryRepository(apiClient: ApiClient()),
-        _watermark = watermark;
+        _watermark = watermark,
+        _rewardsGate = rewardsGate ?? CelebrationRewardsGate.instance;
 
   final MemberClassHistoryRepository _history;
   final CelebrationWatermark _watermark;
+  final CelebrationRewardsGate _rewardsGate;
 
   /// Guards against overlapping fetches (two foregrounds in quick succession).
   bool _inFlight = false;
+
+  /// Start the reward-catalog read the flow's rewards gate decides on, one
+  /// full card before the answer is needed (the points card is the one whose
+  /// CTA pushes the rewards card). [CelebrationRewardsGate.reset] first, so a
+  /// second celebration in the same session never decides on the previous
+  /// one's catalog; the prime never throws, and an unfinished one simply
+  /// leaves the gate undecided, which reads as "show".
+  void _primeRewards() {
+    _rewardsGate.reset();
+    unawaited(_rewardsGate.prime());
+  }
 
   /// Fetch the class-history head, apply the watermark rule, and — on a fire —
   /// push the celebration onto [navigator]. Safe to call on every app open /
@@ -66,6 +82,7 @@ class CelebrationDetector {
           break;
         case CelebrationDecision.fire:
           await _watermark.mark(memberId, occurredAt);
+          _primeRewards();
           navigator?.pushNamed(
             AppRoutes.postClassStreak,
             arguments: _dataFor(newest, occurredAt, history.history),
@@ -98,6 +115,7 @@ class CelebrationDetector {
     _inFlight = true;
     try {
       final data = await _liveData() ?? _debugFallbackData();
+      _primeRewards();
       navigator?.pushNamed(AppRoutes.postClassStreak, arguments: data);
     } finally {
       _inFlight = false;

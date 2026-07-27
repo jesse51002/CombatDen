@@ -411,18 +411,47 @@ been graded yet, and that member still belongs on the rank-shaped page.
 
 `features/stats/data/celebration_flow.dart` owns the card ORDER, and it is the
 only place that decides which cards a member sees: `celebrationCardRoutes` =
-streak → points → (rewards, when `gymHasRewards`) → (rank, when
-`gymRankEnabled` **and** the member holds a rank). Each screen asks
-`nextCelebrationCard(current:, hasRank:)` for its successor and takes its label
-from `celebrationCtaLabel` — so **the last card shown always says "Done" and
-returns home, and never chains into a card that was composed out.** Add a card
-by adding it to that list, not by hardcoding a route in a screen's CTA.
+streak → points → (rewards, when `gymHasRewards` **and** `rewardsWorthShowing`)
+→ (rank, when `gymRankEnabled` **and** the member holds a rank). Each screen
+asks `nextCelebrationCard(current:, hasRank:, pointsBalance:)` for its successor
+and takes its label from `celebrationCtaLabel` — so **the last card shown always
+says "Done" and returns home, and never chains into a card that was composed
+out.** That includes the rank card: **no screen hardcodes a CTA label.** Add a
+card by adding it to that list, not by hardcoding a route in a screen's CTA.
 
+- **The rewards card has TWO independent gates, and both must pass.**
+  `gymHasRewards` asks whether the gym runs rewards at all (a cached identity
+  flag, synchronous); `rewardsWorthShowing` asks whether THIS member can reach
+  one — `rewardsCardWorthShowing` in `celebration_rewards_gate.dart`: they can
+  redeem something, or they are within 10% of the CHEAPEST reward. It is an
+  integer comparison (`balance * 10 >= cheapest * 9`) so the boundary can't turn
+  on float rounding, and "can afford something" collapses into the same
+  comparison. A card that can only say "you can't have any of this" is worse
+  than no card.
+- **The catalog is primed at flow-push time, and the card reuses it.**
+  `CelebrationRewardsGate` (a `ChangeNotifier` singleton) is `reset()` then
+  `prime()`d inside `CelebrationDetector` immediately before BOTH pushes
+  (`maybeFire` and the DEBUG `fireNow`), so the answer is one full card ahead of
+  the points card that needs it. It holds only the CATALOG, never a decided
+  boolean — the balance is read fresh off `MemberProfileBloc` at decision time,
+  so the gate can't hold a stale one. `RewardsCardScreen` then renders the
+  primed catalog instead of fetching again, which removes both a second round
+  trip and its load state.
+- **Undecided → SHOW, and it can never flicker.** A prime still in flight or
+  failed leaves the gate null, which reads as show (the default-to-show law).
+  That is only safe because **`RewardsCardScreen` never self-skips** — once
+  pushed it renders, always. The worst case is a card the member could have been
+  spared, never one that appears and vanishes. `PointsScreen` (the one card
+  whose successor is the async answer) wraps its `nextCelebrationCard` call in a
+  `ListenableBuilder` on the gate so a late arrival re-derives its CTA; the
+  other three don't need it.
 - `RankScreen` keeps its own self-skip (`buildRankStats() == null` → post-frame
   home) as the **deep-link backstop** for PR 3's after-class push, and
-  `AppRoutes.postClassRank` stays registered. The composition is what stops the
-  normal flow ever landing there, so the preceding card's "Continue" can't
-  bounce off a blank `ColoredBox`.
+  `AppRoutes.postClassRank` stays registered. That asymmetry with the rewards
+  card is deliberate: `RankScreen` can render literally nothing, the rewards
+  card can always render the catalog or the bundled fallback. The composition is
+  what stops the normal flow ever landing there, so the preceding card's
+  "Continue" can't bounce off a blank `ColoredBox`.
 - **The cards show the GYM's own art, not the theme's.** The `Mock*Stats`
   carrier types are the prototype's shape, not its data —
   `celebration_stats_builder.dart` fills them from the live `MemberProfile`, and
@@ -436,6 +465,25 @@ by adding it to that list, not by hardcoding a route in a screen's CTA.
   use the same ratio and the same `radiusBig` corner, so one uploaded photo is
   cropped identically on both surfaces. Reward art is gym-uploaded and
   rectangular — never re-frame it square or circular.
+- **On the celebration card the FRAME is the progress meter.** The slide's ring
+  is closed and `accent` when the member can redeem it, and a partial `text`
+  stroke over a hairline `divider` track (`balance / cost`, from top-centre
+  clockwise) when they can't — the same tokens, start point and direction as
+  `NextRankBadge`'s `_ProgressArcPainter`, which is the app's existing
+  "progress toward a thing" language. **Colour is never the only signal**:
+  ring closure, the `RewardReadyTag` and the caption wording each carry the
+  distinction alone, because `accent` is a per-tenant slot that may land close
+  to `text` at some gym. One place decides all of it —
+  `buildRewardsCardView` in `features/stats/data/rewards_card_view.dart`; no
+  widget re-derives a state, and the card's title, subtitle and opening slide
+  are derived there too rather than read from `mockRewardsStats`.
+- **A balance we do not have is UNKNOWN, never zero.** A null `pointsBalance`
+  (profile loading, or errored with no last-good value) and a bundled fallback
+  slide (`RewardSlide.isLive == false`, whose costs are DEMO numbers) both
+  render the unknown state — a closed `text` ring and a plain `{cost} pts`.
+  Showing `0 / 2,200 points` to a member who may hold 3,000 would be a false
+  statement, and the unknown state is exactly what the card shipped before
+  affordability existed, so the degraded path is already proven.
 - **There is no videos CARD in this flow.** The app's one video card is the
   post-BOOKING recommendation (`ClassBookedScreen` → `AppRoutes.videoRecc`),
   which applies the same rule locally: with `gymHasVideos` false the booked
@@ -1111,7 +1159,10 @@ Scoped / significant dependencies:
 - **A widget test that drives `SelectedMember` must seed
   `SharedPreferences.setMockInitialValues({})` and `reset()` it in teardown** —
   it is a process-wide global, so a leaked selection (or a leaked capability
-  flag) changes the next test's app shape.
+  flag) changes the next test's app shape. The same applies to
+  `CelebrationRewardsGate.instance`: a test that primes it (via
+  `test/helpers/fake_rewards_catalog.dart`) must `reset()` it in teardown, or a
+  leaked catalog decides the next test's celebration flow.
 - **A screen that builds its own `ApiClient` needs dotenv**:
   `dotenv.loadFromString(envString: 'API_BASE_URL=http://localhost:8000')` in
   `setUp`. The request never leaves the test, but the URL has to resolve.

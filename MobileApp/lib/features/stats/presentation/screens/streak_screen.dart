@@ -39,6 +39,7 @@ class _StreakScreenState extends State<StreakScreen> {
         final next = nextCelebrationCard(
           current: AppRoutes.postClassStreak,
           hasRank: state.profile?.rank != null,
+          pointsBalance: state.profile?.retention.pointsBalance,
         );
         void toHome() => Navigator.of(context).pushNamedAndRemoveUntil(
               AppRoutes.home,

@@ -149,9 +149,11 @@ const mockPointsStats = MockPointsStats(
 );
 
 // The post-class Rewards card shows the active gym's LIVE rewards
-// (`GET /gyms/{gymId}`). This is the bundled CombatDen fallback used only
-// when that fetch fails or the gym has no rewards; `title` / `subtitle` /
-// `featuredIndex` are the card's presentation chrome in both cases.
+// (`GET /api/v1/member/gyms/{gid}/members/{mid}/rewards`). Only [items] is
+// still read: they are the bundled CombatDen fallback used when that fetch
+// fails. The card's `title` / `subtitle` / `featuredIndex` are now DERIVED
+// from what the member can afford (`rewards_card_view.dart`), so the three
+// fields below are dormant demo chrome, kept for the capture harness.
 const mockRewardsStats = MockRewardsStats(
   title: 'Rewards You Can Get',
   subtitle: 'Swipe to view rewards',

@@ -297,6 +297,11 @@ class _RankRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // A gym on `sub_rank_type = 'none'` has no sub-rank, so the builder hands
+    // over an empty subtitle. Printing it reserves a blank `h2` line plus its
+    // gap and pushes the whole block off centre — the same guard the profile's
+    // `RankHeader` already applies.
+    final sub = stats.rankSubtitle;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       mainAxisSize: MainAxisSize.min,
@@ -310,12 +315,13 @@ class _RankRow extends StatelessWidget {
           spacing: DesignConstants.spacingSmall,
           children: [
             Text(stats.rankTitle, style: DesignConstants.h1),
-            Text(
-              stats.rankSubtitle,
-              style: DesignConstants.h2.copyWith(
-                color: DesignConstants.text2nd,
+            if (sub.isNotEmpty)
+              Text(
+                sub,
+                style: DesignConstants.h2.copyWith(
+                  color: DesignConstants.text2nd,
+                ),
               ),
-            ),
           ],
         ),
       ],

@@ -17,10 +17,14 @@ import 'package:mobile_app/features/profile/data/models/billing_rank.dart';
 import 'package:mobile_app/features/profile/data/models/billing_retention.dart';
 import 'package:mobile_app/features/profile/data/models/member_profile.dart';
 import 'package:mobile_app/features/rewards/data/repositories/member_rewards_repository.dart';
+import 'package:mobile_app/features/stats/data/celebration_rewards_gate.dart';
 import 'package:mobile_app/features/stats/presentation/screens/points_screen.dart';
+import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';
+
+import '../../../helpers/fake_rewards_catalog.dart';
 
 class _MockProfileBloc extends MockBloc<MemberProfileEvent, MemberProfileState>
     implements MemberProfileBloc {}
@@ -132,7 +136,12 @@ void main() {
     dotenv.loadFromString(envString: 'API_BASE_URL=http://localhost:8000');
   });
 
-  tearDown(() => selectedMember.reset());
+  tearDown(() {
+    selectedMember.reset();
+    // The gate is a process-wide singleton; a leaked catalog would decide the
+    // next test's flow.
+    CelebrationRewardsGate.instance.reset();
+  });
 
   group('the celebration chains only to cards that apply', () {
     testWidgets('points continues to the REWARDS card at a gym with rewards',
@@ -158,9 +167,65 @@ void main() {
 
       expect(nav.pushed.last, AppRoutes.postClassRank);
     });
+
+    testWidgets('a catalog this member cannot reach also skips the card',
+        (tester) async {
+      // The gym runs rewards, but the cheapest is 5,000 and the member holds
+      // 120 — nowhere near the 90% mark, so the card would only say "you can't
+      // have any of this".
+      await _selectGym(rankEnabled: true, hasRewards: true);
+      await primeRewardsGate([5000]);
+      final nav = await _pumpCard(tester, const PointsScreen(), rank: _rank);
+
+      _cta(tester).onCtaPressed();
+      await tester.pumpAndSettle();
+
+      expect(nav.pushed.last, AppRoutes.postClassRank);
+      expect(nav.pushed, isNot(contains(AppRoutes.postClassRewards)));
+    });
+
+    testWidgets('90% of the cheapest is close enough to keep the card',
+        (tester) async {
+      // 120 of a 133-point reward: 120 * 10 >= 133 * 9.
+      await _selectGym(rankEnabled: true, hasRewards: true);
+      await primeRewardsGate([133, 5000]);
+      final nav = await _pumpCard(tester, const PointsScreen(), rank: _rank);
+
+      _cta(tester).onCtaPressed();
+      await tester.pumpAndSettle();
+
+      expect(nav.pushed.last, AppRoutes.postClassRewards);
+    });
   });
 
   group('the LAST card terminates cleanly', () {
+    testWidgets('an unreachable catalog makes POINTS the last card',
+        (tester) async {
+      await _selectGym(rankEnabled: false, hasRewards: true);
+      await primeRewardsGate([5000]);
+      final nav = await _pumpCard(tester, const PointsScreen(), rank: _rank);
+
+      expect(_cta(tester).ctaLabel, 'Done');
+      _cta(tester).onCtaPressed();
+      await tester.pumpAndSettle();
+
+      expect(nav.pushed.last, AppRoutes.home);
+    });
+
+    testWidgets('the RANK card reads Done — it is always the last one',
+        (tester) async {
+      await _selectGym(rankEnabled: true, hasRewards: true);
+      final nav = await _pumpCard(tester, const RankScreen(), rank: _rank);
+
+      // It used to hardcode "Continue" while going home: the member was told
+      // there was another card and then dropped out of the flow.
+      expect(_cta(tester).ctaLabel, 'Done');
+      _cta(tester).onCtaPressed();
+      await tester.pumpAndSettle();
+
+      expect(nav.pushed.last, AppRoutes.home);
+    });
+
     testWidgets('rewards is the last card at a rank-OFF gym: Done → home',
         (tester) async {
       await _selectGym(rankEnabled: false, hasRewards: true);

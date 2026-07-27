@@ -5,6 +5,8 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
+import 'package:mobile_app/features/stats/data/celebration_data.dart';
+import 'package:mobile_app/features/stats/data/celebration_flow.dart';
 import 'package:mobile_app/features/stats/data/celebration_stats_builder.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/rank/rank_body.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
@@ -42,6 +44,8 @@ class _RankScreenState extends State<RankScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final data = ModalRoute.of(context)?.settings.arguments as CelebrationData? ??
+        const CelebrationData.empty();
     return BlocBuilder<MemberProfileBloc, MemberProfileState>(
       builder: (context, state) {
         final profile = state.profile;
@@ -63,12 +67,24 @@ class _RankScreenState extends State<RankScreen> {
           }
           return ColoredBox(color: DesignConstants.backgroundColor);
         }
+        // The rank card is last in every composed flow, so this resolves to
+        // null and the CTA reads "Done" — but it is READ from the flow rather
+        // than hardcoded, like its three siblings. A hardcoded "Continue" here
+        // told the member there was another card and then dropped them home.
+        final next = nextCelebrationCard(
+          current: AppRoutes.postClassRank,
+          hasRank: true,
+          pointsBalance: profile.retention.pointsBalance,
+        );
         return PostClassScaffold(
           controller: _controller,
           body: RankBody(stats: stats, controller: _controller),
-          ctaLabel: 'Continue',
+          ctaLabel: celebrationCtaLabel(next),
           onClose: _toHome,
-          onCtaPressed: _toHome,
+          onCtaPressed: next == null
+              ? _toHome
+              : () => Navigator.of(context)
+                  .pushReplacementNamed(next, arguments: data),
         );
       },
     );
