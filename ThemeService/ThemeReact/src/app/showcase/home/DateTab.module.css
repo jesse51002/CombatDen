@@ -1,0 +1,30 @@
+/*
+ * Styles for ./DateTab.tsx (ports CRM/lib/showcase/home/date_tab.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(padding: symmetric(vertical: spacingMedium, horizontal:
+ * spacingLarge), alignment: center)` with an `h2` label at `text2nd`.
+ *
+ * The transparent bottom border is what keeps an unselected pill exactly as
+ * tall as a selected one — Dart gets that from `Border(bottom:)` only being
+ * added to the decoration, which does not affect layout there.
+ */
+.tab {
+  display: block;
+  padding: var(--sc-spacing-medium) var(--sc-spacing-large);
+  border: none;
+  border-bottom: var(--sc-button-border) solid transparent;
+  background: none;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text-2nd);
+  text-align: center;
+  cursor: pointer;
+}
+
+.selected {
+  border-bottom-color: var(--sc-primary);
+  color: var(--sc-primary);
+}

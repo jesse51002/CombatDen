@@ -1,83 +1,95 @@
 /*
- * Styles for ./showcaseScreen.tsx — the seven PLACEHOLDER surfaces.
+ * Styles for ./showcaseScreen.tsx — the island's ROOT box, and the five
+ * surfaces whose ports have not landed yet.
  *
- * Every colour and font here arrives as an inline value resolved from the live
- * theme; this file only lays them out. It declares no design tokens of its own
- * on purpose: the island's `--sc-*` token system is the next agent's, and it
- * must never borrow the surrounding chrome's `--gw-*` / `--adm-*` values, which
- * share token NAMES with different VALUES (eslint.config.js Gates 2a/2b).
+ * Everything here reads `--sc-*` and nothing else. Those variables are written
+ * onto `.root` by ./ShowcaseThemeVars.tsx; the surrounding admin chrome's
+ * `--gw-*` / `--adm-*` share token NAMES with different VALUES and must never
+ * appear inside the phone (eslint.config.js Gates 2a/2b).
  *
- * The layout is sized in the phone's own logical pixels (390×844) because that
+ * The layout is sized in the phone's own logical pixels (390x844) because that
  * is the box ../widgets/PhoneFrame.tsx renders it into at 1:1 before scaling.
  */
+
+/*
+ * The one element the whole token surface lands on. It is also the screen's
+ * own canvas, so an unstyled frame is impossible: the background and ink are
+ * variables written in the same commit as the children.
+ */
+.root {
+  width: 100%;
+  height: 100%;
+  background: var(--sc-background);
+  color: var(--sc-text);
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color-scheme: var(--sc-canvas);
+  overflow: hidden;
+}
+
+/* --- The placeholder ------------------------------------------------------ */
 
 .screen {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: var(--sc-spacing-large);
   width: 100%;
   height: 100%;
   /* Clears the dynamic island, as the frame's MediaQuery inset does in Dart. */
-  padding: calc(var(--phone-status-inset, 52px) + 24px) 28px 40px;
+  padding: calc(var(--phone-status-inset, 52px) + var(--sc-spacing-big)) var(--sc-padding-big)
+    var(--sc-padding-big);
   text-align: center;
-}
-
-.logo {
-  width: 96px;
-  height: 96px;
-  object-fit: contain;
 }
 
 .eyebrow {
   margin: 0;
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.16em;
+  font: var(--sc-type-p-small);
+  letter-spacing: 1.6px;
   text-transform: uppercase;
+  color: var(--sc-primary);
 }
 
 .title {
   margin: 0;
-  font-size: 40px;
-  font-weight: 700;
-  line-height: 1.05;
+  font: var(--sc-type-big2);
+  letter-spacing: var(--sc-type-big2-ls);
+  color: var(--sc-text);
 }
 
 .body {
   margin: 0;
   max-width: 300px;
-  font-size: 15px;
-  line-height: 1.5;
-  opacity: 0.75;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
 }
 
 .swatches {
   display: flex;
-  gap: 12px;
+  gap: var(--sc-spacing-medium);
 }
 
 .swatch {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--sc-spacing-small);
 }
 
 .chip {
   display: block;
-  width: 44px;
-  height: 44px;
-  /* Border colour comes in inline, from the theme's ink. */
-  border: 1px solid;
-  border-radius: 12px;
+  width: var(--sc-icon-2xl);
+  height: var(--sc-icon-2xl);
+  border: var(--sc-divider-thickness) solid var(--sc-divider);
+  border-radius: var(--sc-radius-small);
 }
 
 .chipLabel {
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  opacity: 0.7;
+  font: var(--sc-type-p-small);
+  letter-spacing: var(--sc-type-p-small-ls);
+  color: var(--sc-text-3rd);
 }
 
 .cta {
@@ -85,8 +97,10 @@
   align-items: center;
   justify-content: center;
   width: 100%;
-  padding: 16px 24px;
-  border-radius: 16px;
-  font-size: 16px;
-  font-weight: 700;
+  padding: var(--sc-padding-small);
+  border-radius: var(--sc-radius-big);
+  background: var(--sc-primary);
+  color: var(--sc-primary-button-text);
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
 }

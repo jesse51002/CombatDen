@@ -1,0 +1,35 @@
+/*
+ * Styles for ./HomeNotBookedBody.tsx
+ * (ports CRM/lib/showcase/home/home_not_booked_body.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `ClipRect(OverflowBox(alignment: topCenter, …))` around a
+ * `Column(mainAxisSize: min, crossAxisAlignment: stretch)`.
+ *
+ * The scaffold's body is already `overflow: hidden`, so a plain block laid out
+ * at its natural height gives the same result: top-aligned, no scrolling, and
+ * the phone frame clips the tail.
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/*
+ * `Container(color: backgroundColor, border bottom: text3rd, padding:
+ * symmetric(horizontal: paddingBig, vertical: spacingSmall))` over a
+ * `Row(mainAxisAlignment: spaceBetween)`.
+ */
+.dateStrip {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--sc-spacing-small) var(--sc-padding-big);
+  background: var(--sc-background);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}

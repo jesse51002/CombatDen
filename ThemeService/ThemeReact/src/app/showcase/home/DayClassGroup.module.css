@@ -1,0 +1,29 @@
+/*
+ * Styles for ./DayClassGroup.tsx
+ * (ports CRM/lib/showcase/home/day_class_group.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(vertical: spacingBig)` over `Column(stretch, spacing: spacingLarge)`.
+ */
+.group {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  padding-block: var(--sc-spacing-big);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding)` around an `h2Bold` label.
+ * `margin: 0` because this is an `<h2>` and the UA sheet would otherwise add a
+ * gap the Dart Column does not have.
+ */
+.label {
+  margin: 0;
+  padding-inline: var(--sc-screen-padding-x);
+  font: var(--sc-type-h2-bold);
+  letter-spacing: var(--sc-type-h2-bold-ls);
+  color: var(--sc-text);
+}

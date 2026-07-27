@@ -1,0 +1,42 @@
+/*
+ * Styles for ./ShowcaseBottomNav.tsx
+ * (ports CRM/lib/showcase/support/showcase_bottom_nav.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Container(color: backgroundColor, border top: text3rd)` over a 64px row. */
+.nav {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  background: var(--sc-background);
+  border-top: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}
+
+/* `Expanded(child: _NavItem)` — `Padding(vertical: spacingMedium)` + centred. */
+.item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* `Column(mainAxisSize: min, spacing: spacingTiny)`. */
+  gap: var(--sc-spacing-tiny);
+  padding-block: var(--sc-spacing-medium);
+}
+
+.label {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: inherit;
+  text-align: center;
+  /* `maxLines: 2, overflow: ellipsis`. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}

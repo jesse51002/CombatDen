@@ -1,0 +1,113 @@
+/*
+ * Styles for ./ShowcaseTopbar.tsx
+ * (ports CRM/lib/showcase/support/showcase_topbar.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(padding: top spacingBig, bottom spacingLarge, left/right
+ * spacingMedium)` with a `text3rd` bottom hairline, holding a stretch Column
+ * with `spacing: spacingBig`.
+ */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  width: 100%;
+  padding: var(--sc-spacing-big) var(--sc-spacing-medium) var(--sc-spacing-large);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}
+
+/* `_GymHeader` — `Column(mainAxisSize: min, spacing: spacingBig)`. */
+.gymHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-big);
+}
+
+/* `Image(width: 100, height: 100, fit: BoxFit.contain)`. */
+.logo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+/* `_GymNameLabel` — `Row(min, center, spacing: spacingSmall)`. */
+.gymNameRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-small);
+}
+
+.gymName {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+}
+
+.gymNameBig {
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-text);
+}
+
+/* `Icon(expand_more, size: iconSizeSm, color: text)`. */
+.chevron {
+  flex: 0 0 auto;
+  width: var(--sc-icon-sm);
+  height: var(--sc-icon-sm);
+  color: var(--sc-text);
+}
+
+/* `_InfoBar` — four `Expanded` cells, each 30px tall. */
+.infoBar {
+  display: flex;
+  align-items: center;
+}
+
+.cell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--sc-pill-height-md);
+}
+
+/* `_RankItem` — `Image(width: 39, height: 24, fit: contain)`. */
+.rankBelt {
+  width: 39px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* `_IconValueItem` — `Row(min, center, spacing: spacingSmall)`. */
+.iconValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-small);
+  height: 100%;
+}
+
+.iconValueText {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+.iconValueImage {
+  object-fit: contain;
+}
+
+/* `_QrCodeItem` — `Image(height: 30, fit: contain)`; width follows the ratio. */
+.qrCode {
+  height: var(--sc-pill-height-md);
+  width: auto;
+  object-fit: contain;
+}

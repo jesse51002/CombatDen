@@ -1,26 +1,29 @@
-// Ports the ENUM half of ../../../../../CRM/lib/showcase/showcase_screen.dart:
-// the seven member-app surfaces previewable in the live theme preview, in
-// slideshow order, and their short human labels.
+// Ports ../../../../../CRM/lib/showcase/showcase_screen.dart: the seven
+// member-app surfaces previewable in the live theme preview, in slideshow
+// order, their short human labels, and the fan-out that builds each one.
 //
-// THE SCREENS THEMSELVES ARE STUBS. Dart's `ShowcaseScreen.build` fans out to
-// seven self-contained widgets (HomeShowcase, BookingShowcase, …) that each
-// theme and animate themselves; those are the next agent's work and will land
-// beside this file. What is real here is the CONTRACT — the seven values, their
-// order, their labels — and the proof that the theming pipeline reaches inside
-// the phone: every placeholder below paints from the LIVE resolved theme
-// (colours, both font slots, the logo image), so a wrong or unloaded theme is
-// visible immediately rather than at integration time.
+// TWO ARE REAL, FIVE ARE STILL PLACEHOLDERS. `home` and `booking` render the
+// ported member-app screens; the other five keep the theming-proof placeholder
+// below until their own ports land beside this file. The placeholder is not
+// filler: every value it paints resolves LIVE, so a wrong or unloaded theme
+// shows up immediately rather than at integration time.
 //
-// This module obeys the showcase island's import rule (eslint.config.js Gate
-// 2a): it may reach for `theme-react` and its own CSS, and for nothing in
-// ../chrome, ../browser, ../widgets or ../tokens. The surrounding admin chrome
-// uses the SAME token names with different values, which is exactly the mix-up
-// the gate exists to prevent.
+// Gym identity (`gymName` / `gymLogoSrc`) is NOT a customization slot — it is
+// the host's, passed in as arguments, and only the surfaces that render the gym
+// header consume it. This app is the PUBLIC browser and has no gym, which is
+// why `themeTabPreview` is on: with no host logo the topbar falls through to
+// the active theme's own `logo_primary`, so switching theme re-logos the mock.
+//
+// Everything below obeys the showcase island's import rule (eslint.config.js
+// Gate 2a): `theme-react`, this island, and nothing from ../chrome, ../browser,
+// ../widgets or ../tokens. The surrounding admin chrome uses the SAME token
+// names with different values, which is exactly the mix-up the gate prevents.
 
-import { rgba, toCss, useThemeFontFamily, useThemeImageSrc, useThemeToken } from 'theme-react';
-import type { CSSProperties } from 'react';
-
+import { BookingShowcase } from './BookingShowcase';
+import { HomeShowcase } from './home/HomeShowcase';
 import styles from './showcaseScreen.module.css';
+import { ShowcaseThemeVars } from './ShowcaseThemeVars';
+import { useShowcaseContent } from './useShowcaseContent';
 
 /** The member-app surfaces previewable in the live theme preview. */
 export type ShowcaseScreen = 'home' | 'booking' | 'wins' | 'points' | 'rewards' | 'streak' | 'store';
@@ -47,98 +50,97 @@ export const SHOWCASE_SCREEN_LABELS: Readonly<Record<ShowcaseScreen, string>> = 
   store: 'Store',
 });
 
-/**
- * The CombatDen fallbacks the runtime degrades to when NOTHING has loaded — a
- * dark gym canvas. They are the only hardcoded colours in the island, and
- * seeing them means the theme did not load, which is the point.
- */
-const FALLBACK = {
-  background: rgba(15, 16, 20),
-  text: rgba(240, 241, 245),
-  primary: rgba(212, 12, 26),
-  accent: rgba(64, 132, 255),
-  card: rgba(28, 30, 36),
-} as const;
-
-/** The palette roles the placeholder shows, so an unresolved slot is obvious. */
-const SWATCHES: readonly string[] = Object.freeze(['primary', 'accent', 'card', 'text']);
+/** `ShowcaseScreen.build`'s `gymName` default. */
+const DEFAULT_GYM_NAME = 'Your Gym';
 
 export interface ShowcaseScreenViewProps {
   screen: ShowcaseScreen;
+  /**
+   * The previewed style's showcase category (`Fighting`, `Yoga`, …), which
+   * picks the demo classes and rewards the phone fills with. Null falls back to
+   * the default group, exactly as Dart does when no category is known yet.
+   *
+   * The browser's own `selectedStyle` store already tracks it, but the showcase
+   * island may not import from ../browser (Gate 2a), so it arrives as a prop.
+   * Until ../browser/ThemePreviewPane.tsx threads it through, every theme
+   * previews the default group's content.
+   */
+  category?: string | null;
+  /** The host gym's name. There is no gym in this browser. */
+  gymName?: string;
+  /** The host gym's real logo URL. Absent here, which is what arms the ladder. */
+  gymLogoSrc?: string | undefined;
 }
 
 /**
- * One previewable surface, rendered at the phone's real 390×844 screen size.
- * A placeholder that is explicitly labelled as one — and that resolves every
- * value it draws through the live theme.
+ * One previewable surface, rendered at the phone's real 390x844 screen size.
+ *
+ * <ShowcaseThemeVars> is the root: it writes the whole `--sc-*` token surface
+ * onto this one element, and every stylesheet below reads only those variables.
+ * A theme switch therefore re-skins the screen by rewriting variables here.
  */
-export function ShowcaseScreenView({ screen }: ShowcaseScreenViewProps) {
-  const background = useThemeToken('background', FALLBACK.background);
-  const text = useThemeToken('text', FALLBACK.text);
-  const primary = useThemeToken('primary', FALLBACK.primary);
-  const accent = useThemeToken('accent', FALLBACK.accent);
-  const card = useThemeToken('card', FALLBACK.card);
-  const displayFont = useThemeFontFamily('display', 'system-ui');
-  const bodyFont = useThemeFontFamily('body', 'system-ui');
-  const logoUrl = useThemeImageSrc('logo_primary');
-
-  const swatchColors: Record<string, string> = {
-    primary: toCss(primary),
-    accent: toCss(accent),
-    card: toCss(card),
-    text: toCss(text),
-  };
-
-  const style: CSSProperties = {
-    background: toCss(background),
-    color: toCss(text),
-    fontFamily: `"${bodyFont}", system-ui, sans-serif`,
-  };
+export function ShowcaseScreenView({
+  screen,
+  category = null,
+  gymName = DEFAULT_GYM_NAME,
+  gymLogoSrc,
+}: ShowcaseScreenViewProps) {
+  const { classes } = useShowcaseContent(category);
 
   return (
-    <div className={styles.screen} style={style}>
-      {logoUrl !== '' && (
-        <img
-          key={logoUrl}
-          className={styles.logo}
-          src={logoUrl}
-          alt=""
-          onError={(event) => {
-            event.currentTarget.style.display = 'none';
-          }}
+    <ShowcaseThemeVars className={styles.root}>
+      {screen === 'home' ? (
+        <HomeShowcase
+          gymName={gymName}
+          gymLogoSrc={gymLogoSrc}
+          classes={classes}
+          themeTabPreview
         />
+      ) : screen === 'booking' ? (
+        <BookingShowcase />
+      ) : (
+        <PlaceholderScreen screen={screen} />
       )}
+    </ShowcaseThemeVars>
+  );
+}
 
-      <p className={styles.eyebrow} style={{ color: toCss(primary) }}>
-        Placeholder
-      </p>
-      <h2
-        className={styles.title}
-        style={{ fontFamily: `"${displayFont}", system-ui, sans-serif` }}
-      >
-        {SHOWCASE_SCREEN_LABELS[screen]}
-      </h2>
+/** The palette roles the placeholder shows, so an unresolved slot is obvious. */
+const SWATCHES: readonly string[] = Object.freeze([
+  '--sc-primary',
+  '--sc-accent',
+  '--sc-card',
+  '--sc-text',
+]);
+
+const SWATCH_LABELS: readonly string[] = Object.freeze(['primary', 'accent', 'card', 'text']);
+
+/**
+ * The five surfaces whose ports have not landed. Explicitly labelled as a
+ * placeholder, and painted entirely from the live `--sc-*` variables — so it is
+ * also the cheapest proof that the theming pipeline reaches inside the phone.
+ */
+function PlaceholderScreen({ screen }: { screen: ShowcaseScreen }) {
+  const label = SHOWCASE_SCREEN_LABELS[screen];
+  return (
+    <div className={styles.screen}>
+      <p className={styles.eyebrow}>Placeholder</p>
+      <h2 className={styles.title}>{label}</h2>
       <p className={styles.body}>
-        The real {SHOWCASE_SCREEN_LABELS[screen].toLowerCase()} surface lands next. Everything you
-        see here — the canvas, the ink, the two font slots, the logo and the swatches below — is
-        resolved live from the selected theme.
+        The real {label.toLowerCase()} surface lands next. Everything you see here — the canvas, the
+        ink, both font slots and the swatches below — is resolved live from the selected theme.
       </p>
 
       <div className={styles.swatches}>
-        {SWATCHES.map((role) => (
-          <div key={role} className={styles.swatch}>
-            <span
-              className={styles.chip}
-              style={{ background: swatchColors[role], borderColor: toCss(text) }}
-            />
-            <span className={styles.chipLabel}>{role}</span>
+        {SWATCHES.map((token, i) => (
+          <div key={token} className={styles.swatch}>
+            <span className={styles.chip} style={{ background: `var(${token})` }} />
+            <span className={styles.chipLabel}>{SWATCH_LABELS[i]}</span>
           </div>
         ))}
       </div>
 
-      <div className={styles.cta} style={{ background: toCss(primary) }}>
-        <span style={{ fontFamily: `"${displayFont}", system-ui, sans-serif` }}>Primary action</span>
-      </div>
+      <div className={styles.cta}>Primary action</div>
     </div>
   );
 }

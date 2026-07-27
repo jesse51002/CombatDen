@@ -1,0 +1,108 @@
+/*
+ * Styles for ./ClassListItem.tsx
+ * (ports CRM/lib/showcase/home/class_list_item.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(stretch, spacing: spacingLarge)` — the row over its hairline. */
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding, vertical: spacingMedium)` over
+ * `Row(center, spacing: spacingLarge)`.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+  padding: var(--sc-spacing-medium) var(--sc-screen-padding-x);
+}
+
+/* `Expanded(child: _ClassInfo)` — `Column(start, spacing: spacingMedium)`. */
+.info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+}
+
+.name {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text);
+}
+
+.meta {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+.mentor {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}
+
+/* `_BookedConfirmation` — `Row(min, spacing: spacingSmall)`, `h3` at `text`. */
+.booked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text);
+}
+
+.bookedIcon {
+  flex: 0 0 auto;
+  color: var(--sc-text);
+}
+
+/* `_BookedCount` — the same row at `p` / `text2nd`. */
+.attending {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}
+
+.attendingIcon {
+  flex: 0 0 auto;
+  color: var(--sc-text-2nd);
+}
+
+/*
+ * `ClipRRect(radiusSmall)` around a 122x73 `BoxFit.cover` image. The box keeps
+ * its size when the image fails, showing a flat `card` rectangle — Dart's
+ * `errorBuilder`.
+ */
+.photo {
+  flex: 0 0 auto;
+  width: 122px;
+  height: 73px;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* `Container(height: buttonBorder, color: divider)`. */
+.divider {
+  height: var(--sc-button-border);
+  background: var(--sc-divider);
+}

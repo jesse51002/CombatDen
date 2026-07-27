@@ -34,6 +34,8 @@ import { cx } from '../widgets/cx';
 import { PhoneFrame } from '../widgets/PhoneFrame';
 import { usePrefersReducedMotion } from '../widgets/usePrefersReducedMotion';
 
+import { useSelectedStyle } from './selectedStyle';
+
 import styles from './ThemePreviewPane.module.css';
 
 interface SlideState {
@@ -53,6 +55,11 @@ export function ThemePreviewPane() {
   const [slide, setSlide] = useState<SlideState>(SETTLED);
   const reduceMotion = usePrefersReducedMotion();
   const { id: activeDesignId } = useActiveDesign();
+  // The picked style's category selects which bundled/fetched demo content the
+  // phone shows, so a Yoga theme previews yoga classes rather than boxing.
+  // It lives out here because the showcase island may not import from
+  // `browser/` (lint Gate 2a) — the seam is the `category` prop.
+  const { category } = useSelectedStyle();
 
   const count = SHOWCASE_SCREENS.length;
   const screen = SHOWCASE_SCREENS[slide.index] ?? SHOWCASE_SCREENS[0]!;
@@ -90,7 +97,7 @@ export function ThemePreviewPane() {
                 className={cx(styles.slide, slide.forward ? styles.exitLeft : styles.exitRight)}
                 onAnimationEnd={settle}
               >
-                <ShowcaseScreenView screen={outgoing} />
+                <ShowcaseScreenView screen={outgoing} category={category} />
               </div>
             )}
             <div
@@ -102,7 +109,7 @@ export function ThemePreviewPane() {
                 outgoing !== null && (slide.forward ? styles.enterRight : styles.enterLeft),
               )}
             >
-              <ShowcaseScreenView screen={screen} />
+              <ShowcaseScreenView screen={screen} category={category} />
             </div>
           </div>
         </PhoneFrame>
