@@ -104,11 +104,30 @@ The chrome that frames every screen. Files: `shared/widgets/topbar/app_topbar.da
 
 ```
 INVARIANT
-  GymLogo ×1        GymName ×1        GymSwitchChevron ×1
-  StreakStat ×1     PointsStat ×1     RankBadge ×1
+  GymLogo ×0..1     (present iff the screen passes AppTopbarMode.bigLogo;
+                     markOnly is the one value that always shows it)
+  GymName ×1        GymSwitchChevron ×1
+  RankBadge ×1      StreakStat ×1     PointsStat ×1     QrAction ×1
   BackButton ×0..1  (present only where the screen passes showBackButton)
   NavItem ×4        (home, rank, reward, videos — order is fixed, it is muscle memory)
 ```
+
+> [!warning] Two corrections found while implementing this enum.
+> The first draft of this invariant was wrong in two ways, and building
+> against the real widgets is what exposed both.
+>
+> 1. **`InfoBar` has FOUR items, not three.** Alongside rank, streak and
+>    points there is a **QR action** — the in-gym scan entry point, which
+>    is the first step of the engagement loop. A variant that dropped it
+>    would have broken the loop, not just the layout.
+> 2. **`GymLogo` is not unconditional.** `AppTopbarMode.nameOnly` (every
+>    screen except home) ships with no mark at all, so a flat `×1` would
+>    have forced a logo onto screens that never had one.
+>
+> This is the argument for the gate being executable rather than a
+> written contract: a prose invariant was wrong twice, and
+> `test/shell_invariants_test.dart` would have caught both on the first
+> run.
 
 ### `stacked` — shipped today
 
