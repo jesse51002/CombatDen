@@ -44,6 +44,7 @@ _COLOR = DependencyKind.COLOR.value
 _FONT = DependencyKind.FONT.value
 _TEXT = DependencyKind.TEXT.value
 _ICON = DependencyKind.ICON.value
+_CATEGORY = DependencyKind.CATEGORY.value
 
 # Committed demo fixture: a real (partial) run — colour + one image done,
 # fonts/texts/icons declared in app.yaml but absent from output.yaml.
@@ -320,24 +321,84 @@ def test_node_slots_mirrors_built_graph(tmp_path: Path) -> None:
     assert ns[_COLOR] == {"primary", "background", "text", "accent"}
     assert ns[_FONT] == {"display", "body"}
     assert ns["hero"] == {"hero"}
+    # The classification root owns exactly one pseudo-slot, its own key.
+    assert ns[_CATEGORY] == {_CATEGORY}
+
+
+def test_no_declared_categories_skips_the_classification_node(
+    tmp_path: Path,
+) -> None:
+    """An app with no ``categories`` vocabulary gets no classification node,
+    no pseudo-slot in the seed keyspace, and no LLM call — it keeps working
+    exactly as it did before classification existed."""
+    ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
+    assert ctx.app.categories == []
+
+    graph = _graph(ctx)
+    assert graph.category is None
+    assert _CATEGORY not in Pipeline._build_digraph(graph).nodes
+    assert _CATEGORY not in node_slots(ctx.app)
+    assert _CATEGORY not in all_slot_ids(ctx.app)
+    # And nothing seeds it, even from an output.yaml that carries a category.
+    saved = _demo_output()
+    assert _CATEGORY not in build_seed(ctx.app, saved)
+
+
+def test_build_digraph_includes_category_node_when_app_declares_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """An app that declares ``categories`` gets a classification root in the
+    DAG, level-0 alongside colour and font (it reads only the brief);
+    nothing depends on it."""
+    app = _demo_app()
+    ctx = RunContext(app, Customization.model_validate(_CUST), tmp_path)
+    graph = Pipeline._build_digraph(_graph(ctx))
+
+    gens = [sorted(level) for level in nx.topological_generations(graph)]
+    assert _CATEGORY in gens[0]
+    assert set(graph.predecessors(_CATEGORY)) == set()
+    assert set(graph.successors(_CATEGORY)) == set()
 
 
 def test_build_seed_is_slot_level() -> None:
-    """A saved run with the colours + one image done seeds exactly those
-    SLOTS (per-item outputs verbatim); every absent slot is left to make."""
+    """A saved run with the colours + one image + a category done seeds
+    exactly those SLOTS (per-item outputs verbatim); every absent slot is left
+    to make."""
     app, output = _demo_app(), _demo_output()
     seed = build_seed(app, output)
 
-    assert set(seed) == {"primary", "background", "text", "accent", "hero"}
+    assert set(seed) == {
+        "primary", "background", "text", "accent", "hero", _CATEGORY,
+    }
     # Seeded values are the saved per-item models verbatim.
     assert seed["primary"] is output.color_set.colors["primary"]
     assert seed["hero"] is output.image_set.images["hero"]
+    # The classification pseudo-slot rebuilds its carrier from the scalar.
+    assert seed[_CATEGORY].value == output.category
     # To-(re)generate is the slot complement: the absent fonts/texts/icons.
     assert all_slot_ids(app) - seed.keys() == {
         "display", "body",
         "booked_screen", "cancel_cta", "home_greeting",
         "home_tab", "search_action", "celebration_badge",
     }
+
+
+def test_build_seed_skips_a_category_outside_the_vocabulary() -> None:
+    """A saved category that is no longer one of the app's declared values is
+    NOT seeded — an ``expand`` pass re-classifies it instead of carrying a
+    value the styles API would skip anyway."""
+    app = _demo_app()
+    stale = _demo_output().model_copy(update={"category": "Brutalist"})
+    assert stale.category not in app.categories
+
+    seed = build_seed(app, stale)
+    assert _CATEGORY not in seed
+    assert _CATEGORY in all_slot_ids(app) - seed.keys()
+
+    # An un-classified run behaves the same way.
+    assert _CATEGORY not in build_seed(
+        app, _demo_output().model_copy(update={"category": None})
+    )
 
 
 def test_dropping_a_seed_slot_makes_it_dirty(tmp_path: Path) -> None:
@@ -469,12 +530,14 @@ def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
 
 
 def _all_nodes(graph: Any) -> list[Any]:
-    """Every node object on a built Graph (text/icon may be None)."""
+    """Every node object on a built Graph (text/icon/category may be None)."""
     nodes = [graph.color, graph.font, *graph.images]
     if graph.text is not None:
         nodes.append(graph.text)
     if graph.icon is not None:
         nodes.append(graph.icon)
+    if graph.category is not None:
+        nodes.append(graph.category)
     return nodes
 
 

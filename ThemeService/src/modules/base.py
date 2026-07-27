@@ -19,20 +19,28 @@ from src.core.run_context import RunContext
 class DependencyKind(str, enum.Enum):
     """Executor-owned, frozen dependency keys.
 
-    Never appears in any YAML / ``Output`` / schema: the executor injects
-    ``COLOR`` onto every image node so the engine treats the colour root
-    like any other dependency. ``FONT``, ``TEXT`` and ``ICON`` are here
-    for the same keyspace reason — no node implicitly depends on any of
-    them today, but each root node still needs a stable graph key and an
-    image slot named ``font`` / ``text`` / ``icon`` would shadow it if a
-    future module ever depended on it. New executor-defined dependency
-    kinds (never user slot ids) go here.
+    Never a user-declared slot id: the executor injects ``COLOR`` onto
+    every image node so the engine treats the colour root like any other
+    dependency. ``FONT``, ``TEXT``, ``ICON`` and ``CATEGORY`` are here for
+    the same keyspace reason — no node implicitly depends on any of them
+    today, but each root node still needs a stable graph key and an image
+    slot named ``font`` / ``text`` / ``icon`` / ``category`` would shadow
+    it if a future module ever depended on it (``AppFormat`` rejects those
+    ids for exactly that reason). New executor-defined dependency kinds
+    (never user slot ids) go here.
+
+    ``CATEGORY`` doubles as the classification node's single **pseudo-slot
+    id**: the run's classification is one run-wide value, not a per-slot
+    inventory, so the node declares one slot under its own key. That is
+    what puts it in the slot-level seed keyspace, which is how ``expand``
+    backfills it and ``regen --slot category`` re-rolls it.
     """
 
     COLOR = "color"
     FONT = "font"
     TEXT = "text"
     ICON = "icon"
+    CATEGORY = "category"
 
 
 class Node(ABC):

@@ -8,28 +8,30 @@ Takes a brand brief, produces a fully customized app.
 
 Two YAMLs you write (`app.yaml`, `customization.yaml`), one the pipeline
 produces (`output.yaml`). Customized surface: **images, colours, fonts,
-text, and icons.**
+text, and icons** — plus the run's own **classification**.
 
 The pipeline is a **dependency DAG**, not a fixed sequence. The registry
 turns the two YAMLs into a node set — one **colour node**, one **font
-node**, plus a **text node** and an **icon node** (each built only when
-the app declares the matching slots), and one **image node per image
-slot**. The executor levels that graph topologically and resolves each
-level **concurrently**.
+node**, plus a **text node**, an **icon node** and a **classification
+node** (each built only when the app declares the matching inventory),
+and one **image node per image slot**. The executor levels that graph
+topologically and resolves each level **concurrently**.
 
-Colour, font, text and icon are the **level-0 roots** and run side by
-side: the colour node resolves the four base slots in one structured LLM
-call and then **derives the full palette deterministically** (elevated
-surfaces, faded variants, contrast — see *Colour* below), the font node
-picks every font in one call (validated live against the Google Fonts
-catalogue), the text node rewrites every copy slot in one batched,
-length-bounded call, and the icon node matches each slot against a
-curated set (generating any the set can't cover). The font, text and icon
-roots have no dependents. **Every image node depends on the colour
-node** — image nodes paint with the palette. An image slot may also
-declare `depends_on` other image slots — a **soft reference** for **visual
-continuity**: the dependency's look is folded into this slot's prompt as a
-style reference (never fed in as an input image).
+Colour, font, text, icon and classification are the **level-0 roots** and
+run side by side: the colour node resolves the four base slots in one
+structured LLM call and then **derives the full palette deterministically**
+(elevated surfaces, faded variants, contrast — see *Colour* below), the
+font node picks every font in one call (validated live against the Google
+Fonts catalogue), the text node rewrites every copy slot in one batched,
+length-bounded call, the icon node matches each slot against a curated set
+(generating any the set can't cover), and the classification node files the
+run into one of the app's declared `categories` (see *Classification*
+below). The font, text, icon and classification roots have no dependents.
+**Every image node depends on the colour node** — image nodes paint with
+the palette. An image slot may also declare `depends_on` other image
+slots — a **soft reference** for **visual continuity**: the dependency's
+look is folded into this slot's prompt as a style reference (never fed in
+as an input image).
 
 The graph is validated (acyclic, every dependency satisfied) **before
 any paid call**. The run is then **fault-tolerant**: a node that fails
@@ -50,6 +52,7 @@ flowchart TD
     Font["font node (root)<br/>display · body — one LLM call, Google-Fonts-validated"]
     Text["text node (root, if text slots)<br/>copy slots — one batched, length-bounded call"]
     Icon["icon node (root, if icon slots)<br/>set selection + per-slot match, Recraft fallback"]
+    Cat["classification node (root, if app.yaml categories)<br/>one LLM call — picks the run's category<br/>from the app's own declared vocabulary"]
     Images["image node × N<br/>one per image slot"]
     Color --> Images
     Images -. "depends_on — visual reference only" .-> Images
@@ -89,7 +92,8 @@ flowchart LR
 
 ## The modules
 
-Six atomic modules, one per customized surface. Each resolves the
+Six atomic modules: one per customized surface (colour, fonts, text,
+images, icons) plus the run's own classification. Each resolves the
 smallest indivisible unit (the executor owns iteration); the module
 itself never loops the slot inventory.
 
@@ -202,6 +206,65 @@ icon in it; any slot the set can't honestly cover is generated via
 Recraft. Icons are monochrome (`currentColor`) so the app tints them per
 theme — there is no per-slot colour field.
 
+### Classification
+
+```mermaid
+flowchart LR
+  S["design name + brand brief<br/>+ app.yaml categories"]
+  L["one LLM call<br/>(Haiku, structured)"]
+  V["vocabulary check<br/>re-ask; rejected again at write time"]
+  S --> L --> V
+```
+
+Every run's `output.yaml` carries a top-level `category`, and the style
+picker **requires** it: `GET /apps/{app_id}/styles` skips any run with no
+category, or whose category isn't in the app's declared vocabulary. The
+classification node is what produces it, so a new theme lands listable with
+no manual step.
+
+The node reads only the design name and the brand brief — never the resolved
+colours or images — so it is a level-0 root and costs the run no wall-clock
+time (about $0.003 a run).
+
+**App-agnostic, like everything else.** The buckets come from the app's own
+`app.yaml`:
+
+```yaml
+categories:
+  - Fighting
+  - Yoga
+  # …
+```
+
+No class value exists in Python. The response schema is built **per request**
+from that list and a validator rejects anything outside it, so an invented
+value is fed back and re-asked on the existing structured-output retry loop
+rather than written. An app that declares no `categories` never gets the node
+at all and runs exactly as it did before — the styles endpoint skips the
+vocabulary check for such an app too.
+
+The value is then checked **again at write time**, because a category the
+app doesn't declare has no loud failure mode — the theme just quietly stops
+appearing in the picker:
+
+- A value this pass **produced** that isn't declared fails the write. It
+  cannot happen through the node (the schema is built from the vocabulary),
+  so it is an assertion against a bug, not a data path.
+- A value **carried forward** from the run's existing `output.yaml` that the
+  app no longer declares is stale data, not a bug in this pass — it is logged
+  as an error and dropped, and the run is still written (the pass already
+  spent money). Re-file it with `regen --slot category`.
+
+Because classification is a node and not a bolt-on step, it inherits every
+reopen lever for free: `expand` **backfills** a run that has no category,
+`regen --slot category [--spec "…"]` re-rolls one that was mis-filed, and a
+run that is already classified seeds the node done — reopening it never
+re-spends on classification. A full in-place re-run re-classifies from the
+brief exactly as it re-makes every other slot; the value on the file being
+overwritten is kept only as a fallback for when nothing was produced (the app
+declares no vocabulary, or the call failed), so a blip never drops a listed
+theme out of the picker.
+
 ---
 
 ## Configuration
@@ -244,6 +307,13 @@ stays in harmony (colour also re-checks WCAG-AA against the fixed
 background/text). A node whose slots are all seeded does no work. So **to
 re-roll a slot you just drop it from the seed** — the scripts do exactly that.
 
+The run's classification joins that same map under the pseudo-slot id
+`category` (it is one run-wide value, not a per-slot inventory), which is what
+makes it expandable, regenerable and free to preserve like everything else. It
+seeds only when the saved value is still one of the app's declared
+`categories`, so a stamp that went stale against a changed vocabulary is
+re-made rather than carried.
+
 Steering rides one object, `OverwriteSpecs`, threaded through and recorded on
 every per-item output (so a slot says what produced it) and on the ledger:
 
@@ -258,13 +328,16 @@ Three standalone entrypoints (run from the package root, like `make`):
 
 - **`scripts/expand`** — `--run-dir <dir> [--app-yaml <path>]`. Generates only
   the slots declared in `app.yaml` but missing from `output.yaml` — resume a
-  partial run, or fill newly-added slots. The run dir's `app.yaml` is a frozen
-  snapshot, so to expand against an **updated** inventory pass the live one
-  (`--app-yaml apps/<app_id>/app.yaml`); the snapshot is then refreshed to match.
+  partial run, fill newly-added slots, or **backfill the classification** of a
+  run that has none. The run dir's `app.yaml` is a frozen snapshot, so to
+  expand against an **updated** inventory pass the live one (`--app-yaml
+  apps/<app_id>/app.yaml`); the snapshot is then refreshed to match. That is
+  also how an older run reaches a vocabulary its snapshot predates.
 - **`scripts/regen`** — `--run-dir <dir> --slot <id> [--slot <id> …]
-  [--spec "…"]`. Re-makes one or more colour/font/text/icon slots,
-  preserving everything else. Naming several slots of one atomic node re-rolls
-  them together (harmonised). Images are out of scope here.
+  [--spec "…"]`. Re-makes one or more colour/font/text/icon slots — or
+  `category`, the classification node's single pseudo-slot — preserving
+  everything else. Naming several slots of one atomic node re-rolls them
+  together (harmonised). Images are out of scope here.
 - **`scripts/regen_image`** — `--run-dir <dir> --slot <image_id> [--spec "…"]
   --mode create_new|edit_current_image`. `create_new` generates a fresh image;
   `edit_current_image` edits the existing one (image-to-image — the prompt says
@@ -284,29 +357,6 @@ The first three preserve `output.yaml`'s original `cost` and append one entry to
 pass's spend.
 
 ## TODO
-
-### Classification pipeline step — categorise each run at production time
-
-Every run's `output.yaml` carries a top-level `category` — one of the values
-the app declares under `categories` in its `app.yaml` (app-agnostic: the code
-supports "classification", the class values are the app's own; for combatden
-they are the 8 parent gym-type buckets). The style picker requires it: an
-uncategorised run — or one whose value isn't in the declared vocabulary — is
-skipped by `GET /apps/{app_id}/styles`.
-
-Today the value is **stamped into the artifact by hand** (all 76 combatden
-runs were backfilled this way). The missing piece is a **pipeline
-classification step**: a cheap structured LLM call at run production (and an
-`expand`-style backfill script for existing runs) that reads the design brief
-/ design name and picks the category from the app.yaml vocabulary, so a new
-theme lands classified without any manual step. Until it exists, stamping the
-`category` line is part of producing a new named style. Once a run is stamped,
-every in-place lever carries the stamp forward — `regen`, `regen_image` and
-`expand` thread it through `Writer.write_expansion`, and a full in-place re-run
-(`src/cli.py` pointed at an existing dir) captures the prior `output.yaml`'s
-`category` before the pipeline clears the file and re-stamps it via
-`Writer.write` — so re-touching a run never silently drops the theme from the
-picker.
 
 ### Corner rounding — one paid call, the rest derived
 
@@ -361,8 +411,10 @@ codebase/CustomizationService/
 │   │   ├── fonts/       # FontNode + font selection service
 │   │   │                #   (Google Fonts catalog), prompts/*.md
 │   │   ├── texts/       # TextNode + text generation service, prompts/*.md
-│   │   └── icons/       # IconNode + set selection / matching /
-│   │                    #   generation services, prompts/*.md
+│   │   ├── icons/       # IconNode + set selection / matching /
+│   │   │                #   generation services, prompts/*.md
+│   │   └── categories/  # CategoryNode + category selection service
+│   │                    #   (the run's app.yaml-declared bucket), prompts/*.md
 │   ├── shared/
 │   │   ├── interfaces/  # LLMClient, ImageGenerator, BackgroundRemover,
 │   │   │                #   GoogleFontsCatalog, IconSetCatalog

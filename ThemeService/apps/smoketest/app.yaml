@@ -1,6 +1,15 @@
 id: smoketest
 display_name: Smoke Test
 
+# A small classification vocabulary so the smoke run exercises the
+# classification node too (one cheap Haiku call). The values are this app's
+# own, as they are for every app — nothing here is known to the pipeline
+# code. `Cardio` is the honest answer for the brief in customization.yaml.
+categories:
+  - Cardio
+  - Strength
+  - Mind & Body
+
 # One image only — keeps a pipeline run cheap/fast (image gen + background
 # removal is the expensive part). Swap the description to test other prompts.
 images:

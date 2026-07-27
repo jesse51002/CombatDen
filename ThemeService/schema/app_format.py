@@ -21,11 +21,15 @@ _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 # rejected: a node's resolved-input dict is keyed by these, so an image
 # named "color" would shadow the palette. Source of truth for the values
 # is ``src.modules.base.DependencyKind`` (kept local so schema/ imports no
-# src/ — same reason ColorRole lives in schema/). ``font``, ``text`` and
-# ``icon`` are reserved for the same keyspace reason even though no image
-# module depends on any of them today, so a future ``depends_on: font`` /
-# ``depends_on: text`` / ``depends_on: icon`` doesn't get shadowed.
-_EXECUTOR_NODE_NAMES = frozenset({"color", "font", "text", "icon"})
+# src/ — same reason ColorRole lives in schema/). ``font``, ``text``,
+# ``icon`` and ``category`` are reserved for the same keyspace reason even
+# though no image module depends on any of them today, so a future
+# ``depends_on: font`` / ``depends_on: category`` doesn't get shadowed.
+# ``category`` is additionally the classification node's pseudo-slot id in
+# the slot-level seed, so an image of that name would collide there too.
+_EXECUTOR_NODE_NAMES = frozenset(
+    {"color", "font", "text", "icon", "category"}
+)
 
 
 def _assert_unique_ids(slots: list, *, kind: str) -> None:
@@ -51,10 +55,13 @@ class AppFormat(BaseModel):
     # `category` values this app's runs may carry in their output.yaml.
     # App-agnostic by construction — the code supports "classification",
     # nothing more; the class values are the app's own (this package
-    # never hardcodes them). The style picker's `/styles` endpoint
-    # REQUIRES a run's category to be one of these to list it. Default
-    # keeps the frozen per-run `app.yaml` snapshots (and apps with no
-    # classification concept) valid.
+    # never hardcodes them). This list is what the classification node
+    # builds its per-request response schema from, what the Writer
+    # validates against before dumping, and what the style picker's
+    # `/styles` endpoint REQUIRES a run's category to be in to list it.
+    # Empty ⇒ the app has no classification concept: no node is built,
+    # no check runs. The default also keeps the frozen per-run
+    # `app.yaml` snapshots valid.
     categories: list[str] = Field(default_factory=list)
     images: list[ImageSlot] = Field(default_factory=list)
     colors: list[ColorSlot] = Field(default_factory=list)

@@ -32,13 +32,16 @@ from schema import (
     ColorRole,
     Complexity,
     Customization,
+    ExpansionKind,
     OklchColor,
     Output,
     RunCost,
 )
+from src.core.errors import PipelineError
 from src.core.run_context import RunContext
 from src.executor import orchestrator
-from src.executor.orchestrator import Pipeline
+from src.executor.orchestrator import Pipeline, PipelineResult
+from src.executor.seed import build_seed
 from src.executor.writer import (
     APP_PROVENANCE_NAME,
     CUSTOMIZATION_PROVENANCE_NAME,
@@ -105,10 +108,15 @@ _FAKE_ICON_MATCH: dict[str, str | None] = {
 _FAKE_ICON_SET_ID = "lucide_lite"
 _FAKE_ICON_SET_NAME = "Lucide Lite"
 
+# What the fake LLM files the demo run under. In the demo app.yaml's declared
+# vocabulary (``Modern`` / ``Classic``), so the model's membership validator
+# accepts it and the writer's vocabulary check passes.
+_FAKE_CATEGORY = "Modern"
+
 
 class _FakeLLM:
     """Honours LLMClient: structured colour palette + font selection +
-    text rewrites + image prompt + bg verdict."""
+    text rewrites + classification + image prompt + bg verdict."""
 
     cost = _FAKE_LLM_COST
     cost_by_model = _FAKE_LLM_BY_MODEL
@@ -216,6 +224,13 @@ class _FakeLLM:
                     )
                     for sid in requested
                 }
+            )
+        elif getattr(schema, "__name__", "") == "CategorySelection":
+            # Classification: the closed per-request model built from the
+            # app's declared vocabulary. Constructing it runs the membership
+            # validator (the value below is one of the demo app's buckets).
+            result = schema(
+                category=_FAKE_CATEGORY, reason="fits the demo brand"
             )
         elif schema is ImagePrompt:
             result = ImagePrompt(
@@ -919,6 +934,101 @@ def test_expand_with_updated_app_yaml_adds_slot(tmp_path, monkeypatch):
     assert "extra_hero" in {s.id for s in snap.images}
 
 
+def test_expand_script_backfills_the_category(tmp_path, monkeypatch):
+    """The real backfill path, end to end through ``scripts/expand``.
+
+    Reproduces an existing run exactly as one looks before classification: a
+    frozen ``app.yaml`` snapshot with no ``categories`` and an ``output.yaml``
+    with no ``category``. Expanding it against the LIVE app.yaml (which does
+    declare the vocabulary) classifies the run in place — that is the
+    backfill, with no separate script.
+    """
+    ctx = _full_run_dir(tmp_path, monkeypatch)
+
+    # Roll the run dir back to its pre-classification shape.
+    snapshot = yaml.safe_load((ctx.run_dir / APP_PROVENANCE_NAME).read_text())
+    snapshot.pop("categories", None)
+    (ctx.run_dir / APP_PROVENANCE_NAME).write_text(yaml.safe_dump(snapshot))
+    saved = yaml.safe_load(ctx.output_path().read_text())
+    saved.pop("category", None)
+    ctx.output_path().write_text(yaml.safe_dump(saved))
+
+    expand = _load_script("scripts/expand/run.py")
+    rc = asyncio.run(
+        expand.main(
+            [
+                "--run-dir",
+                str(ctx.run_dir),
+                "--app-yaml",
+                str(APP_DIR / "app.yaml"),
+            ]
+        )
+    )
+    assert rc == 0
+
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    assert out.category == _FAKE_CATEGORY
+    # Everything else is preserved: only the classification was missing.
+    from schema import ExpansionCostLog
+
+    ledger = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert ledger.expansions[-1].generated == ["category"]
+
+    # Re-expanding is now a no-op: everything, classification included, is done.
+    rc = asyncio.run(
+        expand.main(
+            [
+                "--run-dir",
+                str(ctx.run_dir),
+                "--app-yaml",
+                str(APP_DIR / "app.yaml"),
+            ]
+        )
+    )
+    assert rc == 0
+    ledger_after = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert len(ledger_after.expansions) == len(ledger.expansions)
+
+
+def test_regen_script_can_reroll_the_category(tmp_path, monkeypatch):
+    """``regen --slot category`` re-rolls the classification like any other
+    non-image slot, steered by ``--spec`` — the deliberate way to correct a
+    misfile, replacing the hand-edit that used to be the only option."""
+    ctx = _full_run_dir(tmp_path, monkeypatch)
+    assert Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    ).category == _FAKE_CATEGORY
+
+    regen = _load_script("scripts/regen/run.py")
+    rc = asyncio.run(
+        regen.main(
+            [
+                "--run-dir",
+                str(ctx.run_dir),
+                "--slot",
+                "category",
+                "--spec",
+                "this is a period piece, not a contemporary one",
+            ]
+        )
+    )
+    assert rc == 0
+
+    from schema import ExpansionCostLog
+
+    ledger = ExpansionCostLog.model_validate(
+        yaml.safe_load(ctx.expansion_cost_path().read_text())
+    )
+    assert ledger.expansions[-1].generated == ["category"]
+    # Still a declared value, and the run stays listed.
+    out = Output.model_validate(yaml.safe_load(ctx.output_path().read_text()))
+    assert out.category in ctx.app.categories
+
+
 def test_write_expansion_preserves_cost_and_appends_ledger(
     tmp_path, monkeypatch
 ):
@@ -988,12 +1098,40 @@ def test_write_expansion_preserves_cost_and_appends_ledger(
     assert len(ledger2.expansions) == 2
 
 
-def test_write_expansion_carries_category_forward(tmp_path, monkeypatch):
-    """A regen/expand pass carries the run's (hand-stamped) category forward
-    into the re-dumped output.yaml — the assembled Output has none, so without
-    the carry-forward the theme would silently drop out of the picker."""
-    from schema import ExpansionKind, OverwriteSpecs
-    from src.executor.seed import build_seed
+def test_fresh_run_classifies_itself(tmp_path, monkeypatch):
+    """A fresh full run of an app that declares ``categories`` lands
+    classified with no manual step: the classification node picks a value from
+    the app's own vocabulary and the writer stamps it on output.yaml."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    result = asyncio.run(Pipeline().run(ctx))
+
+    # The assembled Output already carries it — no writer-side stamping.
+    assert result.output.category == _FAKE_CATEGORY
+    assert _FAKE_CATEGORY in ctx.app.categories
+    # The classification pseudo-slot is one of the slots this pass generated.
+    assert "category" in result.generated
+
+    Writer().write(result, ctx)
+    written = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert written.category == _FAKE_CATEGORY
+
+
+def test_expand_backfills_the_category_and_reclassification_is_free(
+    tmp_path, monkeypatch
+):
+    """A run saved without a category is backfilled by a seeded (expand) pass
+    — and once classified, a later seeded pass returns the same value with no
+    LLM call, so re-touching a classified run never re-spends on it."""
+    from schema import ExpansionKind
 
     ctx = _run_ctx(tmp_path)
     _patch_services(
@@ -1004,40 +1142,46 @@ def test_write_expansion_carries_category_forward(tmp_path, monkeypatch):
         [i.id for i in ctx.app.icons],
     )
     full = asyncio.run(Pipeline().run(ctx))
-    # Today's reality: a full run assembles category=None; the value is
-    # stamped by hand afterwards. Simulate that by writing it with the stamp,
-    # then reload the way the in-place scripts do (load_run → output.category).
-    Writer().write(full, ctx, prior_category="minimalist")
-    original = Output.model_validate(
-        yaml.safe_load(ctx.output_path().read_text())
-    )
-    assert original.category == "minimalist"
 
-    # Regenerate one image, threading the loaded category as the scripts do.
-    ctx.overwrite_specs = OverwriteSpecs(specs="darker background")
-    seed = {
-        k: v for k, v in build_seed(ctx.app, full.output).items() if k != "hero"
-    }
-    expanded = asyncio.run(Pipeline().run(ctx, seed=seed))
+    # An unclassified saved run (what all pre-classification runs look like).
+    unclassified = full.output.model_copy(update={"category": None})
+    seed = build_seed(ctx.app, unclassified)
+    assert "category" not in seed  # nothing to seed → it will be generated
+
+    backfilled = asyncio.run(Pipeline().run(ctx, seed=seed))
+    assert backfilled.output.category == _FAKE_CATEGORY
+    assert "category" in backfilled.generated
+
+    # Written back in place: the produced value wins over the None carried
+    # forward from the file that was loaded.
     Writer().write_expansion(
-        expanded,
+        backfilled,
         ctx,
-        original_cost=original.cost,
-        original_category=original.category,
-        kind=ExpansionKind.REGENERATE,
+        original_cost=full.output.cost,
+        original_category=unclassified.category,
+        kind=ExpansionKind.EXPAND,
     )
-
     after = Output.model_validate(
         yaml.safe_load(ctx.output_path().read_text())
     )
-    assert after.category == "minimalist"
+    assert after.category == _FAKE_CATEGORY
+
+    # Now that it IS classified, a second seeded pass seeds it done: the node
+    # returns the saved value verbatim and never reaches the LLM.
+    reseed = build_seed(ctx.app, after)
+    assert reseed["category"].value == _FAKE_CATEGORY
+    again = asyncio.run(Pipeline().run(ctx, seed=reseed))
+    assert again.output.category == _FAKE_CATEGORY
+    assert "category" not in again.generated
 
 
-def test_full_rerun_captures_and_carries_category(tmp_path, monkeypatch):
-    """The full in-place re-run seam: cli._existing_category reads the prior
-    run's stamp before the pipeline clears output.yaml, and Writer.write
-    re-stamps it — so a re-run keeps the theme categorised, while a fresh run
-    (no prior file, prior_category=None) stays uncategorised."""
+def test_full_rerun_reclassifies_and_prior_is_only_a_fallback(
+    tmp_path, monkeypatch
+):
+    """The full in-place re-run seam. ``cli._existing_category`` still reads
+    the prior run's value before the pipeline clears output.yaml, but it is
+    now a FALLBACK: an app with a declared vocabulary re-classifies through
+    the node, so the produced value wins."""
     import src.cli as cli
 
     ctx = _run_ctx(tmp_path)
@@ -1050,24 +1194,149 @@ def test_full_rerun_captures_and_carries_category(tmp_path, monkeypatch):
     )
     result = asyncio.run(Pipeline().run(ctx))
 
-    # No prior file → captured category is None (a fresh run stays None).
+    # No prior file → nothing captured; the run classifies itself anyway.
     assert cli._existing_category(ctx.output_path()) is None
     Writer().write(result, ctx)
-    fresh = Output.model_validate(
-        yaml.safe_load(ctx.output_path().read_text())
-    )
-    assert fresh.category is None
+    assert cli._existing_category(ctx.output_path()) == _FAKE_CATEGORY
 
-    # Hand-stamp the run, then take the full-re-run seam: capture the prior
-    # stamp (as cli.main does before Pipeline.run clears the file), re-stamp it.
-    Writer().write(result, ctx, prior_category="bold")
+    # Re-running in place: the captured value is passed as before, and the
+    # freshly produced classification takes precedence over it.
     captured = cli._existing_category(ctx.output_path())
-    assert captured == "bold"
-    Writer().write(result, ctx, prior_category=captured)
+    Writer().write(result, ctx, prior_category="Classic")
     after = Output.model_validate(
         yaml.safe_load(ctx.output_path().read_text())
     )
-    assert after.category == "bold"
+    assert captured == _FAKE_CATEGORY
+    assert after.category == _FAKE_CATEGORY  # produced wins over the prior
+
+
+def test_prior_category_carries_when_the_run_produces_none(
+    tmp_path, monkeypatch
+):
+    """The fallback that keeps a listed theme listed: when this pass produced
+    no category — the classification node failed, or (as here) the run's own
+    app.yaml declares no vocabulary — the value carried in from the loaded /
+    overwritten output.yaml is written unchanged."""
+    from schema import ExpansionKind
+
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    result = asyncio.run(Pipeline().run(ctx))
+
+    # A run dir whose frozen app.yaml snapshot predates `categories` (all 76
+    # combatden snapshots look like this): no vocabulary → no node → nothing
+    # produced → the existing stamp must survive untouched, not be dropped.
+    ctx.app = ctx.app.model_copy(update={"categories": []})
+    unclassified = result.output.model_copy(update={"category": None})
+    stripped = PipelineResult(
+        output=unclassified,
+        llm=result.llm,
+        image_gen=result.image_gen,
+        bg_remover=result.bg_remover,
+        icon_gen=result.icon_gen,
+        generated=result.generated,
+    )
+
+    Writer().write(stripped, ctx, prior_category="Modern")
+    assert (
+        Output.model_validate(
+            yaml.safe_load(ctx.output_path().read_text())
+        ).category
+        == "Modern"
+    )
+
+    Writer().write_expansion(
+        stripped,
+        ctx,
+        original_cost=result.output.cost,
+        original_category="Modern",
+        kind=ExpansionKind.EXPAND,
+    )
+    assert (
+        Output.model_validate(
+            yaml.safe_load(ctx.output_path().read_text())
+        ).category
+        == "Modern"
+    )
+
+
+def test_write_rejects_a_produced_category_outside_the_vocabulary(
+    tmp_path, monkeypatch
+):
+    """Write-time enforcement: a produced category that is not one of the
+    app's declared values is an error, not a silent pass. Without this the
+    only symptom is the theme quietly vanishing from the style picker."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    result = asyncio.run(Pipeline().run(ctx))
+    bad = PipelineResult(
+        output=result.output.model_copy(update={"category": "Brutalist"}),
+        llm=result.llm,
+        image_gen=result.image_gen,
+        bg_remover=result.bg_remover,
+        icon_gen=result.icon_gen,
+        generated=result.generated,
+    )
+
+    with pytest.raises(PipelineError, match="Brutalist"):
+        Writer().write(bad, ctx)
+    with pytest.raises(PipelineError, match="Brutalist"):
+        Writer().write_expansion(
+            bad,
+            ctx,
+            original_cost=None,
+            original_category=None,
+            kind=ExpansionKind.EXPAND,
+        )
+
+
+def test_write_drops_a_stale_carried_category_without_failing(
+    tmp_path, monkeypatch, caplog
+):
+    """A carried-forward value the app no longer declares is stale artifact
+    data, not a bug in this pass: the pass already spent money, so it is
+    logged loudly and dropped rather than raised — the run is still written,
+    just uncategorised until it is re-classified."""
+    ctx = _run_ctx(tmp_path)
+    _patch_services(
+        monkeypatch,
+        [c.id for c in ctx.app.colors],
+        [f.id for f in ctx.app.fonts],
+        [t.id for t in ctx.app.texts],
+        [i.id for i in ctx.app.icons],
+    )
+    result = asyncio.run(Pipeline().run(ctx))
+    # No vocabulary on this run's app.yaml ⇒ nothing produced ⇒ the stale
+    # carried value is the only candidate. Re-declare the vocabulary so the
+    # check runs and rejects it.
+    unclassified = PipelineResult(
+        output=result.output.model_copy(update={"category": None}),
+        llm=result.llm,
+        image_gen=result.image_gen,
+        bg_remover=result.bg_remover,
+        icon_gen=result.icon_gen,
+        generated=result.generated,
+    )
+
+    with caplog.at_level("ERROR"):
+        Writer().write(unclassified, ctx, prior_category="Brutalist")
+    written = Output.model_validate(
+        yaml.safe_load(ctx.output_path().read_text())
+    )
+    assert written.category is None
+    assert "Brutalist" in caplog.text
 
 
 def test_run_cost_by_model_back_compat():

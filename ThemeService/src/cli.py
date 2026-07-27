@@ -24,17 +24,19 @@ ILLEGAL_RUN_NAME_CHARS = ("/", "\\", "..")
 
 
 def _existing_category(output_path: Path) -> str | None:
-    """The ``category`` stamped on a pre-existing run's ``output.yaml``, if any.
+    """The ``category`` on a pre-existing run's ``output.yaml``, if any.
 
     A full run pointed at an existing dir overwrites its ``output.yaml`` (the
-    pipeline clears the file up front), and the assembled ``Output`` carries no
-    ``category`` — the classification step is a README TODO, so categories are
-    hand-stamped today. Reading the prior value here lets the writer carry it
-    forward, so a re-run keeps the theme in the picker instead of dropping it.
+    pipeline clears the file up front), so the prior value has to be read
+    before that happens. It is the writer's **fallback**, not an override: an
+    app that declares a ``categories`` vocabulary re-classifies through the
+    pipeline's classification node like every other slot, and this value is
+    used only if that produced nothing — the app declares no vocabulary, or
+    the node failed. Either way the re-run keeps the theme in the picker
+    instead of dropping it.
 
     Returns ``None`` when there is no prior run, the file is unreadable /
-    malformed, or it carries no ``category`` (a fresh run stays uncategorised —
-    correct until the classification step exists).
+    malformed, or it carries no ``category``.
     """
     if not output_path.is_file():
         return None
@@ -108,8 +110,9 @@ async def main(argv: list[str] | None = None) -> int:
     )
 
     # A full run pointed at an existing dir overwrites its output.yaml, so
-    # capture the prior run's (hand-stamped) category BEFORE the pipeline
-    # clears that file, then carry it forward through the writer.
+    # capture the prior run's category BEFORE the pipeline clears that file.
+    # The writer uses it only as a fallback (the classification node produces
+    # the category now); see Writer._resolve_category.
     prior_category = _existing_category(run_ctx.output_path())
 
     result = await Pipeline().run(run_ctx)

@@ -25,6 +25,18 @@ from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
 from src.modules.base import DependencyKind
+from src.modules.categories.category_models import (
+    CategoryOutput,
+    build_category_selection_model,
+)
+from src.modules.categories.category_node import (
+    CATEGORY_SLOT_ID,
+    CategoryNode,
+)
+from src.modules.categories.category_selection_service import (
+    CATEGORY_PROMPT_PATH,
+    CategorySelectionService,
+)
 from src.modules.colors.color_models import LLMSlotResponse, build_color_response_model
 from src.modules.colors.color_node import ColorNode
 from src.modules.colors.color_models import LLMPalette
@@ -1292,6 +1304,174 @@ def test_build_icon_match_model_rejects_non_member() -> None:
         model(a=LLMIconResponse(icon="rocket", match_reason="x"))
     ok = model(a=LLMIconResponse(icon=None, match_reason="no match"))
     assert ok.a.icon is None
+
+
+# --------------------------------------------------------------------------
+# Classification node (src/modules/categories)
+# --------------------------------------------------------------------------
+
+
+class _FakeCompletion:
+    """Minimal litellm completion stand-in: ``choices[0].message`` with the
+    two access shapes ``LiteLLMClient`` uses (``["content"]`` + attribute)."""
+
+    class _Message:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+        def model_dump(self) -> dict:
+            return {"role": "assistant", "content": self.content}
+
+        def __getitem__(self, key: str) -> str:
+            if key == "content":
+                return self.content
+            raise KeyError(key)
+
+    class _Choice:
+        def __init__(self, content: str) -> None:
+            self.message = _FakeCompletion._Message(content)
+
+    def __init__(self, content: str) -> None:
+        self.choices = [self._Choice(content)]
+
+
+class _CategoryStubLLM:
+    """Stub LLMClient for the classification node: returns a canned pick and
+    records the prompts it was shown."""
+
+    cost = 0.0
+    cost_by_model: dict[str, float] = {}
+
+    def __init__(self, pick: str) -> None:
+        self._pick = pick
+        self.prompts: list[str] = []
+        self.schemas: list[str] = []
+
+    async def complete(self, *a: Any, **k: Any) -> Any:
+        raise AssertionError("complete() not expected in these tests")
+
+    async def complete_structured(
+        self, messages: list[dict], *, schema: Any, **kw: Any
+    ) -> Any:
+        self.prompts.append(messages[0]["content"])
+        self.schemas.append(getattr(schema, "__name__", ""))
+        # Constructing the per-request model runs its vocabulary validator.
+        return schema(category=self._pick, reason="fits")
+
+
+def test_category_node_picks_from_the_declared_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """The node returns one of the app's own declared values, records the
+    pseudo-slot as regenerated, and asks under the stable schema name."""
+    ctx = _run_ctx(tmp_path)
+    llm = _CategoryStubLLM("Modern")
+    node = CategoryNode(ctx, llm=llm)
+
+    out = asyncio.run(node.run())
+
+    assert out.value == "Modern"
+    assert out.value in ctx.app.categories
+    assert out.reason
+    assert node.regenerated == {CATEGORY_SLOT_ID}
+    assert llm.schemas == ["CategorySelection"]
+
+
+def test_category_node_seeded_does_not_call_the_llm(tmp_path: Path) -> None:
+    """A run already classified seeds the node done: the saved value comes
+    back verbatim and no call is made — reopening a classified run never
+    re-spends on classification."""
+    ctx = _run_ctx(tmp_path)
+    llm = _CategoryStubLLM("Classic")
+    node = CategoryNode(
+        ctx, llm=llm, seed={CATEGORY_SLOT_ID: CategoryOutput(value="Modern")}
+    )
+
+    out = asyncio.run(node.run())
+
+    assert out.value == "Modern"  # the seed, not the stub's pick
+    assert node.dirty() == set()
+    assert node.regenerated == set()
+    assert llm.schemas == []
+
+
+def test_category_prompt_is_data_driven(tmp_path: Path) -> None:
+    """The prompt is built entirely from the two YAMLs — every declared
+    bucket and the design brief appear, and the run's steering is folded in.
+    Nothing app-specific is hardcoded in Python."""
+    ctx = _run_ctx(tmp_path)
+    ctx.overwrite_specs = OverwriteSpecs(specs="file it as the older style")
+    llm = _CategoryStubLLM("Classic")
+    asyncio.run(CategoryNode(ctx, llm=llm).run())
+
+    prompt = llm.prompts[0]
+    for bucket in ctx.app.categories:
+        assert f"- {bucket}" in prompt
+    assert ctx.cust.design_direction.name in prompt
+    assert ctx.cust.design_direction.short_desc in prompt
+    assert "file it as the older style" in prompt
+    # The rule text lives in the .md, never in Python.
+    assert CATEGORY_PROMPT_PATH.is_file()
+    assert "$categories" in CATEGORY_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def test_build_category_selection_model_rejects_non_member() -> None:
+    """A pick outside the app's declared vocabulary fails validation (so it
+    re-rides the structured-output retry loop instead of being written), and
+    the error names the permitted values so the re-ask is actionable."""
+    model = build_category_selection_model(frozenset({"Modern", "Classic"}))
+    with pytest.raises(ValidationError) as exc:
+        model(category="Brutalist", reason="x")
+    assert "Modern" in str(exc.value) and "Classic" in str(exc.value)
+    assert model(category="Modern", reason="x").category == "Modern"
+
+
+def test_category_out_of_vocabulary_is_reasked_not_written(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Through the REAL client retry loop: an out-of-vocabulary answer is fed
+    back and re-asked, and only the in-vocabulary answer is returned. The
+    vocabulary is never enforced by a static enum — it is the app's own."""
+    import json
+
+    import litellm
+
+    from src.shared.services.llm_client import LiteLLMClient
+
+    ctx = _run_ctx(tmp_path)
+    replies = [
+        json.dumps({"category": "Brutalist", "reason": "made up"}),
+        json.dumps({"category": "Classic", "reason": "period detailing"}),
+    ]
+    seen: list[int] = []
+
+    async def fake_acompletion(**kwargs):
+        seen.append(len(kwargs["messages"]))
+        return _FakeCompletion(replies[len(seen) - 1])
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+
+    out = asyncio.run(
+        CategorySelectionService(LiteLLMClient()).resolve(
+            ctx, model="anthropic/claude-haiku-4-5"
+        )
+    )
+
+    assert out.value == "Classic"
+    assert len(seen) == 2  # first answer rejected, re-asked once
+    assert seen[1] > seen[0]  # the correction turns were appended
+
+
+def test_category_service_requires_a_vocabulary(tmp_path: Path) -> None:
+    """Defense-in-depth: with no declared categories there is nothing to
+    classify against, so the service refuses rather than inventing a value.
+    (The registry never builds the node in that case.)"""
+    ctx = _run_ctx(tmp_path)
+    ctx.app = ctx.app.model_copy(update={"categories": []})
+    with pytest.raises(ProviderError, match="no categories"):
+        asyncio.run(
+            CategorySelectionService(_CategoryStubLLM("Modern")).resolve(ctx)
+        )
 
 
 def test_recraft_call_cost_from_price_table() -> None:

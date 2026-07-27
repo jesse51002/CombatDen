@@ -40,12 +40,13 @@ This file is a living document — exactly like a skill (above), it must track r
 A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml`,
 and the files under `final_images/` / `images/` / `icons/` — are **never edited
 by hand**. To change anything in an existing run you use the scripts:
-`scripts/expand` (fill not-yet-done slots), `scripts/regen` (re-make
-colour/font/text/icon slots), `scripts/regen_image` (images),
-`scripts/edit_customization` (a validated, targeted edit of the brief
-`customization.yaml`), or a full pipeline run (`src/cli.py`). The brief is the
-one editable *input* — and even it goes through `edit_customization` (which
-re-validates), not raw text munging; `app.yaml` is architect-owned.
+`scripts/expand` (fill not-yet-done slots, including a missing `category`),
+`scripts/regen` (re-make colour/font/text/icon slots, or `category`),
+`scripts/regen_image` (images), `scripts/edit_customization` (a validated,
+targeted edit of the brief `customization.yaml`), or a full pipeline run
+(`src/cli.py`). The brief is the one editable *input* — and even it goes
+through `edit_customization` (which re-validates), not raw text munging;
+`app.yaml` is architect-owned.
 
 If a change someone wants **cannot** be expressed through those scripts, do NOT
 work around it by editing an artifact — say so plainly and surface it as a
@@ -147,6 +148,15 @@ to fetch the rest. The node-return-type ⇄ output-group mapping is 1:1:
 (= `font_set`), `ImageNode → ImageOutput` (= `image_set.images[id]`),
 and so on.
 
+The one node whose output is a **run-wide scalar** rather than a group is
+`CategoryNode → CategoryOutput` (= the top-level `category` string). Its
+return model is a thin carrier that lives with the module
+(`src/modules/categories/category_models.py`), **not** under `schema/output/`
+— the run gains no new output group, only a value for a field the artifact
+already has. `CategoryOutput.value` is exactly that field, so the seed
+round-trip below holds unchanged. Anything a carrier holds beyond it (the
+model's `reason`) is call-local and is not serialized.
+
 **Why this is a hard invariant, not a style note:** the `expand` flow
 (`scripts/expand/run.py`, `src/executor/seed.py`) reconstructs the
 executor's start-state by validating each saved `output.yaml` group
@@ -187,6 +197,13 @@ that is why they are read back with `extra="ignore"` like `Output` /
 `ImageOutput`. A *required* field on a group stays required — adding one
 is a deliberate breaking change that requires migrating every existing
 `apps/<app>/*/output.yaml` (and the `tests/data/` fixtures).
+
+The rule is about **groups** — a collection of resolved items. A single
+run-wide value is a plain field on `Output`, not a one-field wrapper:
+`category` is a bare `str | None`, which is what every consumer (the styles
+API, `ThemeFlutter`, `ThemeReact`, `../FastApiBackend`) reads. Reshaping it
+into a group is exactly the breaking change described above, so a new
+run-wide scalar goes on `Output` directly.
 
 ---
 

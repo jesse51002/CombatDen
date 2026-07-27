@@ -33,12 +33,15 @@ class Output(BaseModel):
     ``category`` is this run's classification bucket — one of the values
     the app declares under ``categories`` in its ``app.yaml`` (the code
     is app-agnostic: it supports "classification", the class values are
-    the app's own). The style picker REQUIRES it (an uncategorised run
-    is never listed by ``GET /apps/{id}/styles``), but the field is
-    ``None``-able here so runs that predate it — and runs of apps with
-    no classification concept — still validate. Today the value is
-    stamped into the artifact; the pipeline classification step that
-    will set it at production time is a README TODO.
+    the app's own). It is produced by the pipeline's classification node
+    (``src/modules/categories/``) and validated against that declared
+    vocabulary before the ``Writer`` dumps it. The style picker REQUIRES
+    it (an uncategorised run is never listed by
+    ``GET /apps/{id}/styles``), but the field is ``None``-able here so
+    runs that predate it — and runs of apps with no classification
+    concept — still validate. It is a bare string on the wire, not a
+    group: a classification is one value, and every consumer (the styles
+    API, both client runtimes, the FastApi backend) reads it that way.
 
     ``cost`` is optional, like ``ImageOutput.complexity``: every fresh run
     sets it, but older or externally-produced ``output.yaml`` files

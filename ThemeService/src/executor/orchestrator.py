@@ -93,9 +93,10 @@ class Pipeline:
         both *before* any node runs.
         """
         graph: nx.DiGraph = nx.DiGraph()
-        # ``text`` is optional: apps with no copy overrides don't get a
-        # text node, so it's filtered out of the level-0 sibling set
-        # rather than producing a no-op root.
+        # ``text`` / ``icon`` / ``category`` are optional: an app with no copy
+        # overrides, no icon overrides, or no declared classification
+        # vocabulary doesn't get that node, so it's filtered out of the
+        # level-0 sibling set rather than producing a no-op root.
         nodes = [
             node_set.color,
             node_set.font,
@@ -105,6 +106,8 @@ class Pipeline:
             nodes.append(node_set.text)
         if node_set.icon is not None:
             nodes.append(node_set.icon)
+        if node_set.category is not None:
+            nodes.append(node_set.category)
         for node in nodes:
             graph.add_node(node.key, node=node)
         known = {node.key for node in nodes}
@@ -360,6 +363,15 @@ class Pipeline:
                     "icon node did not resolve — output has no icon "
                     "overrides"
                 )
+        category = resolved.get(DependencyKind.CATEGORY.value)
+        if category is None and run_ctx.app.categories:
+            # The classification node was built (the app declares a
+            # vocabulary) but failed. ``None`` is the honest answer — the
+            # writer then falls back to any category the run already carried,
+            # so a provider blip never drops a listed theme out of the picker.
+            logger.error(
+                "classification node did not resolve — output has no category"
+            )
         image_set = ImageSet(
             images={
                 slot.id: resolved[slot.id]
@@ -371,6 +383,7 @@ class Pipeline:
             app=run_ctx.app.id,
             display_name=run_ctx.app.display_name,
             design_name=run_ctx.cust.design_direction.name,
+            category=category.value if category is not None else None,
             image_set=image_set,
             color_set=palette,
             font_set=font_set,
