@@ -3,18 +3,29 @@ import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
 import 'package:mobile_app/features/home/data/schedule_dates.dart';
+import 'package:mobile_app/shared/widgets/class_reserved_tag.dart';
 
-/// Class title + gym / date / instructor / attending block, from the real
-/// occurrence.
+/// Class title + reserved status + gym / date / instructor / attending block,
+/// from the real occurrence.
+///
+/// The order is deliberate: what this class IS, then where the member STANDS
+/// with it, then the facts. The reservation is the member's own relationship
+/// to the class, so it is answered before the details rather than being left
+/// to be inferred from a "Cancel reservation" button at the far end of the
+/// screen.
 class ClassMetaSection extends StatelessWidget {
   const ClassMetaSection({
     super.key,
     required this.occurrence,
     required this.gymName,
+    this.reserved = false,
   });
 
   final ClassOccurrence occurrence;
   final String gymName;
+
+  /// The member holds this occurrence.
+  final bool reserved;
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +34,7 @@ class ClassMetaSection extends StatelessWidget {
       spacing: DesignConstants.spacingMedium,
       children: [
         Text(occurrence.className, style: DesignConstants.h1),
+        if (reserved) const ClassReservedTag(),
         _SpecificsBlock(occurrence: occurrence, gymName: gymName),
       ],
     );

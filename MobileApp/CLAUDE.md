@@ -441,8 +441,8 @@ Typed exceptions live in `lib/core/errors/exceptions.dart`:
 - **`NetworkException`** — timeout / connection failure (the gate treats this as
   offline).
 - **`ServerException`** — a backend error response; carries `statusCode`, the
-  FastAPI `detail` string (when `detail` is a plain string), and the raw decoded
-  `data` (for a structured `detail`).
+  FastAPI `detail` string (when `detail` is a plain string), the raw decoded
+  `data` (for a structured `detail`), and the `code` getter below.
 - **`ForbiddenException`** — a `403`, a subtype of `ServerException` so existing
   `on ServerException` handlers still catch it; catch it first to show the
   role-specific message. **Never signs the user out** (that's the 401 path).
@@ -450,6 +450,87 @@ Typed exceptions live in `lib/core/errors/exceptions.dart`:
 Repositories **throw + describe**; blocs **log + handle** and surface a
 user-friendly message. Every bloc-backed screen renders explicit loading / loaded
 / error states with a retry path.
+
+### Branch on the backend's `code`, NEVER on its message text
+
+Where a backend domain publishes a machine-readable error `code`, it rides the
+wire as a **sibling** of `detail`, never nested inside it:
+
+```json
+{"detail": "Class is not active", "code": "class_inactive"}
+```
+
+`ServerException.code` reads it (`data['code']` when it is a non-empty String,
+else null) — **one place, never re-parsed at a call site**. The backend is
+explicit that the exception TYPE is the single source of truth for both the
+HTTP status and the code, and that `detail` is prose that may be reworded
+freely (`../FastApiBackend/src/checkin/checkin_exceptions.py`). So a client that
+sniffs the message (`detail.contains('full')`) turns a backend copy edit into a
+silent behaviour change. Codes are additive by contract — they are never
+renamed or repurposed — so switching on them is safe and sniffing never is.
+
+- **A null code is "fall back to `detail`", not "no error".** Most domains
+  publish no code at all, and even in a domain that does, the generic
+  `except ValueError -> 400` arm emits a bare `detail`.
+- **Map codes to member-facing copy in ONE typed place, with an `unknown`
+  fallback** (the resilient-enum rule). `BookingRejection`
+  (`features/class_booking/data/booking_rejection.dart`) is the reference: it
+  mirrors the reservation subset of the backend's `CheckinErrorCode`, pairs
+  each code with plain member wording (the raw `detail` is engineer-speak —
+  "Not a class occurrence on that date" means nothing to a member), and
+  degrades an unrecognised or absent code to the backend's `detail` and then
+  to a generic message. **A rejection is never blank.**
+- The bloc resolves the copy; the widget only renders `state.errorMessage`.
+  Never let a screen re-decide what a rejection says — that reintroduces the
+  second source of truth this rule removes.
+- `BookingState.fullClass` is a **derived getter** (`rejection == classFull`),
+  not a stored flag, so the designed inline full-class state can only be
+  reached through the code.
+- Reserve and cancel share the same classification helper. `DELETE …/signup`
+  raises no typed rejection today (it 200s with `removed: false` when there was
+  nothing to remove), so the mapping is inert there — deliberately, so the two
+  paths cannot drift if one is ever added.
+
+## A reservation is STATED, never inferred
+
+A member must be able to see that they hold a class without reading a
+destructive action. The class detail used to signal it only by the footer
+button reading "Cancel reservation" — status inferred from the presence of a
+way to undo it, which is backwards.
+
+- **`ClassReservedTag` (`shared/widgets/class_reserved_tag.dart`) is the app's
+  ONE mark for "the member holds this occurrence."** Both places a reservation
+  can be seen use it — the schedule board's `ClassListItem` row and the class
+  detail's `ClassMetaSection` — so it reads as the same object everywhere.
+  Never fork a second treatment. It is **`accent`**-toned, not
+  `primaryColor`: accent is the selection / active-state role and a held
+  reservation is a state, not an action, which also stops it competing with
+  the footer's Reserve CTA (primary orange). Its surface recipe is
+  `ErrorMessage`'s (tinted fill + hairline border + glyph + label) so the
+  screen's positive and negative statuses read as one system; only the
+  geometry differs — a self-sizing pill, not a full-width banner. **It is not
+  tappable**: cancelling stays the footer's single confirmed action.
+- **On the detail it sits between the class TITLE and the specifics block** —
+  what the class is, then where the member stands with it, then the facts. Not
+  next to the footer: a status line beside the Cancel button would restate the
+  same thing twice in one glance.
+- **`ClassDetailArgs.booked` is a SEED, not the truth.** It paints the right
+  state on the first frame (the board joined its occurrences against the
+  member's reservations), but it is a claim made by whoever navigated here —
+  and `UpcomingSessionRow` hardcodes `booked: true`, while the board's flags
+  vanish entirely whenever `HomeBloc`'s best-effort class-history leg fails.
+  So the live screen dispatches `BookingReservationSyncRequested` on mount and
+  re-derives `booked` from the member's OWN open reservations
+  (`MemberClassHistoryRepository`, matched on `ClassOccurrence.slotKey`).
+  A wrong or missing flag cannot survive the first read, so nobody taps
+  "Reserve" on a class they already hold.
+  - The confirm is **best-effort and silent**: a failure keeps the seed and
+    surfaces nothing (the screen's job is the class, and reserve is idempotent
+    anyway).
+  - It applies **only while `BookingState.isUntouched`** (not busy, both
+    success tokens still 0). Once the member has reserved or cancelled here,
+    their action is the truth and a late read must never undo it.
+  - Capture path only skips it (`live` false) — there is no member session.
 
 ## Live-session rules
 

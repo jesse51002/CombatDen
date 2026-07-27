@@ -6,6 +6,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/network/api_client.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/class_booking/bloc/booking_bloc.dart';
+import 'package:mobile_app/features/class_booking/bloc/booking_event.dart';
 import 'package:mobile_app/features/class_booking/bloc/booking_state.dart';
 import 'package:mobile_app/features/class_booking/data/class_detail_args.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_booking_footer.dart';
@@ -16,6 +17,7 @@ import 'package:mobile_app/features/class_booking/presentation/widgets/class_ins
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_location_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_meta_section.dart';
 import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
+import 'package:mobile_app/features/home/data/repositories/member_class_history_repository.dart';
 import 'package:mobile_app/features/home/data/repositories/member_signup_repository.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/features/profile/bloc/member_profile_event.dart';
@@ -27,6 +29,14 @@ import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 /// In the app it reads the tapped occurrence + its booked state from the route
 /// [ClassDetailArgs]; the capture harness injects [occurrence] directly (with
 /// [captureController] / [imageKey] / [reserveKey], and no live blocs).
+///
+/// **The route's `booked` flag is a SEED, not the truth.** It paints the right
+/// state on the first frame (the board already joined its occurrences against
+/// the member's reservations), but it is a claim made by whoever navigated
+/// here. On the live path the screen immediately confirms it against the
+/// member's own reservations
+/// ([BookingReservationSyncRequested]) so a wrong or missing flag can't leave
+/// a member staring at "Reserve" for a class they already hold.
 class ClassScreen extends StatelessWidget {
   const ClassScreen({
     super.key,
@@ -61,11 +71,19 @@ class ClassScreen extends StatelessWidget {
     if (occ == null) return const _MissingClass();
 
     return BlocProvider<BookingBloc>(
-      create: (_) => BookingBloc(
-        repository: MemberSignupRepository(apiClient: ApiClient()),
-        occurrence: occ,
-        initiallyBooked: initialBooked,
-      ),
+      create: (_) {
+        final apiClient = ApiClient();
+        final bloc = BookingBloc(
+          repository: MemberSignupRepository(apiClient: apiClient),
+          historyRepository:
+              MemberClassHistoryRepository(apiClient: apiClient),
+          occurrence: occ,
+          initiallyBooked: initialBooked,
+        );
+        // Live only — the capture path has no member session to read.
+        if (live) bloc.add(const BookingReservationSyncRequested());
+        return bloc;
+      },
       child: _ClassDetailView(
         occurrence: occ,
         live: live,
@@ -183,9 +201,13 @@ class _Body extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: DesignConstants.spacingBig,
         children: [
-          ClassMetaSection(
-            occurrence: occurrence,
-            gymName: selectedMember.gymName ?? '',
+          BlocBuilder<BookingBloc, BookingState>(
+            buildWhen: (p, c) => p.booked != c.booked,
+            builder: (context, state) => ClassMetaSection(
+              occurrence: occurrence,
+              gymName: selectedMember.gymName ?? '',
+              reserved: state.booked,
+            ),
           ),
           if (_hasDescription) ...[
             const SectionDivider(),

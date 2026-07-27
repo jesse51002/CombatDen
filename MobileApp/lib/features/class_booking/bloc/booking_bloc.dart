@@ -6,33 +6,80 @@ import 'package:mobile_app/core/errors/exceptions.dart';
 import 'package:mobile_app/core/state/selected_member.dart';
 import 'package:mobile_app/features/class_booking/bloc/booking_event.dart';
 import 'package:mobile_app/features/class_booking/bloc/booking_state.dart';
+import 'package:mobile_app/features/class_booking/data/booking_rejection.dart';
 import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
+import 'package:mobile_app/features/home/data/repositories/member_class_history_repository.dart';
 import 'package:mobile_app/features/home/data/repositories/member_signup_repository.dart';
+
+const String _kReserveFallback =
+    'Could not reserve your spot. Please try again.';
+const String _kCancelFallback = 'Could not cancel. Please try again.';
+const String _kGenericFallback = 'Something went wrong. Please try again.';
 
 /// Reserve / cancel a member's spot on one class occurrence.
 ///
 /// Addresses the occurrence by its ORIGINAL slot
 /// `(class_id, original_date, original_time)`, echoed VERBATIM from the board.
-/// An idempotent repeat (`already_signed_up`) is treated as a reserve success;
-/// a full class is surfaced as a distinct [BookingState.fullClass] error, other
-/// 4xx as the backend's `detail`.
+/// An idempotent repeat (`already_signed_up`) is treated as a reserve success.
+///
+/// **A rejection is classified by the backend's `code`, never by its message.**
+/// The wire shape is `{"detail": "...", "code": "class_full"}` and the backend
+/// treats the exception type as the sole source of truth for the code, so the
+/// prose may be reworded at any time. [BookingRejection] owns the
+/// code -> member-facing copy mapping; this bloc only resolves it and emits it.
 class BookingBloc extends Bloc<BookingEvent, BookingState> {
   final MemberSignupRepository _repository;
+  final MemberClassHistoryRepository _historyRepository;
   final ClassOccurrence _occurrence;
 
   BookingBloc({
     required MemberSignupRepository repository,
+    required MemberClassHistoryRepository historyRepository,
     required ClassOccurrence occurrence,
     required bool initiallyBooked,
   })  : _repository = repository,
+        _historyRepository = historyRepository,
         _occurrence = occurrence,
         super(BookingState(booked: initiallyBooked)) {
     on<BookingReserveRequested>(_onReserve);
     on<BookingCancelRequested>(_onCancel);
+    on<BookingReservationSyncRequested>(_onReservationSync);
   }
 
   String? get _memberId => selectedMember.memberId;
   String? get _gymId => selectedMember.gymId;
+
+  /// Confirm the seeded `booked` flag against the member's own open
+  /// reservations — the same feed the board joins on, read for this member
+  /// directly so a wrong (or missing) route argument cannot survive.
+  ///
+  /// Best-effort by design: a failure keeps the seeded value and surfaces
+  /// nothing. The screen's job is the class; a banner about a background
+  /// confirmation would be noise, and the reserve call is idempotent anyway.
+  Future<void> _onReservationSync(
+    BookingReservationSyncRequested event,
+    Emitter<BookingState> emit,
+  ) async {
+    final gymId = _gymId;
+    final memberId = _memberId;
+    if (gymId == null || memberId == null) return;
+
+    try {
+      final history = await _historyRepository.getHistory(
+        gymId: gymId,
+        memberId: memberId,
+      );
+      final booked = history.upcoming.any(
+        (r) => r.slotKey == _occurrence.slotKey,
+      );
+      // Only a seed correction: once the member has reserved or cancelled
+      // here, THEIR action is the truth and a late read must not undo it.
+      if (!state.isUntouched || booked == state.booked) return;
+      emit(state.copyWith(booked: booked));
+    } catch (e, st) {
+      log('BookingBloc: reservation sync failed', error: e, stackTrace: st);
+    }
+  }
 
   Future<void> _onReserve(
     BookingReserveRequested event,
@@ -45,7 +92,6 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
     emit(state.copyWith(
       status: BookingStatus.reserving,
-      fullClass: false,
       clearError: true,
     ));
     try {
@@ -64,15 +110,7 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         clearError: true,
       ));
     } on ServerException catch (e) {
-      final detail = e.detail;
-      final isFull = detail != null && detail.toLowerCase().contains('full');
-      emit(state.copyWith(
-        status: BookingStatus.error,
-        fullClass: isFull,
-        errorMessage: isFull
-            ? 'Class is full'
-            : (detail ?? 'Could not reserve your spot. Please try again.'),
-      ));
+      emit(_rejected(e, _kReserveFallback));
     } catch (e, st) {
       log('BookingBloc: reserve failed', error: e, stackTrace: st);
       emit(state.copyWith(
@@ -93,7 +131,6 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
 
     emit(state.copyWith(
       status: BookingStatus.cancelling,
-      fullClass: false,
       clearError: true,
     ));
     try {
@@ -113,10 +150,11 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
         clearError: true,
       ));
     } on ServerException catch (e) {
-      emit(state.copyWith(
-        status: BookingStatus.error,
-        errorMessage: e.detail ?? 'Could not cancel. Please try again.',
-      ));
+      // Same treatment as reserve: the cancel route today can only 200 or
+      // fail generically, but it shares the rejection path, so classifying by
+      // code costs nothing and is already right if a typed rejection is ever
+      // added to it.
+      emit(_rejected(e, _kCancelFallback));
     } catch (e, st) {
       log('BookingBloc: cancel failed', error: e, stackTrace: st);
       emit(state.copyWith(
@@ -126,8 +164,20 @@ class BookingBloc extends Bloc<BookingEvent, BookingState> {
     }
   }
 
+  /// Classify a backend refusal by its `code` and pick the copy: our own
+  /// member-facing wording for a code we know, else the backend's `detail`,
+  /// else [fallback]. Never blank.
+  BookingState _rejected(ServerException e, String fallback) {
+    final rejection = BookingRejection.fromCode(e.code);
+    return state.copyWith(
+      status: BookingStatus.error,
+      rejection: rejection,
+      errorMessage: rejection.memberMessage ?? e.detail ?? fallback,
+    );
+  }
+
   String _networkMessage(Object e) {
     if (e is NetworkException) return e.message;
-    return 'Something went wrong. Please try again.';
+    return _kGenericFallback;
   }
 }

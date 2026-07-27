@@ -9,6 +9,7 @@ import 'package:mobile_app/features/home/bloc/home_bloc.dart';
 import 'package:mobile_app/features/home/bloc/home_event.dart';
 import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
 import 'package:mobile_app/features/home/data/schedule_dates.dart';
+import 'package:mobile_app/shared/widgets/class_reserved_tag.dart';
 
 /// One occurrence row on the schedule board. Taps open the class detail with
 /// the occurrence + its booked state; on return the home board refetches
@@ -109,29 +110,9 @@ class _ClassInfo extends StatelessWidget {
             style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
           ),
         _AttendingCount(count: occurrence.signupCount),
-        if (booked) const _BookedConfirmation(),
-      ],
-    );
-  }
-}
-
-class _BookedConfirmation extends StatelessWidget {
-  const _BookedConfirmation();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Icon(
-          Symbols.check_sharp,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.text,
-          size: DesignConstants.iconSizeXs,
-        ),
-        Text('You booked this class!', style: DesignConstants.h3),
+        // The same mark the class detail shows — one vocabulary for
+        // "you hold this", so the board and the detail can't drift.
+        if (booked) const ClassReservedTag(),
       ],
     );
   }

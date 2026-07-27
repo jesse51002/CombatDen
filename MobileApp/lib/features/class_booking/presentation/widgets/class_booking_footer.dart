@@ -16,6 +16,11 @@ import 'package:mobile_app/shared/widgets/error_message.dart';
 /// confirm step) when booked. A full class and other 4xx surface as a designed
 /// inline error above the button; reserve / cancel success are handled by the
 /// screen's listeners (navigate to the booked screen / show a confirmation).
+///
+/// The footer is the ACTION half of the screen's reservation story; the
+/// affirmative "you hold this" half is [ClassReservedTag] up in the meta
+/// block. Cancel is deliberately the only thing down here — a status line
+/// beside it would just restate what the tag already said.
 class ClassBookingFooter extends StatelessWidget {
   const ClassBookingFooter({super.key, this.buttonKey});
 
@@ -65,11 +70,13 @@ class ClassBookingFooter extends StatelessWidget {
                   DesignConstants.paddingBig,
                   0,
                 ),
+                // One source of copy: the bloc already resolved the backend's
+                // machine-readable `code` to member-facing wording
+                // (BookingRejection), so the footer never re-decides what a
+                // rejection says.
                 child: ErrorMessage(
-                  message: state.fullClass
-                      ? 'This class is full — try another time.'
-                      : (state.errorMessage ??
-                          'Something went wrong. Please try again.'),
+                  message: state.errorMessage ??
+                      'Something went wrong. Please try again.',
                 ),
               ),
             Padding(

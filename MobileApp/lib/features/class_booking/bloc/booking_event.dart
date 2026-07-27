@@ -17,3 +17,16 @@ class BookingReserveRequested extends BookingEvent {
 class BookingCancelRequested extends BookingEvent {
   const BookingCancelRequested();
 }
+
+/// Confirm `booked` against the member's OWN reservations, rather than
+/// trusting the flag whoever navigated here passed in.
+///
+/// Fired once when the live screen mounts. The route argument is only a seed
+/// for the first frame — it is right in the common case (the board joins its
+/// occurrences against the same reservations), but it is a claim made by the
+/// caller, and a caller that gets it wrong shows "Reserve" for a class the
+/// member already holds. This event makes the screen self-correcting so that
+/// can't survive past the first read.
+class BookingReservationSyncRequested extends BookingEvent {
+  const BookingReservationSyncRequested();
+}

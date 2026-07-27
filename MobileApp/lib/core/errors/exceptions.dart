@@ -22,6 +22,31 @@ class ServerException implements Exception {
     this.data,
   });
 
+  /// The backend's stable machine-readable error discriminator, when the
+  /// domain publishes one.
+  ///
+  /// It rides the wire as a **sibling** of `detail`, never nested inside it:
+  ///
+  /// ```json
+  /// {"detail": "Class is not active", "code": "class_inactive"}
+  /// ```
+  ///
+  /// **Branch on this, never on [detail].** The backend treats the exception
+  /// TYPE as the single source of truth for both the status and the code
+  /// (`FastApiBackend/src/checkin/checkin_exceptions.py`), and states outright
+  /// that the message text is not part of the contract — it may be reworded
+  /// at any time. Sniffing prose turns a copy edit into a silent behaviour
+  /// change here.
+  ///
+  /// Null when the body carries no code: most domains publish none, and even
+  /// in a domain that does, the generic `except ValueError -> 400` arm emits
+  /// a bare `detail`. A null code means "fall back to [detail]", never "no
+  /// error".
+  String? get code {
+    final raw = data?['code'];
+    return raw is String && raw.isNotEmpty ? raw : null;
+  }
+
   @override
   String toString() => detail != null ? '$message — $detail' : message;
 }
