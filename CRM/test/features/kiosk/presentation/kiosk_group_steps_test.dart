@@ -7,14 +7,11 @@ import 'package:crm/core/auth/employee_role.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_session_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_consent_check.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_search.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_roster_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_optional_step.dart';
 import 'package:crm/features/member_details/data/models/duplicate_member_match.dart';
 import 'package:crm/features/member_details/data/models/members_management_create_request.dart';
@@ -23,6 +20,12 @@ import 'package:crm/features/member_details/data/models/members_management_updat
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_consent_check.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_roster_row.dart';
 import 'package:crm/features/memberships/data/repositories/memberships_repository.dart';
 
 class _MockMemberRepository extends Mock implements MemberRepository {}
@@ -92,6 +95,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
+          child: child!,
+        ),
         home: Scaffold(
           body: BlocProvider<KioskSignupCubit>.value(
             value: cubit,
@@ -124,9 +134,9 @@ void main() {
     cubit.skipPersonDetails();
     await pump(tester, const KioskPeopleStep());
 
-    expect(find.byType(KioskRosterRow), findsNWidgets(2));
+    expect(find.byType(FlowRosterRow), findsNWidgets(2));
     // The membership check is on EVERY row, not just the payer's.
-    expect(find.byType(KioskConsentCheck), findsNWidgets(2));
+    expect(find.byType(FlowConsentCheck), findsNWidgets(2));
     expect(find.text('Paying'), findsOneWidget);
     expect(find.text('New'), findsOneWidget);
     // Both were created here, so both may be corrected.
@@ -156,7 +166,7 @@ void main() {
     cubit.confirmMatch();
     await pump(tester, const KioskPeopleStep());
 
-    expect(find.byType(KioskRosterRow), findsNWidgets(2));
+    expect(find.byType(FlowRosterRow), findsNWidgets(2));
     expect(find.text('Member'), findsOneWidget);
     expect(find.text('Edit'), findsOneWidget);
     await cubit.close();
@@ -187,7 +197,7 @@ void main() {
 
     // Privacy on the one screen that lists EVERYBODY at once: a lobby queue
     // reads it over the member's shoulder, so no address is printed in full.
-    expect(find.byType(KioskRosterRow), findsNWidgets(2));
+    expect(find.byType(FlowRosterRow), findsNWidgets(2));
     expect(find.text('m•••••@gmail.com'), findsOneWidget);
     expect(find.text('e•••••@icloud.com'), findsOneWidget);
     expect(find.textContaining('marcus.bell@'), findsNothing);
@@ -216,7 +226,7 @@ void main() {
     cubit.skipPersonDetails();
     await pump(tester, const KioskPeopleStep());
 
-    expect(find.byType(KioskConsentCheck), findsNWidgets(2));
+    expect(find.byType(FlowConsentCheck), findsNWidgets(2));
     expect(
       find.text('Marcus is getting a membership as well'),
       findsOneWidget,
@@ -224,8 +234,8 @@ void main() {
     expect(find.text('Ella is getting a membership as well'), findsOneWidget);
     expect(cubit.state.persons.every((p) => p.training), isTrue);
     // The check sits on its OWN line under the identity row, not inline.
-    final row = tester.getRect(find.byType(KioskRosterRow).first);
-    final check = tester.getRect(find.byType(KioskConsentCheck).first);
+    final row = tester.getRect(find.byType(FlowRosterRow).first);
+    final check = tester.getRect(find.byType(FlowConsentCheck).first);
     expect(check.top, greaterThan(row.top));
     expect(tester.takeException(), isNull);
     await cubit.close();
@@ -251,8 +261,8 @@ void main() {
       find.textContaining('we need at least one to carry on'),
       findsOneWidget,
     );
-    final primary = tester.widget<KioskPrimaryButton>(
-      find.widgetWithText(KioskPrimaryButton, 'It\'s just me'),
+    final primary = tester.widget<FlowPrimaryButton>(
+      find.widgetWithText(FlowPrimaryButton, 'It\'s just me'),
     );
     expect(primary.onPressed, isNull);
 
@@ -267,8 +277,8 @@ void main() {
     );
     expect(
       tester
-          .widget<KioskPrimaryButton>(
-            find.widgetWithText(KioskPrimaryButton, 'It\'s just me'),
+          .widget<FlowPrimaryButton>(
+            find.widgetWithText(FlowPrimaryButton, 'It\'s just me'),
           )
           .onPressed,
       isNotNull,
@@ -325,7 +335,7 @@ void main() {
     await pump(tester, const KioskPeopleStep());
 
     expect(find.text('It\'s just me'), findsOneWidget);
-    expect(find.byType(KioskRosterRow), findsOneWidget);
+    expect(find.byType(FlowRosterRow), findsOneWidget);
     expect(find.text('Add someone new'), findsOneWidget);
     await cubit.close();
   });

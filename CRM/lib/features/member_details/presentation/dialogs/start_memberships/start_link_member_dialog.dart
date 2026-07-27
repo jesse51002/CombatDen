@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -11,9 +13,12 @@ import 'package:crm/features/member_details/bloc/member_detail_state.dart';
 import 'package:crm/features/member_details/data/models/member_summary.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
 import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_direction.dart';
-import 'package:crm/features/member_details/presentation/dialogs/start_memberships/payer_waiver_sign_body.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog.dart';
-import 'package:crm/shared/widgets/app_dialog/app_dialog_actions.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/authorize_payer_pane.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/link_select_panel.dart';
+import 'package:crm/features/member_details/presentation/dialogs/start_memberships/start_person_copy.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_dialog.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_foot.dart';
+import 'package:crm/features/member_details/presentation/dialogs/task_chrome/task_terminal.dart';
 import 'package:crm/shared/widgets/paginated_member_picker.dart';
 
 enum _LinkStep { select, sign, success, error }
@@ -27,6 +32,18 @@ enum _LinkStep { select, sign, success, error }
 ///   pick is a new payee the anchor pays for.
 /// - [AuthorizeDirection.addPayer] (payer step): the anchor is the payee; the
 ///   pick is a new authorized payer for the anchor.
+///
+/// The roster it searches is already filtered by the caller — anybody the
+/// anchor is authorized with is gone from it — so the list SAYS that. A name
+/// that can never appear is the one thing a search box cannot explain by
+/// itself, and staff otherwise spell it three ways before giving up.
+///
+/// [preselected] skips the search entirely: the payer switch can offer a
+/// person already on the run's roster, and making staff search for a name
+/// that is on screen is the annoyance that route exists to end. The
+/// authorization itself is unchanged — the same waiver, the same signature,
+/// the same commit — which is why it is this dialog opened on its sign step
+/// rather than a second authorization path.
 ///
 /// On confirm it dispatches [LinkParentRequested] (`memberId` = payee,
 /// `payerMemberId` = payer, who signs) and pops with the PICKED member's id so
@@ -44,15 +61,20 @@ class StartLinkMemberDialog extends StatefulWidget {
   final String anchorName;
 
   /// Roster to choose from; rows already related to the anchor
-  /// are excluded by the caller.
+  /// are excluded by the caller. Unread when [preselected] is given.
   final List<MemberSummary> candidates;
+
+  /// The person the authorization is FOR, when the caller already knows them.
+  /// The dialog opens on the sign step for them and never shows the search.
+  final MemberPickerEntry? preselected;
 
   const StartLinkMemberDialog({
     super.key,
     required this.direction,
     required this.anchorMemberId,
     required this.anchorName,
-    required this.candidates,
+    this.candidates = const [],
+    this.preselected,
   });
 
   static Future<String?> show({
@@ -60,7 +82,8 @@ class StartLinkMemberDialog extends StatefulWidget {
     required AuthorizeDirection direction,
     required String anchorMemberId,
     required String anchorName,
-    required List<MemberSummary> candidates,
+    List<MemberSummary> candidates = const [],
+    MemberPickerEntry? preselected,
   }) {
     return showDialog<String>(
       context: context,
@@ -71,6 +94,7 @@ class StartLinkMemberDialog extends StatefulWidget {
           anchorMemberId: anchorMemberId,
           anchorName: anchorName,
           candidates: candidates,
+          preselected: preselected,
         ),
       ),
     );
@@ -90,12 +114,21 @@ class _StartLinkMemberDialogState
 
   _LinkStep _step = _LinkStep.select;
 
-  MemberSummary? _selected;
+  MemberPickerEntry? _selected;
+
+  /// The select step's Continue is reading the waiver.
   bool _checking = false;
-  String? _checkError;
+
+  /// The sign step is reading the waiver — the preselected route only, which
+  /// enters the step before the read rather than after it.
+  bool _fetching = false;
+
+  /// The waiver read that failed, shown by whichever step is on screen.
+  String? _waiverError;
 
   String? _waiverVersionId;
   String _waiverBody = ''; // raw template body; rendered by the sign body
+  String? _waiverName;
   String _signerName = '';
   bool _consent = false;
   bool _submitting = false;
@@ -103,6 +136,17 @@ class _StartLinkMemberDialogState
   /// Snapshot of the bloc's refreshToken before dispatching,
   /// so we can detect a successful commit.
   int _tokenBefore = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    final known = widget.preselected;
+    if (known == null) return;
+    _selected = known;
+    _step = _LinkStep.sign;
+    _fetching = true;
+    unawaited(_openSignStep());
+  }
 
   /// The resolved (payer, payee) pair for the currently-picked member — null
   /// until one is picked.
@@ -113,10 +157,16 @@ class _StartLinkMemberDialogState
       direction: widget.direction,
       anchorId: widget.anchorMemberId,
       anchorName: widget.anchorName,
-      otherId: other.memberId,
-      otherName: other.fullName,
+      otherId: other.id,
+      otherName: other.name,
     );
   }
+
+  String get _payerName =>
+      _parties?.payerName ?? StartPersonCopy.fallbackPayer;
+
+  String get _payeeName =>
+      _parties?.payeeName ?? StartPersonCopy.fallbackPayee;
 
   Future<List<MemberPickerEntry>> _fetchPage(
     String query,
@@ -146,35 +196,59 @@ class _StartLinkMemberDialogState
         .toList();
   }
 
-  /// Select step → fetch the payee's gym default waiver and advance
-  /// to the sign step. No eligibility check — adding is unconditional;
-  /// the signed waiver is the only gate.
-  Future<void> _continueToSign() async {
+  /// Read the payee's gym default authorized-payer waiver into the sign step.
+  /// Both routes in run this ONE read; they differ only in where they wait.
+  /// No eligibility check — adding is unconditional; the signed waiver is the
+  /// only gate.
+  Future<bool> _readWaiver() async {
     final parties = _parties;
-    if (parties == null || _checking) return;
-    setState(() {
-      _checking = true;
-      _checkError = null;
-    });
+    if (parties == null) return false;
     try {
       final waiver = await _repository.getAuthorizedPayerWaiver(
         parties.payeeId,
       );
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
-        _checking = false;
         _waiverVersionId = waiver.versionId;
         _waiverBody = waiver.body;
-        _step = _LinkStep.sign;
+        _waiverName = waiver.name;
       });
+      return true;
     } catch (_) {
-      if (!mounted) return;
-      setState(() {
-        _checking = false;
-        _checkError = "We couldn't load the waiver. "
-            'Please try again.';
-      });
+      return false;
     }
+  }
+
+  /// Select step → read the waiver, then advance. The step is left only once
+  /// the agreement is in hand, so the sign step it lands on is never a
+  /// spinner.
+  Future<void> _continueToSign() async {
+    if (_parties == null || _checking) return;
+    setState(() {
+      _checking = true;
+      _waiverError = null;
+    });
+    final landed = await _readWaiver();
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      if (landed) {
+        _step = _LinkStep.sign;
+      } else {
+        _waiverError = StartPersonCopy.waiverLoadFailed;
+      }
+    });
+  }
+
+  /// The preselected route: the sign step is already on screen, so the read
+  /// resolves INTO it — its spinner, then its agreement or its failure.
+  Future<void> _openSignStep() async {
+    final landed = await _readWaiver();
+    if (!mounted) return;
+    setState(() {
+      _fetching = false;
+      if (!landed) _waiverError = StartPersonCopy.waiverLoadFailed;
+    });
   }
 
   bool get _canSign =>
@@ -215,7 +289,7 @@ class _StartLinkMemberDialogState
             !state.isMutating) {
           // Committed — pop with the PICKED member's id so the
           // wizard can add/select them.
-          final pickedId = _selected?.memberId;
+          final pickedId = _selected?.id;
           setState(() {
             _submitting = false;
             _step = _LinkStep.success;
@@ -232,15 +306,18 @@ class _StartLinkMemberDialogState
         }
       },
       builder: (context, state) {
-        final isSign = _step == _LinkStep.sign;
-        return AppDialog(
+        final signing = _step == _LinkStep.sign;
+        return TaskDialog(
+          what: StartPersonCopy.findWhat,
+          onClose: _submitting ? null : () => Navigator.of(context).pop(),
+          closeTooltip: StartPersonCopy.closeSemantic,
           title: _title,
-          body: isSign
-              ? _signBody()
-              : _step == _LinkStep.select
-                  ? _selectBody()
-                  : _terminalBody(state),
-          actions: _actions(context, state),
+          subtitle: _subtitle,
+          expanded: true,
+          fillBody: signing || _step == _LinkStep.select,
+          maxWidth: DesignConstants.dialogContentMaxWidth,
+          body: _body(state),
+          foot: _foot(context),
         );
       },
     );
@@ -249,162 +326,121 @@ class _StartLinkMemberDialogState
   String get _title {
     switch (_step) {
       case _LinkStep.sign:
-        return 'Sign authorized-payer waiver';
+        return StartPersonCopy.signTitle(_payerName, _payeeName);
       case _LinkStep.success:
-        return 'Payer authorized';
+        return _kSuccessTitle;
       case _LinkStep.error:
-        return 'Authorization failed';
+        return _kErrorTitle;
       case _LinkStep.select:
-        return widget.direction == AuthorizeDirection.addPayee
-            ? 'Add someone ${widget.anchorName} pays for'
-            : 'Add a payer for ${widget.anchorName}';
+        return StartPersonCopy.findTitle;
     }
   }
 
-  String get _selectIntro {
-    if (widget.direction == AuthorizeDirection.addPayee) {
-      return "The picked member joins ${widget.anchorName}'s paying "
-          'account. ${widget.anchorName} signs an authorization '
-          'for them next.';
+  String? get _subtitle {
+    switch (_step) {
+      case _LinkStep.sign:
+        return StartPersonCopy.signSubtitle;
+      case _LinkStep.select:
+        return StartPersonCopy.findSubtitle(
+          direction: widget.direction,
+          anchorName: widget.anchorName,
+        );
+      case _LinkStep.success:
+      case _LinkStep.error:
+        return null;
     }
-    return 'The picked member becomes an authorized payer for '
-        "${widget.anchorName} and signs ${widget.anchorName}'s "
-        'waiver next.';
+  }
+
+  Widget _body(MemberDetailState state) {
+    switch (_step) {
+      case _LinkStep.select:
+        return _selectBody();
+      case _LinkStep.sign:
+        return AuthorizePayerPane(
+          // Both are false on the search route — it reads the waiver BEFORE
+          // entering this step. The preselected route enters first, so it is
+          // the one that can be seen loading or failing here.
+          fetching: _fetching,
+          error: _waiverError,
+          payerName: _payerName,
+          payeeName: _payeeName,
+          gymName: selectedGym.gymName ?? '',
+          waiverBody: _waiverBody,
+          waiverName: _waiverName,
+          submitting: _submitting,
+          onChanged: (name, consent) => setState(() {
+            _signerName = name;
+            _consent = consent;
+          }),
+        );
+      case _LinkStep.success:
+        return TaskTerminal(
+          icon: Symbols.check_circle_sharp,
+          color: DesignConstants.goodGreen,
+          message: StartPersonCopy.signSuccess(_payerName, _payeeName),
+        );
+      case _LinkStep.error:
+        return TaskTerminal(
+          icon: Symbols.error_sharp,
+          color: DesignConstants.badRed,
+          message: state is MemberDetailLoaded
+              ? (state.actionError ?? StartPersonCopy.unexpectedError)
+              : StartPersonCopy.unexpectedError,
+        );
+    }
   }
 
   Widget _selectBody() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Text(
-          _selectIntro,
-          style: DesignConstants.p.copyWith(
-            color: DesignConstants.text,
-          ),
-        ),
-        SizedBox(
-          height: DesignConstants.dialogMemberPickerHeight,
-          child: PaginatedMemberPicker(
-            fetchPage: _fetchPage,
-            pageSize: _pageSize,
-            selectedId: _selected?.memberId,
-            expand: true,
-            onSelected: (entry) {
-              final match = widget.candidates.where(
-                (m) => m.memberId == entry.id,
-              );
-              setState(() {
-                _selected = match.isEmpty ? null : match.first;
-                _checkError = null;
-              });
-            },
-          ),
-        ),
-        if (_checkError != null)
-          Text(
-            _checkError!,
-            style: DesignConstants.pSmall.copyWith(
-              color: DesignConstants.badRed,
-            ),
-          ),
-      ],
-    );
-  }
-
-  Widget _signBody() {
-    final parties = _parties;
-    return PayerWaiverSignBody(
-      payerName: parties?.payerName ?? 'The payer',
-      payeeName: parties?.payeeName ?? 'this member',
-      gymName: selectedGym.gymName ?? '',
-      waiverBody: _waiverBody,
-      enabled: !_submitting,
-      onChanged: (name, consent) => setState(() {
-        _signerName = name;
-        _consent = consent;
+    return LinkSelectPanel(
+      direction: widget.direction,
+      anchorName: widget.anchorName,
+      fetchPage: _fetchPage,
+      pageSize: _pageSize,
+      selectedId: _selected?.id,
+      error: _waiverError,
+      onSelected: (entry) => setState(() {
+        _selected = entry;
+        _waiverError = null;
       }),
     );
   }
 
-  Widget _terminalBody(MemberDetailState state) {
-    if (_step == _LinkStep.success) {
-      final parties = _parties;
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingLarge,
-        children: [
-          Icon(
-            Symbols.check_circle_sharp,
-            size: DesignConstants.iconSizeBig,
-            weight: DesignConstants.iconWeight,
-            color: DesignConstants.goodGreen,
-          ),
-          Text(
-            '${parties?.payerName ?? 'The payer'} is now authorized '
-            'to pay for ${parties?.payeeName ?? 'this member'}.',
-            style: DesignConstants.p.copyWith(
-              color: DesignConstants.text,
-            ),
-          ),
-        ],
-      );
-    }
-    final msg = state is MemberDetailLoaded
-        ? (state.actionError ?? 'An unexpected error occurred.')
-        : 'An unexpected error occurred.';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Icon(
-          Symbols.error_sharp,
-          size: DesignConstants.iconSizeBig,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.badRed,
-        ),
-        Text(
-          msg,
-          style: DesignConstants.p.copyWith(
-            color: DesignConstants.badRed,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget? _actions(
-    BuildContext context,
-    MemberDetailState state,
-  ) {
+  Widget _foot(BuildContext context) {
     switch (_step) {
       case _LinkStep.select:
-        return AppDialogActions(
-          primaryLabel: 'Continue',
-          isLoading: _checking,
-          primaryOnPressed: _selected == null || _checking
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.findPrimary,
+          busy: _checking,
+          onPrimary: _selected == null || _checking
               ? null
               : _continueToSign,
-          secondaryLabel: 'Cancel',
-          secondaryOnPressed: () =>
-              Navigator.of(context).pop(),
+          secondaryLabel: StartPersonCopy.cancel,
+          onSecondary: () => Navigator.of(context).pop(),
         );
       case _LinkStep.sign:
-        return AppDialogActions(
-          primaryLabel: 'Authorize payer',
-          isLoading: _submitting,
-          primaryOnPressed: _canSign ? _confirmSign : null,
-          secondaryLabel: 'Back',
-          secondaryOnPressed: _submitting
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.signPrimary,
+          busy: _submitting,
+          onPrimary: _canSign ? _confirmSign : null,
+          secondaryLabel: StartPersonCopy.back,
+          // There is no search to go back TO when the person was handed in,
+          // so Back leaves — onto the surface that named them, which is where
+          // picking them again (and so re-reading a waiver that failed) is.
+          onSecondary: _submitting
               ? null
-              : () => setState(() => _step = _LinkStep.select),
+              : widget.preselected != null
+                  ? () => Navigator.of(context).pop()
+                  : () => setState(() => _step = _LinkStep.select),
         );
       case _LinkStep.success:
       case _LinkStep.error:
-        return AppDialogActions(
-          primaryLabel: 'Close',
-          primaryOnPressed: () => Navigator.of(context).pop(),
+        return TaskFoot(
+          primaryLabel: StartPersonCopy.close,
+          onPrimary: () => Navigator.of(context).pop(),
         );
     }
   }
 }
+
+const String _kSuccessTitle = 'Payer authorized';
+const String _kErrorTitle = 'Authorization failed';

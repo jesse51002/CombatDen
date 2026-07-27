@@ -434,6 +434,14 @@ class DesignConstants {
   // none restates a size. The admin ramp (h1/h2/h3/p, `AppPrimaryButton`,
   // `AppOutlineButton`) is untouched by any of it.
   //
+  // The SIGNUP lane reads them one hop away, through
+  // `MembershipFlowScale.kiosk()`
+  // (`features/membership_flow/config/membership_flow_scale.dart`): its
+  // components render two surfaces at two reading distances, so they ask for
+  // a ROLE and the surface's scale picks the token. That scale SELECTS
+  // between these tokens and restates none of them, so this ramp stays the
+  // one source of the numbers.
+  //
   // The ladder, largest first (see each token's own doc for its role):
   //   kioskStreakNum 112 · kioskDisplay 40 · kioskMetric 30 ·
   //   kioskPanelTitle 25 · kioskStatement 22 · kioskFieldText 22 ·
@@ -441,7 +449,11 @@ class DesignConstants {
   //   kioskSubtitle 18 · kioskButtonOutlineLabel 17 ·
   //   kioskButtonGhostLabel 17 · kioskBody 17 ·
   //   kioskLabel 16 · kioskSectionText 16 · kioskCaption 15 ·
-  //   kioskMicro 13 · kioskMonoValue 13 · kioskEyebrow 12 · kioskTag 11
+  //   kioskMicro 13 · kioskMonoValue 13 · eyebrow 12 · tag 11
+  //
+  // The last two carry no `kiosk` prefix: they measure the same at BOTH
+  // reading distances, so they are shared roles rather than kiosk ones. They
+  // are still the tail of this ladder and still move with it.
   //
   // Like the other text getters these carry `color: text`; callers apply a
   // muted color for a role that reads as secondary (e.g. a section's
@@ -605,7 +617,7 @@ class DesignConstants {
 
   /// A literal value rendered as a kiosk chip — the sign-in email on the "Get
   /// the app" card's step 2. Geist Mono at body size so an address reads
-  /// unambiguously (l/1, O/0), untracked — unlike [kioskEyebrow], which is a
+  /// unambiguously (l/1, O/0), untracked — unlike [eyebrow], which is a
   /// tracked uppercase micro-label.
   static TextStyle get kioskMonoValue => monoFont.copyWith(
         fontWeight: FontWeight.w600,
@@ -614,11 +626,16 @@ class DesignConstants {
         letterSpacing: 0,
       );
 
-  /// The kiosk's tracked mono eyebrow ("YOUR POINTS", "IN THE APP", "WHY") — a
+  /// The tracked mono EYEBROW ("YOUR POINTS", "IN THE APP", "WHY") — a
   /// Geist-Mono micro-label above the thing it names. Muted and
   /// letter-tracked (lifted to [text2nd] — see the contrast note at the top
   /// of this ramp).
-  static TextStyle get kioskEyebrow => monoFont.copyWith(
+  ///
+  /// Unprefixed because it is the same size at BOTH reading distances: a
+  /// tracked 12px mono label is already at the floor where tracking still
+  /// reads, so the kiosk has nothing to step up to. It is the tail of the
+  /// kiosk ladder and a shared role — see `MembershipFlowScale`.
+  static TextStyle get eyebrow => monoFont.copyWith(
         fontWeight: FontWeight.w600,
         fontSize: 12,
         color: text2nd,
@@ -627,10 +644,12 @@ class DesignConstants {
 
   /// A TAG pinned on artwork or the tiniest meta line — a reward tile's price
   /// pill, the rank ladder's RESTING belt names (its featured rung steps up to
-  /// [kioskLabel]), a showcase video's view count (w500). The one kiosk role
-  /// that stays genuinely tiny: it always sits ON an image or inside a dense
-  /// strip.
-  static TextStyle get kioskTag => baseFont.copyWith(
+  /// [kioskLabel]), a showcase video's view count (w500). The one role that
+  /// stays genuinely tiny: it always sits ON an image or inside a dense strip.
+  ///
+  /// Unprefixed for the same reason as [eyebrow] — a tag pinned on artwork is
+  /// sized by the artwork, not by how far away the reader is standing.
+  static TextStyle get tag => baseFont.copyWith(
         fontWeight: FontWeight.w700,
         fontSize: 11,
         color: text,
@@ -677,17 +696,7 @@ class DesignConstants {
   /// a single control.
   static const double kioskAdoptMeasure = 640.0;
 
-  /// Content measure for a signup step's FORM panel — the width the field
-  /// panel is capped at (and centred within) on the wide kiosk stage.
-  ///
-  /// A form stretched across a full iPad puts a member's eye through a
-  /// half-metre sweep between a label and its box; capping the panel keeps
-  /// each 2-up field pair inside one comfortable scan. Wider than
-  /// [kioskAdoptMeasure] because this holds two side-by-side controls, not
-  /// one sentence.
-  static const double kioskFormMeasure = 860.0;
-
-  /// Height of the kiosk's date WHEEL (`KioskDobField`'s bottom sheet).
+  /// Height of the kiosk's date WHEEL (`FlowDobField`'s bottom sheet).
   ///
   /// A `CupertinoDatePicker` has no intrinsic height — it must be given a
   /// bounded box — and the value is a MEASURE, not a type size, so it lives
@@ -704,9 +713,13 @@ class DesignConstants {
   // not a separate scale — the primary label sits with [kioskName] (19) and
   // the outline label between [kioskSubtitle] (18) and [kioskBody] (17).
   // Applied ONLY through `KioskPrimaryButton` / `KioskOutlineButton`
-  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`) so the whole
-  // kiosk button set scales together and no call site restates a size; the
-  // admin app keeps the `AppPrimaryButton` / `AppOutlineButton` defaults.
+  // (`features/kiosk/presentation/widgets/kiosk_buttons.dart`, the check-in
+  // lane) and through `MembershipFlowScale.kiosk()` →
+  // `FlowPrimaryButton` / `FlowOutlineButton`
+  // (`features/membership_flow/presentation/chrome/flow_buttons.dart`, the
+  // signup lane) so the whole kiosk button set scales together and no call
+  // site restates a size; the admin app keeps the `AppPrimaryButton` /
+  // `AppOutlineButton` defaults.
 
   /// Kiosk PRIMARY button label — 19px semibold.
   static TextStyle get kioskButtonPrimaryLabel => baseFont.copyWith(
@@ -763,6 +776,107 @@ class DesignConstants {
     horizontal: 18,
     vertical: 13,
   );
+
+  // ══ MEMBERSHIP-FLOW DESK ROLES ══
+  // The membership purchase runs on TWO surfaces — the kiosk's standing-
+  // distance iPad and the staff dialog read from a desk — through one
+  // component set that asks `MembershipFlowScale` for a ROLE
+  // (`features/membership_flow/config/`). The kiosk side of that scale
+  // resolves to the `kiosk*` ramp above; the desk side resolves to the ADMIN
+  // ramp (`h1` / `big2` / `h2` / `h3` / `p`, `eyebrow`, `tag`), which already
+  // carries almost every role it needs.
+  //
+  // These are the handful it does NOT. Each is a role the admin ramp has no
+  // rung for, sized from the approved desk mockups rather than invented, and
+  // each carries the `flow` prefix because it belongs to the purchase flow at
+  // desk scale — not to the app generally. `eyebrow` and `tag` stay unprefixed
+  // and shared: they measure the same at both reading distances.
+  //
+  // They are ADDITIVE. Nothing above them moves — the kiosk ramp and the admin
+  // ramp are both untouched by anything here, which
+  // `test/features/kiosk/presentation/kiosk_type_ramp_test.dart` asserts.
+
+  /// The desk's ONE important line set apart — a picked membership's plan
+  /// name, and the amount on a buy row. 17px semibold: a clear step over the
+  /// admin `h2` (16) it sits beside, without reaching `h1`'s 24, because a
+  /// dialog carrying several of these must not read as several titles.
+  static TextStyle get flowStatement => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 17,
+        color: text,
+        letterSpacing: -0.3,
+      );
+
+  /// A person's NAME at the desk — a roster row, the "who is this for" strip,
+  /// the review's identity line. 15px semibold, one rung under
+  /// [flowStatement]: staff scan a column of these against the memberships
+  /// beside them, so a name must not out-weigh what is being sold.
+  static TextStyle get flowName => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 15,
+        color: text,
+        letterSpacing: -0.15,
+      );
+
+  // ── Desk button scale ──
+  // The flow's buttons sit inside a 1100px dialog, so they run a step under
+  // the kiosk's (19/17px labels) and a step OVER the app's own
+  // `AppPrimaryButton` defaults (13px / 16x8) — a dialog whose primary action
+  // is the same size as a table's row button reads as having no primary
+  // action. Applied only through
+  // `features/membership_flow/presentation/chrome/flow_buttons.dart`, via
+  // `MembershipFlowScale.admin()`, so no call site restates a size.
+
+  /// Desk flow button label — 14px semibold, shared by the primary and the
+  /// outline tier. The two differ by FILL and box, never by type size.
+  static TextStyle get flowButtonLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w600,
+        fontSize: 14,
+        color: text,
+        letterSpacing: -0.1,
+      );
+
+  /// Desk flow GHOST (escape) label — [flowButtonLabel]'s size at a lighter
+  /// weight, in [text2nd]. Demoted by weight and ink, never by shrinking:
+  /// the way out of a purchase has to stay findable.
+  static TextStyle get flowButtonGhostLabel => baseFont.copyWith(
+        fontWeight: FontWeight.w500,
+        fontSize: 14,
+        color: text2nd,
+        letterSpacing: -0.1,
+      );
+
+  /// Desk flow PRIMARY button box — 13/26 padding.
+  static const EdgeInsets flowButtonPrimaryPadding = EdgeInsets.symmetric(
+    horizontal: 26,
+    vertical: 13,
+  );
+
+  /// Desk flow OUTLINE button box — 11/22 padding. One step tighter than the
+  /// primary on both axes.
+  static const EdgeInsets flowButtonOutlinePadding = EdgeInsets.symmetric(
+    horizontal: 22,
+    vertical: 11,
+  );
+
+  /// Desk flow GHOST button box — 10/14 padding. It has no chrome to balance,
+  /// and its horizontal value doubles as the optical pull that lands the
+  /// ghost's glyph on the step's content rail (see `FlowFoot`).
+  static const EdgeInsets flowButtonGhostPadding = EdgeInsets.symmetric(
+    horizontal: 14,
+    vertical: 10,
+  );
+
+  /// Content measure for a purchase step's FORM panel — the width the field
+  /// panel is capped at (and centred within) on BOTH surfaces.
+  ///
+  /// One number for two stages because they measure the same: the kiosk
+  /// stage's content width (1180 − 2×32) and the desk dialog's (1100 minus its
+  /// own padding) land within a few pixels of each other, so the same form
+  /// transplants between them. A form stretched across either one puts the
+  /// reader's eye through a half-metre sweep between a label and its box;
+  /// capping the panel keeps each 2-up field pair inside one comfortable scan.
+  static const double flowFormMeasure = 860.0;
 
   /// H2 text style (semibold, 16)
   static TextStyle get h2 => baseFont.copyWith(

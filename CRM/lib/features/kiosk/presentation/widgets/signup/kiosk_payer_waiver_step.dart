@@ -8,13 +8,14 @@ import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/core/utils/waiver_render.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_sign_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_doc_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_waiver_status.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_sign_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_doc_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_waiver_status.dart';
 import 'package:crm/features/memberships/presentation/widgets/waiver_markdown_editor.dart';
 
 /// E3 — the authorized-payer agreement, one per payee.
@@ -109,26 +110,36 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
       },
       builder: (context, state) {
         final controller = _controller;
-        return KioskSignupStepScaffold(
+        // Kiosk-only step: the desk's wizard has no authorized-payer run, so
+        // this head lives on the kiosk's own copy. The QUEUE is walked here —
+        // it reads state — and only the facts the line interpolates go over.
+        final copy = kioskStepCopy(context);
+        final queue = state.waiverPersonQueue;
+        return KioskStepScaffold(
           step: KioskSignupStep.waivers,
-          title: 'You\'re paying for ${state.activePerson.firstName}',
-          subtitle: _subtitle(state),
+          title: copy.payerWaiverStepTitle(state.activePerson.firstName),
+          subtitle: copy.payerWaiverStepSubtitle(
+            index: state.waiverPersonIndex,
+            total: queue.isEmpty ? 1 : queue.length,
+            remaining: _remaining(state),
+          ),
           // Names the payee this agreement is about. This run is always per
           // person, so it is never omitted here.
-          identity: KioskWhoFor(
+          identity: FlowWhoFor(
             eyebrow: 'PAYING FOR',
             name: _name(state.activePerson),
           ),
           fillBody: true,
-          foot: KioskFlowFoot(
+          foot: FlowFoot(
             primaryLabel: 'Sign and continue',
             onPrimary: _canSign(state)
                 ? () => cubit.signPayerAuth(signerName: _signerName.text)
                 : null,
             onBack: state.submitting ? null : cubit.back,
+            onEscape: cubit.abandon,
           ),
           child: controller == null
-              ? KioskWaiverStatus(
+              ? FlowWaiverStatus(
                   loading: state.payerAuthLoading,
                   failed: state.payerAuthFailed,
                   onRetry: cubit.retryPayerAuth,
@@ -150,18 +161,17 @@ class _KioskPayerWaiverStepState extends State<KioskPayerWaiverStep> {
     );
   }
 
-  /// "Person 1 of 2 · Ella, then Theo" — the run counts PEOPLE.
-  String _subtitle(KioskSignupState state) {
+  /// Who is still to be authorised, this person first — the queue read off
+  /// state, which is why it stays here rather than in the copy. Only the first
+  /// two survive: that is all the line names ("Ella, then Theo"), and a longer
+  /// list would be a fact nobody reads.
+  List<String> _remaining(KioskSignupState state) {
     final queue = state.waiverPersonQueue;
-    final total = queue.isEmpty ? 1 : queue.length;
-    final position = 'Person ${state.waiverPersonIndex + 1} of $total';
-    final rest = [
+    return [
       for (var i = state.waiverPersonIndex; i < queue.length; i++)
         if (queue[i] >= 0 && queue[i] < state.persons.length)
           state.persons[queue[i]].firstName,
-    ].where((n) => n.trim().isNotEmpty).toList();
-    if (rest.length < 2) return position;
-    return '$position · ${rest.first}, then ${rest[1]}';
+    ].where((n) => n.trim().isNotEmpty).take(2).toList();
   }
 }
 
@@ -197,12 +207,12 @@ class _Body extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         if (state.payerAuthStale)
-          const KioskInlineNotice(
+          const FlowInlineNotice(
             message: 'The gym updated this agreement — please read and sign '
                 'the new version.',
           ),
         if (state.payerAuthFailed)
-          KioskInlineNotice(
+          FlowInlineNotice(
             message: 'That didn\'t go through. Please try again.',
             onRetry: onRetry,
           ),
@@ -213,7 +223,7 @@ class _Body extends StatelessWidget {
             children: [
               Expanded(
                 flex: 3,
-                child: KioskWaiverDocPanel(
+                child: FlowWaiverDocPanel(
                   title: state.payerAuthWaiver?.name ??
                       'Authorized Payer Agreement',
                   controller: controller,
@@ -222,7 +232,7 @@ class _Body extends StatelessWidget {
               Expanded(
                 flex: 2,
                 child: SingleChildScrollView(
-                  child: KioskSignPanel(
+                  child: FlowSignPanel(
                     memberName: payerName,
                     eyebrow: 'YOU ARE SIGNING',
                     bannerNote: 'Authorising yourself to pay for $payeeName.',

@@ -2,14 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_group_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_side_panel.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_result_item.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_status.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_price_response.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_group_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_side_panel.dart';
 
 /// The review's left half, on the two things it must not get wrong.
 ///
@@ -28,6 +32,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
+          child: child!,
+        ),
         home: Scaffold(body: SingleChildScrollView(child: panel)),
       ),
     );
@@ -39,7 +50,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewSidePanel(state: _soloState()),
+        _soloPanel(_soloState()),
       );
 
       expect(find.text('m•••••@gmail.com'), findsOneWidget);
@@ -53,7 +64,7 @@ void main() {
         (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewSidePanel(state: _soloState(email: '')),
+        _soloPanel(_soloState(email: '')),
       );
 
       expect(find.textContaining('•'), findsNothing);
@@ -67,7 +78,7 @@ void main() {
         'charged do not', (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupStateAfterPartial()),
+        _groupPanel(_groupStateAfterPartial()),
       );
 
       expect(find.text('Marcus Bell'), findsOneWidget);
@@ -83,7 +94,7 @@ void main() {
     testWidgets('nothing is marked before a start has landed', (tester) async {
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupState()),
+        _groupPanel(_groupState()),
       );
 
       // The mark is derived from a LANDED response, never from a person who
@@ -98,7 +109,7 @@ void main() {
       // marking them STARTED would claim a membership they never bought.
       await pumpPanel(
         tester,
-        KioskReviewGroupPanel(state: _groupStateAfterPartial(payerTrains: false)),
+        _groupPanel(_groupStateAfterPartial(payerTrains: false)),
       );
 
       expect(find.text('STARTED'), findsOneWidget);
@@ -107,6 +118,17 @@ void main() {
     });
   });
 }
+
+/// The panels through the kiosk's own readers, so the mapping the live review
+/// uses is what these assertions exercise — not a hand-built fixture that
+/// could mask a masking or marking regression in it.
+FlowReviewSidePanel _soloPanel(KioskSignupState state) => FlowReviewSidePanel(
+      person: kioskReviewPerson(state, state.activePerson),
+      signed: kioskSignedWaivers(state),
+    );
+
+FlowReviewGroupPanel _groupPanel(KioskSignupState state) =>
+    FlowReviewGroupPanel(people: kioskReviewPeople(state));
 
 MembershipPlanResponse _plan() => MembershipPlanResponse(
       planId: 'plan-1',

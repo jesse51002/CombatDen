@@ -5,8 +5,11 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
-import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+// The flow's own button set, not the kiosk's: this popup is raised from INSIDE
+// the signup lane, under the surface's `MembershipFlowScale`.
+import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
 
 /// The answer behind a plan card the member cannot pick — ONE popup, whichever
 /// reason closed it.
@@ -18,17 +21,22 @@ import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart'
 /// dead-end the signup at the review). The reason varies, never the popup:
 /// every string and the glyph come from `kiosk_plan_block_copy.dart`.
 ///
+/// **Kiosk-only, and it stays that way.** The shared plan CARD keeps its
+/// blocked / dimmed / tagged visual — that is what both surfaces show — but
+/// this popup carries the auto-return countdown (no screen may hold a shared
+/// iPad forever) and the lane's own member-voice wording. The desk has neither.
+///
 /// Warm [DesignConstants.yellowDark], never red — nothing is broken and nobody
 /// did anything wrong. The grid stays live behind it, so "Pick a membership"
 /// dismisses rather than navigates; the blocked plan was never selected, so
 /// nothing has to be undone. The countdown sits INSIDE the popup and is not a
-/// cooldown: no screen may hold a shared iPad forever, and a timer drawn behind
-/// a popup would take the surface away unseen.
+/// cooldown: a timer drawn behind a popup would take the surface away unseen.
 class KioskPlanBlock extends StatelessWidget {
   const KioskPlanBlock({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final scale = MembershipFlowTheme.of(context);
     final cubit = context.read<KioskSignupCubit>();
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
@@ -66,12 +74,12 @@ class KioskPlanBlock extends StatelessWidget {
                         _BlockIcon(reason: reason),
                         Text(
                           kioskPlanBlockTitle(reason),
-                          style: DesignConstants.kioskPanelTitle,
+                          style: scale.panelTitle,
                           textAlign: TextAlign.center,
                         ),
                         Text(
                           kioskPlanBlockBody(state, reason),
-                          style: DesignConstants.kioskBody.copyWith(
+                          style: scale.body.copyWith(
                             color: DesignConstants.text2nd,
                           ),
                           textAlign: TextAlign.center,
@@ -112,8 +120,8 @@ class _Actions extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingMedium,
       children: [
-        KioskPrimaryButton(text: 'Pick a membership', onPressed: onPick),
-        KioskOutlineButton(text: 'Get help at the desk', onPressed: onHelp),
+        FlowPrimaryButton(text: 'Pick a membership', onPressed: onPick),
+        FlowOutlineButton(text: 'Get help at the desk', onPressed: onHelp),
       ],
     );
   }

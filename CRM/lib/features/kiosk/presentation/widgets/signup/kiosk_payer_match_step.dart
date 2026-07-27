@@ -4,11 +4,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_step_copy.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_match_card.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_form_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_form_panel.dart';
 import 'package:crm/shared/widgets/intrinsic_wrap.dart';
 
 /// "Is this you?" — the person who started this signup already has an account
@@ -24,6 +25,7 @@ class KioskPayerMatchStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cubit = context.read<KioskSignupCubit>();
     return BlocBuilder<KioskSignupCubit, KioskSignupState>(
       buildWhen: (prev, cur) =>
           prev.matchCandidate != cur.matchCandidate ||
@@ -32,18 +34,18 @@ class KioskPayerMatchStep extends StatelessWidget {
       builder: (context, state) {
         final match = state.matchCandidate;
         if (match == null) return const SizedBox.shrink();
-        return KioskSignupStepScaffold(
+        // Kiosk-only step: the desk never confronts the payer with their own
+        // duplicate, so this head lives on the kiosk's own copy. The route it
+        // was reached by is the fact the answering line branches on.
+        final copy = kioskStepCopy(context);
+        return KioskStepScaffold(
           step: KioskSignupStep.payerMatch,
-          title: 'Is this you?',
-          // On the identify route they already told us they have an account;
-          // on the duplicate route it is the news.
-          subtitle: state.payerMatchFromIdentify
-              ? 'Tap yes and we\'ll use this account. Nothing new gets '
-                  'created.'
-              : 'You already have an account here. If it\'s you, we\'ll use '
-                  'it instead of making a second one.',
-          foot: const KioskFlowFoot(onPrimary: null),
-          child: KioskSignupFormPanel(
+          title: copy.payerMatchStepTitle,
+          subtitle: copy.payerMatchStepSubtitle(
+            fromIdentify: state.payerMatchFromIdentify,
+          ),
+          foot: FlowFoot(onPrimary: null, onEscape: cubit.abandon),
+          child: FlowFormPanel(
             children: [
               KioskMatchCard(match: match),
               _Decide(busy: state.submitting),

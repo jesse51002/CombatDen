@@ -73,7 +73,7 @@ void main() {
       final purple = tester.widget<Text>(find.text('Purple'));
       expect(purple.style?.fontSize, DesignConstants.kioskLabel.fontSize);
       final white = tester.widget<Text>(find.text('White'));
-      expect(white.style?.fontSize, DesignConstants.kioskTag.fontSize);
+      expect(white.style?.fontSize, DesignConstants.tag.fontSize);
       expect(white.style?.color, DesignConstants.text2nd);
     });
 

@@ -8,7 +8,7 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// The results receipt's footer: a hairline, the return countdown, then the
 /// screen's decisions — the shape every kiosk TERMINAL wears.
 ///
-/// Deliberately NOT `KioskFlowFoot`, which carries the ghost escape in its left
+/// Deliberately NOT `FlowFoot`, which carries the ghost escape in its left
 /// gutter by construction: money has moved by the time this screen renders, so
 /// there is nothing to start over. The escape pattern belongs to steps that can
 /// be corrected or abandoned, never to a terminal.

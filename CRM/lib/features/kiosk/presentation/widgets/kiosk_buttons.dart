@@ -10,6 +10,14 @@ import 'package:crm/shared/widgets/app_primary_button.dart';
 /// (escape) tier. The ONLY place the kiosk button tokens are applied, so the
 /// whole set scales as one and no call site restates a size. Loudest first:
 /// [KioskPrimaryButton] > [KioskOutlineButton] > [KioskGhostButton].
+///
+/// **The two sets are a deliberate split, not a duplicate.** This one PINS the
+/// `kiosk*` tokens, for the lanes that are kiosk-only and never render at a
+/// second scale; the membership flow's `flow_buttons.dart` reads the surface's
+/// `MembershipFlowScale` instead, so it can render at the desk's size too.
+/// Both are thin wrappers over the same shared [AppPrimaryButton] /
+/// [AppOutlineButton], so the split is wiring rather than logic, and under
+/// `MembershipFlowScale.kiosk()` the two resolve to identical metrics.
 
 /// The kiosk's primary action — the brand gradient CTA at kiosk scale.
 ///

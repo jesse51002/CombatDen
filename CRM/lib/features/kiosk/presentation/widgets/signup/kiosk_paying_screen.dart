@@ -6,7 +6,7 @@ import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_stage.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// D7 — the locked wait while the charge is in flight.
@@ -93,7 +93,7 @@ class _Amount extends StatelessWidget {
             ),
             style: DesignConstants.kioskMetric,
           ),
-        KioskCardChip(brand: state.cardBrand, last4: state.cardLast4),
+        FlowCardChip(brand: state.cardBrand, last4: state.cardLast4),
       ],
     );
   }

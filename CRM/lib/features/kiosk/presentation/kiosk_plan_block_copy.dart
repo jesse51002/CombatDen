@@ -2,7 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_labels.dart';
+import 'package:crm/features/membership_flow/domain/name_labels.dart';
 
 /// The plan block's member-facing words — the ONE place a
 /// [KioskPlanBlockReason] becomes a sentence, mirroring
@@ -69,7 +69,7 @@ String _trialBody(bool isGroup, String firstName) {
 /// no name resolvable at all (a held plan the gym no longer offers) it falls
 /// back to the unnamed form rather than printing a blank.
 String _heldBody(bool isGroup, String firstName, List<String> planNames) {
-  final plans = kioskNameList(planNames);
+  final plans = flowNameList(planNames);
   const soloTail = 'Anything else on the list is open — or the coach at the '
       'desk can change your plan.';
   const groupTail = 'Anything else on the list is open — or the coach at the '
@@ -117,7 +117,7 @@ String kioskPlanBlockTag(KioskPlanBlockReason reason) {
 String? kioskHeldPlanNotice(KioskSignupState state) {
   final names = state.heldPlanNames;
   if (names.isEmpty) return null;
-  final plans = kioskNameList(names);
+  final plans = flowNameList(names);
   final marked = names.length == 1
       ? 'It\'s marked below so you don\'t buy it twice.'
       : 'They\'re marked below so you don\'t buy them twice.';

@@ -10,8 +10,11 @@ import 'package:crm/features/kiosk/bloc/kiosk_flow_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_flow_state.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_welcome_screen.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 
 class _MockKioskFlowCubit extends MockCubit<KioskFlowState>
     implements KioskFlowCubit {}
@@ -78,6 +81,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
+          child: child!,
+        ),
         home: Scaffold(
           body: MultiBlocProvider(
             providers: [
@@ -99,7 +109,7 @@ void main() {
     // The welcome still welcomes them — they are a member of this gym.
     expect(find.text('Welcome to Iron Den, Marcus!'), findsOneWidget);
     // And the one thing the greeting cannot say on its own.
-    expect(find.byType(KioskInlineNotice), findsOneWidget);
+    expect(find.byType(FlowInlineNotice), findsOneWidget);
     expect(
       find.text('Some memberships didn\'t go through — ask the front desk to '
           'finish them.'),
@@ -113,7 +123,7 @@ void main() {
     await pumpWelcome(tester, afterPartial: false);
 
     expect(find.text('Welcome to Iron Den, Marcus!'), findsOneWidget);
-    expect(find.byType(KioskInlineNotice), findsNothing);
+    expect(find.byType(FlowInlineNotice), findsNothing);
     expect(find.textContaining('front desk'), findsNothing);
     expect(tester.takeException(), isNull);
   });
