@@ -31,18 +31,24 @@ class SettingsTimezoneChanged extends SettingsEvent {
   List<Object?> get props => [timezone];
 }
 
-/// The user saved the Gym profile (name + logo). NOT optimistic: the repo
-/// saves first; only on success does `selectedGym` update and the saved count
-/// bump. [logoUrl] carries the current logo (null = none / cleared) so the
-/// single PUT keeps patch semantics when only the name changed.
+/// The user saved the Gym profile (name + address + logo). NOT optimistic: the
+/// repo saves first; only on success does `selectedGym` update and the saved
+/// count bump. [address] and [logoUrl] carry their current values (null =
+/// none / cleared) so the single PUT keeps patch semantics when only one of
+/// the three changed.
 class GymProfileSaveRequested extends SettingsEvent {
   final String gymName;
+  final String? address;
   final String? logoUrl;
 
-  const GymProfileSaveRequested({required this.gymName, required this.logoUrl});
+  const GymProfileSaveRequested({
+    required this.gymName,
+    required this.address,
+    required this.logoUrl,
+  });
 
   @override
-  List<Object?> get props => [gymName, logoUrl];
+  List<Object?> get props => [gymName, address, logoUrl];
 }
 
 /// Dismiss the inline error after a failed save was surfaced.

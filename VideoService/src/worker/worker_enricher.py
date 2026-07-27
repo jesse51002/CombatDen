@@ -29,7 +29,7 @@ runs and logged as POOL-LEVEL cost rows (gym_id / run_id NULL) in a ``finally``,
 an abort / exception mid-sweep still records the dollars already incurred.
 
 Thumbnail fallback: the pool's stored ``thumbnail_url`` is whatever resolution the
-scrape found (``worker_transforms._best_thumbnail`` prefers YouTube's ``maxres``
+scrape found (``worker_transforms.best_thumbnail`` prefers YouTube's ``maxres``
 variant), but ``maxresdefault`` only exists for HD uploads — an older/non-HD video
 404s on it, which litellm surfaces as an image-fetch ``BadRequestError`` on the
 multimodal call. YouTube always serves ``hqdefault`` for a live video, so a call

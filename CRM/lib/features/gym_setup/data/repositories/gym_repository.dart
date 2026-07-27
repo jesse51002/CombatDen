@@ -28,13 +28,18 @@ class GymRepository {
   /// the three contract values. Throws
   /// [DatabaseException] for every other failure mode
   /// with a user-facing message.
+  ///
+  /// [address] is optional — pass null when the owner
+  /// skipped the wizard's address field.
   Future<GymCreateResponse> createGym({
     required String gymName,
+    String? address,
     required String firstName,
     required String lastName,
   }) async {
     final request = GymCreateRequest(
       gymName: gymName,
+      address: address,
       ownerFirstName: firstName,
       ownerLastName: lastName,
     );

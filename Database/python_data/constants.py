@@ -19,6 +19,15 @@ MEMBERS_PER_GYM = 100
 # Members (per gym) that get a real Supabase auth login (the rest are
 # staff-managed CRM rows with no auth account).
 AUTH_MEMBERS_PER_GYM = 5
+# The known member-app test login. THREE member rows share this email (a
+# family root + one of its linked children + an independent member — assigned
+# in generators/members.py) so the member app's multi-profile picker is
+# exercisable every day: sign in as member1@test.com / DEFAULT_PASSWORD and
+# GET /api/v1/member/members returns all three. The auth user is created
+# regardless of list position (see api_creation/members.py). Their names stay
+# Faker-generated, so the backend's same-identity duplicate gate (name+email)
+# never trips.
+TEST_MEMBER_EMAIL = "member1@test.com"
 # Age band a seeded ADULT member's date_of_birth is drawn from. The column is
 # nullable, but a blank one reads as a broken field on the CRM member page, so
 # the seed always fills it. Shapes generated data only — not a validation

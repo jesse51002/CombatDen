@@ -8,8 +8,9 @@ are shown, flagged). Past and future render from the SAME computation: the
 version owning an occurrence's original slot is immutable, so the past always
 re-renders identically — there is no stored-occurrence side, no
 materialize-on-read, and no past/live dedup. Each occurrence is enriched with
-the resolved instructor name, the per-occurrence instance/range-exception
-flags, and the attendance / sign-up counts (all keyed by the occurrence's
+the class description, the resolved instructor (name, public bio, photo), the
+per-occurrence instance/range-exception flags, and the attendance / sign-up
+counts (all keyed by the occurrence's
 full identity, ``(class_id, original_date, original_time)`` — two same-day
 slots enrich independently).
 
@@ -32,6 +33,7 @@ Two INDEPENDENT visibility rules sit on top of that — never entangle them:
 import asyncio
 import logging
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from uuid import UUID
 
@@ -58,6 +60,26 @@ from src.shared.db_rows import fetch_all
 from src.shared.sql_loader import load_sql
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class InstructorInfo:
+    """A gym employee resolved for schedule-board display.
+
+    Carries exactly the fields the board renders for an occurrence's effective
+    instructor: the display name plus the optional public bio and photo url.
+
+    Attributes:
+        name: ``first_name last_name``.
+        bio: The employee's public bio (``employee_public_description``); None
+            when unset.
+        image_url: The employee's photo (``employee_pic_url``); None when
+            unset.
+    """
+
+    name: str
+    bio: str | None
+    image_url: str | None
 
 
 class ClassesScheduleReaderService:
@@ -134,7 +156,7 @@ class ClassesScheduleReaderService:
             "end_date": count_end,
         }
         instructors, attendance, signups = await asyncio.gather(
-            self._instructor_names(gym_id),
+            self._instructor_directory(gym_id),
             self._occurrence_counts(
                 "classes_attendance_counts.sql",
                 "attendance_count",
@@ -213,7 +235,7 @@ class ClassesScheduleReaderService:
         range_rows: list[dict],
         start_date: date,
         end_date: date,
-        instructors: dict[str, str],
+        instructors: dict[str, InstructorInfo],
         attendance: dict[tuple[str, date, time], int],
         signups: dict[tuple[str, date, time], int],
         now: datetime,
@@ -291,12 +313,15 @@ class ClassesScheduleReaderService:
         instance_slots: set[tuple[date, time]],
         capacity_overrides: dict[tuple[date, time], int],
         range_rows: list[dict],
-        instructors: dict[str, str],
+        instructors: dict[str, InstructorInfo],
         attendance: dict[tuple[str, date, time], int],
         signups: dict[tuple[str, date, time], int],
     ) -> EffectiveClassInstanceResponse:
         """Assemble one enriched board row from an effective occurrence."""
-        instructor_name = (
+        # ``occ.instructor_id`` is the RESOLVED instructor (the expander has
+        # already applied any per-occurrence instance/range override), so the
+        # bio + photo follow the override exactly as the name does.
+        instructor = (
             instructors.get(str(occ.instructor_id))
             if occ.instructor_id is not None
             else None
@@ -322,7 +347,16 @@ class ClassesScheduleReaderService:
             resolved_class_time=occ.class_time,
             resolved_duration_minutes=occ.duration_minutes,
             resolved_instructor_id=occ.instructor_id,
-            resolved_instructor_name=instructor_name,
+            resolved_instructor_name=(
+                instructor.name if instructor else None
+            ),
+            class_description=class_row["class_description"],
+            resolved_instructor_bio=(
+                instructor.bio if instructor else None
+            ),
+            resolved_instructor_image_url=(
+                instructor.image_url if instructor else None
+            ),
             image_url=class_row["image_url"],
             points_worth=class_row["points_worth"],
             is_active=class_row["is_active"],
@@ -366,13 +400,21 @@ class ClassesScheduleReaderService:
 
     # -- loads -----------------------------------------------------------
 
-    async def _instructor_names(self, gym_id: UUID) -> dict[str, str]:
-        """Map ``employee_id`` -> ``"first_name last_name"`` for the gym."""
+    async def _instructor_directory(
+        self, gym_id: UUID
+    ) -> dict[str, InstructorInfo]:
+        """Map ``employee_id`` -> the instructor's board display info (name +
+        public bio + photo url) for the gym, used to resolve an occurrence's
+        effective instructor."""
         rows = await self._read_all(
             "classes_gym_instructors.sql", {"gym_id": str(gym_id)}
         )
         return {
-            str(row["employee_id"]): f"{row['first_name']} {row['last_name']}"
+            str(row["employee_id"]): InstructorInfo(
+                name=f"{row['first_name']} {row['last_name']}",
+                bio=row["employee_public_description"],
+                image_url=row["employee_pic_url"],
+            )
             for row in rows
         }
 

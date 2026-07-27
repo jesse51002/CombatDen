@@ -24,7 +24,8 @@ import 'package:crm/shared/widgets/hairline.dart';
 /// rule). Each section is **role-gated** (see [RolePolicy]); a role that can't
 /// use a section never sees it, and the hairlines interleave only the visible
 /// ones:
-///   1. Gym profile — the gym's name + uploaded logo (staff admin only)
+///   1. Gym profile — the gym's name, address + uploaded logo (staff admin
+///      only). AUTO-SAVES: no Save button; see [GymProfileSection].
 ///   2. Appearance — the System / Light / Dark theme control (any staff)
 ///   3. Gym timezone — the gym's IANA zone (staff admin only)
 ///   4. Reports & exports — download the gym's records as zipped CSVs (staff

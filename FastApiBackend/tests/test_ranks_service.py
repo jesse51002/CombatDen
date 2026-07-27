@@ -1681,3 +1681,399 @@ async def test_count_members_by_sub_index_none_gym_single_null_row():
     assert len(response.counts) == 1
     assert response.counts[0].sub_index is None
     assert response.counts[0].count == 7
+
+
+# ---------------------------------------------------------------------------
+# next_leaf_image_url — the NEXT rank's belt art (member-facing rank payload)
+# ---------------------------------------------------------------------------
+
+
+def _three_belt_ladder(gym_id, *, sub_rank_count: int) -> list[dict]:
+    """White / Blue / Purple, each with the same leaf count + belt art."""
+    return [
+        make_rank_row(
+            rank_id=str(uuid4()),
+            gym_id=str(gym_id),
+            main_rank_num_order=order,
+            name=name,
+            image_url=f"https://cdn.combatden.net/rank/{name.lower()}.png",
+            sub_rank_count=sub_rank_count,
+        )
+        for order, name in enumerate(["White", "Blue", "Purple"])
+    ]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_advances_within_main_rank():
+    """A member below the top sub-position gets the SAME main rank's art —
+    the next leaf is the next sub-position, not the next belt."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=1,
+    )
+
+    assert url == ladder[0]["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_rolls_over_to_next_main_rank():
+    """At the TOP sub-position the next leaf is the next MAIN rank's base
+    leaf, so the image is that belt's art."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=4,
+    )
+
+    assert url == ladder[1]["image_url"]
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_prefers_sub_rank_override():
+    """The per-sub override for the TARGET leaf wins over the main image —
+    the same COALESCE precedence the current leaf's image uses."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    override = "https://cdn.combatden.net/rank/white-2-stripes.png"
+    ladder[0]["sub_rank_image_overrides"] = {"2": override}
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=1,
+    )
+
+    assert url == override
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_is_none_at_top_of_ladder():
+    """Top main + top sub has no next leaf → None (the client falls back)."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result(), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[-1]["rank_id"],
+        sub_index=4,
+    )
+
+    assert url is None
+
+
+@pytest.mark.asyncio
+async def test_next_leaf_image_none_gym_is_main_to_main():
+    """On a 'none' gym every rank is its own leaf: the next image is the
+    next MAIN belt, and the top main has none."""
+    gym_id = uuid4()
+    ladder = _three_belt_ladder(gym_id, sub_rank_count=5)
+    session = _make_session_mock(
+        [_sub_type_result("none"), _result(ladder, many=True)],
+    )
+    reads = RanksReads(_make_pool_mock(session))
+
+    url = await reads.next_leaf_image_url(
+        gym_id,
+        ladder[0]["rank_id"],
+        sub_index=None,
+    )
+
+    assert url == ladder[1]["image_url"]
+
+    top_session = _make_session_mock(
+        [_sub_type_result("none"), _result(ladder, many=True)],
+    )
+    top_reads = RanksReads(_make_pool_mock(top_session))
+
+    assert (
+        await top_reads.next_leaf_image_url(
+            gym_id,
+            ladder[-1]["rank_id"],
+            sub_index=None,
+        )
+        is None
+    )
+
+
+# ---------------------------------------------------------------------------
+# rank_changed payload — BOTH leaves fully resolved (the promotion animation)
+# ---------------------------------------------------------------------------
+#
+# The member app plays an old-belt → new-belt animation once per new promotion,
+# driven by its own watermark. That only works if the activity row it reads
+# already carries the belt the member came FROM — the client holds no prior
+# rank. The URLs are SNAPSHOTS on purpose: gym_ranks.image_url and
+# sub_rank_image_overrides are user-writable, so re-uploading belt art must not
+# retroactively change what a past promotion looked like.
+
+
+def _belt(gym_id, *, order: int, name: str, subs: int, overrides=None) -> dict:
+    """One main rank carrying belt art (and optional per-sub overrides)."""
+    return make_rank_row(
+        rank_id=str(uuid4()),
+        gym_id=str(gym_id),
+        main_rank_num_order=order,
+        name=name,
+        image_url=f"https://cdn.combatden.net/rank/{name.lower()}.png",
+        sub_rank_count=subs,
+        sub_rank_image_overrides=overrides,
+    )
+
+
+@pytest.mark.asyncio
+async def test_promotion_payload_carries_both_sub_indices_and_both_images():
+    """A cross-belt promotion snapshots BOTH leaves in activity_info.
+
+    Stripes gym: the member sits at White's TOP sub-position, which carries a
+    per-sub OVERRIDE, and lands on Blue's base leaf, which has none. So the
+    payload proves both halves of the one image rule in a single row — the
+    override wins on the FROM side, the main image is the fallback on the TO
+    side — plus the two sub-indices the display names alone would lose.
+    """
+    gym_id = uuid4()
+    member_id = uuid4()
+    white_override = "https://cdn.combatden.net/rank/white-4-stripes.png"
+    white = _belt(
+        gym_id, order=0, name="White", subs=5, overrides={"4": white_override}
+    )
+    blue = _belt(gym_id, order=1, name="Blue", subs=5)
+
+    session = _make_session_mock(
+        [
+            _current(white["rank_id"], 4, gym_id),
+            _result([white, blue], many=True),
+            _sub_type_result("stripes"),
+            _result({"updated": True}),  # set_member_rank
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    payload = _params_for(session, "insert_rank_activity.sql")
+    assert payload["old_sub_index"] == 4
+    assert payload["new_sub_index"] == 0
+    # The FROM leaf's override beats White's main image.
+    assert payload["old_image_url"] == white_override
+    # The TO leaf has no override, so it falls back to Blue's main image.
+    assert payload["new_image_url"] == blue["image_url"]
+    # The names are unchanged by this addition.
+    assert payload["old_rank_name"] == "White · 4 Stripes"
+    assert payload["new_rank_name"] == "Blue"
+
+
+@pytest.mark.asyncio
+async def test_sub_only_promotion_resolves_two_different_images():
+    """A sub-only promotion (same rank_id, next sub-index) still yields TWO
+    DIFFERENT belt images.
+
+    This is the case a rank-id-keyed lookup gets wrong: nothing about the
+    main rank changed, so resolving art from the rank alone would animate a
+    belt into itself. The per-sub overrides are what make the two leaves
+    visually distinct, and both sides must be resolved at the LEAF."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    base = "https://cdn.combatden.net/rank/white-plain.png"
+    one_stripe = "https://cdn.combatden.net/rank/white-1-stripe.png"
+    white = _belt(
+        gym_id,
+        order=0,
+        name="White",
+        subs=5,
+        overrides={"0": base, "1": one_stripe},
+    )
+
+    session = _make_session_mock(
+        [
+            _current(white["rank_id"], 0, gym_id),
+            _result([white], many=True),
+            _sub_type_result("stripes"),
+            _result({"updated": True}),  # set_member_rank
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.promote_member(
+        RankPromoteMemberRequest(gym_id=gym_id, member_id=member_id),
+    )
+
+    payload = _params_for(session, "insert_rank_activity.sql")
+    assert payload["old_rank_id"] == payload["new_rank_id"]  # same main rank
+    assert (payload["old_sub_index"], payload["new_sub_index"]) == (0, 1)
+    assert payload["old_image_url"] == base
+    assert payload["new_image_url"] == one_stripe
+    assert payload["old_image_url"] != payload["new_image_url"]
+
+
+@pytest.mark.asyncio
+async def test_unassign_payload_leaves_the_new_side_null():
+    """Unassigning has no "to" leaf, so the new side is NULL throughout —
+    a belt is never fabricated for a leaf that doesn't exist."""
+    gym_id = uuid4()
+    member_id = uuid4()
+    white = _belt(gym_id, order=0, name="White", subs=5)
+
+    session = _make_session_mock(
+        [
+            _current(white["rank_id"], 2, gym_id),
+            _result([white], many=True),
+            _sub_type_result("stripes"),
+            _result({"updated": True}),  # set_member_rank
+            _result(None),  # insert_rank_activity
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.set_member_rank(
+        RankSetMemberRequest(gym_id=gym_id, member_id=member_id, rank_id=None),
+    )
+
+    payload = _params_for(session, "insert_rank_activity.sql")
+    assert payload["old_sub_index"] == 2
+    assert payload["old_image_url"] == white["image_url"]
+    assert payload["new_sub_index"] is None
+    assert payload["new_image_url"] is None
+    assert payload["new_rank_name"] is None
+
+
+def test_backfill_sql_keeps_the_old_side_null():
+    """The backfill writes no "from" leaf at all: every old_* key is a
+    literal NULL in the statement, and the new sub-index comes from the
+    UPDATE's own RETURNING so the payload records the leaf actually
+    written."""
+    body = _sql_body("backfill_lowest_rank.sql")
+    assert "'old_rank_id', NULL" in body
+    assert "'old_rank_name', NULL" in body
+    assert "'old_sub_index', NULL" in body
+    assert "'old_image_url', NULL" in body
+    assert "m.current_sub_index AS new_sub_index" in body
+    assert "'new_sub_index', b.new_sub_index" in body
+
+
+@pytest.mark.asyncio
+async def test_backfill_binds_derived_base_leaf_image():
+    """The backfill's new belt image is resolved at the BASE leaf through the
+    same one image rule — the base override beats the main image — and is
+    bound alongside the derived display name."""
+    gym_id = uuid4()
+    base_override = "https://cdn.combatden.net/rank/white-div-1.png"
+    lowest = _belt(
+        gym_id, order=0, name="White", subs=4, overrides={"0": base_override}
+    )
+
+    session = _make_session_mock(
+        [
+            _result(make_rank_row(rank_id=str(uuid4()), gym_id=str(gym_id))),
+            _result({"gym_id": gym_id, "is_rank_enabled": True}),
+            _result([lowest], many=True),  # backfill ladder read
+            _sub_type_result("div"),  # gym sub_rank_type
+            _result(None),  # backfill SQL
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.create_rank(
+        RankCreateRequest(
+            gym_id=gym_id,
+            main_rank_num_order=1,
+            name="Blue",
+            classes_to_next_major=10,
+        ),
+    )
+
+    params = _params_for(session, "backfill_lowest_rank.sql")
+    assert params["new_image_url"] == base_override
+    assert params["new_rank_name"] == "White · Div 1"
+
+
+@pytest.mark.asyncio
+async def test_backfill_none_gym_binds_main_image_for_the_null_leaf():
+    """On a 'none' gym the base leaf is NULL, so the dormant sub-index-0
+    override must NOT be picked up — the main belt image is what's stored."""
+    gym_id = uuid4()
+    lowest = _belt(
+        gym_id,
+        order=0,
+        name="White",
+        subs=4,
+        overrides={"0": "https://cdn.combatden.net/rank/dormant.png"},
+    )
+
+    session = _make_session_mock(
+        [
+            _result(make_rank_row(rank_id=str(uuid4()), gym_id=str(gym_id))),
+            _result({"gym_id": gym_id, "is_rank_enabled": True}),
+            _result([lowest], many=True),
+            _sub_type_result("none"),
+            _result(None),  # backfill SQL
+        ],
+    )
+    service = _make_service(_make_pool_mock(session))
+
+    await service.create_rank(
+        RankCreateRequest(
+            gym_id=gym_id,
+            main_rank_num_order=1,
+            name="Blue",
+            classes_to_next_major=10,
+        ),
+    )
+
+    params = _params_for(session, "backfill_lowest_rank.sql")
+    assert params["new_image_url"] == lowest["image_url"]
+
+
+def test_rank_activity_sql_binds_only_real_params():
+    """Both activity-writing statements bind EXACTLY the params the service
+    supplies. text() scans the whole statement — comments included — for
+    :name markers, so a stray one in the expanded header would 500 every
+    promotion with "A value is required for bind parameter"."""
+    insert_binds = set(text(_load("insert_rank_activity.sql"))._bindparams.keys())
+    assert insert_binds == {
+        "member_id",
+        "gym_id",
+        "activity_type",
+        "old_rank_id",
+        "new_rank_id",
+        "old_rank_name",
+        "new_rank_name",
+        "old_sub_index",
+        "new_sub_index",
+        "old_image_url",
+        "new_image_url",
+    }, f"unexpected bind params: {insert_binds}"
+
+    backfill_binds = set(text(_load("backfill_lowest_rank.sql"))._bindparams.keys())
+    assert backfill_binds == {
+        "gym_id",
+        "activity_type",
+        "new_rank_name",
+        "new_image_url",
+    }, f"unexpected bind params: {backfill_binds}"

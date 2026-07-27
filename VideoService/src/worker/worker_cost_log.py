@@ -43,16 +43,28 @@ class WorkerCostLog:
         *,
         youtube_quota_units: int,
         embed_usd: float,
+        avatar_quota_units: int = 0,
+        channels_resolved: int = 0,
     ) -> None:
         """The scrape step's rows: the free ``search`` (quota diagnostic) and the
-        tier-2 probe ``embed``, both attributed to this gym + run."""
+        tier-2 probe ``embed``, both attributed to this gym + run.
+
+        ``youtube_quota_units`` is the run's TOTAL — search plus the avatar pass's
+        ``channels.list`` calls — and the avatar share is broken out beside it so
+        the ledger shows what the avatars cost without a second row (they are the
+        same free API and the same run). The avatar args default to 0 because the
+        failure path logs this row before the scrape has produced a result."""
         await self._insert(
             gym_id,
             run_id,
             CostStage.search,
             None,
             0.0,
-            {"youtube_quota_units": youtube_quota_units},
+            {
+                "youtube_quota_units": youtube_quota_units,
+                "avatar_quota_units": avatar_quota_units,
+                "channels_resolved": channels_resolved,
+            },
             "youtube data api",
         )
         await self._insert(
@@ -65,10 +77,12 @@ class WorkerCostLog:
             "tier-2 query embeddings",
         )
         logger.info(
-            "gym %s run %s scrape cost: search $0 (%d quota) embed $%.4f",
+            "gym %s run %s scrape cost: search $0 (%d quota, %d of it avatars) "
+            "embed $%.4f",
             gym_id,
             run_id,
             youtube_quota_units,
+            avatar_quota_units,
             embed_usd,
         )
 

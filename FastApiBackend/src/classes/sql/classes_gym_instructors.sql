@@ -1,8 +1,10 @@
 -- The gym's employees, for resolving an effective instructor_id to a display
--- name when building the schedule board.
+-- name, public bio, and photo when building the schedule board.
 SELECT
     employee_id,
     first_name,
-    last_name
+    last_name,
+    employee_public_description,
+    employee_pic_url
 FROM gym_employees
 WHERE gym_id = :gym_id

@@ -61,21 +61,29 @@ class SettingsRepository {
     }
   }
 
-  /// `PUT /api/v1/gyms/{gymId}` — save the gym's identity: its [gymName] and
-  /// [logoUrl] (the uploaded brand logo's CDN URL; an explicit null clears the
-  /// logo). Patch semantics — both fields are sent together, so pass the
-  /// current logo unchanged when only the name is edited. Throws
-  /// [DatabaseException] on any failure so the bloc can surface the error.
+  /// `PUT /api/v1/gyms/{gymId}` — save the gym's identity: its [gymName],
+  /// [address] (the gym's street address) and [logoUrl] (the uploaded brand
+  /// logo's CDN URL). `address` and `logo_url` are both nullable columns, so an
+  /// explicit null legitimately CLEARS them (unlike `gym_name`, which the
+  /// backend rejects an explicit null for). Patch semantics — all three fields
+  /// are sent together, so pass the current address/logo unchanged when only
+  /// the name is edited. Throws [DatabaseException] on any failure so the bloc
+  /// can surface the error.
   Future<void> updateGymProfile({
     required String gymId,
     required String gymName,
+    required String? address,
     required String? logoUrl,
   }) async {
     try {
       await _apiClient.put<dynamic>(
         '/api/v1/gyms/$gymId',
         data: {
-          'data': {'gym_name': gymName, 'logo_url': logoUrl},
+          'data': {
+            'gym_name': gymName,
+            'address': address,
+            'logo_url': logoUrl,
+          },
         },
       );
     } on ServerException catch (e) {

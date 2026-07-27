@@ -1,8 +1,9 @@
 """API routes for the theme domain.
 
     * ``GET /api/v1/gyms/{gym_id}/showcase`` — a gym's branded class/reward
-      cards (any employee of the gym; every role may READ the theme, only
-      owner/admin may CHANGE it via ``PUT /gyms/{id}/theme``).
+      cards + its saved theme design id (any employee OR any MEMBER of the
+      gym may READ the theme, only owner/admin may CHANGE it via
+      ``PUT /gyms/{id}/theme``).
     * ``GET /api/v1/theme/showcase-defaults`` — category-keyed static demo
       class/reward cards for the standalone theme browser (PUBLIC).
 """
@@ -17,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials
 
 from src.core.dependencies import DependencyInjector
-from src.shared.auth import ALL_EMPLOYEES, Auth, security
+from src.shared.auth import Auth, security
 from src.theme.schema.theme_schema import GymShowcase, ShowcaseDefaults
 from src.theme.service.theme_showcase_defaults_service import (
     ThemeShowcaseDefaultsService,
@@ -32,16 +33,19 @@ theme_router = APIRouter(tags=["theme"])
 @theme_router.get(
     "/api/v1/gyms/{gym_id}/showcase",
     response_model=GymShowcase,
-    summary="Get a gym's showcase (branded class/reward cards)",
+    summary="Get a gym's showcase (branded class/reward cards + theme id)",
     description=(
-        "The gym's branded class cards and points-store reward cards. "
-        "``classes`` / ``rewards`` are possibly-empty lists. "
-        "Readable by any employee of the gym (all four roles)."
+        "The gym's branded class cards, points-store reward cards, and saved "
+        "theme design id. ``classes`` / ``rewards`` are possibly-empty lists; "
+        "``theme_design_id`` is null until the gym picks a theme. Readable by "
+        "any employee of the gym (all four roles) AND any member of the gym — "
+        "it is gym branding, not member data. Only owner/admin may CHANGE the "
+        "theme (``PUT /gyms/{id}/theme``)."
     ),
     responses={
         200: {"description": "The gym's showcase"},
         401: {"description": "Not authenticated"},
-        403: {"description": "Not an employee of this gym"},
+        403: {"description": "Not an employee or member of this gym"},
     },
 )
 @inject
@@ -53,18 +57,21 @@ async def get_gym_showcase(
         Provide[DependencyInjector.theme_showcase_service]
     ),
 ) -> GymShowcase:
-    """Return the gym's showcase: its class cards and reward cards."""
+    """Return the gym's showcase: class cards, reward cards, theme id."""
     user_payload = auth.get_current_user(credentials)
-    # ALL_EMPLOYEES: every role may READ its gym's current theme/showcase (the
-    # auth gate fetches it for everyone at sign-in). Only owner/admin may
-    # CHANGE the theme — that write is `PUT /gyms/{id}/theme`, still gated
-    # OWNER_ADMIN in gyms_router.
-    await auth.verify_roles(gym_id, user_payload, ALL_EMPLOYEES)
+    # Every employee role AND any member of the gym may READ its current
+    # theme/showcase — this is gym branding, not member data, so a member
+    # reaches it directly with only a gym_id (a deliberate exception to the
+    # member-scoped-surface separation). Only owner/admin may CHANGE the
+    # theme — that write is `PUT /gyms/{id}/theme`, still OWNER_ADMIN in
+    # gyms_router.
+    await auth.verify_gym_member_or_employee(gym_id, user_payload)
 
     try:
-        classes, rewards = await asyncio.gather(
+        classes, rewards, theme_design_id = await asyncio.gather(
             theme_showcase_service.load_showcase_classes(gym_id),
             theme_showcase_service.load_showcase_rewards(gym_id),
+            theme_showcase_service.load_theme_design_id(gym_id),
         )
     except Exception:
         logger.error(
@@ -74,7 +81,12 @@ async def get_gym_showcase(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to load gym showcase",
         ) from None
-    return GymShowcase(gym_id=gym_id, classes=classes, rewards=rewards)
+    return GymShowcase(
+        gym_id=gym_id,
+        classes=classes,
+        rewards=rewards,
+        theme_design_id=theme_design_id,
+    )
 
 
 @theme_router.get(

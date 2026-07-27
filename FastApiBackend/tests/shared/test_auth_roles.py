@@ -43,6 +43,7 @@ IDENTITY_SQL_FILES = (
     "auth_staff_principal.sql",
     "auth_verified_account.sql",
     "auth_member_self.sql",
+    "auth_gym_member_or_employee.sql",
 )
 
 # The caller's ``auth.users`` id (the JWT ``sub``). Every real ``Auth`` call
@@ -237,6 +238,53 @@ async def test_401_when_sub_absent_but_email_present() -> None:
 
     with pytest.raises(HTTPException) as exc:
         await auth.verify_verified_account({"email": "someone@test.com"})
+    assert exc.value.status_code == 401
+    db_pool.session.assert_not_called()
+
+
+# ── verify_gym_member_or_employee ─────────────────────────────────
+
+
+async def test_gym_member_or_employee_passes_when_authorized() -> None:
+    """An authorized caller (employee OR member of the gym, confirmed account)
+    passes; the query binds the gym id, LOWERCASED email, and caller id."""
+    gym_id = uuid4()
+    db_pool, session = _db_pool({"authorized": True})
+    auth = Auth(db_pool)
+
+    result = await auth.verify_gym_member_or_employee(
+        gym_id, {"email": "Member@Gym.com", "sub": _CALLER_ID}
+    )
+
+    assert result is None
+    params = _params(session)
+    assert params == {
+        "gym_id": str(gym_id),
+        "email": "member@gym.com",
+        "caller_id": _CALLER_ID,
+    }
+    assert "email_confirmed_at IS NOT NULL" in _sql(session)
+
+
+async def test_gym_member_or_employee_403_when_not_authorized() -> None:
+    """Neither an employee nor a member of the gym (or unverified) → 403."""
+    db_pool, _ = _db_pool({"authorized": False})
+    auth = Auth(db_pool)
+
+    with pytest.raises(HTTPException) as exc:
+        await auth.verify_gym_member_or_employee(
+            uuid4(), {"email": "stranger@test.com", "sub": _CALLER_ID}
+        )
+    assert exc.value.status_code == 403
+
+
+async def test_gym_member_or_employee_401_without_email_claim() -> None:
+    """A payload with no ``email`` claim is a 401, before any DB query."""
+    db_pool, _ = _db_pool({"authorized": True})
+    auth = Auth(db_pool)
+
+    with pytest.raises(HTTPException) as exc:
+        await auth.verify_gym_member_or_employee(uuid4(), {})
     assert exc.value.status_code == 401
     db_pool.session.assert_not_called()
 

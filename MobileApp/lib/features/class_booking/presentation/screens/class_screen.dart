@@ -1,41 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/design_constants.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/core/selected_gym.dart';
-import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/state/selected_member.dart';
+import 'package:mobile_app/features/class_booking/bloc/booking_bloc.dart';
+import 'package:mobile_app/features/class_booking/bloc/booking_event.dart';
+import 'package:mobile_app/features/class_booking/bloc/booking_state.dart';
+import 'package:mobile_app/features/class_booking/data/class_detail_args.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_booking_footer.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_detail_topbar.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_image_banner.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_instructor_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_location_section.dart';
 import 'package:mobile_app/features/class_booking/presentation/widgets/class_meta_section.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_reserve_footer.dart';
-import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
-import 'package:mobile_app/features/home/data/mock_gym.dart';
+import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
+import 'package:mobile_app/features/home/data/repositories/member_class_history_repository.dart';
+import 'package:mobile_app/features/home/data/repositories/member_signup_repository.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_event.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
-import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
-/// Class detail / booking screen.
+/// Class detail / booking screen for one occurrence.
 ///
-/// Accepts a [MockClass] via `Navigator.pushNamed` route arguments and
-/// falls back to the canonical Muay Thai sample if none is provided.
+/// In the app it reads the tapped occurrence + its booked state from the route
+/// [ClassDetailArgs]; the capture harness injects [occurrence] directly (with
+/// [captureController] / [imageKey] / [reserveKey], and no live blocs).
+///
+/// **The route's `booked` flag is a SEED, not the truth.** It paints the right
+/// state on the first frame (the board already joined its occurrences against
+/// the member's reservations), but it is a claim made by whoever navigated
+/// here. On the live path the screen immediately confirms it against the
+/// member's own reservations
+/// ([BookingReservationSyncRequested]) so a wrong or missing flag can't leave
+/// a member staring at "Reserve" for a class they already hold.
 class ClassScreen extends StatelessWidget {
   const ClassScreen({
     super.key,
-    this.classData,
+    this.occurrence,
+    this.booked = false,
     this.captureController,
     this.imageKey,
     this.reserveKey,
   });
 
-  /// Injected by the capture harness (`tools/capture/`) to render a specific
-  /// class detail without a route. Falls back to the route argument (then the
-  /// canonical Muay Thai sample) in normal app use.
-  final MockClass? classData;
+  /// Capture-only: the occurrence to render without a route. In the app it
+  /// comes from the route [ClassDetailArgs] instead.
+  final ClassOccurrence? occurrence;
+  final bool booked;
 
-  /// Capture-only: a scroll controller for the body, a key on the class photo
-  /// (to scroll the topbar off / start at the image), and a key on the reserve
-  /// CTA (to centre a tap pulse on it). All null in normal app use.
   final ScrollController? captureController;
   final GlobalKey? imageKey;
   final GlobalKey? reserveKey;
@@ -43,66 +59,134 @@ class ClassScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
-    final data = classData ?? (args is MockClass ? args : fallbackClass);
-    final detail = detailFor(data);
-    final gym = mockGym;
+    final occ = occurrence ??
+        (args is ClassDetailArgs ? args.occurrence : null);
+    final initialBooked = occurrence != null
+        ? booked
+        : (args is ClassDetailArgs ? args.booked : false);
+    // The app path (no injected occurrence) has the live profile bloc and can
+    // actually reserve; the capture path renders standalone.
+    final live = occurrence == null;
 
-    return AppScreenScaffold(
-      horizontalPadding: AppScreenHorizontalPadding.none,
-      child: GestureDetector(
-        behavior: HitTestBehavior.translucent,
-        onHorizontalDragEnd: (details) {
-          final velocity = details.primaryVelocity;
-          if (velocity != null && velocity < -50) {
-            Navigator.of(
-              context,
-            ).pushReplacementNamed(AppRoutes.postClassStreak);
-          }
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                controller: captureController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTopbar(
-                      mode: AppTopbarMode.nameOnly,
-                      showBackButton: true,
-                      gymName: selectedGym.displayName,
-                      logoAsset: gym.logoAsset,
-                      streakDays: gym.streakDays,
-                      pointsLabel: gym.pointsLabel,
-                      rankBadgeAsset: gym.rankBadgeAsset,
-                    ),
-                    KeyedSubtree(
-                      key: imageKey,
-                      child: ClassImageBanner(imageUrl: data.imageUrl),
-                    ),
-                    _Body(detail: detail),
-                  ],
-                ),
-              ),
-            ),
-            ClassReserveFooter(
-              buttonKey: reserveKey,
-              onReserve: () => Navigator.of(
-                context,
-              ).pushReplacementNamed(AppRoutes.reservingLoading),
-            ),
-          ],
-        ),
+    if (occ == null) return const _MissingClass();
+
+    return BlocProvider<BookingBloc>(
+      create: (_) {
+        final apiClient = ApiClient();
+        final bloc = BookingBloc(
+          repository: MemberSignupRepository(apiClient: apiClient),
+          historyRepository:
+              MemberClassHistoryRepository(apiClient: apiClient),
+          occurrence: occ,
+          initiallyBooked: initialBooked,
+        );
+        // Live only — the capture path has no member session to read.
+        if (live) bloc.add(const BookingReservationSyncRequested());
+        return bloc;
+      },
+      child: _ClassDetailView(
+        occurrence: occ,
+        live: live,
+        captureController: captureController,
+        imageKey: imageKey,
+        reserveKey: reserveKey,
       ),
     );
   }
 }
 
-class _Body extends StatelessWidget {
-  const _Body({required this.detail});
+class _ClassDetailView extends StatelessWidget {
+  const _ClassDetailView({
+    required this.occurrence,
+    required this.live,
+    this.captureController,
+    this.imageKey,
+    this.reserveKey,
+  });
 
-  final MockClassDetail detail;
+  final ClassOccurrence occurrence;
+  final bool live;
+  final ScrollController? captureController;
+  final GlobalKey? imageKey;
+  final GlobalKey? reserveKey;
+
+  void _onReserveSuccess(BuildContext context) {
+    context
+        .read<MemberProfileBloc>()
+        .add(const MemberProfileRefreshRequested());
+    Navigator.of(context).pushReplacementNamed(AppRoutes.reservingLoading);
+  }
+
+  void _onCancelSuccess(BuildContext context) {
+    context
+        .read<MemberProfileBloc>()
+        .add(const MemberProfileRefreshRequested());
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Reservation cancelled', style: DesignConstants.p),
+        ),
+      );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scaffold = AppScreenScaffold(
+      horizontalPadding: AppScreenHorizontalPadding.none,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              controller: captureController,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  ClassDetailTopbar(live: live),
+                  KeyedSubtree(
+                    key: imageKey,
+                    child: ClassImageBanner(imageUrl: occurrence.imageUrl),
+                  ),
+                  _Body(occurrence: occurrence),
+                ],
+              ),
+            ),
+          ),
+          ClassBookingFooter(buttonKey: reserveKey),
+        ],
+      ),
+    );
+
+    if (!live) return scaffold;
+    return MultiBlocListener(
+      listeners: [
+        BlocListener<BookingBloc, BookingState>(
+          listenWhen: (p, c) =>
+              p.reserveSuccessToken != c.reserveSuccessToken,
+          listener: (context, _) => _onReserveSuccess(context),
+        ),
+        BlocListener<BookingBloc, BookingState>(
+          listenWhen: (p, c) => p.cancelSuccessToken != c.cancelSuccessToken,
+          listener: (context, _) => _onCancelSuccess(context),
+        ),
+      ],
+      child: scaffold,
+    );
+  }
+}
+
+class _Body extends StatelessWidget {
+  const _Body({required this.occurrence});
+
+  final ClassOccurrence occurrence;
+
+  bool get _hasDescription =>
+      occurrence.classDescription?.trim().isNotEmpty ?? false;
+
+  bool get _hasInstructor =>
+      (occurrence.resolvedInstructorBio?.trim().isNotEmpty ?? false) ||
+      (occurrence.resolvedInstructorImageUrl?.isNotEmpty ?? false);
 
   @override
   Widget build(BuildContext context) {
@@ -117,14 +201,50 @@ class _Body extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         spacing: DesignConstants.spacingBig,
         children: [
-          ClassMetaSection(detail: detail),
+          BlocBuilder<BookingBloc, BookingState>(
+            buildWhen: (p, c) => p.booked != c.booked,
+            builder: (context, state) => ClassMetaSection(
+              occurrence: occurrence,
+              gymName: selectedMember.gymName ?? '',
+              reserved: state.booked,
+            ),
+          ),
+          if (_hasDescription) ...[
+            const SectionDivider(),
+            ClassDetailsSection(description: occurrence.classDescription),
+          ],
+          if (_hasInstructor) ...[
+            const SectionDivider(),
+            ClassInstructorSection(
+              name: occurrence.resolvedInstructorName,
+              bio: occurrence.resolvedInstructorBio,
+              imageUrl: occurrence.resolvedInstructorImageUrl,
+            ),
+          ],
           const SectionDivider(),
-          ClassDetailsSection(description: detail.classData.description),
-          const SectionDivider(),
-          ClassInstructorSection(detail: detail),
-          const SectionDivider(),
-          ClassLocationSection(detail: detail),
+          ClassLocationSection(
+            gymName: selectedMember.gymName ?? '',
+            address: selectedMember.gymAddress,
+          ),
         ],
+      ),
+    );
+  }
+}
+
+/// Defensive fallback — the schedule always passes an occurrence, so this only
+/// shows if the detail is opened with no arguments.
+class _MissingClass extends StatelessWidget {
+  const _MissingClass();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppScreenScaffold(
+      child: Center(
+        child: Text(
+          'Class not found.',
+          style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+        ),
       ),
     );
   }

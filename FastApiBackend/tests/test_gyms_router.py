@@ -7,7 +7,8 @@ from uuid import uuid4
 from fastapi import HTTPException, status
 
 from src.core.config import settings
-from src.gyms.schema.gyms_schema import GymCreateResponse
+from src.gyms.schema.gyms_schema import GymCreateRequest, GymCreateResponse
+from src.gyms.service.gyms_create_service import GymsCreateService
 
 # Every gym row the router maps to a GymResponse carries created_at (the
 # reports/exports month-picker floor) — `gyms_list_for_user.sql` selects it
@@ -53,6 +54,155 @@ def test_create_gym_returns_201_with_onboarding_url(client, auth_headers):
     assert body["onboarding_url"].startswith("https://")
 
 
+def test_create_gym_forwards_optional_address_to_the_service(
+    client,
+    auth_headers,
+):
+    """The wizard's OPTIONAL address rides along on POST /api/v1/gyms/.
+
+    The gym owner can type a street address on the "Name Your Gym"
+    onboarding step instead of waiting to set it in Settings.
+    """
+    address = "1200 Combat Ave, Suite 4, Austin, TX 78701"
+    mock_service = MagicMock()
+    mock_service.create_gym = AsyncMock(
+        return_value=GymCreateResponse(
+            gym_id=uuid4(),
+            stripe_account_id="acct_test123",
+            stripe_onboarding_status="pending",
+            onboarding_url="https://connect.stripe.com/setup/e/acct_test123",
+            onboarding_url_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+    )
+
+    container = client.app.container
+    container.gyms_service.override(mock_service)
+    try:
+        response = client.post(
+            "/api/v1/gyms/",
+            json={
+                "gym_name": "Aztec MMA",
+                "address": address,
+                "owner_first_name": "Jesse",
+                "owner_last_name": "Musa",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        container.gyms_service.reset_override()
+
+    assert response.status_code == 201
+    sent = mock_service.create_gym.await_args.kwargs["request"]
+    assert sent.address == address
+
+
+def test_create_gym_address_defaults_to_none_when_omitted(
+    client,
+    auth_headers,
+):
+    """Omitting the address is a valid create — the column stays NULL."""
+    mock_service = MagicMock()
+    mock_service.create_gym = AsyncMock(
+        return_value=GymCreateResponse(
+            gym_id=uuid4(),
+            stripe_account_id="acct_test123",
+            stripe_onboarding_status="pending",
+            onboarding_url="https://connect.stripe.com/setup/e/acct_test123",
+            onboarding_url_expires_at=datetime.now(UTC) + timedelta(minutes=5),
+        )
+    )
+
+    container = client.app.container
+    container.gyms_service.override(mock_service)
+    try:
+        response = client.post(
+            "/api/v1/gyms/",
+            json={
+                "gym_name": "Aztec MMA",
+                "owner_first_name": "Jesse",
+                "owner_last_name": "Musa",
+            },
+            headers=auth_headers,
+        )
+    finally:
+        container.gyms_service.reset_override()
+
+    assert response.status_code == 201
+    sent = mock_service.create_gym.await_args.kwargs["request"]
+    assert sent.address is None
+
+
+def _create_service_with_mocks(db_pool_mock: MagicMock) -> tuple:
+    """A ``GymsCreateService`` whose Stripe + waiver legs are doubles.
+
+    Returns the service and the mocked session so a test can read the
+    params bound to ``gyms_insert_pending.sql``.
+    """
+    session = db_pool_mock.session.return_value
+    insert_result = MagicMock()
+    insert_result.mappings.return_value.one.return_value = {"gym_id": uuid4()}
+    session.execute = AsyncMock(return_value=insert_result)
+
+    stripe_connect = MagicMock()
+    stripe_connect.create_express_account = AsyncMock(return_value="acct_test123")
+    stripe_connect.create_account_link = AsyncMock(
+        return_value=(
+            "https://connect.stripe.com/setup/e/acct_test123",
+            datetime.now(UTC) + timedelta(minutes=5),
+        )
+    )
+    waivers_service = MagicMock()
+    waivers_service.create_payer_auth_waiver = AsyncMock()
+
+    service = GymsCreateService(
+        db_pool=db_pool_mock,
+        stripe_connect_service=stripe_connect,
+        waivers_service=waivers_service,
+    )
+    return service, session
+
+
+def _bound_insert_params(session: AsyncMock) -> dict:
+    """The params bound to the FIRST execute — the gym INSERT."""
+    return session.execute.await_args_list[0].args[1]
+
+
+async def test_create_service_persists_the_address(db_pool_mock):
+    """A gym created WITH an address binds it to the INSERT."""
+    address = "1200 Combat Ave, Suite 4, Austin, TX 78701"
+    service, session = _create_service_with_mocks(db_pool_mock)
+
+    await service.create_gym(
+        request=GymCreateRequest(
+            gym_name="Aztec MMA",
+            address=address,
+            owner_first_name="Jesse",
+            owner_last_name="Musa",
+        ),
+        user_email="owner@example.com",
+    )
+
+    assert _bound_insert_params(session)["address"] == address
+
+
+async def test_create_service_binds_null_address_when_omitted(db_pool_mock):
+    """A gym created WITHOUT an address binds NULL, never an empty string."""
+    service, session = _create_service_with_mocks(db_pool_mock)
+
+    await service.create_gym(
+        request=GymCreateRequest(
+            gym_name="Aztec MMA",
+            owner_first_name="Jesse",
+            owner_last_name="Musa",
+        ),
+        user_email="owner@example.com",
+    )
+
+    params = _bound_insert_params(session)
+    assert "address" in params
+    assert params["address"] is None
+
+
 def test_list_my_gyms_returns_empty_list(client, db_pool_mock, auth_headers):
     """GET /api/v1/gyms/ returns [] (200) when the user administers no gyms."""
     session = db_pool_mock.session.return_value
@@ -75,6 +225,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "stripe_account_id": "acct_aztec",
@@ -86,6 +237,7 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
             "created_at": GYM_CREATED_AT,
             "gym_name": "North BJJ",
             "gym_description": "No-gi",
+            "address": "88 Mat St, Brooklyn, NY 11211",
             "timezone": "America/New_York",
             "sub_rank_type": "div",
             # Not onboarded yet — the id is NULL until onboarding completes.
@@ -108,6 +260,9 @@ def test_list_my_gyms_returns_role_annotated_gyms(client, db_pool_mock, auth_hea
     # The caller's saved theme rides along so the CRM can hydrate at login.
     assert body[0]["theme_preference"] == "dark"
     assert body[1]["theme_preference"] == "system"
+    # The street address rides along so the CRM can edit it from Settings.
+    assert body[0]["address"] is None
+    assert body[1]["address"] == "88 Mat St, Brooklyn, NY 11211"
     # The connected-account id IS exposed on this authenticated staff read
     # (client-safe; the CRM sets the Stripe.js connected-account context from
     # it). It is NULL until the gym finishes Stripe onboarding.
@@ -204,6 +359,7 @@ def test_update_gym_sets_logo_url(client, db_pool_mock, auth_headers):
             "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "logo_url": logo_url,
@@ -236,6 +392,7 @@ def test_update_gym_clears_logo_url_with_explicit_null(
             "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "stripes",
             "logo_url": None,
@@ -257,6 +414,75 @@ def test_update_gym_clears_logo_url_with_explicit_null(
     assert bound_params["logo_url"] is None
 
 
+def test_update_gym_sets_address(client, db_pool_mock, auth_headers):
+    """PUT /api/v1/gyms/{gym_id} with address persists and echoes it back.
+
+    The owner types a free-text street address in the CRM; the member app
+    renders it plus an "Open in Maps" link.
+    """
+    gym_id = uuid4()
+    address = "1200 Combat Ave, Suite 4, Austin, TX 78701"
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "address": address,
+            "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"address": address}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["address"] == address
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert bound_params["address"] == address
+
+
+def test_update_gym_clears_address_with_explicit_null(
+    client, db_pool_mock, auth_headers
+):
+    """An explicit null for address clears it back to NULL — the column is
+    nullable, so clearing it is a legal edit, not a 422 like gym_name."""
+    gym_id = uuid4()
+    db_pool_mock.execute_with_retry = AsyncMock(
+        return_value={
+            "gym_id": gym_id,
+            "created_at": datetime.now(UTC),
+            "gym_name": "Aztec MMA",
+            "gym_description": None,
+            "address": None,
+            "timezone": "America/Chicago",
+            "sub_rank_type": "stripes",
+            "logo_url": None,
+            "theme_design_id": None,
+        }
+    )
+
+    response = client.put(
+        f"/api/v1/gyms/{gym_id}",
+        json={"data": {"address": None}},
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["address"] is None
+    bound_params = db_pool_mock.execute_with_retry.call_args.args[1]
+    assert "address" in bound_params
+    assert bound_params["address"] is None
+
+
 def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
     """PUT /api/v1/gyms/{gym_id} with sub_rank_type persists, echoes it, AND
     fires the member sub-index reconcile (the gyms -> ranks edge)."""
@@ -269,6 +495,7 @@ def test_update_gym_sets_sub_rank_type(client, db_pool_mock, auth_headers):
             "created_at": GYM_CREATED_AT,
             "gym_name": "Aztec MMA",
             "gym_description": None,
+            "address": None,
             "timezone": "America/Chicago",
             "sub_rank_type": "div",
             "logo_url": None,

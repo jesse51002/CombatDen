@@ -158,12 +158,38 @@ reused verbatim in `list_members_ready_to_promote.sql`.
 
 `rank_changed` (`RANK_CHANGED_ACTIVITY_TYPE = "rank_changed"`) is logged on every
 promote, explicit set, and backfill (via `insert_rank_activity.sql` /
-`backfill_lowest_rank.sql`). `activity_info` is
-`{old_rank_id, new_rank_id, old_rank_name, new_rank_name}`, where the names are the
-derived `Main · SubLabel`. A **sub-only** promotion (same main rank, next
+`backfill_lowest_rank.sql`). A **sub-only** promotion (same main rank, next
 sub-index) still logs — only a no-op (identical rank_id AND sub_index) skips.
 Delete-reassignment is deliberately activity-**silent** (a deletion is not a
 promotion; progress must not reset).
+
+**`activity_info` describes BOTH leaves in full** — eight keys, every one
+nullable:
+
+```
+old_rank_id, new_rank_id       -- the main rank on each side
+old_rank_name, new_rank_name   -- the derived `Main · SubLabel` display names
+old_sub_index, new_sub_index   -- the leaf position on each side
+old_image_url, new_image_url   -- that leaf's belt art on each side
+```
+
+The FROM side exists so a reader can render the belt the member came from
+without holding any prior state — it is what drives the member app's
+old-belt → new-belt promotion animation (served by
+`MemberPortalProfile.latest_promotion`, §11). The backfill has no FROM leaf at
+all, so its `old_*` keys are literal NULLs in the SQL — never fabricate one; an
+unassign symmetrically has no TO leaf. The backfill's `new_sub_index` comes from
+the UPDATE's own `RETURNING`, so the payload records the leaf actually written.
+
+**The two image URLs are SNAPSHOTS, deliberately.** `image_url` /
+`sub_rank_image_overrides` are user-writable (§5), so a live lookup would let
+re-uploaded belt art retroactively rewrite what a past promotion looked like.
+Each URL is resolved once, at the moment of the change, through the domain's
+**single image rule** — `RanksBase._leaf_image_url(rank, sub_index)`: the leaf's
+`sub_rank_image_overrides[sub_index]` if present, else the main rank's
+`image_url`. `RanksReads.next_leaf_image_url` resolves through the same method,
+so there is one rule and not two. Resolution happens at the LEAF, which is what
+makes a sub-only promotion still yield two DIFFERENT images.
 
 ## 5. Belt images: user-writable, persist-only overrides
 
@@ -172,7 +198,9 @@ Per-sub images live in `sub_rank_image_overrides`, a sparse `{sub_index: url}` m
 
 - **Effective sub image** = `overrides[sub_index]` if present, else the main
   `image_url`. In SQL: `COALESCE(sub_rank_image_overrides ->> CAST(idx AS TEXT),
-  image_url)` (member_details resolves the leaf image this way).
+  image_url)` (member_details resolves the leaf image this way). The **next**
+  leaf's image resolves with the identical precedence in
+  `RanksReads.next_leaf_image_url` (§7) — one rule, two leaves.
 - **The override map is PERSIST-ONLY.** Shrinking `sub_rank_count`, switching the
   gym's `sub_rank_type`, or any other "revert" **never prunes the map** — overrides
   for now-hidden indices go dormant and reactivate if the count grows back.
@@ -237,13 +265,17 @@ demo/showcase `PresetsService` (that importer never touches ranks).
   `list_ranks` also returns the gym's `sub_rank_type` on `RankListResponse`.
 - **`RanksBase`** — shared reads: `_list_ranks_in_session`, `_gym_sub_rank_type`,
   `_effective_sub_count(rank, sub_rank_type)` (`0` on a `'none'` gym, else the
-  stored count — the single source of the effective-count rule), and `_next_leaf`
+  stored count — the single source of the effective-count rule), `_next_leaf`
   (enumerate leaves per main via the EFFECTIVE count; rank-less → lowest leaf; top
   main + top sub → `ValueError("highest rank")`; on a `'none'` gym every rank is
-  effective-subless so promotion is main-to-main).
+  effective-subless so promotion is main-to-main), and
+  `_leaf_image_url(rank, sub_index)` (the single image rule — the leaf's override
+  else the main `image_url`; `None` for no rank. Both the next-leaf read and the
+  promotion snapshot resolve through it, §4/§5).
 - **`RanksMembers`** — the only member-writing paths: `promote_member`,
   `set_member_rank` (validates the leaf invariant against the effective count),
-  `_apply_member_rank` (writes + logs `rank_changed` with derived names),
+  `_apply_member_rank` (writes + logs `rank_changed` with both leaves resolved —
+  derived names, sub-indices, and snapshotted belt images, §4),
   `backfill_lowest_for_gym`, `reassign_members_to_neighbor_in_session` (the
   delete-rank downgrade the facade's `delete_rank` calls — so even the deletion
   member write routes through here, never the facade directly), and the sub-index
@@ -276,7 +308,17 @@ demo/showcase `PresetsService` (that importer never touches ranks).
   `sub_rank_count`) returned as `RankSubRankCountsResponse
   { total_count, counts: [{sub_index, count}] }` with the total summed in
   Python. On a `'none'` gym members carry a NULL sub-index → one `{null,
-  total}` row.
+  total}` row. `next_leaf_image_url(gym_id, rank_id, sub_index)` is the
+  **cross-domain** read (no route of its own): the belt art of the leaf ABOVE a
+  member's current leaf, for the member-facing "next rank" badge. It reuses
+  `_next_leaf` rather than deriving "next rank" a second time — so the art can
+  never disagree with what a promotion would actually award — and resolves the
+  image with the same override-over-main precedence as the current leaf
+  (`sub_rank_image_overrides[target_index]` else `image_url`). Returns `None`
+  when `_next_leaf` raises (top of the ladder / no ladder) or the target leaf
+  carries no image. Its one caller is `MembersBillingDetailService`, DI-injected
+  with `ranks_reads`, which fills `BillingRank.next_rank_image_url` (skipped
+  entirely for an unranked member, so it costs no query there).
 - **`RanksPresets`** — `from_preset` (also sets the gym `sub_rank_type`), plus the
   preset list/grouped reads.
 
@@ -373,6 +415,21 @@ People-tab members filter gained a rank dimension (`rank_ids`, filtering
 **Belt image upload** uses the backend `rank` `UploadCategory` (S3 `rank/`
 prefix); the preset placeholder art lives under `rank/presets/` in the same
 `combatden-assets` bucket / `cdn.combatden.net` CDN.
+
+**Member-app surface (brief).** The member reads their rank through
+`src/member_portal/`, never a ranks route: the profile's `rank` block
+(`BillingRank`, incl. `next_rank_image_url` from `RanksReads.next_leaf_image_url`),
+the `.../rank-progress` series, and — for the promotion animation —
+`MemberPortalProfile.latest_promotion`
+(`src/member_portal/sql/member_portal_latest_promotion.sql`): the newest
+`rank_changed` row with BOTH belts read straight out of its snapshot (§4), never
+a live `gym_ranks` join. `activity_id` is the client's watermark key; the app
+plays the animation once per new id and seeds silently on null. The block is
+**decoupled from any class** — promotions are staff-driven from the
+ready-to-promote board, minutes to days later and often in bulk, so no
+attribution to an attendance is possible or attempted; the copy reads "You've
+been promoted". A row written before the payload carried images yields null URLs
+and the app falls back to its themed belt (nothing is backfilled).
 
 ---
 

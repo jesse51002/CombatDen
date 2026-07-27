@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/video.dart';
-import 'package:mobile_app/features/videos/presentation/widgets/video_carousel_card.dart';
+import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/gym_video_carousel_card.dart';
 
 /// A titled section with a horizontally-scrolling row of video cards
 /// and an optional "view all" affordance on the right.
@@ -15,9 +15,9 @@ class VideoCarouselSection extends StatelessWidget {
   });
 
   final String title;
-  final List<Video> videos;
+  final List<GymVideoCard> videos;
   final VoidCallback? onViewAllTap;
-  final ValueChanged<Video>? onVideoTap;
+  final ValueChanged<GymVideoCard>? onVideoTap;
 
   @override
   Widget build(BuildContext context) {
@@ -40,8 +40,8 @@ class VideoCarouselSection extends StatelessWidget {
             spacing: DesignConstants.spacingLarge,
             children: [
               for (final v in videos)
-                VideoCarouselCard(
-                  video: v,
+                GymVideoCarouselCard(
+                  card: v,
                   onTap: () => onVideoTap?.call(v),
                 ),
             ],

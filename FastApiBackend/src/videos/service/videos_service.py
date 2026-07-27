@@ -6,7 +6,8 @@ ungated owner management listing; the feed read backs the member rec too),
 commit gate), ``VideoFeedRefiner`` (feed-learning refiner), ``VideoRecsService``
 (the member's single rotating-category RAG recommendation), and
 ``VideoRecClickService`` (record a rec click → stamp + log + fire a profile
-refresh).
+refresh), and ``VideoClickService`` (record a FEED click → append-only log +
+fire the same refresh).
 
 The router injects this facade for every non-agent video operation; the
 conversational agent uses it for the deterministic accept-path
@@ -22,6 +23,7 @@ from uuid import UUID
 
 from schema.video import GymVideoSpecSource, VideoGenre
 
+from src.videos.schema.video_click_schema import MemberVideoClickResponse
 from src.videos.schema.video_recs_schema import (
     MemberVideoRec,
     VideoRecClickResponse,
@@ -36,6 +38,7 @@ from src.videos.schema.videos_schema import (
     GymVideoCard,
     GymVideoSpecView,
 )
+from src.videos.service.video_click_service import VideoClickService
 from src.videos.service.video_feed_refiner import VideoFeedRefiner
 from src.videos.service.video_feed_service import VideoFeedService
 from src.videos.service.video_rec_click_service import VideoRecClickService
@@ -59,6 +62,7 @@ class VideosService:
         feed_refiner: VideoFeedRefiner,
         recs_service: VideoRecsService,
         click_service: VideoRecClickService,
+        video_click_service: VideoClickService,
     ) -> None:
         self._feed = feed_service
         self._spec_service = spec_service
@@ -66,6 +70,7 @@ class VideosService:
         self._feed_refiner = feed_refiner
         self._recs = recs_service
         self._click = click_service
+        self._video_click = video_click_service
 
     # ── live gym feed ─────────────────────────────────────────────
 
@@ -202,3 +207,13 @@ class VideosService:
     ) -> VideoRecClickResponse:
         """Record a member opening (clicking) a served recommendation."""
         return await self._click.record_click(gym_id, member_id, rec_id)
+
+    async def record_video_click(
+        self, gym_id: UUID, member_id: UUID, video_id: str
+    ) -> MemberVideoClickResponse:
+        """Record a member opening a video from the FEED (not from a rec).
+
+        Append-only: every open logs its own ``video_clicked`` activity — the
+        rec click's idempotency deliberately does NOT apply here.
+        """
+        return await self._video_click.record_click(gym_id, member_id, video_id)

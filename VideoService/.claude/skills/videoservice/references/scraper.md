@@ -91,6 +91,32 @@ query is dropped, not fatal. Results are **merge-upserted** into the shared
 land untagged and **transcript-less**. Transcripts are NOT fetched here; they are
 a lazy fetch at enrich time (`scan.md`).
 
+### Creator avatars — the third call, right after the merge
+
+A search / videos snippet carries the channel **id** but no avatar, so a third
+call resolves it: `channels.list?part=snippet&id=<≤50 ids>` →
+`snippet.thumbnails` (`high` → `medium` → `default`), **1 quota unit per call
+regardless of batch size** (`src/worker/worker_avatars.py`). It runs AFTER the
+merge — the rows must exist to be written — and writes by **`channel_url`, never
+by video id**: the avatar is a per-CHANNEL value stored redundantly on each of the
+channel's ~2 pool rows, so a video-keyed write would leave the rest of the channel
+stale.
+
+It **refreshes, not just fills**. A `yt3.ggpht.com` URL rotates when a creator
+changes their picture and the old one eventually 404s, so every channel the scrape
+touched is re-resolved, not only the uncovered ones. Every gym re-scrapes at least
+weekly (tier 3), so a channel that still surfaces in any gym's queries is refreshed
+at least weekly for ~nothing: ~600 distinct channels per run ≈ **12 quota units**
+against the ~2,500 that run spends on `search.list`. `worker_avatar_max_batches`
+(40) hard-caps the calls; when it binds, channels with NO avatar go first. A 403 on
+a batch is logged and dropped — the run never fails over an avatar, and an
+unresolved avatar just stays empty (the member UI omits it).
+
+Every pool row already carries a resolved avatar and a canonical `/channel/UC…`
+channel URL — this per-scrape pass is the ongoing path that keeps both current.
+The pool still needs no `channel_id` column: the id is always recoverable from
+the stored `/channel/UC…` URL by regex (`worker_transforms.channel_id_from_url`).
+
 ### Funnel
 
 Pick up to `scan_budget_per_run` (1500) candidates:
@@ -122,6 +148,9 @@ enrich + scan sweeps and the finalize step (above) take it from there.
 
 Two rows to the generic `cost_log` table, both stamped that gym + run: `search`
 (**free** — the YouTube Data API within quota; the quota units ride in
-`breakdown`) and `embed` (the tier-2 funnel probe's query embeddings).
+`breakdown` as the run TOTAL, `search.list` plus the avatar pass's
+`channels.list`, with the avatar share broken out as `avatar_quota_units` /
+`channels_resolved` so the pass is never uncounted quota) and `embed` (the tier-2
+funnel probe's query embeddings).
 
 → Continue with the enrich + scan half in `scan.md`.

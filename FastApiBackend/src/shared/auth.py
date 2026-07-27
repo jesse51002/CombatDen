@@ -390,6 +390,62 @@ class Auth:
         """
         await self.verify_roles(gym_id, user_payload, OWNER_ADMIN)
 
+    async def verify_gym_member_or_employee(
+        self,
+        gym_id: UUID,
+        user_payload: dict,
+    ) -> None:
+        """Verify the caller is an EMPLOYEE **or** a MEMBER of the gym.
+
+        The gate for gym-level BRANDING reads (the theme/showcase): every one
+        of the gym's four employee roles AND any of its members may READ its
+        gym's theme. It takes NO ``member_id`` and grants no member-scoped
+        access — it only answers "does this verified caller belong to this gym
+        in some capacity". This is why it deliberately sits OUTSIDE the
+        member-scoped-surface separation rule: a member reaches it directly
+        with only a ``gym_id``, because the showcase is gym branding, not
+        member data.
+
+        The caller's verified email must match EITHER a non-archived
+        ``gym_employees`` row at ``gym_id`` (any ``employee_type``) OR any
+        ``members`` row at ``gym_id`` (no membership-status filter — an
+        engagement-only member still sees their gym's theme), AND back a
+        CONFIRMED auth account that is the caller's own. Mirrors
+        ``verify_roles``' behavior: 401 with no email claim, 403 on no match.
+
+        Raises:
+            HTTPException: 401 if the token has no email claim, 403 if the
+                caller is neither an employee nor a member of the gym (or is
+                unverified).
+        """
+        email = self.require_email(user_payload)
+        caller_id = self.require_sub(user_payload)
+
+        async with self._db_pool.session() as session:
+            row = (
+                await session.execute(
+                    text(
+                        load_sql(SQL_DIR / "auth_gym_member_or_employee.sql")
+                    ),
+                    {
+                        "gym_id": str(gym_id),
+                        "email": email,
+                        "caller_id": caller_id,
+                    },
+                )
+            ).mappings().fetchone()
+
+        if not row or not row["authorized"]:
+            logger.warning(
+                "Gym member-or-employee access denied: email=%s, gym_id=%s",
+                email,
+                gym_id,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to access this gym",
+            ) from None
+
     async def verify_member_self(
         self,
         member_id: UUID,

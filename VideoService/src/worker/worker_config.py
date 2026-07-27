@@ -104,6 +104,14 @@ class WorkerSettings(BaseSettings):
     worker_enrich_batch_size: int = 64
     # Per-query top-k for the tier-2 RAG probes.
     rag_probe_top_k: int = 40
+    # Hard ceiling on the `channels.list` calls ONE scrape may spend resolving +
+    # refreshing creator avatars. Each call covers ≤50 channels and costs 1 quota
+    # unit, so 40 calls = up to 2,000 channels for 40 units — against the ~2,500
+    # units the same run spends on search.list. A typical run surfaces ~600
+    # distinct channels (~12 calls), so the cap is a guard, not the normal path:
+    # it exists so an unusually broad scrape can never turn the avatar pass into a
+    # quota problem. When it binds, channels with no avatar yet are served first.
+    worker_avatar_max_batches: int = 40
     # Head characters of transcript fed to the enrich call.
     enrich_transcript_char_budget: int = 8000
 

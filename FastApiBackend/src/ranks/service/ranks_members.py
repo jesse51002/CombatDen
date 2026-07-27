@@ -82,6 +82,8 @@ class RanksMembers(RanksBase):
                 sub_rank_type=sub_rank_type,
                 old_rank_name=old_rank.name if old_rank else None,
                 new_rank_name=new_rank.name,
+                old_image_url=self._leaf_image_url(old_rank, old_sub_index),
+                new_image_url=self._leaf_image_url(new_rank, new_sub_index),
             )
             await session.commit()
 
@@ -143,6 +145,8 @@ class RanksMembers(RanksBase):
                 sub_rank_type=sub_rank_type,
                 old_rank_name=old_rank.name if old_rank else None,
                 new_rank_name=new_rank.name if new_rank else None,
+                old_image_url=self._leaf_image_url(old_rank, old_sub_index),
+                new_image_url=self._leaf_image_url(new_rank, new_sub_index),
             )
             await session.commit()
 
@@ -175,11 +179,20 @@ class RanksMembers(RanksBase):
         Pins each backfilled member to the lowest rank's base leaf
         (sub-index 0 when it has sub-ranks, else NULL) and writes one
         ``rank_changed`` activity per member with the Python-derived
-        display name, so progress counts from the backfill moment (not
-        the member's join date). No-op when the gym has no ranks.
+        display name and belt image, so progress counts from the backfill
+        moment (not the member's join date). No-op when the gym has no
+        ranks.
+
+        A backfill has no "from" leaf, so every ``old_*`` key of the
+        payload is a literal NULL in the SQL — an old belt is never
+        fabricated. The new belt image is resolved from the same ladder
+        read through the domain's single image rule
+        (``RanksBase._leaf_image_url``) and stored as a snapshot, since
+        the source columns are user-writable.
         """
         ladder = await self._list_ranks_in_session(session, gym_id)
         new_rank_name: str | None = None
+        new_image_url: str | None = None
         if ladder:
             sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
             lowest = ladder[0]
@@ -193,6 +206,7 @@ class RanksMembers(RanksBase):
                 sub_rank_type,
                 base_index,
             )
+            new_image_url = self._leaf_image_url(lowest, base_index)
         sql = load_sql(SQL_DIR / "backfill_lowest_rank.sql")
         await session.execute(
             text(sql),
@@ -200,6 +214,7 @@ class RanksMembers(RanksBase):
                 "gym_id": str(gym_id),
                 "activity_type": MemberActivityType.rank_changed.value,
                 "new_rank_name": new_rank_name,
+                "new_image_url": new_image_url,
             },
         )
 
@@ -358,6 +373,8 @@ class RanksMembers(RanksBase):
         sub_rank_type: SubRankType,
         old_rank_name: str | None,
         new_rank_name: str | None,
+        old_image_url: str | None,
+        new_image_url: str | None,
     ) -> None:
         """Set a member's leaf and log the change, in one session.
 
@@ -366,6 +383,19 @@ class RanksMembers(RanksBase):
         sub_index unchanged) leaves no row. Both display names are
         derived here via ``rank_display_name`` (NULL for an unassigned
         old / new leaf).
+
+        The activity payload records BOTH leaves in full — id, display
+        name, sub-index and belt image on each side — so a reader can
+        render the belt the member came FROM without holding any prior
+        state. Every field is nullable: an unassign has no "to" leaf and a
+        first assignment has no "from" leaf.
+
+        The two image URLs are resolved by the CALLER through the domain's
+        single image rule (``RanksBase._leaf_image_url``) and stored as
+        SNAPSHOTS on purpose: ``gym_ranks.image_url`` /
+        ``sub_rank_image_overrides`` are user-writable, so re-uploading belt
+        art must never retroactively change what a past promotion looked
+        like.
         """
         set_sql = load_sql(SQL_DIR / "set_member_rank.sql")
         updated = (
@@ -410,6 +440,10 @@ class RanksMembers(RanksBase):
                 "new_rank_id": str(new_rank_id) if new_rank_id else None,
                 "old_rank_name": old_display,
                 "new_rank_name": new_display,
+                "old_sub_index": old_sub_index,
+                "new_sub_index": new_sub_index,
+                "old_image_url": old_image_url,
+                "new_image_url": new_image_url,
                 "activity_type": MemberActivityType.rank_changed.value,
             },
         )

@@ -17,6 +17,10 @@ class GymCreate(SeedModel):
     gym_id: UUID
     gym_name: str
     gym_description: str | None = None
+    # Physical street address (handed to the phone's native maps app via a
+    # geo/maps URL). Nullable — a real gym may not have set one yet, and the
+    # seed deliberately leaves at least one gym null to exercise that state.
+    address: str | None = None
     # The gym's uploaded logo (CDN URL). The seed never uploads one.
     logo_url: str | None = None
     timezone: str = "America/Chicago"

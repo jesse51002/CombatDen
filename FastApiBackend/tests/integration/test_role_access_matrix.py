@@ -285,9 +285,10 @@ def test_trainer_can_read_checkin_attendees(trainer_api, gym_id: str):
 
 
 def test_trainer_can_read_gym_showcase(trainer_api, gym_id: str):
-    """The showcase read is ALL_EMPLOYEES — every role (trainer included) may
-    read its gym's branded class/reward cards; only owner/admin CHANGE the
-    theme (a separate PUT, still owner/admin)."""
+    """The showcase read is gated by ``verify_gym_member_or_employee`` — every
+    employee role (trainer included) AND any member may read its gym's branded
+    class/reward cards; only owner/admin CHANGE the theme (a separate PUT,
+    still owner/admin)."""
     resp = trainer_api.get(f"/api/v1/gyms/{gym_id}/showcase")
     assert resp.status_code == 200, resp.text
 

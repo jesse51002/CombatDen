@@ -37,13 +37,15 @@ class TestGetGymShowcase:
         assert response.status_code == 200, response.text
 
     def test_body_shape(self, api: httpx.Client, gym_id: str) -> None:
-        """The body echoes the gym_id and carries both card lists."""
+        """The body echoes the gym_id and carries both card lists + theme id."""
         response = api.get(f"/api/v1/gyms/{gym_id}/showcase")
         assert response.status_code == 200, response.text
         data = response.json()
         assert data["gym_id"] == gym_id
         assert isinstance(data["classes"], list)
         assert isinstance(data["rewards"], list)
+        # The gym's saved ThemeService design id — present (possibly null).
+        assert "theme_design_id" in data
 
     def test_class_cards_carry_all_fields(
         self, api: httpx.Client, gym_id: str
@@ -68,6 +70,7 @@ class TestGetGymShowcase:
             assert isinstance(card["points_cost"], int)
 
     def test_foreign_gym_is_403(self, api: httpx.Client) -> None:
-        """A gym the caller doesn't staff is rejected by the employee gate."""
+        """A gym the caller is neither an employee nor a member of is rejected
+        by the member-or-employee gate."""
         response = api.get(f"/api/v1/gyms/{uuid.uuid4()}/showcase")
         assert response.status_code == 403, response.text
