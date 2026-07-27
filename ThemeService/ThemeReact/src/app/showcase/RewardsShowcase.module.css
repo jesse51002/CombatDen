@@ -1,0 +1,23 @@
+/*
+ * Styles for ./RewardsShowcase.tsx
+ * (ports CRM/lib/showcase/rewards_showcase.dart).
+ *
+ * `--sc-*` only — the member app's values. See ./ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `ClipRect > OverflowBox(minHeight: 0, maxHeight: infinity,
+ * alignment: topCenter) > Column(mainAxisSize: min, stretch, spacing: spacingBig)`.
+ *
+ * The whole `OverflowBox` dance is Flutter's way of saying "lay this out at its
+ * natural height and clip the rest" — which is what a block box in a clipping
+ * parent does by default here, so there is no height and no scroll: the store
+ * is taller than the phone on purpose, and the scaffold body's own
+ * `overflow: hidden` is the `ClipRect`.
+ */
+.store {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+}

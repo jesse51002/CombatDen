@@ -1,0 +1,131 @@
+/*
+ * Styles for ./PointsShowcase.tsx
+ * (ports CRM/lib/showcase/points_showcase.dart).
+ *
+ * `--sc-*` for the design tokens (see ./ShowcaseThemeVars.tsx); `--pt-*` for
+ * this screen's own geometry and motion, written inline by the component from
+ * the ported constants and delay arithmetic.
+ *
+ * THE SPHERE HAS NO MOTION HERE AT ALL. Its transforms, opacities and stacking
+ * order are written per frame by the driver in the component, because fourteen
+ * stars share one spin and one converge factor (see ./pointSphere.ts). What the
+ * classes below give it is only the box each element sits in.
+ */
+
+/*
+ * `Padding(vertical: spacingBig)` — on this screen it wraps BOTH branches, so
+ * it is the screen box rather than a per-view wrapper (points_showcase.dart:77).
+ */
+.screen {
+  height: 100%;
+  padding-block: var(--sc-spacing-big);
+}
+
+/* --- The sphere ----------------------------------------------------------- */
+
+/* `SizedBox.expand > Stack(alignment: center)`. */
+.sphere {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * One star: `Transform.translate(offset) > Opacity > Transform.scale > Image`.
+ * Centred on the stack, then moved onto the ellipsoid — the driver writes all
+ * three as one transform. The element's own size is written once, from
+ * `starSize`.
+ */
+.star {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  will-change: transform, opacity;
+}
+
+/* `Image(fit: BoxFit.contain)`. */
+.starImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* --- The focused statement ------------------------------------------------ */
+
+/*
+ * `SizedBox.expand > Column(crossAxisAlignment: center)` holding
+ * `[Spacer, _FocusedContent, Spacer, _TotalCaption]`.
+ */
+.points {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 100%;
+}
+
+/* `Spacer()` — an `Expanded` with nothing in it. */
+.spacer {
+  flex: 1 1 0;
+}
+
+/* `StaggeredReveal > Column(min, center, spacing: spacingLarge)`. */
+.focused {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+  animation: pointsReveal var(--pt-reveal-ms) var(--pt-ease) both;
+}
+
+/* `Image(width: _kHeroSize, height: _kHeroSize, fit: BoxFit.contain)`. */
+.hero {
+  width: var(--pt-hero-size);
+  height: var(--pt-hero-size);
+  object-fit: contain;
+  display: block;
+}
+
+/* `CountUpText(prefix: '+', suffix: ' points', style: big2)`. */
+.gained {
+  font: var(--sc-type-big2);
+  letter-spacing: var(--sc-type-big2-ls);
+  color: var(--sc-text);
+  text-align: center;
+}
+
+/* `StaggeredReveal(delay)` over `h3` at `text2nd`. */
+.total {
+  flex: 0 0 auto;
+  margin: 0;
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text-2nd);
+  text-align: center;
+  animation: pointsReveal var(--pt-reveal-ms) var(--pt-ease) var(--pt-total-delay-ms) both;
+}
+
+/* `StaggeredReveal`: opacity 0 -> 1 with a 12px slide up, ease-out-quart. */
+@keyframes pointsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--pt-reveal-offset));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the statement renders finished. The
+ * component also skips the sphere entirely and never arms the loop timers.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .focused,
+  .total {
+    animation: none;
+  }
+}

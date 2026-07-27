@@ -1,0 +1,107 @@
+/*
+ * Styles for ./RewardCard.tsx
+ * (ports CRM/lib/showcase/rewards/reward_card.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(color: card, borderRadius: radiusBig, clipBehavior: Clip.antiAlias)
+ * > Column(min, stretch)`. The clip is what rounds the photo's top corners.
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-big);
+  overflow: hidden;
+}
+
+/* `AspectRatio(aspectRatio: 1.5) > Stack(fit: StackFit.expand)`. */
+.hero {
+  position: relative;
+  aspect-ratio: 1.5;
+  /* `errorBuilder: (_, _, _) => ColoredBox(color: card)` — shows when the
+     photo is absent or dead, because the <img> is removed on error. */
+  background: var(--sc-card);
+}
+
+/* `Image(fit: BoxFit.cover)`. */
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * `RewardPriceTag` — `Container(padding: symmetric(horizontal: spacingMedium,
+ * vertical: spacingTiny), color: primary, borderRadius: radiusSmall)` over
+ * `Text(pSmall @ primaryButtonText, w700)`.
+ *
+ * `primaryButtonText` is the theme's own `regular_text` derivation of
+ * `primary` — the service's AA-checked answer to "what reads on this fill".
+ */
+.priceTag {
+  position: absolute;
+  top: var(--sc-spacing-medium);
+  right: var(--sc-spacing-medium);
+  padding: var(--sc-spacing-tiny) var(--sc-spacing-medium);
+  border-radius: var(--sc-radius-small);
+  background: var(--sc-primary);
+  font: var(--sc-type-p-small);
+  font-weight: 700;
+  letter-spacing: var(--sc-type-p-small-ls);
+  color: var(--sc-primary-button-text);
+}
+
+/* `Padding(all: paddingSmall) > Column(min, stretch, spacing: spacingMedium)`. */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+  padding: var(--sc-padding-small);
+}
+
+/*
+ * `_kRewardCardTitleHeight` — two lines of 16px `h2` at ~1.3, reserved so a
+ * one-line and a two-line title produce the same card height. The 42 is the
+ * Dart's own const; it is a fixed box, not a derivation, so it is spelled here
+ * rather than computed from the type ramp.
+ */
+.titleSlot {
+  height: 42px;
+  overflow: hidden;
+}
+
+/*
+ * `Text(title, style: h2, maxLines: 2, overflow: ellipsis)`, top-aligned.
+ *
+ * `pre-line` is load-bearing: one sample title carries a literal `\n`
+ * (./mockPointsStore.ts) that Flutter's `Text` breaks on, and the default
+ * `normal` would collapse it to a space.
+ */
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  white-space: pre-line;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+  text-align: center;
+}
+
+/* `RewardPointsCost` — `Text('… pts', style: h2 @ primary)`. */
+.points {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-primary);
+  text-align: center;
+}

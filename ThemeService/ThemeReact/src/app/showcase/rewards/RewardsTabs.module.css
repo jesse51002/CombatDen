@@ -1,0 +1,49 @@
+/*
+ * Styles for ./RewardsTabs.tsx
+ * (ports CRM/lib/showcase/rewards/rewards_tabs.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(border: Border(bottom: text3rd @ dividerThickness),
+ * padding: only(top: spacingSmall, bottom: spacingTiny, left/right: paddingBig))
+ * > Row(spacing: spacingBig)`.
+ */
+.tabs {
+  display: flex;
+  gap: var(--sc-spacing-big);
+  padding: var(--sc-spacing-small) var(--sc-padding-big) var(--sc-spacing-tiny);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}
+
+/*
+ * `Expanded(child: Container(padding: only(bottom: spacingMedium),
+ * border: Border(bottom: … @ buttonBorder)))`.
+ *
+ * The inactive underline is the CANVAS colour rather than absent, which is what
+ * keeps both tabs exactly the same height.
+ */
+.tab {
+  flex: 1 1 0;
+  padding-bottom: var(--sc-spacing-medium);
+  border-bottom: var(--sc-button-border) solid var(--sc-background);
+}
+
+.active {
+  border-bottom-color: var(--sc-accent);
+}
+
+/* `Text(label, style: h2 @ text2nd)`, centred. */
+.label {
+  display: block;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text-2nd);
+  text-align: center;
+}
+
+/* `isActive ? accent : text2nd` — accent is the member app's active-state role. */
+.active .label {
+  color: var(--sc-accent);
+}

@@ -1,6 +1,6 @@
 /*
- * Styles for ./showcaseScreen.tsx — the island's ROOT box, and the five
- * surfaces whose ports have not landed yet.
+ * Styles for ./showcaseScreen.tsx — the island's ROOT box, and nothing else.
+ * Every one of the seven surfaces brings its own stylesheet.
  *
  * Everything here reads `--sc-*` and nothing else. Those variables are written
  * onto `.root` by ./ShowcaseThemeVars.tsx; the surrounding admin chrome's
@@ -25,82 +25,4 @@
   letter-spacing: var(--sc-type-p-ls);
   color-scheme: var(--sc-canvas);
   overflow: hidden;
-}
-
-/* --- The placeholder ------------------------------------------------------ */
-
-.screen {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--sc-spacing-large);
-  width: 100%;
-  height: 100%;
-  /* Clears the dynamic island, as the frame's MediaQuery inset does in Dart. */
-  padding: calc(var(--phone-status-inset, 52px) + var(--sc-spacing-big)) var(--sc-padding-big)
-    var(--sc-padding-big);
-  text-align: center;
-}
-
-.eyebrow {
-  margin: 0;
-  font: var(--sc-type-p-small);
-  letter-spacing: 1.6px;
-  text-transform: uppercase;
-  color: var(--sc-primary);
-}
-
-.title {
-  margin: 0;
-  font: var(--sc-type-big2);
-  letter-spacing: var(--sc-type-big2-ls);
-  color: var(--sc-text);
-}
-
-.body {
-  margin: 0;
-  max-width: 300px;
-  font: var(--sc-type-p);
-  letter-spacing: var(--sc-type-p-ls);
-  color: var(--sc-text-2nd);
-}
-
-.swatches {
-  display: flex;
-  gap: var(--sc-spacing-medium);
-}
-
-.swatch {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--sc-spacing-small);
-}
-
-.chip {
-  display: block;
-  width: var(--sc-icon-2xl);
-  height: var(--sc-icon-2xl);
-  border: var(--sc-divider-thickness) solid var(--sc-divider);
-  border-radius: var(--sc-radius-small);
-}
-
-.chipLabel {
-  font: var(--sc-type-p-small);
-  letter-spacing: var(--sc-type-p-small-ls);
-  color: var(--sc-text-3rd);
-}
-
-.cta {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 100%;
-  padding: var(--sc-padding-small);
-  border-radius: var(--sc-radius-big);
-  background: var(--sc-primary);
-  color: var(--sc-primary-button-text);
-  font: var(--sc-type-h3);
-  letter-spacing: var(--sc-type-h3-ls);
 }

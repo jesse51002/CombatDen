@@ -2,25 +2,35 @@
 // member-app surfaces previewable in the live theme preview, in slideshow
 // order, their short human labels, and the fan-out that builds each one.
 //
-// FOUR ARE REAL, THREE ARE STILL PLACEHOLDERS. `home`, `booking`, `wins` and
-// `streak` render the ported member-app screens; the other three keep the
-// theming-proof placeholder below until their own ports land beside this file.
-// The placeholder is not filler: every value it paints resolves LIVE, so a
-// wrong or unloaded theme shows up immediately rather than at integration time.
+// ALL SEVEN ARE REAL. Each case below renders the ported member-app screen; the
+// theming-proof placeholder that stood in for the last three is gone, because
+// nothing references it.
 //
 // Gym identity (`gymName` / `gymLogoSrc`) is NOT a customization slot — it is
-// the host's, passed in as arguments, and only the surfaces that render the gym
-// header consume it. This app is the PUBLIC browser and has no gym, which is
-// why `themeTabPreview` is on: with no host logo the topbar falls through to
-// the active theme's own `logo_primary`, so switching theme re-logos the mock.
+// the host's, passed in as arguments, and only the two surfaces that render the
+// gym header (`home` and `store`) consume it. This app is the PUBLIC browser
+// and has no gym, which is why `themeTabPreview` is on: with no host logo the
+// topbar falls through to the active theme's own `logo_primary`, so switching
+// theme re-logos the mock.
+//
+// The gym CONTENT ladder is the other half of that: `useShowcaseContent`
+// resolves the previewed category's demo classes and rewards (network →
+// bundled) once here, and hands the classes to `home` and the rewards to both
+// rewards surfaces — the same list, rendered as a cover flow on one and as
+// store cards on the other.
 //
 // Everything below obeys the showcase island's import rule (eslint.config.js
 // Gate 2a): `theme-react`, this island, and nothing from ../chrome, ../browser,
 // ../widgets or ../tokens. The surrounding admin chrome uses the SAME token
 // names with different values, which is exactly the mix-up the gate prevents.
 
+import type { ReactElement } from 'react';
+
 import { BookingShowcase } from './BookingShowcase';
 import { HomeShowcase } from './home/HomeShowcase';
+import { PointsShowcase } from './PointsShowcase';
+import { RewardsCardShowcase } from './RewardsCardShowcase';
+import { RewardsShowcase } from './RewardsShowcase';
 import styles from './showcaseScreen.module.css';
 import { ShowcaseThemeVars } from './ShowcaseThemeVars';
 import { StatsShowcase } from './StatsShowcase';
@@ -87,66 +97,43 @@ export function ShowcaseScreenView({
   gymName = DEFAULT_GYM_NAME,
   gymLogoSrc,
 }: ShowcaseScreenViewProps) {
-  const { classes } = useShowcaseContent(category);
+  const { classes, rewards } = useShowcaseContent(category);
 
-  return (
-    <ShowcaseThemeVars className={styles.root}>
-      {screen === 'home' ? (
+  // `ShowcaseScreen.build`'s switch. A switch rather than a ternary chain at
+  // seven cases, and exhaustive over the union — a new surface fails to
+  // typecheck here until it is built, which is what the placeholder used to
+  // paper over.
+  let surface: ReactElement;
+  switch (screen) {
+    case 'home':
+      surface = (
         <HomeShowcase
           gymName={gymName}
           gymLogoSrc={gymLogoSrc}
           classes={classes}
           themeTabPreview
         />
-      ) : screen === 'booking' ? (
-        <BookingShowcase />
-      ) : screen === 'wins' ? (
-        <WinsShowcase />
-      ) : screen === 'streak' ? (
-        <StatsShowcase />
-      ) : (
-        <PlaceholderScreen screen={screen} />
-      )}
-    </ShowcaseThemeVars>
-  );
-}
+      );
+      break;
+    case 'booking':
+      surface = <BookingShowcase />;
+      break;
+    case 'wins':
+      surface = <WinsShowcase />;
+      break;
+    case 'points':
+      surface = <PointsShowcase />;
+      break;
+    case 'rewards':
+      surface = <RewardsCardShowcase rewards={rewards} />;
+      break;
+    case 'streak':
+      surface = <StatsShowcase />;
+      break;
+    case 'store':
+      surface = <RewardsShowcase gymName={gymName} gymLogoSrc={gymLogoSrc} rewards={rewards} />;
+      break;
+  }
 
-/** The palette roles the placeholder shows, so an unresolved slot is obvious. */
-const SWATCHES: readonly string[] = Object.freeze([
-  '--sc-primary',
-  '--sc-accent',
-  '--sc-card',
-  '--sc-text',
-]);
-
-const SWATCH_LABELS: readonly string[] = Object.freeze(['primary', 'accent', 'card', 'text']);
-
-/**
- * The three surfaces whose ports have not landed. Explicitly labelled as a
- * placeholder, and painted entirely from the live `--sc-*` variables — so it is
- * also the cheapest proof that the theming pipeline reaches inside the phone.
- */
-function PlaceholderScreen({ screen }: { screen: ShowcaseScreen }) {
-  const label = SHOWCASE_SCREEN_LABELS[screen];
-  return (
-    <div className={styles.screen}>
-      <p className={styles.eyebrow}>Placeholder</p>
-      <h2 className={styles.title}>{label}</h2>
-      <p className={styles.body}>
-        The real {label.toLowerCase()} surface lands next. Everything you see here — the canvas, the
-        ink, both font slots and the swatches below — is resolved live from the selected theme.
-      </p>
-
-      <div className={styles.swatches}>
-        {SWATCHES.map((token, i) => (
-          <div key={token} className={styles.swatch}>
-            <span className={styles.chip} style={{ background: `var(${token})` }} />
-            <span className={styles.chipLabel}>{SWATCH_LABELS[i]}</span>
-          </div>
-        ))}
-      </div>
-
-      <div className={styles.cta}>Primary action</div>
-    </div>
-  );
+  return <ShowcaseThemeVars className={styles.root}>{surface}</ShowcaseThemeVars>;
 }

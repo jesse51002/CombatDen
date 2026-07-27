@@ -1,0 +1,135 @@
+/*
+ * Styles for ./SparkleHero.tsx
+ * (ports CRM/lib/showcase/rewards/sparkle_hero.dart).
+ *
+ * `--sc-*` for the design tokens (see ../ShowcaseThemeVars.tsx); `--sh-*` for
+ * this hero's own geometry and motion, which the component derives from
+ * ./sparkleHeroGeometry.ts and writes inline — so no offset, delay or point of
+ * the star is restated as a literal here.
+ */
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding, vertical: paddingBig) >
+ * Stack(alignment: center, clipBehavior: Clip.none)`.
+ *
+ * The sparkles are absolutely positioned against THIS box, and its symmetric
+ * padding is what makes its centre the accent block's centre — which is the
+ * `Alignment.center` the Dart stack resolves them against.
+ */
+.hero {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sc-padding-big) var(--sc-screen-padding-x);
+  /* `Clip.none` — sparkles sit up to 170px out and are meant to escape. */
+  overflow: visible;
+}
+
+/*
+ * One sparkle: `Transform.translate(offset)` over `Opacity` over
+ * `Transform.scale`, painted by `_SparklePainter`. The three transforms
+ * collapse into one declaration in the keyframes below, in Dart's nesting
+ * order: centre on the stack, translate to the scatter offset, then scale about
+ * the star's OWN centre.
+ */
+.sparkle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--sh-size);
+  height: var(--sh-size);
+  background: var(--sc-primary);
+  clip-path: var(--sh-star);
+  animation: heroSparkleIn var(--sh-fade-ms) var(--sh-ease) var(--sh-delay-ms) both;
+}
+
+/*
+ * `_accentBlock` — `Opacity > Transform.scale > Column(min, spacing: spacingSmall)`.
+ * Sits above the sparkles because it comes last in the Dart stack too.
+ */
+.accent {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  animation: heroAccentIn var(--sh-window-ms) var(--sh-ease) both;
+}
+
+/*
+ * `pSmall.copyWith(color: text2nd, fontWeight: w700, letterSpacing: 0.24 * pSmall.fontSize)`.
+ *
+ * `em` IS the correct unit here, and it is the exception the package's rule
+ * names: Flutter's `letterSpacing` is absolute px and normally ports as px, but
+ * this call site multiplies by the font size itself, which is exactly what `em`
+ * means (see ../../../CLAUDE.md, "Things that will bite").
+ *
+ * `font-weight` must follow the `font` shorthand — the shorthand resets it.
+ */
+.eyebrow {
+  font: var(--sc-type-p-small);
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  color: var(--sc-text-2nd);
+  text-align: center;
+}
+
+/* `big1_5.copyWith(color: primary, fontWeight: w700)` — the hero numeral. */
+.value {
+  font: var(--sc-type-big1-5);
+  font-weight: 700;
+  letter-spacing: var(--sc-type-big1-5-ls);
+  color: var(--sc-primary);
+  text-align: center;
+}
+
+/*
+ * `opacity: eased * s.$4` and `scale: 0.5 + 0.5 * eased`.
+ *
+ * Both are LINEAR in `eased`, so interpolating each endpoint-to-endpoint under
+ * the ease-out-quart timing function reproduces the Dart's per-frame value
+ * exactly rather than approximating it.
+ */
+@keyframes heroSparkleIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--sh-dx), var(--sh-dy))
+      scale(var(--sh-start-scale));
+  }
+
+  to {
+    opacity: var(--sh-opacity);
+    transform: translate(-50%, -50%) translate(var(--sh-dx), var(--sh-dy)) scale(1);
+  }
+}
+
+/* `opacity: t` and `scale: 0.92 + 0.08 * t`, both linear in the same eased `t`. */
+@keyframes heroAccentIn {
+  from {
+    opacity: 0;
+    transform: scale(var(--sh-accent-start-scale));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the hero renders settled. `both` would
+ * otherwise hold every sparkle at the `from` frame (invisible) forever.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .sparkle {
+    animation: none;
+    opacity: var(--sh-opacity);
+    transform: translate(-50%, -50%) translate(var(--sh-dx), var(--sh-dy));
+  }
+
+  .accent {
+    animation: none;
+  }
+}
