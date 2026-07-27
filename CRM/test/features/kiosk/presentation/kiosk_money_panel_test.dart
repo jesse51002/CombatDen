@@ -2,9 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_panel.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
 import 'package:crm/features/member_details/data/models/payments_invoice_preview.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_money_panel.dart';
 
 /// The review's money half names the address payment mail reaches — and says
 /// nothing when there is no address.
@@ -26,10 +30,19 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
+          child: child!,
+        ),
         home: Scaffold(
           body: SingleChildScrollView(
-            child: KioskMoneyPanel(
-              state: _state(),
+            // Through the kiosk's own reader, so the mapping the live review
+            // uses is what these assertions actually exercise.
+            child: FlowMoneyPanel(
+              money: kioskMoneyView(_state()),
               contactEmail: contactEmail,
             ),
           ),

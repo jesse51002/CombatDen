@@ -13,20 +13,16 @@ import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_section_head.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_chip.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_card_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_declined_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_entry_choice_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_identify_step.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_name_row.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_payer_pick_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_result_row.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
 import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_block.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_people_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_pick_step.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_results_screen.dart';
 import 'package:crm/features/member_details/data/models/authorized_payer_waiver.dart';
 import 'package:crm/features/member_details/data/models/member_detail_response.dart';
 import 'package:crm/features/member_details/data/models/member_memberships_start_preview.dart';
@@ -45,14 +41,22 @@ import 'package:crm/features/member_details/data/models/personal_info.dart';
 import 'package:crm/features/member_details/data/models/plan_type.dart';
 import 'package:crm/features/member_details/data/models/retention.dart';
 import 'package:crm/features/member_details/data/repositories/member_repository.dart';
+import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_request.dart';
 import 'package:crm/features/members_list/data/models/crm_members_list_response.dart';
 import 'package:crm/features/members_list/data/models/member_row.dart';
-import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/models/members_list_filters.dart';
 import 'package:crm/features/members_list/data/models/members_list_view.dart';
+import 'package:crm/features/members_list/data/models/membership_status.dart';
 import 'package:crm/features/members_list/data/repositories/members_list_repository.dart';
-import 'package:crm/features/member_details/presentation/dialogs/card_field_box.dart';
+import 'package:crm/features/membership_flow/config/kiosk_flow_copy.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_scale.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_buttons.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_card_chip.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_picked_banner.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_result_row.dart';
 import 'package:crm/features/memberships/data/models/waiver_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_signature_response.dart';
 import 'package:crm/features/memberships/data/models/waiver_type.dart';
@@ -191,6 +195,13 @@ void main() {
     addTearDown(() => tester.binding.setSurfaceSize(null));
     await tester.pumpWidget(
       MaterialApp(
+        // The kiosk SURFACE's scale, mounted the way `KioskSignupScreen`
+        // does: the shared flow components carry no size of their own.
+        builder: (context, child) => MembershipFlowTheme(
+          scale: const MembershipFlowScale.kiosk(),
+          copy: const KioskFlowCopy(),
+          child: child!,
+        ),
         home: Scaffold(
           body: BlocProvider<KioskSignupCubit>.value(
             value: cubit,
@@ -439,8 +450,8 @@ void main() {
         find.widgetWithText(KioskOutlineButton, 'Choose who\'s paying'),
         findsOneWidget,
       );
-      final primary = tester.widget<KioskPrimaryButton>(
-        find.byType(KioskPrimaryButton),
+      final primary = tester.widget<FlowPrimaryButton>(
+        find.byType(FlowPrimaryButton),
       );
       expect(primary.onPressed, isNull);
       expect(tester.takeException(), isNull);
@@ -472,13 +483,13 @@ void main() {
       await tester.pump();
       await pump(tester, const KioskPlanPickStep());
 
-      expect(find.byType(KioskPlanPickedBanner), findsNothing);
+      expect(find.byType(FlowPlanPickedBanner), findsNothing);
 
-      await tester.tap(find.byType(KioskPlanCard).first);
+      await tester.tap(find.byType(FlowPlanCard).first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 400));
 
-      expect(find.byType(KioskPlanPickedBanner), findsOneWidget);
+      expect(find.byType(FlowPlanPickedBanner), findsOneWidget);
       expect(find.text('YOU\'VE PICKED'), findsOneWidget);
       expect(find.text('Unlimited'), findsWidgets);
       expect(tester.takeException(), isNull);
@@ -496,7 +507,7 @@ void main() {
 
       expect(find.text('Already used'), findsOneWidget);
 
-      await tester.tap(find.widgetWithText(KioskPlanCard, 'Two-week trial'));
+      await tester.tap(find.widgetWithText(FlowPlanCard, 'Two-week trial'));
       await tester.pump();
       // The tap EXPLAINS and selects nothing: a blocked plan must never reach
       // the review and fail at pay.
@@ -505,7 +516,7 @@ void main() {
         cubit.state.planBlockActive,
         KioskPlanBlockReason.trialUsed,
       );
-      expect(find.byType(KioskPlanPickedBanner), findsNothing);
+      expect(find.byType(FlowPlanPickedBanner), findsNothing);
       expect(tester.takeException(), isNull);
       await cubit.close();
     });
@@ -530,11 +541,11 @@ void main() {
         // describe a narrower rule than the grid enforces.
         expect(find.textContaining('Two-week trial'), findsNothing);
         expect(
-          find.widgetWithText(KioskPrimaryButton, 'Pick a membership'),
+          find.widgetWithText(FlowPrimaryButton, 'Pick a membership'),
           findsOneWidget,
         );
         expect(
-          find.widgetWithText(KioskOutlineButton, 'Get help at the desk'),
+          find.widgetWithText(FlowOutlineButton, 'Get help at the desk'),
           findsOneWidget,
         );
         // No blocking overlay may hold a shared iPad forever.
@@ -566,7 +577,7 @@ void main() {
         findsOneWidget,
       );
 
-      await tester.tap(find.widgetWithText(KioskPlanCard, 'Unlimited'));
+      await tester.tap(find.widgetWithText(FlowPlanCard, 'Unlimited'));
       await tester.pump();
       expect(cubit.state.activePerson.selectedPlanId, isNull);
       expect(
@@ -598,7 +609,7 @@ void main() {
 
       // The rule is PER PLAN: a member on one recurring plan may still buy a
       // different one, and a false block turns a paying customer away.
-      await tester.tap(find.widgetWithText(KioskPlanCard, 'Two classes a week'));
+      await tester.tap(find.widgetWithText(FlowPlanCard, 'Two classes a week'));
       await tester.pump();
       expect(cubit.state.activePerson.selectedPlanId, 'plan-2');
       expect(cubit.state.planBlockActive, isNull);
@@ -710,7 +721,7 @@ void main() {
         expect(find.text('You\'re all set'), findsOneWidget);
         expect(find.text('Every membership below started today.'),
             findsOneWidget);
-        expect(find.byType(KioskResultRow), findsNWidgets(5));
+        expect(find.byType(FlowResultRow), findsNWidgets(5));
         expect(find.text('Marcus Bell · Unlimited'), findsOneWidget);
         expect(find.text('Started today'), findsNWidgets(5));
         // Names where FAILURE mail lands; no receipt is promised because none
@@ -729,7 +740,7 @@ void main() {
         expect(find.text('Retry the rest'), findsNothing);
         expect(find.byType(KioskReturnTimer), findsOneWidget);
         // The card chip is noise once the money has landed.
-        expect(find.byType(KioskCardChip), findsNothing);
+        expect(find.byType(FlowCardChip), findsNothing);
         expect(
           tester.takeException(),
           isNull,
@@ -777,7 +788,7 @@ void main() {
         );
         expect(find.byType(KioskReturnTimer), findsOneWidget);
         // Which card was used is the fact a member wants before retrying.
-        expect(find.byType(KioskCardChip), findsOneWidget);
+        expect(find.byType(FlowCardChip), findsOneWidget);
         // `Next` is live on a partial too (founder ruling): a retry-only
         // ladder strands a member who does not want to retry. It is
         // ADDITIONAL — the retry actions stay, and the desk finishes the rest.

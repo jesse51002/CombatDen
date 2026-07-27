@@ -130,7 +130,7 @@ void main() {
 
     // The shared duplicate warning + matched member card render inside this
     // (payer-direction) dialog.
-    expect(find.text('Possible duplicate'), findsOneWidget);
+    expect(find.text('This may already be a member'), findsOneWidget);
     expect(find.byType(DuplicateMemberPanel), findsOneWidget);
     expect(find.text('Jo Doe'), findsOneWidget);
 
@@ -165,10 +165,14 @@ void main() {
 
     // Advanced to the authorize/sign phase — the dialog stays open (nothing
     // popped) and shows the sign step (here its waiver-load error, as no
-    // backend is reachable in tests). "Authorize payer" appears as both the
-    // dialog title and the sign footer's confirm button.
+    // backend is reachable in tests). The head names the pair being
+    // authorized and the footer's confirm button names the act.
     expect(result, isNull);
-    expect(find.text('Authorize payer'), findsWidgets);
+    expect(
+      find.text('Authorize Jo Doe to pay for Pat Payee'),
+      findsOneWidget,
+    );
+    expect(find.text('Sign and authorize'), findsWidgets);
     expect(
       find.text("We couldn't load the waiver. Please try again."),
       findsOneWidget,

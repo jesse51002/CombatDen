@@ -186,7 +186,7 @@ class _Initials extends StatelessWidget {
     return Center(
       child: Text(
         _initials(channelName),
-        style: DesignConstants.kioskTag.copyWith(
+        style: DesignConstants.tag.copyWith(
           color: DesignConstants.text2nd,
         ),
       ),
@@ -225,7 +225,7 @@ class _Meta extends StatelessWidget {
         // (or invent a count).
         Text(
           views.isEmpty ? video.channelName : '$views views',
-          style: DesignConstants.kioskTag.copyWith(
+          style: DesignConstants.tag.copyWith(
             fontWeight: FontWeight.w500,
             color: DesignConstants.text2nd,
           ),

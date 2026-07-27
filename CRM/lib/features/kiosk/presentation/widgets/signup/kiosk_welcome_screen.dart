@@ -16,7 +16,7 @@ import 'package:crm/features/kiosk/presentation/widgets/get_app/slides/kiosk_ran
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_buttons.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_get_app_modal.dart';
 import 'package:crm/features/kiosk/presentation/widgets/kiosk_return_timer.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
 import 'package:crm/shared/widgets/hairline.dart';
 
 /// The signup's terminal — they're a member, and the next thing they need is
@@ -64,7 +64,7 @@ class KioskWelcomeScreen extends StatelessWidget {
                   // membership is still outstanding, and the desk is where it
                   // gets finished.
                   if (state.welcomeAfterPartial)
-                    const KioskInlineNotice(
+                    const FlowInlineNotice(
                       message: 'Some memberships didn\'t go through — ask the '
                           'front desk to finish them.',
                     ),

@@ -5,11 +5,14 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/utils/money.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_money_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_group_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_review_side_panel.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_flow_views.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_money_view.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_money_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_group_panel.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_review_side_panel.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 
 /// D6 — the last screen before the money moves: what was picked, what was
@@ -36,23 +39,19 @@ class KioskReviewStep extends StatelessWidget {
           prev.cardLast4 != cur.cardLast4,
       builder: (context, state) {
         final ready = state.preview != null;
-        return KioskSignupStepScaffold(
+        final copy = MembershipFlowTheme.copyOf(context);
+        return KioskStepScaffold(
           step: KioskSignupStep.review,
-          // Button-agnostic: the label below says what is being signed and for
-          // how much, so naming it here would start lying the moment a trial
-          // cart changes the verb.
-          title: 'Check this over',
-          subtitle: state.isGroup
-              ? 'One card covers everyone. Nothing is charged until you '
-                  'confirm.'
-              : 'Nothing is charged until you confirm.',
-          foot: KioskFlowFoot(
+          title: copy.reviewStepTitle,
+          subtitle: copy.reviewStepSubtitle(isGroup: state.isGroup),
+          foot: FlowFoot(
             primaryLabel: _primaryLabel(state, ready: ready),
             // The label carries the amount, so the button is inert until the
             // amount is real: never commit before the screen says what for.
             onPrimary: ready ? cubit.pay : null,
             onBack: cubit.back,
-            confirmAbandon: true,
+            // The escape CONFIRMS here — everything typed and signed would go.
+            onEscape: cubit.askAbandon,
           ),
           child: ready ? _Panels(state: state) : const _Loading(),
         );
@@ -103,7 +102,7 @@ class _Panels extends StatelessWidget {
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(
-          maxWidth: DesignConstants.kioskFormMeasure,
+          maxWidth: DesignConstants.flowFormMeasure,
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -113,12 +112,15 @@ class _Panels extends StatelessWidget {
               // A group is blocked BY PERSON — the solo panel reads as a single
               // purchase and cannot answer "who costs what" for a family.
               child: state.isGroup
-                  ? KioskReviewGroupPanel(state: state)
-                  : KioskReviewSidePanel(state: state),
+                  ? FlowReviewGroupPanel(people: kioskReviewPeople(state))
+                  : FlowReviewSidePanel(
+                      person: kioskReviewPerson(state, state.activePerson),
+                      signed: kioskSignedWaivers(state),
+                    ),
             ),
             Expanded(
-              child: KioskMoneyPanel(
-                state: state,
+              child: FlowMoneyPanel(
+                money: kioskMoneyView(state),
                 contactEmail: state.payer.email,
               ),
             ),

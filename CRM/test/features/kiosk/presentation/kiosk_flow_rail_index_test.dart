@@ -1,12 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_rail.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
+import 'package:crm/features/kiosk/presentation/kiosk_rail_index.dart';
 
 /// The step rail's mapping, pinned.
 ///
-/// `kioskFlowRailIndex` alone decides which rung a member sees lit, and getting
+/// `kioskRailIndex` alone decides which rung a member sees lit, and getting
 /// it wrong is SILENT: nothing throws, the rail just advertises progress that
 /// has not happened. So every enum value is asserted by name, and both
 /// templates are asserted to still be 6 solo / 7 group.
@@ -50,19 +49,19 @@ void main() {
       expected.keys.toSet(),
       KioskSignupStep.values.toSet(),
       reason: 'a step was added to the spine without a rail mapping — add it '
-          'to `kioskFlowRailIndex` AND to this table in the same change.',
+          'to `kioskRailIndex` AND to this table in the same change.',
     );
   });
 
   test('the mapping is exactly the table above', () {
     expected.forEach((step, rungs) {
       expect(
-        kioskFlowRailIndex(step, isGroup: false),
+        kioskRailIndex(step, isGroup: false),
         rungs.$1,
         reason: 'solo rung for $step',
       );
       expect(
-        kioskFlowRailIndex(step, isGroup: true),
+        kioskRailIndex(step, isGroup: true),
         rungs.$2,
         reason: 'group rung for $step',
       );
@@ -70,11 +69,11 @@ void main() {
   });
 
   test('the templates stay 6 solo / 7 group, and every rung is reachable', () {
-    expect(kKioskSoloFlowSteps, hasLength(6));
-    expect(kKioskGroupFlowSteps, hasLength(7));
+    expect(kKioskSoloSteps, hasLength(6));
+    expect(kKioskGroupSteps, hasLength(7));
     for (final rungs in expected.values) {
-      expect(rungs.$1, lessThan(kKioskSoloFlowSteps.length));
-      expect(rungs.$2, lessThan(kKioskGroupFlowSteps.length));
+      expect(rungs.$1, lessThan(kKioskSoloSteps.length));
+      expect(rungs.$2, lessThan(kKioskGroupSteps.length));
     }
   });
 }

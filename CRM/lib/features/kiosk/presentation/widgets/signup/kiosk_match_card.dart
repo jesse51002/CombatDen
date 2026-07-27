@@ -69,7 +69,7 @@ class _TypedBox extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               spacing: DesignConstants.spacingSmall,
               children: [
-                Text('YOU TYPED', style: DesignConstants.kioskEyebrow),
+                Text('YOU TYPED', style: DesignConstants.eyebrow),
                 Text(
                   name,
                   style: DesignConstants.kioskName,

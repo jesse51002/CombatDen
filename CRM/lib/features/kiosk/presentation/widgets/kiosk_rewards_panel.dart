@@ -76,7 +76,7 @@ class _RewardsHead extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text('YOUR POINTS', style: DesignConstants.kioskEyebrow),
+        Text('YOUR POINTS', style: DesignConstants.eyebrow),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           spacing: DesignConstants.spacingMedium,

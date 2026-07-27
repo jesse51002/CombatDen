@@ -104,7 +104,7 @@ class _Head extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       spacing: DesignConstants.spacingSmall,
       children: [
-        Text('IN THE APP', style: DesignConstants.kioskEyebrow),
+        Text('IN THE APP', style: DesignConstants.eyebrow),
         Text(
           title,
           style: DesignConstants.kioskPanelTitle,

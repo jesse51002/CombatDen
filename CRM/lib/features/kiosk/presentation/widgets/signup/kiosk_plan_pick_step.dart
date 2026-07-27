@@ -5,13 +5,14 @@ import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_cubit.dart';
 import 'package:crm/features/kiosk/bloc/kiosk_signup_state.dart';
 import 'package:crm/features/kiosk/presentation/kiosk_plan_block_copy.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_flow_foot.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_inline_notice.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_card.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_plan_picked_banner.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_signup_step_scaffold.dart';
-import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_who_for.dart';
+import 'package:crm/features/kiosk/presentation/widgets/signup/kiosk_step_scaffold.dart';
 import 'package:crm/features/member_details/data/models/membership_plan_response.dart';
+import 'package:crm/features/membership_flow/config/membership_flow_theme.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_foot.dart';
+import 'package:crm/features/membership_flow/presentation/chrome/flow_who_for.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_inline_notice.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_card.dart';
+import 'package:crm/features/membership_flow/presentation/widgets/flow_plan_picked_banner.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
 import 'package:crm/shared/widgets/fill_grid.dart';
 
@@ -78,21 +79,31 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
         builder: (context, state) {
           final picked = state.activePerson.selectedPlanId;
           final pickedPlan = state.planById(picked);
-          return KioskSignupStepScaffold(
+          final copy = MembershipFlowTheme.copyOf(context);
+          // The step is walked once per TRAINING person, so the run's own
+          // order is what the answering line counts through.
+          final order = state.trainingPersonIndexes;
+          return KioskStepScaffold(
             step: KioskSignupStep.plans,
-            title: _title(state),
-            subtitle: _subtitle(state),
+            title: copy.planStepTitle(
+              firstName: state.activePerson.firstName,
+              isGroup: state.isGroup,
+            ),
+            subtitle: copy.planStepSubtitle(
+              personIndex: order.indexOf(state.activePersonIndex),
+              personCount: order.length,
+            ),
             bodyController: _scroll,
             // Pinned so it cannot scroll away: a parent picking three
             // memberships in a row must never buy the wrong one for the wrong
             // child. Solo has only one person to mean, so it is omitted.
             identity: state.isGroup
-                ? KioskWhoFor(
+                ? FlowWhoFor(
                     eyebrow: 'PICKING FOR',
                     name: _fullName(state),
                   )
                 : null,
-            foot: KioskFlowFoot(
+            foot: FlowFoot(
               onPrimary: picked == null ? null : cubit.continueFromPlans,
               onBack: cubit.back,
               // Skip is GROUP-only (founder ruling): skipping the sole person
@@ -101,6 +112,7 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
               // roster — see `KioskSignupCubit.skipPlanForPerson`.
               onSkip: state.isGroup ? cubit.skipPlanForPerson : null,
               skipLabel: 'Skip',
+              onEscape: cubit.abandon,
             ),
             child: state.plansLoading && state.plans.isEmpty
                 ? const _Loading()
@@ -116,29 +128,9 @@ class _KioskPlanPickStepState extends State<KioskPlanPickStep> {
     );
   }
 
-  /// The step is walked once per TRAINING person, so in a GROUP the title names
-  /// whose choice is on screen — every turn, the payer's included. An unnamed
-  /// turn in a run of named ones is paid for with the wrong membership on the
-  /// wrong person. Solo keeps the second person.
-  String _title(KioskSignupState state) {
-    if (!state.isGroup) return 'Pick your membership';
-    final first = state.activePerson.firstName.trim();
-    return first.isEmpty
-        ? 'Pick their membership'
-        : 'Pick $first\'s membership';
-  }
-
   String _fullName(KioskSignupState state) {
     final person = state.activePerson;
     return '${person.firstName} ${person.lastName}'.trim();
-  }
-
-  String _subtitle(KioskSignupState state) {
-    const rule = 'You can change it any time at the front desk · no lock-in';
-    final order = state.trainingPersonIndexes;
-    if (order.length < 2) return rule;
-    final at = order.indexOf(state.activePersonIndex);
-    return 'Person ${at + 1} of ${order.length} · $rule';
   }
 }
 
@@ -183,9 +175,9 @@ class _PlanGrid extends StatelessWidget {
         // Context first, then the pick just made. The notice NAMES the
         // membership this person already holds, so a marked card has its answer
         // above it and not only behind a tap; it is self-gating.
-        if (held != null) KioskInlineNotice(message: held),
+        if (held != null) FlowInlineNotice(message: held),
         if (pickedPlanName != null)
-          KioskPlanPickedBanner(planName: pickedPlanName!),
+          FlowPlanPickedBanner(planName: pickedPlanName!),
         FillGrid(
           // Three across on the kiosk stage, degrading to two on a narrower
           // fold — the class grid's own numbers.
@@ -235,7 +227,7 @@ class _PlanTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final reason = state.planBlockReason(plan);
-    return KioskPlanCard(
+    return FlowPlanCard(
       plan: plan,
       selected: selected,
       // A blocked plan can never be selected; the cubit turns its tap into the

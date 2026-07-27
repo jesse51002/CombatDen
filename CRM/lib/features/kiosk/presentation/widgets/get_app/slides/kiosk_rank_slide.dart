@@ -129,7 +129,7 @@ class _Belt extends StatelessWidget {
               ? DesignConstants.kioskLabel.copyWith(
                   fontWeight: FontWeight.w700,
                 )
-              : DesignConstants.kioskTag.copyWith(
+              : DesignConstants.tag.copyWith(
                   fontWeight: FontWeight.w600,
                   color: DesignConstants.text2nd,
                 ),
