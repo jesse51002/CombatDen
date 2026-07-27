@@ -50,6 +50,13 @@ and the boundary between them is load-bearing:
   | `browser/selectedStyle.ts` | the THEME half of `CRM/lib/core/state/selected_gym.dart` |
   | `widgets/` | `CRM/lib/shared/widgets/*.dart` |
   | `showcase/` | `CRM/lib/showcase/` |
+  | `showcase/celebrations/CountUpText.tsx` | `CRM/lib/shared/widgets/animation/count_up_text.dart` |
+
+  The count-up is the one file in `showcase/` that does not come out of
+  `CRM/lib/showcase/`. Dart keeps it in `shared/widgets/animation/` because the
+  kiosk uses it too; this app has no kiosk, and its only readers are the
+  celebration screens — so it sits with the other celebration primitives rather
+  than in a one-file `animation/` folder.
 
   Nothing gated on `selectedGym.gymId != null` ports: this browser has no gym,
   no auth and no write path, so the admin's "set as app theme" / "edit gym name"
@@ -152,6 +159,16 @@ context so a value can reach somewhere, the resolver already reaches there.
   `addPostFrameCallback` or a `GlobalKey` — it fires at commit with the node in
   hand, so it may write a ref and measure/scroll (`useElementSize`, the
   centre-once anchors in `LibraryView` / `ThemeGrid`).
+- **Flutter's named `Curves.*` are cubic BÉZIERS, not the analytic easings the
+  web reaches for, and `Curve.transform` short-circuits both endpoints.**
+  `Curves.easeOutExpo` is `Cubic(0.19, 1, 0.22, 1)` — not `1 - 2^(-10t)` — and
+  the two diverge visibly over a 1400ms count-up. `showcase/celebrations/curves.ts`
+  therefore ports `Cubic.transformInternal`'s own bisection, and CSS needs none
+  of it because `cubic-bezier()` IS the same curve (which is why the library
+  exports `EASE_OUT_QUART` as a string). The endpoint short-circuit is
+  load-bearing, not an optimisation: the bisection stops within
+  `_cubicErrorBound` (0.001) of the target x, so without it an ease answers
+  ~0.005 at `t == 0` and a phase that has not started is already 0.5% in.
 - **CSS scroll anchoring fights a collapsing header.** The library's title
   collapses out of the flow as the page scrolls; Chrome compensates for that
   height change by moving the scroll offset, which shoves it straight back

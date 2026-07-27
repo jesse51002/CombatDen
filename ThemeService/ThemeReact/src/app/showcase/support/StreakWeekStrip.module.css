@@ -1,0 +1,96 @@
+/*
+ * Styles for ./StreakWeekStrip.tsx
+ * (ports CRM/lib/showcase/support/streak_week_strip.dart).
+ *
+ * `--sc-*` for the design tokens (see ../ShowcaseThemeVars.tsx); `--sw-*` for
+ * the two per-badge motions, written inline by the component from the ported
+ * stagger arithmetic so no delay is a literal here.
+ */
+
+/* `Row(mainAxisAlignment: spaceBetween)`. */
+.strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  width: 100%;
+}
+
+/* `StaggeredReveal(delay)` — the outer of the two motions. */
+.reveal {
+  flex: 0 0 auto;
+  animation: streakBadgeReveal var(--sw-reveal-ms) var(--sw-ease) var(--sw-delay-ms) both;
+}
+
+/*
+ * `Container(padding: (h: spacingMedium, v: paddingSmall), borderRadius:
+ * radiusSmall)` over `Column(min, spacing: spacingSmall)`.
+ *
+ * The narrow horizontal padding is deliberate (Dart says so in place): it is
+ * what lets all seven day-pills fit the device width without overflowing, while
+ * the taller vertical padding keeps the pill proportion.
+ */
+.badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  padding: var(--sc-padding-small) var(--sc-spacing-medium);
+  border-radius: var(--sc-radius-small);
+  background: var(--sc-background);
+  color: var(--sc-text-2nd);
+}
+
+/*
+ * A day the member trained: the brand tint, the brand ink, and `_PulseOnLand` —
+ * a scale 0.9 → 1 on the same beat as the reveal above it.
+ */
+.completed {
+  background: var(--sc-primary-card);
+  color: var(--sc-primary);
+  animation: streakBadgePulse var(--sw-pulse-ms) var(--sw-ease) var(--sw-delay-ms) both;
+}
+
+/* `h2` at the badge's own colour. */
+.label {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: inherit;
+}
+
+/* `Icon(weight: iconWeight, size: iconSizeSm)` at the badge's own colour. */
+.glyph {
+  flex: 0 0 auto;
+  color: inherit;
+}
+
+/* `StaggeredReveal`: opacity 0 -> 1 with a 12px slide up, ease-out-quart. */
+@keyframes streakBadgeReveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--sw-reveal-offset));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `_PulseOnLand`: `scale: 0.9 + 0.1 * easeOutQuart(t)`. */
+@keyframes streakBadgePulse {
+  from {
+    transform: scale(0.9);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+/* `MediaQuery.disableAnimationsOf` — the strip renders landed. */
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  .completed {
+    animation: none;
+  }
+}

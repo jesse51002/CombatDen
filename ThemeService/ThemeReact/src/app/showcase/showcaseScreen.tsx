@@ -2,11 +2,11 @@
 // member-app surfaces previewable in the live theme preview, in slideshow
 // order, their short human labels, and the fan-out that builds each one.
 //
-// TWO ARE REAL, FIVE ARE STILL PLACEHOLDERS. `home` and `booking` render the
-// ported member-app screens; the other five keep the theming-proof placeholder
-// below until their own ports land beside this file. The placeholder is not
-// filler: every value it paints resolves LIVE, so a wrong or unloaded theme
-// shows up immediately rather than at integration time.
+// FOUR ARE REAL, THREE ARE STILL PLACEHOLDERS. `home`, `booking`, `wins` and
+// `streak` render the ported member-app screens; the other three keep the
+// theming-proof placeholder below until their own ports land beside this file.
+// The placeholder is not filler: every value it paints resolves LIVE, so a
+// wrong or unloaded theme shows up immediately rather than at integration time.
 //
 // Gym identity (`gymName` / `gymLogoSrc`) is NOT a customization slot — it is
 // the host's, passed in as arguments, and only the surfaces that render the gym
@@ -23,7 +23,9 @@ import { BookingShowcase } from './BookingShowcase';
 import { HomeShowcase } from './home/HomeShowcase';
 import styles from './showcaseScreen.module.css';
 import { ShowcaseThemeVars } from './ShowcaseThemeVars';
+import { StatsShowcase } from './StatsShowcase';
 import { useShowcaseContent } from './useShowcaseContent';
+import { WinsShowcase } from './WinsShowcase';
 
 /** The member-app surfaces previewable in the live theme preview. */
 export type ShowcaseScreen = 'home' | 'booking' | 'wins' | 'points' | 'rewards' | 'streak' | 'store';
@@ -98,6 +100,10 @@ export function ShowcaseScreenView({
         />
       ) : screen === 'booking' ? (
         <BookingShowcase />
+      ) : screen === 'wins' ? (
+        <WinsShowcase />
+      ) : screen === 'streak' ? (
+        <StatsShowcase />
       ) : (
         <PlaceholderScreen screen={screen} />
       )}
@@ -116,7 +122,7 @@ const SWATCHES: readonly string[] = Object.freeze([
 const SWATCH_LABELS: readonly string[] = Object.freeze(['primary', 'accent', 'card', 'text']);
 
 /**
- * The five surfaces whose ports have not landed. Explicitly labelled as a
+ * The three surfaces whose ports have not landed. Explicitly labelled as a
  * placeholder, and painted entirely from the live `--sc-*` variables — so it is
  * also the cheapest proof that the theming pipeline reaches inside the phone.
  */
