@@ -40,21 +40,24 @@ enum MotionPersonality {
 }
 
 /// The one-shot that plays before a post-class card settles.
+///
+/// Every value plays something. A celebration card always animates, so
+/// "no intro" is deliberately not offerable — a tenant that has not
+/// opted in gets [orbit] like everyone else, and an unrecognised wire
+/// value (including the retired `none`) resolves to it too.
 enum CelebrationIntro {
   /// Icon pops, a rotating ring of particles expands then collapses.
   orbit,
 
-  /// Particles fire outward once and fade where they land.
+  /// Particles gather inward, then fire outward and fade where they
+  /// land.
   burst,
 
   /// Icon rises from below with a trailing blur and settles.
   rise,
 
   /// Icon flips on the Y axis; the count starts mid-flip.
-  flipCount,
-
-  /// Card arrives settled. Stats still cascade via the reveal style.
-  none;
+  flipCount;
 
   static CelebrationIntro fromWire(String? wire) =>
       parseFormat(values, wire, CelebrationIntro.orbit);

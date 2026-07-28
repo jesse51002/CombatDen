@@ -2,8 +2,12 @@ import 'package:flutter/material.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/formats/format_catalog.dart';
-import 'package:mobile_app/core/formats/format_overrides.dart';
+import 'package:mobile_app/core/formats/format_resolver.dart';
 import 'package:mobile_app/core/formats/format_store.dart';
+
+/// Marks the chip a row is currently showing as live, so a test can read
+/// back what the panel displays rather than infer it from a decoration.
+Key selectedChipKey(String slot) => Key('format-selected-$slot');
 
 /// The in-app DEV picker for layout and motion formats.
 ///
@@ -73,8 +77,11 @@ class _PanelHeader extends StatelessWidget {
           ),
           Text(
             pinned == 0
-                ? 'Showing what this tenant resolves to.'
-                : '$pinned pinned. Nothing here reaches a real tenant.',
+                ? 'Live values, resolved exactly as the app resolves '
+                      'them. Each row says where its value came from.'
+                : '$pinned pinned. A pin wins until the next theme '
+                      'load, which releases all of them, and never '
+                      'reaches a real tenant.',
             style: DesignConstants.pSmall.copyWith(
               color: DesignConstants.text2nd,
             ),
@@ -113,17 +120,14 @@ class _FormatRow extends StatelessWidget {
 
   final FormatEntry entry;
 
-  /// What this slot resolves to right now, ignoring the store — so an
-  /// unpinned row still shows which value is actually live.
-  String get _effective =>
-      FormatStore.instance.read(entry.slot) ??
-      FormatOverrides.read(entry.slot) ??
-      entry.shipped;
-
   @override
   Widget build(BuildContext context) {
-    final pinned = FormatStore.instance.read(entry.slot) != null;
-    final effective = _effective;
+    // Asked of the resolver, never re-derived here: this row used to
+    // walk its own copy of the chain, and the copy was missing the
+    // tenant step, so a themed slot drew the shipped value as selected.
+    final source = FormatResolver.sourceOf(entry.slot);
+    final effective = FormatResolver.resolve(entry.slot, entry.shipped);
+    final pinned = source == FormatSource.pinned;
     return Padding(
       padding: EdgeInsets.fromLTRB(
         DesignConstants.screenHorizontalPadding,
@@ -139,6 +143,12 @@ class _FormatRow extends StatelessWidget {
             spacing: DesignConstants.spacingSmall,
             children: [
               Text(entry.label, style: DesignConstants.h2),
+              Text(
+                source.label,
+                style: DesignConstants.pSmall.copyWith(
+                  color: DesignConstants.text3rd,
+                ),
+              ),
               if (!entry.implemented)
                 Text(
                   'not wired yet',
@@ -154,6 +164,10 @@ class _FormatRow extends StatelessWidget {
             children: [
               for (final value in entry.values)
                 _ValueChip(
+                  // Keyed so a test can read back which value this row
+                  // is actually showing as live, without inferring it
+                  // from a decoration.
+                  key: value == effective ? selectedChipKey(entry.slot) : null,
                   label: value,
                   selected: value == effective,
                   pinned: pinned && value == effective,
@@ -172,6 +186,7 @@ class _FormatRow extends StatelessWidget {
 
 class _ValueChip extends StatelessWidget {
   const _ValueChip({
+    super.key,
     required this.label,
     required this.selected,
     required this.pinned,

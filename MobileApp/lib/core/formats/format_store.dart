@@ -16,6 +16,12 @@ import 'package:flutter/foundation.dart';
 /// re-resolve in place, so navigation state is preserved — you stay on
 /// the screen you are judging instead of being thrown back to Home.
 ///
+/// A theme carries its own format slots, so **loading a theme releases
+/// every pin** — see [bindTo]. The theme sets the formats; a pin
+/// overrides it until the next load. Without that, one tap froze a slot
+/// for the rest of the session and every theme loaded afterwards
+/// silently failed to move it.
+///
 /// Deliberately in-memory only. Nothing here is persisted or ever read
 /// in a release build (the panel that writes it is behind [kDebugMode]),
 /// so it cannot leak into what a real tenant sees.
@@ -52,4 +58,16 @@ class FormatStore extends ChangeNotifier {
     _overrides.clear();
     notifyListeners();
   }
+
+  /// Release every pin whenever [changes] fires — wired once at startup
+  /// against `ThemeRuntime.changes`.
+  ///
+  /// Every pin, not just the slots the incoming theme speaks to: a
+  /// half-cleared picker is not something you can reason about
+  /// mid-review, and "Reset means back to the theme" is a rule that
+  /// fits in your head.
+  ///
+  /// Never unsubscribed, because both the store and the engine live for
+  /// the whole process.
+  void bindTo(Listenable changes) => changes.addListener(reset);
 }

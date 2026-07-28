@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_config.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/formats/format_store.dart';
 import 'package:mobile_app/features/class_booking/presentation/screens/class_booked_screen.dart';
 import 'package:mobile_app/features/class_booking/presentation/screens/class_screen.dart';
 import 'package:mobile_app/features/home/presentation/screens/home_screen.dart';
@@ -36,6 +37,13 @@ Future<void> main() async {
     expectedText: CombatDenSlots.expectedText,
     expectedIcons: CombatDenSlots.expectedIcons,
   );
+
+  // A theme carries its own layout/motion format slots, so loading one
+  // releases every dev-picker pin: the theme sets the formats, and a pin
+  // overrides it only until the next load. Wired here, once, rather than
+  // per screen. Attached after the first load, whose values the empty
+  // store already resolves to.
+  FormatStore.instance.bindTo(ThemeRuntime.changes);
 
   runApp(const MobileAppRoot());
 }

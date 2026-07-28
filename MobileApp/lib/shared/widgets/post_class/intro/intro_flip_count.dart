@@ -5,17 +5,27 @@ import 'package:mobile_app/core/formats/motion_formats.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
 import 'package:mobile_app/shared/widgets/post_class/intro/celebration_intro_frame.dart';
 
-// Composed from `CelebrationTimings`: the flip is the sparkle window,
-// the settle is one pulse, the exit is the standard element reveal.
-final Duration _kFlip = CelebrationTimings.sparkleWindow;
-final Duration _kSettle = CelebrationTimings.pulseDuration;
-final Duration _kExit = CelebrationTimings.revealDuration;
-final Duration _kTotal = _kFlip + _kSettle + _kExit;
+// The turn is this intro's own timing math, per CLAUDE.md's `_k`
+// carve-out. It is slow on purpose: a quarter turn is a small amount of
+// change, and at speed it reads as a flicker rather than as a figure
+// turning to face you.
+const Duration _kDelay = Duration(milliseconds: 300);
+const Duration _kFlip = Duration(milliseconds: 1200);
+const Duration _kHold = Duration(milliseconds: 200);
+// A long, gentle fade rather than a snap: the figure is dissolving over
+// a count-up that is already rolling, so this beat is a cross-fade.
+const Duration _kExit = Duration(milliseconds: 800);
 
-/// The one value that hands off before it finishes. Half way through the
-/// flip the settled content starts revealing underneath, so the count-up
-/// is already rolling while the figure is still turning.
-final Duration _kHandoff = _kFlip ~/ 2;
+final Duration _kTotal = _kDelay + _kFlip + _kHold + _kExit;
+
+/// The one value that hands off before it finishes. Half way through
+/// the turn the settled content starts revealing underneath, so the
+/// count-up is already rolling while the figure is still moving.
+final Duration _kHandoff = _kDelay + _kFlip ~/ 2;
+
+/// Matches `rise`: the figure fades up while it is still turning, so it
+/// is never fully present before the run-up is.
+final Duration _kFadeIn = CelebrationTimings.revealDuration * 2;
 
 const double _kExitShrink = 0.3;
 
@@ -24,7 +34,7 @@ const double _kExitShrink = 0.3;
 /// The hero turns in on the vertical axis from edge-on, and the card's
 /// figure starts counting mid-turn rather than waiting for the intro to
 /// clear. Nothing is added or removed by that overlap: the same settled
-/// content arrives, it just arrives while the hero is still moving.
+/// content arrives, in the same place, while the hero is still moving.
 final CelebrationIntroSpec kFlipCountIntro = CelebrationIntroSpec(
   value: CelebrationIntro.flipCount,
   total: _kTotal,
@@ -34,18 +44,25 @@ final CelebrationIntroSpec kFlipCountIntro = CelebrationIntroSpec(
 );
 
 CelebrationIntroFrame _frameAt(double t) {
-  final total = _kTotal.inMilliseconds.toDouble();
-  final flipEnd = _kFlip.inMilliseconds / total;
-  final holdEnd = (_kFlip + _kSettle).inMilliseconds / total;
-  final fadeInEnd = _kExit.inMilliseconds / total;
+  final ms = t * _kTotal.inMilliseconds;
+  final flipStart = _kDelay.inMilliseconds.toDouble();
+  final exitStart = flipStart + _kFlip.inMilliseconds + _kHold.inMilliseconds;
 
   // Edge-on to face-on, decelerating into square. A quarter turn, so no
-  // frame ever shows the mark mirrored, and the rotation approaches zero
-  // without passing it.
-  final flipE = Curves.easeOutCubic.transform((t / flipEnd).clamp(0.0, 1.0));
-  final fadeInE = Curves.easeOut.transform((t / fadeInEnd).clamp(0.0, 1.0));
-  final exitT = ((t - holdEnd) / (1 - holdEnd)).clamp(0.0, 1.0);
-  final exitE = Curves.easeInQuart.transform(exitT);
+  // frame ever shows the mark mirrored, and the rotation approaches
+  // zero without passing it.
+  final flipE = Curves.easeOutCubic.transform(
+    ((ms - flipStart) / _kFlip.inMilliseconds).clamp(0.0, 1.0),
+  );
+  final fadeInE = Curves.easeOut.transform(
+    ((ms - flipStart) / _kFadeIn.inMilliseconds).clamp(0.0, 1.0),
+  );
+  // Ease-OUT on the way out too, so the figure clears the count-up
+  // early in the beat instead of sitting on top of it and then
+  // vanishing.
+  final exitE = Curves.easeOut.transform(
+    ((ms - exitStart) / _kExit.inMilliseconds).clamp(0.0, 1.0),
+  );
 
   return CelebrationIntroFrame(
     heroScale: 1 - _kExitShrink * exitE,
