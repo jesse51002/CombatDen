@@ -170,7 +170,7 @@ export function RewardsCarousel({
 function RewardCircle({ item }: { item: ShowcaseRewardItem }) {
   const src = showcaseAssetOrNetwork(item.imageUrl, item.imageAsset);
   // `key` remounts the frame whenever the photo changes, so one dead URL cannot
-  // pin the slot to the empty disc forever. The same reset ../home/ClassListItem.tsx
+  // pin the slot to the empty disc forever. The same reset ../home/classItem/ClassItemThumb.tsx
   // and the library's <ThemedImage> use, and for the same reason.
   return <RewardCircleFrame key={src} src={src} alt={item.name} />;
 }

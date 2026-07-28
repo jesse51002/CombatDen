@@ -303,9 +303,12 @@ context so a value can reach somewhere, the resolver already reaches there.
 - **`letterSpacing` ports as `px`, never `em`.** Flutter's `letterSpacing` is an
   absolute logical pixel value that does NOT scale with font size; CSS `em` does.
   `ShowcaseTokens.h1` is `letterSpacing: -0.02` at 24px → `-0.02px`. Writing
-  `-0.02em` gives `-0.48px` — about 24× tighter. The one legitimate `em` is
-  `library_card.dart:75`, which writes `0.08 * h3.fontSize` and is explicitly
-  proportional.
+  `-0.02em` gives `-0.48px` — about 24× tighter. **`em` is legitimate only where
+  the Dart itself writes the value as a fraction of `fontSize`**, which is a
+  proportion by construction and therefore ports as one: `library_card.dart:75`
+  (`0.08 * h3.fontSize`), `rewards/RewardBandSection.module.css` (`0.16 *
+  h3.fontSize`) and `rewards/SparkleHero.module.css` (`0.24 *`). Anywhere the
+  Dart writes a bare number, it is logical pixels and `em` is a bug.
 - **`getSnapshot()` must return a cached reference.** `useSyncExternalStore`
   throws "The result of getSnapshot should be cached" and loops forever if the
   store returns a fresh object literal per call. Build one frozen snapshot inside

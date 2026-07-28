@@ -13,7 +13,7 @@
 // and 404s on its own; a stale avatar drawn as a filled disc is worse than no
 // avatar at all. Dart spells this `errorBuilder: SizedBox.shrink()`; here the
 // <img> is removed on error and the `key` remount resets that decision whenever
-// the URL changes (the same idiom ../home/ClassListItem.tsx uses — resetting in
+// the URL changes (the same idiom ../home/classItem/ClassItemThumb.tsx uses — resetting in
 // an effect is a lint error in this package, see ../../../CLAUDE.md).
 
 import { useState } from 'react';

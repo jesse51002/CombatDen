@@ -7,7 +7,7 @@
 // rather than to a broken-image glyph. The `key` remount is what resets that
 // decision when the URL changes — a category switch swaps the whole feed, and
 // without it one dead URL would pin its slot to the empty box forever (the same
-// idiom ../home/ClassListItem.tsx and ../rewards/RewardCard.tsx use; resetting
+// idiom ../home/classItem/ClassItemThumb.tsx and ../rewards/RewardCard.tsx use; resetting
 // in an effect is a lint error in this package, see ../../../CLAUDE.md).
 
 import { useState } from 'react';

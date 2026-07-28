@@ -21,7 +21,7 @@
 // when the injected rewards change. Resetting state from an effect is a lint
 // error in this package (../../CLAUDE.md), so the celebration is `key`-remounted
 // on a signature of the resolved items instead — the sanctioned replacement,
-// and the same reset ../home/ClassListItem.tsx uses for a changed photo.
+// and the same reset ../home/classItem/ClassItemThumb.tsx uses for a changed photo.
 //
 // WHAT DRIVES WHAT. The giftbox intro is the one rAF driver: the box's spin and
 // fourteen stars share ONE clock and are recomputed per frame (./rewardsCelebration.ts
