@@ -52,12 +52,25 @@ FORMAT_PROMPT_PATH = (
 
 # Model for the format call. A per-call constant, not config: the model is
 # a property of this call. Override via ``resolve(model=...)`` in dev;
-# production uses this default. Haiku is plenty — this is a closed
-# single-label pick per slot over a short brief, constrained by the closed
-# schema and the per-slot vocabulary validator. Matches the other
-# classify-shaped calls in the package (classification, icon set
-# selection, text generation).
-FORMAT_MODEL = "anthropic/claude-haiku-4-5"
+# production uses this default.
+#
+# SONNET, NOT HAIKU, AND THE SHAPE OF THE CALL IS WHY. This looks
+# classify-shaped — a closed single-label pick per slot, schema-constrained
+# and vocabulary-validated — and it was run on Haiku for exactly that
+# reason. The output shape is not the difficulty. What is being asked for
+# is TASTE: which arrangement a brand should live in, judged from prose
+# about that brand, thirteen times over, coherently. Haiku answered it the
+# way a small model answers an aesthetic question — it found a safe value
+# per slot and repeated it, returning the same app-shell arrangement for 74
+# of 76 differently-branded gyms.
+#
+# So this belongs with the COLOUR call (``COLOR_MODEL``), the package's
+# other judgement call, rather than with the classify-shaped ones
+# (classification, icon-set selection, text generation) it superficially
+# resembles. The vocabulary describes each arrangement and stops; deciding
+# which one suits a brand is the model's job, and it needs a model that can
+# do it.
+FORMAT_MODEL = "anthropic/claude-sonnet-4-6"
 
 
 class FormatSelectionService:

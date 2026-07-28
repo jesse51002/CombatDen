@@ -342,9 +342,13 @@ icons:
 # never which elements exist or where they sit.
 #
 # Each value's description is the only thing the model reads to choose, so
-# each one says three things: what the value does to the screen, how it
-# reads to a member, and what kind of brand it was built for AND what kind
-# it is wrong for. The contrast is the part that makes a choice possible.
+# each one describes the arrangement and stops there: what dominates it,
+# what is demoted, where things sit relative to each other, and — for the
+# motion slots — what moves, in what direction, and how fast, with real
+# proportions and real timings wherever they matter. Which brand belongs in
+# which arrangement is the classifier's own judgement and is deliberately
+# NOT written here: fit language in the vocabulary gets pattern-matched and
+# obeyed rather than reasoned about, and collapses the spread of picks.
 formats:
   # ---------------------------------------------------------------------
   # LAYOUT — one slot per major screen, plus the shell.
@@ -360,122 +364,115 @@ formats:
     values:
       - value: stacked
         description: >-
-          The mark takes a full square at the top of Home with the gym
-          name beneath it, and the stats spread across a full-width bar
-          under that, so identity claims real vertical space and each
-          stat gets room around it. Reads like walking into a lobby: the
-          place announces itself first, and the member's numbers are laid
-          out rather than clustered. Built for gyms whose name and mark
-          are the draw — an established club, a franchise with equity in
-          its logo, anywhere membership means belonging to a named place.
-          Wrong for a gym whose members open the app several times a week
-          to check one time, where a lobby on every screen is a toll they
-          pay over and over.
+          The mark takes a 100px square at the top of Home with the gym
+          name centred beneath it at 24px bold, and 32px of air separates
+          that block from the stats. Under them the rank, streak, points
+          and QR spread across four equal full-width columns, each value
+          at 12px with room around it. The bar is padded 32px from the top
+          of the screen, 16px at the bottom, and closed by a 1px rule. On
+          every screen other than Home the mark drops out and the name
+          renders at 16px. The bottom navigation is a 64px bar sitting
+          flush against the bottom edge, one labelled icon per tab, with a
+          1px rule along its top.
       - value: compactRail
         description: >-
-          Mark, gym name and the whole stats cluster share one compact
-          row, so the chrome is a single band of height and the screen's
-          content starts higher on every tab. Reads
-          efficient and tool-like: the brand is present but is not asking
-          for the room. Built for gyms whose app is used in a hurry and
-          used often, and whose screens are long — a full weekly
-          timetable, a deep video library, a large rewards catalogue.
-          Wrong for a boutique studio whose whole proposition is the room
-          and the name, where compressing identity into a corner turns a
-          considered brand into a booking utility.
+          Mark, gym name and all four stats share one horizontal row: a
+          28px mark leading, the name beside it at 16px set to ellipsize
+          rather than wrap, and rank, streak, points and QR clustered
+          tight at the trailing edge at 11px with 16px icons. The bar is
+          padded 16px from the top and 8px at the bottom — half the height
+          of the stacked arrangement — so the screen's content starts
+          higher on every tab, and a 1px rule closes it. The stats no
+          longer span the width; they take only the room they need on the
+          right. The bottom navigation is the same flush 64px labelled
+          bar.
       - value: statFirst
         description: >-
-          The stats row (rank, streak, points, QR) sits ABOVE the brand
-          identity, and identity drops beneath it to a small mark and a
-          body-sized name, so the first thing on every screen is the
-          member's own progress rather than the gym's name. Reads as a
-          training instrument rather than a storefront: personal,
-          measured, faintly utilitarian. Built for gyms whose whole
-          proposition is measurable progress — competitive programmes,
-          belt and rank systems, anywhere members come to watch a number
-          move. Wrong for a studio whose draw is atmosphere or community,
-          where meeting the member with their own metrics before the
-          brand's name feels like being weighed at the door.
+          The stats row (rank, streak, points, QR) sits above the brand
+          identity rather than below it, so it is the first thing on every
+          screen: four equal columns running the full width with their
+          values at 12px. Identity drops beneath it to a 20px mark and a
+          12px regular-weight name on one line, 16px under the stats. The
+          frame is the same 32px top padding and 1px closing rule as the
+          stacked arrangement — only the order and the scale of the
+          identity change. The gym's name no longer has a line of its own.
+          The bottom navigation is the flush 64px labelled bar.
       - value: markOnly
         description: >-
-          Only the mark is shown: the gym name leaves the screen (it
-          stays in the tree as the switch-gym target and for screen
-          readers), the stats run inline beside it, there is no rule
-          under the bar, and the bottom nav becomes a floating pill with
-          no labels. Reads assured and design-led — an app confident you
-          already know whose it is. Built for a single-location brand
-          with a distinctive, self-explanatory mark and a members-only
-          audience: the kind of gym whose logo is on the wall, the shirts
-          and the door. Wrong for a multi-location or newly opened gym
-          whose name is still doing the work of telling a member where
-          they are, and for an audience that needs its navigation
-          labelled.
+          Only the 56px mark is shown, centred, on every screen including
+          Home; the gym name occupies zero width (it stays in the tree as
+          the switch-gym target and for screen readers). The four stats
+          run inline in a centred row 8px beneath it at 11px, taking only
+          the width they need rather than spreading. No rule closes the
+          bar — this is the one arrangement without one. The bottom
+          navigation becomes a 56px floating pill inset 32px from each
+          side edge and lifted 8px off the bottom, fully rounded with a
+          1px border, carrying 24px icons and no visible labels.
   - id: home_format
     description: >-
-      The class schedule — the app's default landing destination and the
-      screen a member opens most. It lists the gym's upcoming classes by
-      day; this slot decides how those days and classes are arranged.
+      The class schedule — the screen the app opens on. It lists the gym's
+      upcoming classes by day; this slot decides how those days and
+      classes are arranged.
     values:
       - value: agendaList
         description: >-
-          A pinned date rail sits over vertically stacked day groups,
-          each class a row with its text left and a thumbnail right, so a
-          whole week is one continuous scroll with a shortcut to any day.
-          Reads like a printed timetable you flick through: orderly,
-          complete, easy to plan against. Built for a gym with a broad
-          weekly programme whose members choose their days in advance
-          rather than taking whatever is next. Wrong for a studio running
-          one or two sessions a day, where a date rail and day headers
-          are scaffolding around almost nothing.
+          A 50px date rail pins to the top of the scroll — 365 day pills
+          with the selected one underlined — and stays there while the
+          header above it scrolls away. Beneath it the days stack
+          vertically, each opening with an uppercase day label and 32px of
+          air. Every class is a full-width row with its title, time,
+          instructor and attendee count on the left and a 122x73
+          thumbnail on the right, closed by a 2px rule. No text is
+          clamped, so a long class name wraps instead of truncating. The
+          whole week is one continuous vertical scroll with the rail as a
+          shortcut into any day.
       - value: dayPager
         description: >-
-          The date rail stops being a scroll shortcut and becomes the
-          control: it drives a horizontal pager, one day per swipe, and
-          each class gets the room to be a wide image-top media card.
-          Reads focused and unhurried — one day is the whole world, and
-          each class is presented rather than listed. Built for a gym
-          whose days are genuinely different from one another and whose
-          classes have to be sold with a picture: themed sessions, varied
-          programming, a studio where choosing is part of the
-          experience. Wrong for a member comparing Tuesday against
-          Thursday to plan a training week, which this turns into a
-          swipe-and-remember exercise.
+          The date rail pins and becomes the control: tapping a day
+          animates a horizontal pager to that page over 350ms, and swiping
+          the page moves the rail back. Each of the 365 days is its own
+          page with its own vertical scroll, so exactly one day exists on
+          screen at a time. Classes become wide media cards — a
+          full-width 16:9 image with 16px rounded corners on top, then the
+          title, time, instructor and attendees stacked 16px beneath it,
+          with no dividing rule between one card and the next. The header
+          above the rail scrolls away.
       - value: timeSpine
         description: >-
-          The time leaves the meta column and becomes a left gutter with
-          a vertical rule running down every row, so consecutive classes
-          read as one continuous spine, and the thumbnail demotes to a
-          small square. Reads like the board on the wall of a busy gym:
-          operational and precise, time first and everything else second.
-          Built for gyms running many sessions back to back — a full mat
-          schedule, overlapping classes, open mats — where the real
-          question is what is on at six. Wrong for a studio with two
-          sessions a day, where a timetable spine implies a density that
-          is not there and shrinks the imagery that actually sells the
-          class.
+          The time leaves the class text and becomes a 66px left gutter
+          carrying the start time over the duration, with a 1px vertical
+          rule running the full height of every row beside it, so
+          consecutive classes read as one continuous line down the page.
+          The thumbnail shrinks to a 44x44 square held at the top of its
+          row, and the class text sits between the rule and the thumbnail
+          with its own time removed since the gutter already carries it.
+          No horizontal rule separates rows. Above it, the same pinned
+          50px date rail with underlined day pills over a header that
+          scrolls away.
       - value: nextUpHero
         description: >-
-          The upcoming-sessions card runs edge to edge as a hero, the
-          date rail becomes a segmented control that scrolls away with
-          the content instead of pinning, and the rest of the schedule
-          collapses into dense rows beneath. Reads as an answer rather
-          than a catalogue: what is next, then everything else. Built for
-          a gym whose members train on a fixed routine and open the app
-          on the way in — a commuter check-in, a team with a set weekly
-          schedule. Wrong for a gym whose value is variety and discovery,
-          where putting one booked session in front of the programme
-          hides everything else the gym offers.
+          The upcoming-sessions card loses its 16px side gutters and runs
+          edge to edge as a 290px hero at the top of the page. The date
+          rail below it is a segmented control with the selected day as a
+          filled chip, and it is the one arrangement where the rail does
+          not pin — it scrolls away with everything else. The schedule
+          under it goes dense: each class is a 44x44 square thumbnail
+          leading a tight text block with 4px of vertical padding,
+          separated by 1px hairlines rather than 2px rules. What is
+          booked sits at the top of the screen; the rest of the programme
+          is below it.
       - value: boardGrid
         description: >-
-          Each day is a band header over a two-up card grid, which packs
-          twice as many classes into a screenful and pays for it in time
-          hierarchy: two classes side by side no longer read as "this
-          one, then that one". Reads like a menu board — a wide offer,
-          browsed by what it is rather than when it runs. Built for a
-          multi-discipline club with many concurrent class types, where
-          members pick by discipline first and time second. Wrong for a
-          gym whose classes run strictly in sequence, where losing the
-          reading order of the day is losing the schedule itself.
+          Each day opens with its uppercase label band and then lays its
+          classes out two across rather than one under the other. Every
+          cell is a raised card on the card surface with 16px rounded
+          corners: a 4:3 image filling the top, then the title, time,
+          instructor and attendees in an 8px-padded block beneath. Cells
+          sit 16px apart in both directions inside a 16px screen gutter,
+          and the two cards of a row share a height. Because two classes
+          sit side by side, a row has no top-to-bottom reading order of
+          its own. The 50px date rail pins above it with underlined day
+          pills.
   - id: videos_format
     description: >-
       The video feed — the technique / level-up library, browsed by tag.
@@ -483,58 +480,57 @@ formats:
     values:
       - value: carouselRows
         description: >-
-          A pill strip of tags, one featured video as a hero, then a
-          horizontally scrolling row per tag, so many groups stay
-          reachable without a long page. Reads like a streaming service:
-          a deep library you graze rather than read. Built for a gym
-          publishing a lot of content across a lot of tags, whose promise
-          to members is the size of the library. Wrong for a small or
-          newly started library, where a horizontal row holding three
-          items reads as an empty shelf.
+          A horizontal strip of tag pills sits at the top, then one
+          featured video as a 32px-rounded card with a 16:9 image, a 55px
+          creator avatar and a full-width Play button under it. Beneath
+          that each tag becomes a horizontally scrolling row of 258px-wide
+          cards, each with a 145px-tall image, a 35px avatar and a title
+          clamped to one line. Section titles sit left with a view-all
+          link on the same line. Nothing pins — pill strip, hero and every
+          row scroll away together — and the only sideways movement is
+          inside each tag's own row.
       - value: editorialStack
         description: >-
-          Nothing scrolls sideways: the hero bleeds to both edges like a
-          cover, and every tag becomes a vertical section of two
-          width-filling cards closed by a view-all row. Reads like a
-          publication — slower, considered, every title legible at a
-          glance. Built for a gym whose content is long-form and
-          instructional, where members choose by reading the title rather
-          than recognising a thumbnail. Wrong for a large, shallow
-          catalogue meant to be skimmed, since every tag now costs a full
-          screen to pass.
+          Nothing scrolls sideways. The featured video loses its rounded
+          corners and bleeds to both screen edges as a full-width 16:9
+          cover. Below it each tag is a vertical section: its title alone
+          on a line, then two full-width 16:9 cards stacked 16px apart
+          with their titles, avatars and view counts underneath, then a
+          full-width view-all row closing the section. Every card spans
+          the screen's width between 16px gutters, so a section is two
+          images, a title line and a closing row. The tag pills stay a
+          plain unpinned strip at the top.
       - value: mosaic
         description: >-
-          The tag filter pins to the top so it stays reachable through a
-          long page, the hero spans the full width, and each tag becomes
-          a two-column tile grid under an inline band divider. Reads like
-          a gallery: image-led, dense, made for browsing by eye. Built
-          for a library whose thumbnails carry the meaning — movement
-          demos, drills, highlight footage — and that is deep enough to
-          reward scrolling. Wrong for content whose titles are the
-          information (numbered curriculum steps, named techniques),
-          which a two-column tile clips before it can be read.
+          The tag pills pin at the top inside a 76px band and stay on
+          screen for the whole page. Under them the featured video keeps
+          its 32px-rounded card, and each tag becomes a two-column grid of
+          16:9 tiles spaced 16px in both directions, with the last cell of
+          every grid a view-all tile cut to the same shape as a video.
+          Section titles sit inline with a 1px rule running from the end
+          of the text to the right edge. Card meta shrinks to fit the
+          narrower cell — the creator avatar drops from 35px to 28px.
       - value: shortsColumn
         description: >-
-          One column of tall portrait cards, with each tag's name riding
-          the top of its first card instead of standing above the
-          section, so the page reads as one continuous run of posters.
-          Reads native and casual — the shape members already scroll in
-          every other app on the phone. Built for a gym whose content is
-          short vertical clips: quick drills, tips, technique of the day.
-          Wrong for landscape or long-form sessions, which portrait cards
-          letterbox, and for a library whose tag structure is meant to be
-          navigated rather than scrolled past.
+          One column of full-width cards, each a 16:9 image on a
+          16px-rounded card surface with an opaque caption band riding its
+          bottom edge — the avatar, title and view count sit ON the image
+          rather than under it. Each tag's name rides a second opaque band
+          across the TOP of that tag's first card instead of standing
+          above the section, so the page runs as one uninterrupted column
+          of images with no title line breaking it. Remaining cards follow
+          plain, 16px apart. The tag pills stay an unpinned strip at the
+          top and nothing scrolls sideways.
       - value: tagRail
         description: >-
-          The filter leaves the top and becomes a pinned rail down the
-          left, scrolling inside its own fixed band, with the content in
-          one narrower column beside it. Reads like a reference library
-          with its table of contents permanently open. Built for a feed
-          carrying enough named groups that a strip across the top stops
-          being readable — a structured syllabus, a technique index, a
-          multi-discipline catalogue. Wrong for a library with two or
-          three tags, where a permanent rail spends a sixth of the screen
-          on a control with almost nothing to do.
+          The tag filter leaves the top of the screen and becomes a
+          112px-wide column down the left, its pills stacked vertically
+          inside a 240px band that pins and holds position while the page
+          scrolls past it. Content runs beside it in the remaining width:
+          the featured card, then each tag as a stacked section of
+          full-width 16:9 cards closed by a view-all row. The content
+          column is narrower than in every other arrangement by the width
+          of the rail and its gutters. Nothing scrolls sideways.
   - id: rank_format
     description: >-
       Rank and progress — the member's current earned tier, their streak,
@@ -543,62 +539,60 @@ formats:
     values:
       - value: sparkleStack
         description: >-
-          The streak hero opens the screen at full size, then the rank
-          summary (current rank, rating plot, range pills), then the next
-          rank, then level-up videos, each separated by a rule. Reads as
-          a record of showing up: consistency is the headline and grading
-          is context beneath it. Built for gyms with no formal ladder, or
-          where attendance IS the progression — group fitness,
-          conditioning, studios whose retention story is the habit.
-          Wrong for a graded art whose members open this screen to ask
-          how far they are from the next belt, a question this
-          arrangement answers third.
+          The streak hero opens the screen at full size, then the current
+          rank: a 77x50 belt centred over its name, a 196.5px-tall rating
+          plot inline inside 16px gutters, and a centred row of timeframe
+          pills. A 1px divider, then next rank as a row with its title and
+          distance on the left and a 100px ring-wrapped badge trailing on
+          the right. Another divider, then the level-up video carousel.
+          Everything scrolls together including the topbar; nothing holds
+          a fixed position.
       - value: beltHero
         description: >-
-          The current rank becomes a full-width band with the streak
-          statement laid over it, the next-rank rail runs directly
-          beneath, and the rating plot demotes to a card lower down, so
-          "where I am" and "what is next" are one glance instead of two
-          scroll positions. Reads ceremonial: the rank is worn, not
-          reported. Built for graded martial arts where the belt is
-          identity — the thing a member earns, wears and is known by.
-          Wrong for a gym with no visible rank ladder, where a full-width
-          band leads the screen with a token that means little to the
-          person looking at it.
+          The current rank becomes a 220px full-width band of belt artwork
+          with a scrim darkening downward into the page and the rank names
+          set at its bottom-left, and the streak statement is laid
+          directly over that band rather than occupying a section of its
+          own. Immediately beneath it, next-rank progress is a 6px bar
+          running edge to edge, then a row pairing a 56px badge with the
+          next rank's name — so where the member is and what is next are
+          one glance apart. The rating plot drops below a divider onto a
+          small raised card at 196.5px, alongside the timeframe pills.
+          Level-up videos close the screen.
       - value: statTiles
         description: >-
-          A board opens the screen — the streak above it, paired tiles
-          for current rank and the timeframe selector, then next rank —
-          with the rating plot running full bleed beneath. Reads as a
-          dashboard: training as a set of readings you check. Built for
-          performance-led gyms whose members treat training as
-          measurement — conditioning programmes, competitive athletes,
-          anyone tracking form across months. Wrong for a studio where
-          progress is felt rather than measured, and where a board of
-          tiles makes a practice look like a quarterly report.
+          The streak hero opens at full size, then a board of tiles: two
+          176px-tall cards side by side — the current rank with a 60x39
+          belt centred over its name, and the timeframe control as a 2x2
+          pill grid — over a third full-width 176px tile holding next rank
+          as a 64px ring badge with its label centred underneath. Every
+          tile is a rounded card surface with 8px of internal padding,
+          8px apart. Below the board the rating plot runs the full device
+          width at 248px tall with no side gutters — the tallest and only
+          edge-to-edge plot of the five. Level-up videos close the screen.
       - value: progressFirst
         description: >-
-          Next-rank progress is promoted to a large arc with the rank
-          token inside it at the top of the screen, the streak drops to a
-          line, and the current rank compresses to a row beneath, so the
-          screen answers "how far" before it answers "what am I". Reads
-          as a climb in progress: the ladder is the point and the member
-          is on it. Built for programmes with a long, finely stepped
-          syllabus, where the next tier is close enough to chase and the
-          distance is the motivation. Wrong for a gym with two or three
-          broad levels, where an arc that barely moves in a month reads
-          as being stuck.
+          Next-rank progress leads the screen: a 232x232 arc drawn at a
+          10px stroke with a 120px rank badge centred inside it and the
+          next rank's title and distance centred beneath. The streak
+          follows at full size, then the current rank compresses to a
+          left-aligned 77x50 belt beside its name — one row. Below a
+          divider the timeframe control becomes four equal segments
+          sharing a single row and the rating plot sits inline at
+          196.5px, the last thing before the video carousel. The arc is
+          the largest single element on the screen.
       - value: splitRank
         description: >-
-          The screen splits cleanly into where the member IS and what
-          comes NEXT, with the rating plot as a collapsible strip on the
-          seam between them. Reads plain and instructional: the structure
-          is obvious and nothing on the screen performs. Built for a
-          technical academy whose voice is matter-of-fact, that would
-          rather state a member's standing than dramatise it. Wrong for a
-          gym leaning on the app as its motivation surface, where a
-          treatment this even-handed undersells the achievement it is
-          reporting.
+          The screen divides into where the member IS and what comes NEXT.
+          The upper block is the current rank — a left-aligned 77x50 belt
+          beside its name — with the streak 16px beneath it. On the seam
+          between the halves sits a collapsible plot: a header row
+          carrying inline timeframe options and a chevron toggle, over a
+          110px strip, the shortest of the three plot heights, which folds
+          away to nothing when collapsed. The lower block is next rank,
+          left-aligned: a 72px badge beside its name, then an 8px
+          full-width rounded progress bar, then the distance label. One
+          divider, then level-up videos.
   - id: rewards_format
     description: >-
       The points store — the catalogue of rewards a member spends earned
@@ -607,60 +601,62 @@ formats:
     values:
       - value: cardGrid
         description: >-
-          Topbar, tab strip and points headline over a two-up grid of
-          image-top cards, each with its price tag on the image. Reads
-          like a small shop: things you can see, priced and compared side
-          by side. Built for a catalogue of physical goods that a
-          photograph sells — merchandise, gear, supplements, branded kit.
-          Wrong for a catalogue of intangible perks (a guest pass, a free
-          session, a private lesson) that have no picture worth half the
-          screen.
+          The topbar, tab strip and points headline scroll away with the
+          content into a two-column grid of image-top cards. Each card is
+          a 32px-rounded surface: a 3:2 photograph on top with the price
+          tag chipped into its top-right corner, then a 16px-padded block
+          holding a two-line title on a reserved 42px slot, the points
+          cost, and a full-width redeem button. The two columns are
+          independent, so a card's height is not forced to match its
+          neighbour's. 16px screen gutters, 16px between cards in both
+          directions.
       - value: listRows
         description: >-
-          Every reward takes a full-width row: square thumbnail leading,
-          price inline beside the cost, action trailing, and the title
-          gets the whole width so a two-line clamp stops deciding what a
-          reward is called. Reads as a plain price list — legible,
-          unglamorous, quick to scan down. Built for perk-shaped
-          catalogues whose names carry the meaning ("Bring a friend to
-          any class", "One month of locker hire"). Wrong for a
-          merchandise store, where the product photograph is the reason
-          anyone wants the item and a square thumb is not it.
+          Every reward takes a full-width row on the page background
+          rather than a card: a 76x76 square thumbnail leading, the title
+          on one line with the price chip and points cost inline beside
+          the cost, and the redeem button at the trailing edge. Rows carry
+          16px of vertical padding and are separated by 1px hairlines,
+          with no rounded surface, no reserved two-line title slot, and no
+          price tag on the image. The title gets the whole width between
+          thumbnail and button. Topbar, underlined tabs and points
+          headline scroll away above it.
       - value: posterDeck
         description: >-
-          The topbar, segmented tabs and points headline pin to the top,
-          and the rest of the screen is a horizontally snapping deck of
-          full-width posters, each carrying its own redeem action. Reads
-          like a gallery of prizes: one at a time, each given the whole
-          screen. Built for a short, curated catalogue where each reward
-          is an event in itself — a signature prize, a seasonal drop, a
-          handful of things genuinely worth wanting. Wrong for a long
-          catalogue, where a member hunting for the cheapest thing they
-          can afford has to swipe past everything to find it.
+          The topbar, segmented tabs and points headline do not scroll —
+          they hold the top of the screen while everything below them is
+          one horizontally snapping deck. Each reward is a
+          full-screen-width page inside a 16px gutter: a 32px-rounded card
+          whose image stretches to fill all the height the deck has left,
+          then a two-line title, the points cost set at heading size in
+          the brand colour, and a full-width redeem button carried on the
+          card itself. One reward is on screen at a time and the deck
+          snaps page to page; the page never scrolls vertically.
       - value: priceLadder
         description: >-
-          The points headline pins above the content so the member's
-          balance stays on screen while they scroll, and the rewards
-          group into cost bands, cheapest first, each band labelled by
-          how far off it is. Reads as a savings ladder: the store is a
-          set of targets and the balance is a position on it. Built for
-          gyms running points as a real engagement loop, where the member
-          should always be able to see the next thing within reach.
-          Wrong for a gym whose rewards are occasional gifts rather than
-          a currency, since banding a handful of items by price implies
-          an economy that is not actually running.
+          The points headline pins above the content so the balance stays
+          on screen while the rewards scroll under it. Rewards sort
+          cheapest first and fall into three labelled bands measured
+          against that balance — READY TO REDEEM for anything already
+          affordable, ALMOST THERE up to twice the balance, KEEP EARNING
+          beyond it — and a band with nothing in it is omitted entirely.
+          Band labels are small wide-tracked capitals, the affordable one
+          in the accent colour. Under each label sit three tiles per row:
+          a square image with its price chip, a one-line 12px title, an
+          11px cost and a compact redeem button, 8px apart, with 32px
+          between bands.
       - value: storefrontHero
         description: >-
-          The first reward in the catalogue is promoted to a full-bleed
-          hero with its title, cost and action riding the image; the
-          points headline drops below it and the rest fall into the
-          two-up grid, with the promoted reward taken OUT of the grid
-          rather than duplicated. Reads as retail merchandising: one
-          thing pushed, everything else stocked behind it. Built for a
-          gym that curates its catalogue and wants a flagship item or a
-          current promotion leading the screen. Wrong for a catalogue of
-          equals, where promoting whichever reward happens to be first
-          makes a claim the gym never intended to make.
+          The first reward in the catalogue is promoted to a 16:9
+          full-bleed panel above everything else — no rounded card
+          surface, just the photograph with a scrim rising from its bottom
+          edge carrying the title at 24px, the points cost, and a
+          full-width redeem button. The points headline drops below it,
+          and the remaining rewards fall into the same two-column grid of
+          3:2 image-top cards used elsewhere. The promoted reward is taken
+          OUT of the grid rather than repeated, so every reward appears
+          exactly once. The tabs above the hero are segmented rather than
+          underlined.
   - id: class_format
     description: >-
       Class detail and booking — the screen a member lands on from the
@@ -669,129 +665,119 @@ formats:
     values:
       - value: bannerStack
         description: >-
-          A photo banner, then the meta block, then three divided
-          sections — details, instructor, location — down one scroll with
-          the reserve action pinned beneath. Reads complete and
-          conventional: everything about the class is readable in order
-          without a tap. Built for a gym still converting newcomers and
-          drop-ins, where the description, the coach and the address all
-          genuinely get read before someone commits. Wrong for a
-          members-only routine where all of that is already known, and
-          the page becomes a long scroll past facts the member has read
-          fifty times.
+          A 248px full-width photograph sits under the topbar, then the
+          class meta and three divided sections — details, instructor,
+          location — run down one scroll 32px apart with a 1px rule
+          between each. All four blocks are present in that one scroll;
+          nothing sits behind a tap. The reserve button lives outside the
+          scroll entirely, pinned to the bottom of the screen inside 32px
+          of padding with a divider above it, so it holds position however
+          far down the page the member is.
       - value: overlayHero
         description: >-
-          A taller 4:5 hero carries the topbar at its top and the meta
-          block at its bottom, both behind a fade to the page
-          background, and the instructor is promoted above the
-          description. Reads like a poster for the session: the room and
-          the coach are the pitch. Built for gyms where the coach is the
-          reason to book — named instructors, personality-led
-          programmes, a gym that markets its people. Wrong for a gym
-          whose classes are interchangeable slots on a timetable, where
-          poster treatment promises a distinctiveness the session does
-          not have.
+          The photograph becomes a 4:5 portrait hero carrying both the
+          topbar and the class meta on it: a 180px fade at the top holds
+          the topbar over the image, and a second fade rising from the
+          bottom holds the title, time and location against it. Beneath
+          the hero the instructor section comes first, before the
+          description, with location last — three divided sections instead
+          of four. The reserve button is pinned at the bottom of the
+          screen inside 32px of padding, exactly as in the banner
+          arrangement.
       - value: detailSheet
         description: >-
-          The photo becomes a fixed backdrop and the content rises over
-          it as a draggable sheet, with the reserve action at the TOP of
-          the sheet — in thumb reach on the way down rather than at the
-          end of a scroll. Reads modern and tactile: booking is a
-          gesture, and the image is atmosphere behind it. Built for a
-          design-forward studio whose members book fast and repeatedly
-          and whose photography is worth keeping on screen. Wrong for a
-          gym whose class detail is genuinely reference material — long
-          descriptions, prerequisites, equipment lists — where a sheet
-          puts a drag between the member and the text.
+          The photograph is a fixed backdrop filling the whole screen with
+          the topbar over a 180px fade at its top, and the content rises
+          over it as a sheet with 32px top corners and a 44x4 grab handle.
+          The sheet rests with its top at 44% of the screen's height and
+          drags up to 10%, snapping over 220ms. The reserve button sits at
+          the TOP of the sheet, directly under the handle and above the
+          divider, rather than at the bottom of the screen or the end of
+          the content; the sections scroll beneath it. The backdrop never
+          moves — only the sheet does.
       - value: sectionTabs
         description: >-
-          The photo and meta stay put and the three sections share one
-          swipeable pane, so what the class is and when it runs is always
-          on screen and two thirds of the detail sits behind a tap. Reads
-          organised and app-like: a class with more to say than one
-          screen holds. Built for gyms with substantial content in each
-          section — long instructor bios, several rooms or sites,
-          detailed prerequisites. Wrong for a gym whose sections are a
-          line each, where three tabs over three sentences is chrome
-          wrapped around nothing.
+          The banner shrinks to 160px, and it, the class meta and the tab
+          bar all hold their place — none of them scroll. Under them three
+          equal tabs (Details, Instructor, Location) share one swipeable
+          pane with a 2px underline marking the active one, so one section
+          is on screen and the other two are behind a tap or a swipe.
+          Only the active pane scrolls. The instructor tab centres a 132px
+          headshot above the bio; the location tab runs a full-width map.
+          The reserve button is pinned below the pane inside 32px of
+          padding.
       - value: specBrief
         description: >-
-          No banner at all: the photo shrinks to a thumbnail inline with
-          the title, the specifics become a table, instructor and
-          location compress to single strips, and the reserve action sits
-          at the end of the content instead of pinned. Reads operational
-          — a listing, not a pitch. Built for the member who has taken
-          this class fifty times and wants the time and the mat, at a gym
-          where booking is a routine rather than a decision. Wrong for a
-          gym still selling first sessions, where the photograph and the
-          atmosphere are exactly what makes someone book.
+          There is no banner. The photograph becomes a 96x96 rounded
+          thumbnail sitting inline beside the class title, and the
+          specifics become a table: a fixed 96px label column against its
+          values for location, date, time and attendance, 4px between
+          rows. The instructor compresses to a 56px avatar beside its bio
+          and the location to a 116px-wide map beside the address. The
+          reserve button is not pinned — it sits at the end of the content
+          with 16px above and below, reached by scrolling. Nothing on this
+          screen holds a fixed position.
   - id: celebration_format
     description: >-
       The post-class celebration cards — the five-card payoff a member
       walks through after finishing a session (streak, wins, points,
       rewards, rank). One slot for all five: the body content differs per
-      card, the arrangement around it does not. This is the app's emotional
-      peak, so the arrangement carries real brand weight.
+      card, the arrangement around it does not.
     values:
       - value: centerHero
         description: >-
-          The header sits on top, the card's body is centred in
-          everything left over, the action is pinned full width at the
-          bottom, and the close sits in the screen's top-right inset.
-          Reads composed and ceremonial: the moment is presented
-          squarely, with air around it. Built for brands whose voice is
-          measured and whose celebration should feel like a quiet
-          acknowledgement — a premium studio, a technical academy that
-          nods rather than cheers. Wrong for a gym whose payoff is meant
-          to hit, where a centred figure on plain canvas is dignified and
-          dignity is not what a fight gym's post-session screen is for.
+          The header sits on top, the card's body is centred in the space
+          left over, and the full-width action holds the bottom — three
+          rows with 32px between them and 32px above and below. The whole
+          column is inset 16px from both side edges and nothing bleeds
+          past them. The close is a bare 32px glyph floating in the
+          screen's top-right corner, 16px from each edge. The body sits at
+          the exact vertical centre of the space between header and
+          action, with equal air above and below it.
       - value: figureTop
         description: >-
-          The frame opens tighter and the body settles against the TOP of
-          the stage instead of its centre, so on a screen held at arm's
-          length the earned figure is where the eye lands first; the
-          action keeps the same resting place it has everywhere else.
-          Reads as a result being reported: the number is the news and
-          everything else is supporting detail. Built for brands whose
-          payoff genuinely IS the figure — points totals, session counts,
-          streak days at a gym that tracks them seriously. Wrong for a
-          brand carried by its imagery, where anchoring everything high
-          leaves the lower half of the screen empty.
+          The frame opens tighter — 16px of top padding and 16px between
+          rows instead of 32 — and the body settles against the TOP of its
+          space rather than the centre, so the earned figure sits high on
+          the screen and the leftover room falls below it. The action
+          keeps the same full-width resting place at the bottom of the
+          column. The close sits in the screen's top-right corner on a
+          round filled chip rather than as a bare glyph. Side edges stay
+          inset 16px, as in the centred arrangement.
       - value: cardReveal
         description: >-
-          The whole celebration rides one raised, rounded surface
-          floating on the canvas, with the close in the card's own corner
-          and the action on bare canvas beneath it. Reads collectible:
-          something handed to you, with an edge you could pick up. Built
-          for gyms leaning on rewards and accumulation — points
-          economies, badges, tiers a member collects and comes back to.
-          Wrong for a brand whose imagery is meant to be immersive, since
-          a card frames the illustration and holds it at arm's length.
+          The whole celebration rides one raised surface: a 32px-cornered
+          card filled in the card colour, inset only 8px from each side
+          edge — wider than the header and the action above and below it,
+          which keep the standard 16px inset. The body is centred inside
+          the card with 8px of horizontal and 16px of vertical padding,
+          and the surface is drawn rather than clipped, so an illustration
+          can break past its rounded corners. The close moves off the
+          screen and into the card's own top-right corner. The action sits
+          alone on bare canvas beneath the card, not on it.
       - value: splitBand
         description: >-
-          The celebration is contained in a band that bleeds to the top
-          and both side edges, and the action sits alone on plain canvas
-          beneath it; the seam gives the figure its own surface, which is
-          what keeps it legible under a busy illustration. Reads
-          structured and calm — the moment is framed rather than flooding
-          the screen. Built for brands with rich, detailed artwork that
-          needs a surface to sit on, and for a voice that wants clear
-          separation between the celebration and the thing it asks for
-          next. Wrong for a spare, minimal identity, where a band drawn
-          around a small figure reads as a container with nothing to
-          contain.
+          The celebration is contained in a band that runs flush to the
+          top edge and both side edges, rounded 32px on its bottom two
+          corners only and filled in the card colour. The header and body
+          sit inside it with 16px of padding all round, the body centred.
+          The action is outside the band entirely, alone on the page
+          background 32px below it and inset 16px from the sides. The
+          close sits in the band's own top-right corner, which is also the
+          screen's. The band gives the figure its own surface with a
+          visible seam where it ends and the canvas begins.
       - value: fullBleed
         description: >-
-          No frame: the stage runs the entire canvas top to bottom and
-          the chrome floats over it on a scrim instead of reserving rows
-          in a column, which gives the illustration and its intro the
-          whole canvas to work in. Reads cinematic and loud — the payoff
-          fills the room. Built for brands with strong, distinctive
-          imagery whose celebration should feel like an event: combative
-          gyms, competition teams, anywhere the post-session screen is
-          the emotional peak of the product. Wrong for a restrained,
-          typographic identity, where an edge-to-edge illustration
-          overwhelms the brand it is meant to express.
+          No frame: the stage runs from the very top edge of the screen
+          down to a 112px zone reserved for the action, inset only 16px at
+          the sides, so the illustration gets the whole canvas instead of
+          a row in a column. The chrome floats over it — a 144px scrim
+          fading up from the bottom edge carries the action, the header
+          sits at top-left with its right edge pulled in to 64px to clear
+          the close, and the close is a plated chip at top-right. It is
+          the one arrangement where header, close and action are
+          positioned over the artwork rather than reserving space beside
+          it.
 
   # ---------------------------------------------------------------------
   # MOTION — one global personality plus five per-surface overrides.
@@ -822,51 +808,43 @@ formats:
       - value: standard
         description: >-
           260ms elements on ease-out-quart, 90ms between consecutive
-          reveals, a 1.4-second count-up and twelve decorative particles
-          — an even, mid-tempo timing set with no accent of its own.
-          Reads brisk and unremarkable: motion that does its job and gets
-          out of the way of the content. Built for brands whose
-          personality lives in
-          their imagery, copy and colour rather than in how the app
-          moves: a gym with a strong visual identity that needs no help
-          from the animation. Wrong for a brand whose whole promise is
-          intensity or serenity, where neutral timing on every surface
-          says nothing about either.
+          reveals and 70ms between badges in a cascade, a 1.4-second
+          count-up, a 620ms sparkle window and twelve decorative
+          particles. It has the longest unclamped element duration of the
+          four and the second-widest stagger. Every figure sits mid-range
+          against the other three: no timing here is the fastest or the
+          slowest value in its own row, and the curve is neither the
+          shallowest nor the steepest.
       - value: calm
         description: >-
-          Elements settle on a soft ease-out-sine, consecutive reveals
-          follow only 40ms apart so a stack arrives almost as one rather
-          than cascading, the count-up runs short, and NO decorative
-          particles are drawn at all. Reads unhurried and quiet: nothing
-          is performed at the member. Built for restorative and
-          technique-led practices — recovery, mobility, yoga,
-          rehabilitation — where a shower of particles would contradict
-          the room the member just trained in. Wrong for a gym selling
-          intensity, where an app that arrives without energy reads as
-          flat.
+          220ms elements on ease-out-sine — SHORTER than standard's 260ms,
+          not longer — with only 40ms between consecutive reveals and 32ms
+          between badges, the tightest stagger of the four, so a stack
+          arrives almost as one rather than cascading down. The count-up
+          runs 900ms, the shortest here, and the sparkle window 520ms. NO
+          decorative particles are drawn at all: the particle count is
+          zero, the only value where the sparkle surfaces render nothing.
+          The curve is the shallowest of the four, so elements coast into
+          place rather than snapping.
       - value: hype
         description: >-
-          200ms elements on a steep ease-out-expo with a tight 55ms
-          stagger, a shorter count-up and twenty decorative particles:
-          the energy comes from how densely things arrive, never from a
-          bounce. Reads urgent and physical, like the app is still
-          breathing hard. Built for combative and competitive gyms —
-          striking, fight teams, hard conditioning — where the product
-          should feel the way the training does. Wrong for a premium or
-          restorative brand, where a dense cascade under twenty particles
-          reads as a mobile game rather than a studio.
+          200ms elements on ease-out-expo — the shortest duration and the
+          steepest curve of the four — with a 55ms stagger between reveals
+          and twenty decorative particles, the largest particle count
+          here. The count-up runs 1.1 seconds. Elements arrive close on
+          each other's heels and decelerate hard at the end; nothing
+          bounces or overshoots its settled size, because the density of
+          arrivals is where the energy comes from rather than a spring.
       - value: cinematic
         description: >-
-          Authored long and clamped to the app's element ceiling, with a
-          wide 140ms stagger, a two-second count-up and a deep
-          ease-out-quint: elements arrive one at a time and the number
-          takes its time landing. Reads deliberate and weighty — every
-          payoff is staged as an occasion. Built for brands that trade on
-          prestige and ceremony: a promotion night, a competition team, a
-          premium club where earning something is meant to feel formal.
-          Wrong for an app opened in a hurry several times a week, where
-          sitting through a two-second count before you can leave the
-          screen is a toll.
+          Authored at 420ms and clamped to the app's 300ms element
+          ceiling, on the deepest curve of the four (ease-out-quint), with
+          a 140ms stagger between reveals — three and a half times calm's,
+          and the widest here — so elements arrive one at a time rather
+          than together. The count-up runs a full two seconds and the
+          sparkle window 900ms, both the longest of the four. Eight
+          decorative particles are drawn, fewer than standard's twelve or
+          hype's twenty.
   - id: celebration_intro
     description: >-
       The one-shot that plays before a post-class card settles — the
@@ -879,46 +857,44 @@ formats:
     values:
       - value: orbit
         description: >-
-          A ring of eight small marks expands out from centre while
-          spinning, then collapses back to nothing; the hero pops up into
-          the space it left, holds for most of a second, and fades into
-          the stats cascade. Reads ceremonious and complete — a build, a
-          reveal and a settle, with the ring built from the brand's own
-          point token. Built for gyms whose points-and-rewards language
-          is central to the product and whose post-class moment is meant
-          to be a small ritual. Wrong for a spare, disciplined identity,
-          where a spinning ring of marks is more decoration than the
-          brand wants anywhere near its screens.
+          Eight marks expand out from the centre as a ring over 600ms and
+          collapse back to nothing over 500ms, spinning the whole time —
+          1.6 full turns across the run. Only once the ring is gone does
+          the hero mark pop up into the space it left, over 400ms; it
+          holds facing the member for 800ms, then shrinks to 70% and
+          leaves over 250ms. Nothing overlaps: build, reveal, hold, settle,
+          in that order, 3050ms end to end — the longest of the four. The
+          ring is built from the brand's own point token.
       - value: burst
         description: >-
-          The marks fade in out from centre and draw INWARD around the
-          hero first, then fire outward once and fade where they land: no
-          ring, no rotation, no return trip, with a run-up in front of
-          the payoff and a beat behind it. Reads as an impact — tension,
-          then release. Built for striking and combative gyms where
-          finishing a session should land like a hit. Wrong for a
-          restorative practice, where a scatter firing outward carries an
-          aggression the room does not have.
+          Twelve marks fade in and draw INWARD around the hero over 700ms,
+          tightening from about a third of the stage radius to a tenth,
+          then fire outward to the full radius in a single 620ms throw and
+          fade where they land. Nothing rotates and nothing makes a return
+          trip — one run-up, one release. The hero arrives during the
+          gather rather than after it, holds 500ms, and leaves in 260ms.
+          The marks sit at uneven radii rather than evenly spaced on a
+          circle, so the scatter is irregular. 2380ms end to end.
       - value: rise
         description: >-
-          The hero climbs from below the stage with a vertical trail
-          behind it that sharpens as it decelerates, and settles. No
-          particles at all. Reads as ascent: calm, controlled,
-          cinematic. Built for technique-led academies and premium
-          studios whose story is steady progress and whose screens should
-          stay clean. Wrong for a gym whose payoff should feel explosive,
-          where a single silent climb reads as the app underreacting to
-          what the member just did.
+          The hero climbs from half a stage below into place over 1200ms,
+          decelerating the whole way, with a vertical motion blur behind
+          it that starts as a 16px smear and sharpens to nothing as it
+          lands. Its opacity takes 520ms to fill, so it is still
+          travelling when it becomes solid. No particles are drawn at all.
+          It holds 700ms and leaves in 260ms, 2460ms end to end. One
+          element moves, in one direction, and nothing else on the stage
+          does anything.
       - value: flipCount
         description: >-
-          The hero turns in on its vertical axis from edge-on over more
-          than a second, holds facing the member, and leaves; only then
-          does the card settle and its figure count up. Reads as a
-          reveal — something turning to face you, the way a card is
-          shown. Built for brands whose reward language is collectible:
-          badges, tiers, cards, things earned and then displayed. Wrong
-          for a brand whose payoff is physical effort, where a card flip
-          is a game gesture rather than a training one.
+          The hero turns in on its vertical axis from edge-on to facing
+          the member — a quarter turn over 1200ms under a slight
+          perspective, so the near edge widens as it comes round — then
+          holds facing forward for 700ms and leaves over 300ms. Nothing
+          else moves: no particles, no travel, no ring. Its opacity takes
+          520ms to fill and is complete long before the turn is. 2500ms
+          end to end, and only when it finishes does the settled card
+          appear and its figure begin counting.
   - id: reveal_style
     description: >-
       The per-element entrance used across the celebration stack: how each
@@ -930,98 +906,87 @@ formats:
     values:
       - value: fadeUp
         description: >-
-          Opacity comes up on ease-out-quart while the element rises the
-          last few pixels into place, over 260ms, with no held beat in
-          front of it. Reads as things settling into position:
-          unobtrusive and immediately legible, with no element drawing
-          attention to its own arrival. Built for content-dense brands
-          whose screens carry many elements at once and whose character
-          is in what is on the screen rather than how it got there.
-          Wrong for a brand that wants the entrance itself to carry some
-          of its personality.
+          Opacity comes up from zero on ease-out-quart while the element
+          travels its last 12px upward into place, over 260ms, with no
+          held beat in front of it. Nothing scales and nothing moves
+          sideways. The travel is short against the length of the fade, so
+          the element is near its final position for most of the run and
+          what changes late is brightness rather than location. It is the
+          only value that combines a fade with a translate.
       - value: scalePop
         description: >-
-          Every element fades in from half its size — the pop IS the
-          entrance, and nothing translates, because stacking a slide on
-          top of it would make two beats out of one. Reads eager and
-          springy, each thing arriving with a bit of life in it, while
-          never growing past its settled size. Built for playful,
-          high-energy brands: youth programmes, group fitness, a gym
-          whose whole tone is upbeat. Wrong for a formal, text-heavy
-          identity, where scaling type up through fractional sizes reads
-          soft-edged and bouncy.
+          Every element fades in from half its size and grows to exactly
+          its settled size over 260ms on ease-out-quart — the growth IS
+          the entrance, and nothing translates, so the element expands in
+          place around its own centre rather than arriving from a
+          direction. It never passes its final size, so there is no
+          overshoot to settle back from. Same duration and same curve as
+          fadeUp; what differs is that the element's size changes and its
+          position does not.
       - value: slideIn
         description: >-
-          After a short held beat the element travels 28px in from the
-          leading edge with its opacity held high for most of the run, so
-          what the eye follows is the travel rather than a fade; leading
-          resolves against the reading direction, so an RTL locale gets
-          the mirror for free. Reads directional and orderly, like items
-          being dealt into place along a line. Built for brands whose
-          language is sequence and discipline — a syllabus, a
-          progression, a programme with steps. Wrong for a centred,
-          symmetrical visual identity, where a sideways entrance
-          introduces a direction the design does not have.
+          After a 60ms held beat the element travels 28px in from the
+          leading edge over 280ms. Its opacity is full by 35% of the run —
+          about 98ms in — and holds there for the remaining two thirds, so
+          what the eye follows is the travel rather than a fade. It is the
+          longest travel distance of the four and the only value that
+          moves horizontally. Leading resolves against the reading
+          direction, so an RTL locale gets the mirror image for free.
       - value: maskWipe
         description: >-
           Nothing is transformed at all — no scale, no translate, no
-          opacity ramp: the element is uncovered by a clip sweeping along
-          its own long axis, so text renders at exactly its final size
-          and position for every frame it is visible and stays
-          pin-sharp. Reads editorial and exact, like type being printed
-          rather than flown in. Built for typographic, premium brands
-          where crisp lettering is a large part of the identity. Wrong
-          for an illustration-led brand, where a wipe across a figure
-          reads as an image still loading rather than as a reveal.
+          opacity ramp. The element is uncovered by a clip sweeping along
+          its own long axis (left to right for anything wider than it is
+          tall, top to bottom otherwise) over 300ms, the app's full
+          element ceiling, after the longest held beat of the four at
+          90ms. Because nothing moves, text renders at exactly its final
+          size and position for every frame it is visible and stays
+          pin-sharp. The sweep runs on ease-out-sine where the other three
+          use quart.
   - id: loader_style
     description: >-
       The waiting state — what a member looks at while something is being
-      fetched. A small surface, but the one they see at their least
-      patient moment, so it carries more brand weight than its size
-      suggests.
+      fetched. Every value fills the same 104x52 box whatever its shape,
+      and every value loops until the fetch resolves.
     values:
       - value: dots
         description: >-
-          Three brand-coloured dots in a travelling wave, each a third of
-          a cycle behind the last, so the bounce reads as one ripple
-          crossing the row and coming back. Reads friendly and
-          universally understood — the ordinary "working on it". Built
-          for brands that want waiting to be unremarkable and human, and
-          whose tone is warm rather than technical. Wrong for a severe,
-          minimal identity, where three bouncing dots read as a chat app
-          that wandered into the product.
+          Three 24px brand-coloured dots sit evenly across the box, each
+          lifting on a half-sine a third of a cycle behind the last, so
+          the lift travels across the row and back over a 1100ms loop.
+          Each dot rests flat on the baseline for half of its
+          own phase, so at any moment at least one dot is down. Peak lift
+          is 28px, slightly more than a dot's own height. Nothing scales
+          and nothing fades — vertical position is the only channel that
+          moves.
       - value: pulseRing
         description: >-
-          Two rings, half a cycle apart, scale out from the centre and
-          fade, each arriving at its settled radius and never passing it,
-          so a ripple is always on screen including at mount. Reads
-          technical and alive, like a signal going out and being listened
-          for. Built for gyms whose language is measurement and systems:
-          performance labs, data-forward programmes, anywhere training is
-          presented as instrumentation. Wrong for a warm, human-led
-          studio, where a radar ping is colder than the room it stands
-          for.
+          Two rings expand from 18% of the full radius out to the edge of
+          the box on ease-out-quart, half a cycle apart on a 1300ms loop,
+          so a ring is always on screen including at the moment of mount.
+          Each fades up over its first 156ms and then decays steadily as
+          it grows, reaching zero exactly as it arrives at full size, and
+          neither ring ever passes that settled radius. The centre of the
+          box stays empty — all the motion happens at the expanding edge.
       - value: barSweep
         description: >-
-          A short bar sweeps its track there and back on a half-cosine,
-          arriving at each end with zero velocity so the loop closes on
-          itself instead of cutting back to the start. Reads mechanical
-          and industrial — something being driven, at a steady rate.
-          Built for strength, conditioning and equipment-led gyms whose
-          visual language is already hardware, plates and straight lines.
-          Wrong for a soft or organic identity, where a machine stroke is
-          the wrong metaphor for what happens in the room.
+          A bar 38% of the track's length sweeps to the far end and back
+          over 1200ms on a half-cosine, arriving at each end with zero
+          velocity and reversing without a cut, so the loop closes on
+          itself instead of jumping back to the start. The bar's length is
+          fixed for the whole cycle — it never grows or shrinks, only
+          travels. A static track sits behind it at 16% of the box's
+          height, visible for the whole wait.
       - value: logoBreathe
         description: >-
-          The gym's own mark breathes: scaling up from just under its
-          settled size and back on a slow two-and-a-half-second cycle,
-          never growing past its true size, so the mark is never
-          distorted. It is the only waiting state made from the tenant's
-          own identity rather than an abstract shape. Built for brands
-          with a strong, simple mark that should be present even in dead
-          time — a gym whose logo is genuinely part of what members buy.
-          Wrong for a finely detailed mark or a long wordmark that stops
-          being legible at loader size.
+          The gym's own mark scales between 94% and 100% of its settled
+          size on a 2400ms half-cosine, pausing imperceptibly at each end
+          of the breath. It never grows past its true size, so the mark is
+          never distorted or cropped. At 2400ms its cycle is twice the
+          length of the next slowest value here. It is the only waiting
+          state drawn from the tenant's own identity rather than an
+          abstract shape, so what a member watches while waiting is the
+          logo itself.
   - id: transition_style
     description: >-
       Screen-to-screen motion: how an arriving route animates in and how
@@ -1038,48 +1003,38 @@ formats:
       - value: platformDefault
         description: >-
           Whatever the platform's own page transition already is, read
-          live from the framework rather than copied — so if the OS
-          changes what it does, this follows. Reads native: the app moves
-          between screens exactly the way every other app on that phone
-          does. Built for brands whose app should disappear into the
-          device, utility-first products where familiarity beats having a
-          signature. Wrong for a brand that wants its own hand on every
-          part of the experience, since this is the one value that
-          deliberately has none.
+          live from the framework rather than copied — and on a platform
+          the framework has no entry for, its zoom transition. The app
+          moves between screens the same way the rest of the phone does,
+          and if the OS changes what that means, this follows. It is the
+          only value with no authored duration, distance or curve of its
+          own.
       - value: fade
         description: >-
           A cross-dissolve with no travel at all: the arriving screen
-          fades up over the one it replaces, which stays fully painted
-          underneath for the whole transition. Reads weightless and
-          quiet — screens replace one another rather than sliding past.
-          Built for calm, atmospheric brands (recovery, wellness,
-          meditative practice) where moving through the app should be as
-          gentle as the training it books. Wrong for an app with deep
-          navigation, where a dissolve leaves the member no sense of
-          having gone in or come back out.
+          fades up from zero over 300ms on ease-out while the screen it
+          replaces stays fully painted underneath — unmoved, unscaled and
+          undimmed — for the whole transition. Only one of the two screens
+          animates. Nothing slides or recedes, so the move has no
+          direction to it.
       - value: sharedAxis
         description: >-
-          A paired slide plus fade along the navigation axis: the
-          arriving screen travels in a quarter of the screen's width from
-          the leading edge while the leaving one carries on in the same
-          direction. The pairing is what makes the axis legible — one
-          screen moving alone reads as an overlay, two moving together
-          read as a step along a line. Built for programmes built on
-          sequence, where moving through the app should feel like moving
-          through a progression. Wrong for a brand whose screens are
-          peers rather than steps, where implying a line that is not
-          there makes ordinary navigation feel one-way.
+          A paired slide plus fade over 320ms: the arriving screen travels
+          in a quarter of the screen's width from the leading edge while
+          the one it replaces travels a further quarter-width in the SAME
+          direction and fades out completely. Both screens move, both on
+          ease-out-cubic, and both change opacity. Because they travel
+          together rather than one sliding over a stationary other, the
+          pair moves along a single axis.
       - value: cardStack
         description: >-
-          The arriving screen rises up over the one it covers, which
-          recedes to slightly under full size and stays legible behind it
-          — a scale, not a dim, so the covered screen remains itself
-          rather than becoming a grey plate. Reads layered and physical,
-          like cards being dealt onto a table. Built for brands whose
-          product language is collectible and tactile: rewards, badges,
-          decks, tiers. Wrong for a utility app opened many times a day,
-          where 360ms of layered motion between every screen becomes a
-          tax the member pays constantly.
+          The arriving screen rises 18% of the screen's height from below
+          over 360ms, reaching full opacity by 126ms — well before it
+          lands. The screen it covers scales down to 94% and stays there,
+          undimmed and untinted, so it remains legible as itself behind
+          the arriving one rather than becoming a grey plate. At 360ms it
+          is the longest of the authored transitions, and the only one
+          where the covered screen changes size.
   - id: count_up_style
     description: >-
       How an earned figure arrives — the points total, the streak count,
@@ -1089,47 +1044,40 @@ formats:
     values:
       - value: odometer
         description: >-
-          A slot-counter reel: one vertical strip per digit position,
-          each listing every integer that digit will pass through,
-          clipped to a one-digit window, on a steep ease-out-expo — fast
-          spin up front, long slow landing on the final digits. Reads
-          mechanical and satisfying, like a meter turning over. Built for
-          gyms where points are a real currency and watching the number
-          climb is part of the payoff. Wrong for a brand whose numbers
-          are incidental, where a full reel spin makes a modest figure
-          look like a jackpot.
+          A slot-counter reel: one vertical strip per digit position, each
+          listing every integer that digit will pass through, clipped to a
+          one-digit window. It starts moving the instant it mounts — no
+          opening hold — and runs 1400ms on ease-out-expo, so the spin is
+          fast at the front and the final digits take most of the run to
+          land. The ones column travels furthest and settles last while
+          the leading digits stop early. It is the only value where the
+          digits themselves travel rather than being swapped in place.
       - value: ticker
         description: >-
-          No per-digit motion at all: the whole number simply re-renders
-          through its intermediate values on a gentle ease-out-quad after
-          a short opening hold, so the figures are meant to be read on
-          the way up rather than blurred through. Reads plain and
-          factual — a number counting, not a machine spinning. Built for
-          measurement-led brands whose members care about the actual
-          values: performance tracking, training logs, anywhere the
-          intermediate numbers mean something. Wrong for a brand whose
-          post-class screen is meant to feel like a reward, where a quiet
-          re-render lands as a readout.
+          No per-digit motion at all: after a 224ms hold on its opening
+          value, the whole number re-renders through its intermediate
+          values on ease-out-quad for the rest of the 1400ms. Each digit
+          position is a single glyph that changes, not a strip that
+          travels, so every intermediate figure is rendered sharp rather
+          than blurred through. The curve is the gentlest of the counting
+          values, so the number climbs at a fairly even rate before easing
+          into its last few.
       - value: sweepArc
         description: >-
-          An arc sweeps left to right beneath the number while the number
-          holds on its opening zeros; then the figure rolls up while the
-          arc completes and clears, so the two settle together and the
-          arc leaves nothing behind. Reads as a gauge filling — the
-          figure is progress toward something. Built for programmes
-          framed as distance to a threshold: graded ladders, class-count
-          targets, anything with a next tier to reach. Wrong for a brand
-          whose points are an open-ended tally with no target, where an
-          arc implies a ceiling that does not exist.
+          An arc sweeps left to right in a shallow bowl behind the number
+          — its depth about a tenth of the figure's height — while the
+          figure holds on its opening value for the first 280ms. The arc
+          completes its sweep at 770ms, roughly halfway through the 1400ms
+          run, then fades out from 1050ms so it has cleared before the
+          number lands. The figure rolls up on ease-out-quad after its
+          hold, re-rendering whole rather than reeling per digit. The two
+          settle together and the arc leaves nothing behind it.
       - value: instant
         description: >-
-          The figure is simply there at its final value: no roll, no
-          hold, no run-up. The entrance is not removed — it belongs
-          entirely to the surrounding reveal, so the number still arrives
-          with everything around it; only the counting is gone. Reads
-          matter-of-fact: the result is stated rather than performed.
-          Built for brands whose restraint is the point — a serious
-          technical academy, a premium studio that would rather state a
-          fact than animate it. Wrong for a gym running points as an
-          engagement loop, where the count-up IS the reward and removing
-          it removes the moment.
+          The figure is at its final value on the first frame: no roll, no
+          opening hold, no run-up, and no arc behind it. The entrance is
+          not removed — the number still arrives with everything around
+          it, because that entrance belongs to the reveal slot rather than
+          to this one; only the counting is gone. It is the one value
+          exempt from the timing floors the other three clear, because
+          there is no count that could be too fast to read.
