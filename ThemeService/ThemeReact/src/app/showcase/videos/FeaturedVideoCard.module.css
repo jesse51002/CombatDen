@@ -19,6 +19,16 @@
   overflow: hidden;
 }
 
+/*
+ * `FeaturedVideoLayout.bleed` — `BorderRadius.zero`. Square-cornered and edge
+ * to edge, so the hero reads as a cover the page opens with rather than as the
+ * first card of a list. The arrangement that asks for it drops its own inset;
+ * nothing else about the hero changes.
+ */
+.bleed {
+  border-radius: 0;
+}
+
 /* `Padding(fromLTRB(paddingBig, 0, paddingBig, spacingLarge))`. */
 .ctaRow {
   padding: 0 var(--sc-padding-big) var(--sc-spacing-large);

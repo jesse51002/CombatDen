@@ -27,6 +27,25 @@
 }
 
 /*
+ * `VideoCategoryTabsAxis.vertical` — `SingleChildScrollView(padding:
+ * symmetric(horizontal: spacingMedium, vertical: spacingLarge))`.
+ *
+ * `height: 100%` is what makes the pills scroll INSIDE the rail band rather
+ * than lengthening it: the band (../layouts/VideosTagRail.module.css) has a
+ * fixed height, so a tenant with many genres lengthens this scroll instead of
+ * the page's chrome. `overflow-x: hidden` is spelled out rather than left at
+ * `visible`, which would compute to `auto` beside a scrolling axis and hand the
+ * rail a sideways scrollbar it never uses (../../../CLAUDE.md).
+ */
+.stripVertical {
+  height: 100%;
+  padding: var(--sc-spacing-large) var(--sc-spacing-medium);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+}
+
+/*
  * `Row(mainAxisAlignment: center, spacing: spacingLarge)`.
  *
  * `width: max-content` + `margin-inline: auto` is the centring Flutter gets
@@ -42,6 +61,21 @@
   width: max-content;
   margin-inline: auto;
   padding-inline: var(--sc-screen-padding-x);
+}
+
+/*
+ * The vertical axis' `Column(crossAxisAlignment: stretch, spacing:
+ * spacingMedium)`. `stretch` is why the pills fill the rail's width rather than
+ * hugging their labels: a column of ragged chips reads as a list of links, and
+ * the filled active pill is what makes the selection legible at rail width.
+ */
+.column {
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+  width: auto;
+  margin-inline: 0;
+  padding-inline: 0;
 }
 
 /*
@@ -61,6 +95,24 @@
   letter-spacing: var(--sc-type-h3-ls);
   color: var(--sc-text-2nd);
   white-space: nowrap;
+}
+
+/*
+ * In the rail the label WRAPS instead. Dart's `_CategoryPill` holds a plain
+ * `Text`, which wraps wherever it is placed; across the top the pill can simply
+ * scroll sideways, but a rail is ~96px wide and a genre like "Entertainment"
+ * has to break rather than run out of the band.
+ */
+.column .pill {
+  white-space: normal;
+  /*
+   * And BREAKS when it has to. A genre is the tenant's word, not ours, and the
+   * app's own vocabulary already carries "Entertainment" — 13 characters that
+   * do not fit a rail pill's text box at any word boundary. Wrapping alone
+   * would leave it overflowing a band that clips; breaking keeps the label
+   * readable inside the constraint the arrangement chose.
+   */
+  overflow-wrap: break-word;
 }
 
 /*

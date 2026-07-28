@@ -1,45 +1,23 @@
 /*
  * Styles for ./VideoShowcase.tsx (ports MobileApp/lib/features/videos/
- * presentation/screens/videos_screen.dart + widgets/videos_feed_body.dart).
+ * presentation/screens/videos_screen.dart).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
  */
 
 /*
- * The scroller's content column — `Column(crossAxisAlignment: stretch)` under
- * `SingleChildScrollView(padding: only(bottom: spacingBig))`. The bottom
- * padding is the Dart's own, and it is what stops the last carousel from
- * ending flush against the bottom nav.
+ * The scroller's content column — the `CustomScrollView`'s sliver list under
+ * `SliverPadding(only(bottom: spacingBig))`. The bottom padding is the Dart's
+ * own, and it is what stops the last section from ending flush against the
+ * bottom nav.
+ *
+ * NO `gap` and NO `overflow`, both on purpose. The arrangement's own column
+ * supplies the feed's rhythm; and the sticky bands in `mosaic` / `tagRail`
+ * stick to the scaffold's body scroller, so an `overflow` here would make this
+ * box the scroll container instead and pin them to the wrong edge.
  */
 .feed {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   padding-bottom: var(--sc-spacing-big);
-}
-
-/* `_LoadedFeed`'s inner `Column(stretch, spacing: spacingBig)`. */
-.body {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: var(--sc-spacing-big);
-}
-
-/* `_PaddedSection(horizontal: screenHorizontalPadding)` around the hero. */
-.heroInset {
-  padding-inline: var(--sc-screen-padding-x);
-}
-
-/*
- * `Padding(vertical: spacingBig) > Center(Text('Nothing here yet.',
- * style: p.copyWith(color: text2nd)))`. Reachable only for a host that injects
- * a real gym with an empty feed — see the component header.
- */
-.empty {
-  margin: 0;
-  padding: var(--sc-spacing-big) var(--sc-screen-padding-x);
-  text-align: center;
-  font: var(--sc-type-p);
-  letter-spacing: var(--sc-type-p-ls);
-  color: var(--sc-text-2nd);
 }

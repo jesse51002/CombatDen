@@ -19,6 +19,7 @@
 import { useState } from 'react';
 
 import styles from './CreatorAvatar.module.css';
+import { PART_ATTR, VIDEO_PARTS } from './videoParts';
 
 /** Ports `creatorAvatarProvider` — a blank/whitespace URL means no avatar. */
 export function hasCreatorAvatar(url: string | null | undefined): boolean {
@@ -48,6 +49,7 @@ function AvatarImage({ url, size }: CreatorAvatarProps) {
       onError={() => {
         setFailed(true);
       }}
+      {...{ [PART_ATTR]: VIDEO_PARTS.avatar }}
     />
   );
 }

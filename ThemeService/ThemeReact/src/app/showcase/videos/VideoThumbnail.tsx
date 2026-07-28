@@ -12,6 +12,7 @@
 
 import { useState } from 'react';
 
+import { PART_ATTR, VIDEO_PARTS } from './videoParts';
 import styles from './VideoThumbnail.module.css';
 
 export interface VideoThumbnailProps {
@@ -37,6 +38,7 @@ function ThumbnailImage({ src, className }: VideoThumbnailProps) {
       onError={() => {
         setFailed(true);
       }}
+      {...{ [PART_ATTR]: VIDEO_PARTS.thumb }}
     />
   );
 }

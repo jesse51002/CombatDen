@@ -1,0 +1,20 @@
+/*
+ * Styles for ./VideosFeedStatus.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/videos_feed_status.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(vertical: spacingBig) > Center(Text(message, style:
+ * p.copyWith(color: text2nd)))`. The horizontal inset is this island's own: an
+ * arrangement may place the status full-bleed, and a message that ran to the
+ * screen edge would be the only text on the phone that does.
+ */
+.empty {
+  margin: 0;
+  padding: var(--sc-spacing-big) var(--sc-screen-padding-x);
+  text-align: center;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}

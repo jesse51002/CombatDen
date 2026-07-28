@@ -1,0 +1,39 @@
+/*
+ * Styles for ./VideoSectionRow.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/sections/video_section_row.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingLarge)`. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `SingleChildScrollView(scrollDirection: horizontal, padding: horizontal:
+ * inset) > Row(spacing: spacingLarge)`.
+ *
+ * The scrollbar is hidden on purpose: a desktop scrollbar track drawn inside a
+ * phone mock is the one thing that would give away that this is not a device.
+ * iOS paints an overlay bar that occupies no layout, which is what this matches.
+ */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sc-spacing-large);
+  padding-inline: var(--vc-inset);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* A horizontal swipe must not chain into the page's vertical scroll. */
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.row::-webkit-scrollbar {
+  display: none;
+}

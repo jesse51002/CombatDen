@@ -1,0 +1,34 @@
+/*
+ * Styles for ./VideoSectionTall.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/sections/video_section_tall.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingLarge)`. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `ClipRRect(borderRadius: radiusSmall) > Stack`.
+ *
+ * The clip is deliberate rather than incidental: the header band runs edge to
+ * edge across the card, so without it the opaque band would square off the two
+ * corners the card rounds.
+ */
+.first {
+  position: relative;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+}
+
+/* `Positioned(left: 0, right: 0, top: 0)`. */
+.overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}

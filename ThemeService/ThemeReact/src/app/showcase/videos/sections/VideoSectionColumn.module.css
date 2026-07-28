@@ -1,0 +1,25 @@
+/*
+ * Styles for ./VideoSectionColumn.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/sections/video_section_column.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingLarge)`. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * The inner `Column(stretch, spacing: spacingLarge)`. Kept as its own box
+ * rather than flattened into `.section` because Dart nests it too: the header
+ * and the run of cards are one gap apart, and so is every card from the next.
+ */
+.cards {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}

@@ -18,6 +18,7 @@
 import type { ShowcaseVideo } from '../showcaseContent';
 
 import { CreatorAvatar } from './CreatorAvatar';
+import { PART_ATTR, VIDEO_PARTS } from './videoParts';
 import styles from './VideoReccCard.module.css';
 import { videoMetaLabel } from './videoSelectors';
 import { VideoThumbnail } from './VideoThumbnail';
@@ -32,7 +33,7 @@ export interface VideoReccCardProps {
 export function VideoReccCard({ video }: VideoReccCardProps) {
   return (
     // `Column(mainAxisSize: min, stretch, spacing: spacingLarge)`.
-    <div className={styles.card}>
+    <div className={styles.card} {...{ [PART_ATTR]: VIDEO_PARTS.reccCard }}>
       {/* `AspectRatio(16 / 9)` over the cover image. */}
       <div className={styles.thumbFrame}>
         <VideoThumbnail src={video.thumbnailUrl} />

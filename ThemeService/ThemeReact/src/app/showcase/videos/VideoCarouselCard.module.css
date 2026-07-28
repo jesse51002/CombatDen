@@ -1,7 +1,14 @@
 /*
  * Styles for ./VideoCarouselCard.tsx (ports MobileApp/lib/features/videos/
- * presentation/widgets/gym_video_carousel_card.dart).
+ * presentation/widgets/gym_video_carousel_card.dart + `VideoCardSize`).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ *
+ * `VideoCardSize.md` IS THE BASE RULE, not a modifier: it is Dart's own default
+ * value and the card the shipped horizontal rows render, so `.card` /
+ * `.thumbFrame` below are the 258x145 card verbatim and the other three sizes
+ * are overrides on top. Writing it the other way round would have changed the
+ * class list on the one shape ./__tests__/videosFormats.test.tsx pins byte for
+ * byte against the arrangement that ships.
  */
 
 /*
@@ -24,6 +31,15 @@
   overflow: hidden;
 }
 
+/*
+ * `lg` / `tile` / `tall` — the width-filling sizes. Dart expresses this by
+ * simply NOT wrapping the card in a `SizedBox`; the CSS equivalent has to undo
+ * the fixed width the base rule sets.
+ */
+.fill {
+  width: 100%;
+}
+
 /* `SizedBox(height: _kThumbHeight)` over the cover image. */
 .thumbFrame {
   flex: 0 0 auto;
@@ -33,43 +49,35 @@
 }
 
 /*
- * `Padding(spacingMedium, 0, spacingMedium, spacingLarge) >
- * Row(center, spacing: spacingMedium)`.
+ * `AspectRatio(aspectRatio: 16 / 9)`.
+ *
+ * 16:9, ALWAYS — the Dart's own comment, and it is load-bearing: YouTube serves
+ * thumbnails at a fixed aspect, so a card that re-proportions the artwork
+ * either crops the subject or letterboxes it. A size may make the CARD taller
+ * (`tall` does, by riding a caption band over the image); the image itself is
+ * not a free variable.
  */
-.info {
-  display: flex;
-  align-items: center;
-  gap: var(--sc-spacing-medium);
-  padding: 0 var(--sc-spacing-medium) var(--sc-spacing-large);
+.thumbRatio {
+  height: auto;
+  aspect-ratio: 16 / 9;
 }
 
 /*
- * `Expanded > Padding(right: spacingMedium) > Column(start, spacing: spacingMedium)`.
+ * `_Captioned` — `Stack[thumbnail, Positioned(bottom: the caption band)]`. The
+ * card surface sits BEHIND the artwork, not just around it: a thumbnail that is
+ * still loading (or gone) has to leave a card, not a hole in the column.
  */
-.text {
-  flex: 1 1 auto;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sc-spacing-medium);
-  padding-right: var(--sc-spacing-medium);
+.tall {
+  position: relative;
+  gap: 0;
 }
 
-/* `Text(title, style: p, maxLines: 1, overflow: ellipsis)`. */
-.title {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font: var(--sc-type-p);
-  letter-spacing: var(--sc-type-p-ls);
-  color: var(--sc-text);
-}
-
-/* `Text(style: pSmall.copyWith(color: text2nd))`. */
-.meta {
-  font: var(--sc-type-p-small);
-  letter-spacing: var(--sc-type-p-small-ls);
-  color: var(--sc-text-2nd);
+/* `Positioned(left: 0, right: 0, bottom: 0) > ColoredBox(popup) > Padding(spacingMedium)`. */
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--sc-spacing-medium);
+  background: var(--sc-popup);
 }

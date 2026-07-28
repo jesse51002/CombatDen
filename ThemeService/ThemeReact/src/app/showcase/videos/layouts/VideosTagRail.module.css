@@ -1,0 +1,67 @@
+/*
+ * Styles for ./VideosTagRail.tsx (ports MobileApp/lib/features/videos/
+ * presentation/layouts/videos_tag_rail.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `SliverCrossAxisGroup` — rail and content share the cross axis.
+ *
+ * `align-items: flex-start` is load-bearing: without it the rail would stretch
+ * to the content's full height, and a sticky box that already spans its
+ * container never moves relative to it.
+ */
+.split {
+  display: flex;
+  align-items: flex-start;
+}
+
+/*
+ * `SliverConstrainedCrossAxis(maxExtent: _kRailWidth)` around
+ * `SliverPersistentHeader(pinned: true, delegate: _Rail)` — 112 wide, a fixed
+ * 240 band, pinned to the top of the scroller.
+ *
+ * The fixed height is Dart's own note: a persistent header measures its child,
+ * so a rail that reported the pills' natural height would claim more layout
+ * than it paints. Here it does the same job from the other side — the band is
+ * what the pills scroll inside (../VideoCategoryTabs.module.css), so a tenant
+ * with many genres lengthens that scroll rather than the page's chrome.
+ *
+ * The opaque fill is not decoration: a transparent pinned rail would let the
+ * content column scroll through the pills.
+ */
+.rail {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 112px;
+  /*
+   * `min-width: 0` is what makes the 112 a CAP rather than a starting point:
+   * a flex item's automatic minimum is its min-content width, so without it a
+   * genre like "Entertainment" widens the band past the constraint and steals
+   * the difference from the content column. `SliverConstrainedCrossAxis`
+   * clamps; this is the CSS spelling of the same clamp.
+   */
+  min-width: 0;
+  height: 240px;
+  background: var(--sc-background);
+}
+
+/*
+ * `SliverCrossAxisExpanded(flex: 1) > Padding(left: spacingMedium, right:
+ * screenHorizontalPadding) > Column(stretch, spacing: spacingBig)`.
+ *
+ * `min-width: 0` is what makes the flex child behave like the expanded sliver:
+ * without it a long title refuses to shrink and pushes the column past the
+ * screen.
+ */
+.content {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding-left: var(--sc-spacing-medium);
+  padding-right: var(--sc-screen-padding-x);
+}

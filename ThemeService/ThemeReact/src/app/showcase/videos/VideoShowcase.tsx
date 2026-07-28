@@ -1,26 +1,30 @@
 // Ports ../../../../../../MobileApp/lib/features/videos/presentation/screens/
-// videos_screen.dart + widgets/videos_feed_body.dart — a visual clone of the
-// member app's VIDEOS tab: the name-only topbar, the genre pill strip, a
-// featured hero, then one carousel per genre in the feed.
+// videos_screen.dart — a visual clone of the member app's VIDEOS tab: the
+// name-only topbar over whichever arrangement the tenant's `videos_format`
+// selects (./VideosFeedBody.tsx).
 //
 // NO DART SHOWCASE COUNTERPART. The other surfaces in this island port
 // `CRM/lib/showcase/*.dart`; the Flutter preview never carried Videos, so this
 // is a first port straight from the member app — which is why the header points
 // at `MobileApp/` rather than at a showcase clone.
 //
-// A STATIC, SCROLLING SURFACE. The real screen is a `SingleChildScrollView` and
-// so is this one (`bodyScroll` on ../support/ShowcaseScaffold.tsx): a feed is
-// the one thing in the member app that cannot be shown in a single viewport,
-// and clipping it would preview a shorter app than the one being sold. Nothing
-// here animates, so the screen takes no loop knobs.
+// THE SCREEN OWNS THE SHELL, THE ARRANGEMENT OWNS THE FEED. The topbar, the
+// bottom nav and the scroller are identical in all five values, exactly as they
+// are in Dart: a format arranges videos, so everything that is not videos stays
+// here. The filter pills are NOT in that set — `mosaic` pins them and `tagRail`
+// turns them into a rail — so they live inside the arrangement.
+//
+// A STATIC, SCROLLING SURFACE. The real screen is a `CustomScrollView` and so is
+// this one (`bodyScroll` on ../support/ShowcaseScaffold.tsx): a feed is the one
+// thing in the member app that cannot be shown in a single viewport, and
+// clipping it would preview a shorter app than the one being sold. Nothing here
+// animates, so the screen takes no loop knobs.
 //
 // THE STATES THE REAL SCREEN HAS AND THIS ONE DOES NOT. `videos_screen.dart`
 // branches over loading / error / empty because it awaits a portal fetch. The
 // preview resolves its feed synchronously from bundled constants
 // (../useShowcaseContent.ts), so the loading and retryable-error branches have
-// no reachable input here and are not ported — an unreachable spinner is a lie
-// about what the phone does. The EMPTY branch is kept, because it is reachable:
-// a host that injects a real gym with no videos hits it.
+// no reachable input here and are not ported — see ./VideosFeedStatus.tsx.
 //
 // WHAT IS THE GYM'S AND WHAT IS THE MEMBER'S. `gymName` / `gymLogoSrc` are the
 // HOST's gym identity and are NOT customization slots. The streak, points and
@@ -32,11 +36,9 @@ import { ShowcaseBottomNav } from '../support/ShowcaseBottomNav';
 import { ShowcaseScaffold } from '../support/ShowcaseScaffold';
 import { ShowcaseTopbar } from '../support/ShowcaseTopbar';
 
-import { FeaturedVideoCard } from './FeaturedVideoCard';
-import { VideoCategoryTabs } from './VideoCategoryTabs';
-import { VideoCarouselSection } from './VideoCarouselSection';
 import styles from './VideoShowcase.module.css';
-import { featuredVideo, genreLabel, genresInFeed, genreSections } from './videoSelectors';
+import { VideosFeedBody } from './VideosFeedBody';
+import { videosLayoutData } from './videosLayoutData';
 
 /** `VideosScreen`'s own default gym name, matching every other surface here. */
 const DEFAULT_GYM_NAME = 'Your Gym';
@@ -47,13 +49,10 @@ const RANK_BADGE_ASSET = 'icon_rank_belt.png' as const;
 const STREAK_DAYS = 3;
 const POINTS_LABEL = '3.4k';
 
-/**
- * `tabGenres = [null, ...genres]` — "All" is this screen, so index 0 is always
- * the selected tab in a preview that cannot navigate.
- */
-export function videoTabLabels(videos: readonly ShowcaseVideo[]): readonly string[] {
-  return ['All', ...genresInFeed(videos).map(genreLabel)];
-}
+// Re-exported from where it has always been imported: the tab labels are part
+// of the payload every arrangement is handed, so the derivation moved to
+// ./videosLayoutData.ts with the rest of it.
+export { videoTabLabels } from './videosLayoutData';
 
 export interface VideoShowcaseProps {
   /** The host gym's name. There is no gym in this browser. */
@@ -69,8 +68,7 @@ export function VideoShowcase({
   gymLogoSrc,
   videos,
 }: VideoShowcaseProps) {
-  const featured = featuredVideo(videos);
-  const sections = genreSections(videos);
+  const data = videosLayoutData(videos);
 
   return (
     <ShowcaseScaffold
@@ -78,7 +76,7 @@ export function VideoShowcase({
       bodyScroll
       bottomNav={<ShowcaseBottomNav selected="videos" />}
     >
-      {/* `Column(crossAxisAlignment: stretch)` inside the screen's scroller. */}
+      {/* `CustomScrollView`'s sliver list, as one column inside the scroller. */}
       <div className={styles.feed}>
         <ShowcaseTopbar
           mode="nameOnly"
@@ -88,29 +86,7 @@ export function VideoShowcase({
           pointsLabel={POINTS_LABEL}
           rankBadgeAsset={RANK_BADGE_ASSET}
         />
-        <VideoCategoryTabs tabs={videoTabLabels(videos)} selectedIndex={0} />
-
-        {featured === null && sections.length === 0 ? (
-          // `VideosFeedBody`'s own empty state, verbatim.
-          <p className={styles.empty}>Nothing here yet.</p>
-        ) : (
-          // `Column(stretch, spacing: spacingBig)`.
-          <div className={styles.body}>
-            {featured !== null && (
-              // `_PaddedSection(horizontal: screenHorizontalPadding)`.
-              <div className={styles.heroInset}>
-                <FeaturedVideoCard video={featured} />
-              </div>
-            )}
-            {sections.map((section) => (
-              <VideoCarouselSection
-                key={section.genre}
-                title={genreLabel(section.genre)}
-                videos={section.videos}
-              />
-            ))}
-          </div>
-        )}
+        <VideosFeedBody data={data} />
       </div>
     </ShowcaseScaffold>
   );

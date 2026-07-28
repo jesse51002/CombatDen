@@ -1,0 +1,61 @@
+/*
+ * Styles for ./VideoSectionHeader.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/sections/video_section_header.dart).
+ *
+ * `--sc-*` for the design tokens (see ../../ShowcaseThemeVars.tsx); `--vc-inset`
+ * is the one geometry value a section writes inline, because only the
+ * horizontally-scrolling section insets its own header — every other section is
+ * padded by the arrangement that places it. The fallback is what makes an unset
+ * `--vc-inset` mean "my owner already padded me" rather than an invalid
+ * declaration.
+ */
+
+/* `Row(crossAxisAlignment: center)`. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  padding-inline: var(--vc-inset, 0px);
+}
+
+/*
+ * `Expanded(child: Text(title, style: h2))`. `margin: 0` because this is an
+ * <h2> and the UA sheet would otherwise add a gap the Dart Row does not have.
+ */
+.title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+}
+
+/*
+ * `VideoSectionHeaderStyle.divider` — the title is NOT expanded here; the rule
+ * takes the slack and runs to the edge, so the header reads as a band divider
+ * rather than a heading.
+ */
+.divider .title {
+  flex: 0 1 auto;
+}
+
+/* `Expanded(child: Container(height: dividerThickness, color: divider))`. */
+.rule {
+  flex: 1 1 auto;
+  height: var(--sc-divider-thickness);
+  background: var(--sc-divider);
+}
+
+/*
+ * `VideoSectionHeaderStyle.overlay` — `ColoredBox(popup) > Padding(horizontal:
+ * paddingSmall, vertical: spacingMedium)`. The band is opaque so the header can
+ * sit over artwork, which is the whole reason this treatment exists.
+ */
+.band {
+  padding: var(--sc-spacing-medium) var(--sc-padding-small);
+  background: var(--sc-popup);
+}
