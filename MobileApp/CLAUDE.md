@@ -387,13 +387,13 @@ landing page: `capture_main.dart` (the theme-reel scroll), `capture_booking_main
 `capture_frame.dart`. NOT shipping code — its only app-side hooks are opt-in and
 inert in normal use (all null / false / clock-unset): `captureController` on
 `VideosScreen`; `classData` on `ClassScreen`; `captureContentOnly` on
-`ClassBookedScreen`; and the global `captureRevealClock`
+`ClassBookedScreen`; `value` on `LoadingDots`, which pins the loader to one
+phase of its cycle; and the global `captureRevealClock`
 (`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
 reveal + post-class celebration animations deterministically — read by
-`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the shared
-celebration intro stage (`shared/widgets/post_class/intro/`), the points intro
-controller (`_PointSphere`), and the streak badge pulse. See
-`tools/capture/README.md`.
+`ScaleReveal`, `StaggeredReveal`, `CountUpText`, the shared celebration intro
+stage (`shared/widgets/post_class/intro/`), the points intro controller
+(`_PointSphere`), and the streak badge pulse. See `tools/capture/README.md`.
 
 Also outside `lib/`, **`docs/`** holds design docs for this app. Today that is
 `layout_and_motion_formats.md` — the layout and motion enum library (one
@@ -469,6 +469,26 @@ tenant-slot order applies. The difference is the invariant:
   ring: routing points through it would replace the shipped points intro
   for every tenant, which the "first value renders exactly what ships
   today" guarantee forbids.
+- **`loader_style` is wired, and it governs every waiting state.**
+  `lib/shared/widgets/animation/loader/` holds it, same split as the
+  intro: `loader_frame.dart` is the pure per-instant model (`LoaderMark`
+  / `LoaderFrame`) plus one value's whole contract (`LoaderSpec` —
+  shape, cycle, mark count, frame function); one file per value declares
+  a spec; the `loader_*_field.dart` widgets are the only things that
+  paint one, always inside the same `LoaderBox` (the shipped dots'
+  footprint); and `loading_dots.dart` holds the `FormatBuilder`-wrapped
+  switch plus the repeating controller. Every surface that waits renders
+  `LoadingDots` — the videos feed, the home schedule, the rewards grid,
+  the tag list, the recommendation flow and the booking confirmation —
+  so there is one waiting state to brand, not six. (The name is the
+  shipped value's; `tools/capture/` imports it.) The one spinner
+  deliberately left alone is the gym-browser's pagination footer, an
+  inline "fetching more" affordance rather than a screen's waiting
+  state. `test/loader_style_invariants_test.dart` is the gate: every
+  value renders one indicator in the same box, moves, never settles,
+  closes its loop, honours a pinned `value` for capture, disposes its
+  controller, and never overshoots — plus a floor on cycle length, since
+  a repeat too quick to read is a fault light, not a loader.
 
 ## Development Commands
 

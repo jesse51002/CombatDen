@@ -99,7 +99,7 @@ final List<FormatEntry> kMotionFormats = [
     slot: CombatDenSlots.loaderStyle,
     label: 'Loader',
     values: _names(LoaderStyle.values),
-    implemented: false,
+    implemented: true,
   ),
   FormatEntry(
     slot: CombatDenSlots.transitionStyle,
