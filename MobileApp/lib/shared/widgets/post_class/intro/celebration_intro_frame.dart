@@ -69,16 +69,15 @@ class CelebrationIntroSpec {
   final CelebrationIntro value;
 
   /// When the intro is over: the figure leaves, the settled content
-  /// arrives and `markDone` fires — in that order, always.
+  /// arrives, and `markDone` fires.
   ///
-  /// An intro owns the stage until it is done. There is deliberately no
-  /// "hand off early" seam: `flipCount` used to reveal the card
-  /// mid-turn, and on a real device that reads as the card abandoning
-  /// its own animation. It also meant the figure and the settled
-  /// content were briefly alive together, which is a layout state no
-  /// other value produced and which silently displaced the settled card
-  /// by ~190pt under `figureTop`. Removing the overlap removes that
-  /// whole class of bug rather than relying on a fix for it.
+  /// There is deliberately no "hand off early" knob. An earlier draft
+  /// let `flipCount` reveal the settled content mid-turn so the
+  /// count-up overlapped the flip; on a real screen that read as the
+  /// card abandoning its own animation rather than as one composed
+  /// moment. **The intro owns the stage until it is finished**, and
+  /// because that is now true of every value, the settled content can
+  /// only ever be behind one shape.
   final Duration total;
 
   /// One entry per particle, each a multiplier on the stage radius.

@@ -11,10 +11,11 @@ import 'package:mobile_app/shared/widgets/post_class/intro/celebration_intro_fra
 // turning to face you.
 const Duration _kDelay = Duration(milliseconds: 300);
 const Duration _kFlip = Duration(milliseconds: 1200);
-const Duration _kHold = Duration(milliseconds: 200);
-// A long, gentle fade rather than a snap: the figure is dissolving over
-// a count-up that is already rolling, so this beat is a cross-fade.
-const Duration _kExit = Duration(milliseconds: 800);
+// The landed figure gets a real beat facing you before it leaves, the
+// same shape as `orbit`'s hold: the turn is the point, so it has to
+// finish being a turn before the card moves on.
+const Duration _kHold = Duration(milliseconds: 700);
+const Duration _kExit = Duration(milliseconds: 300);
 
 final Duration _kTotal = _kDelay + _kFlip + _kHold + _kExit;
 
@@ -24,12 +25,16 @@ final Duration _kFadeIn = CelebrationTimings.revealDuration * 2;
 
 const double _kExitShrink = 0.3;
 
-/// `CelebrationIntro.flipCount` — the value with the earliest payoff.
+/// `CelebrationIntro.flipCount` — the deliberate one.
 ///
-/// The hero turns in on the vertical axis from edge-on, holds, then
-/// clears. Like every other value it owns the stage until it is done:
-/// the card settles and the count-up starts once the turn has finished,
-/// not during it.
+/// The hero turns in on the vertical axis from edge-on, holds facing
+/// you, and leaves; then the card settles and its figure counts up.
+///
+/// An earlier draft started the count mid-turn, so the roll and the
+/// flip overlapped. On a real screen that did not read as one composed
+/// moment — it read as the card giving up on its own animation and
+/// jumping ahead. The intro owns the stage until it is finished, like
+/// every other value.
 final CelebrationIntroSpec kFlipCountIntro = CelebrationIntroSpec(
   value: CelebrationIntro.flipCount,
   total: _kTotal,
@@ -51,10 +56,7 @@ CelebrationIntroFrame _frameAt(double t) {
   final fadeInE = Curves.easeOut.transform(
     ((ms - flipStart) / _kFadeIn.inMilliseconds).clamp(0.0, 1.0),
   );
-  // Ease-OUT on the way out too, so the figure clears the count-up
-  // early in the beat instead of sitting on top of it and then
-  // vanishing.
-  final exitE = Curves.easeOut.transform(
+  final exitE = Curves.easeInQuart.transform(
     ((ms - exitStart) / _kExit.inMilliseconds).clamp(0.0, 1.0),
   );
 

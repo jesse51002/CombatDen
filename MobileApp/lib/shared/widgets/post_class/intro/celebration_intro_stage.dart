@@ -29,11 +29,6 @@ typedef CelebrationSettledBuilder =
 /// a tap on the stage jumping to the final state, exactly one
 /// `markDone` — is implemented once here rather than per value.
 class CelebrationIntroStage extends StatelessWidget {
-  /// The settled card. Public so the gate can assert the one rule this
-  /// stage exists to enforce: an intro owns the stage until it is done,
-  /// and the card never appears before the intro has finished.
-  static const Key settledKey = Key('celebration-intro-settled');
-
   const CelebrationIntroStage({
     super.key,
     required this.hero,
@@ -104,6 +99,7 @@ class _IntroRunner extends StatefulWidget {
 
 class _IntroRunnerState extends State<_IntroRunner>
     with SingleTickerProviderStateMixin {
+  static const Key _kSettledKey = Key('celebration-intro-settled');
   static const Key _kFigureKey = Key('celebration-intro-figure');
 
   late final AnimationController _ctrl;
@@ -168,44 +164,30 @@ class _IntroRunnerState extends State<_IntroRunner>
           t = _ctrl.value;
         }
 
-        final elapsedUs = totalUs * t;
-        // Mutually exclusive, always: the figure holds the stage until
-        // the intro is over, then the settled content takes it. Never
-        // both at once.
-        final figureOn = !_skipped && elapsedUs < totalUs;
-        final settledOn = !figureOn;
-
-        final settledChild = settledOn
-            ? KeyedSubtree(
-                key: CelebrationIntroStage.settledKey,
-                child: widget.settled(
-                  context,
-                  clock != null ? spec.total : null,
+        // The intro owns the stage until it is done. One or the other,
+        // never both: the figure fills the stage while it plays, then
+        // the settled content sizes to itself and the stage's own
+        // alignment places it, exactly as the shipped card always did.
+        if (!_skipped && t < 1) {
+          return SizedBox.expand(
+            child: KeyedSubtree(
+              key: _kFigureKey,
+              child: IgnorePointer(
+                child: CelebrationIntroFigure(
+                  spec: spec,
+                  frame: spec.frameAt(t),
+                  hero: widget.hero,
+                  particle: widget.particle,
                 ),
-              )
-            : null;
-        final figureChild = figureOn
-            ? KeyedSubtree(
-                key: _kFigureKey,
-                child: IgnorePointer(
-                  child: CelebrationIntroFigure(
-                    spec: spec,
-                    frame: spec.frameAt(t),
-                    hero: widget.hero,
-                    particle: widget.particle,
-                  ),
-                ),
-              )
-            : null;
-
-        // The figure fills the stage; the settled content sizes to
-        // itself and the stage's own alignment places it. Because the
-        // two never coexist, the settled content can never be re-parented
-        // or re-measured by the figure's box.
-        if (figureChild != null) return SizedBox.expand(child: figureChild);
-        return settledChild!;
+              ),
+            ),
+          );
+        }
+        return KeyedSubtree(
+          key: _kSettledKey,
+          child: widget.settled(context, clock != null ? spec.total : null),
+        );
       },
     );
   }
-
 }

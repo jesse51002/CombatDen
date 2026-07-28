@@ -48,9 +48,10 @@ import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';
 ///   things.
 /// * **Deterministic under capture.** The capture clock drives every
 ///   value; none of them self-runs while it is set.
-/// * **The `flipCount` hand-off still works.** That intro deliberately
-///   starts the count mid-flip, so no value's lead-in may push the roll
-///   out past the flip it overlaps.
+/// * **The card's intro still finishes first.** No value's lead-in may
+///   start pulling the settled card forward into an intro that is still
+///   playing, and none may stall so long after it that the figure
+///   spends most of its window not moving.
 void main() {
   // The figure the pumped tests use: two digits, a prefix and a suffix.
   const target = 42;
@@ -466,13 +467,16 @@ void main() {
     });
   });
 
-  group('the lead-in fits inside the intro it follows', () {
-    // An intro owns the stage until it is done, so a count-up never
-    // starts before the card has settled. What still matters is that a
-    // value's lead-in is dead time the viewer is paying for AFTER an
-    // intro they already watched — so cap it against the shortest intro
-    // rather than against a hand-off that no longer exists.
-    final flipRemaining = kFlipCountIntro.total;
+  group('the lead-in stays a beat, not a wait', () {
+    // This cap used to be anchored to `CelebrationIntro.flipCount`'s
+    // hand-off, back when that intro revealed the card mid-turn and the
+    // roll was meant to overlap the flip. That overlap is gone — the
+    // intro now finishes before the card settles — so the anchor is now
+    // the count-up's OWN window: the figure should spend most of it
+    // moving. A lead-in past the halfway mark is not a beat before the
+    // roll, it is a stall, and it lands after an intro that already
+    // held the screen for two to three seconds.
+    final maxLeadIn = CelebrationTimings.countUpDuration ~/ 2;
 
     for (final value in CountUpStyle.values) {
       test('$value', () {
@@ -482,9 +486,9 @@ void main() {
         final leadIn = leadInOf(spec);
         expect(
           leadIn,
-          lessThan(flipRemaining),
-          reason: '$value waits $leadIn before the figure moves, past the '
-              'flip it is supposed to start inside',
+          lessThan(maxLeadIn),
+          reason: '$value waits $leadIn before the figure moves, most of '
+              'the window it had to move in',
         );
 
         // Every authored value holds a beat first. `odometer` does not,
@@ -589,7 +593,7 @@ void main() {
     }
   });
 
-  group('the flipCount hand-off survives every count-up value', () {
+  group('every count-up value waits for the intro to finish', () {
     Widget card(PostClassController controller) {
       return DefaultAssetBundle(
         bundle: StubAssetBundle(),
@@ -618,19 +622,18 @@ void main() {
 
         await tester.pumpWidget(card(controller));
 
-        // One frame past the intro: the card has settled and the
-        // count-up is mounted, and the hero has left. The intro owns
-        // the stage until it is done — no count-up value may start
-        // before that, and none may delay it afterwards.
-        await tester.pump(
-          kFlipCountIntro.total + const Duration(milliseconds: 16),
-        );
-        expect(find.byType(CountUpText), findsOneWidget);
+        // Mid-flip the figure still owns the stage and the count-up has
+        // not mounted. An earlier draft deliberately overlapped the two;
+        // on a real screen it read as the card giving up on its own
+        // animation, so the intro now runs to completion first and no
+        // count-up value may start pulling the card forward again.
+        await tester.pump(kFlipCountIntro.total ~/ 2);
         expect(
-          find.byKey(CelebrationIntroFigure.heroKey),
+          find.byType(CountUpText),
           findsNothing,
-          reason: 'the count-up no longer starts mid-flip',
+          reason: 'the count-up started before the flip had finished',
         );
+        expect(find.byKey(CelebrationIntroFigure.heroKey), findsOneWidget);
 
         await tester.pump(kFlipCountIntro.total);
         await tester.pump(const Duration(seconds: 4));

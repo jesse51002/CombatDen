@@ -6,11 +6,10 @@ import 'package:mobile_app/shared/widgets/animation/count_up/count_up_frame.dart
 //
 // The lead-in: the figure holds on its opening zeros for a beat before
 // the roll starts, so the eye has time to register that something is
-// about to happen rather than finding the number already resolved. It
-// is short in absolute terms because it is dead time inside an already
-// bounded run, not because any intro is waiting on it: an intro owns
-// the stage until it finishes, so the count-up never starts until the
-// card has settled.
+// about to happen rather than finding the number already resolved. Kept
+// short on purpose — the card only settles once its intro has finished
+// holding the screen, so a long hold here reads as a stall rather than
+// as anticipation. The gate caps it at half the roll's window.
 const double _kLeadIn = 0.16; // ~224ms of the 1400ms reference.
 
 /// `CountUpStyle.ticker` — the cheap one.

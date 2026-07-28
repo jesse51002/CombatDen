@@ -148,40 +148,6 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   }
 
-  group('an intro owns the stage until it is done', () {
-    // The founder caught this on a device: `flipCount` used to reveal
-    // the settled card half way through its turn, which reads as the
-    // card giving up on its own animation. No value may move on early.
-    for (final intro in CelebrationIntro.values) {
-      testWidgets('$intro does not settle early', (tester) async {
-        phoneSized(tester);
-        pin(intro);
-        await tester.pumpWidget(card());
-
-        final total = introSpec(intro).total;
-        // Sample across the whole run. The settled card must not appear
-        // at any point before the intro is over.
-        for (var i = 1; i <= 20; i++) {
-          final elapsed = total * (i / 21);
-          await tester.pump(
-            i == 1 ? elapsed : total * (1 / 21),
-          );
-          expect(
-            find.byKey(CelebrationIntroStage.settledKey),
-            findsNothing,
-            reason: '$intro settled at ${elapsed.inMilliseconds}ms of '
-                '${total.inMilliseconds}ms — an intro must finish first',
-          );
-        }
-
-        // And it must arrive once the intro is over, not never.
-        await tester.pump(total);
-        await tester.pumpAndSettle();
-        expect(find.byKey(CelebrationIntroStage.settledKey), findsOneWidget);
-      });
-    }
-  });
-
   group('every value settles into the same element set', () {
     for (final intro in CelebrationIntro.values) {
       testWidgets('$intro', (tester) async {
@@ -378,10 +344,9 @@ void main() {
   });
 
   group('every value holds its timing contract', () {
-    test('every spec is wired to the value it claims', () {
+    test('the switch is wired to the value it claims', () {
       for (final intro in CelebrationIntro.values) {
-        expect(introSpec(intro).value, intro,
-            reason: 'the switch is mis-wired');
+        expect(introSpec(intro).value, intro);
       }
     });
 
@@ -515,9 +480,60 @@ void main() {
     }
   });
 
-  /// The invariant the whole system exists to protect, measured rather
-  /// than asserted by presence: a motion value may change WHEN the
-  /// settled card appears, never WHERE.
+  /// The founder's complaint, as an assertion: an intro that lets the
+  /// card settle while it is still playing reads as the card giving up
+  /// on its own animation and jumping ahead, not as one composed
+  /// moment. The intro owns the stage until it is done.
+  ///
+  /// This is the honest form of the invariant — stronger than checking
+  /// where the settled card lands, because it says the settled card
+  /// must not be there AT ALL yet.
+  group('the intro owns the stage until it finishes', () {
+    for (final intro in CelebrationIntro.values) {
+      testWidgets('$intro', (tester) async {
+        phoneSized(tester);
+        pin(intro);
+        final spec = introSpec(intro);
+        final controller = PostClassController();
+        addTearDown(controller.dispose);
+
+        await tester.pumpWidget(card(controller: controller));
+
+        // Sampled across the whole run, not just at one instant: an
+        // early hand-off anywhere in the intro is the bug.
+        const samples = 12;
+        for (var i = 1; i < samples; i++) {
+          await tester.pump(spec.total ~/ samples);
+          expect(
+            find.byType(CountUpText),
+            findsNothing,
+            reason:
+                '$intro settled its card ${i * 100 ~/ samples}% of the way '
+                'through the intro, before the intro was done',
+          );
+          expect(find.byType(StreakWeekStrip), findsNothing, reason: '$intro');
+          expect(
+            find.byKey(CelebrationIntroFigure.heroKey),
+            findsOneWidget,
+            reason: '$intro dropped its figure before it finished',
+          );
+          expect(controller.isAnimating, isTrue, reason: '$intro');
+        }
+
+        // ...and once it IS done, the card is there and the figure is not.
+        await playOut(tester, intro);
+        expect(find.byType(CountUpText), findsOneWidget);
+        expect(find.byType(StreakWeekStrip), findsOneWidget);
+        expect(find.byKey(CelebrationIntroFigure.heroKey), findsNothing);
+        expect(controller.isAnimating, isFalse);
+      });
+    }
+  });
+
+  /// A motion value may change WHEN the settled card appears, never
+  /// WHERE. Kept alongside the ownership gate above: that one proves the
+  /// card does not arrive early, this one proves it does not arrive
+  /// somewhere else.
   ///
   /// This is the gate that would have caught the real defect. Under
   /// `figureTop` the stage is top-aligned, and `flipCount` — the one

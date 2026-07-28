@@ -521,11 +521,14 @@ invariant:
   (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
-- **`flipCount` is the only value whose figure and settled content share
-  the stage** (it hands off mid-turn). That path must keep the settled
-  content as the thing that SIZES the body, or the stage's own `Align`
-  has nothing to place and every non-centred layout silently re-centres.
-  Getting that wrong is what dropped the stat ~190pt under `figureTop`.
+- **The intro owns the stage until it is done.** The figure and the
+  settled content are never both mounted: the card settles when the
+  intro finishes, not before. `flipCount` used to reveal the card
+  mid-turn so the count-up overlapped the flip; on a device that read as
+  the card giving up on its own animation and jumping ahead, and the
+  overlap path was also the only thing that could displace the settled
+  card (it dropped the stat ~190pt under `figureTop`). There is
+  deliberately no "hand off early" knob to reintroduce it with.
 - **Only the streak card is on the shared stage.** The points card keeps
   its own `_PointSphere`, because the shipped `orbit` value is the streak
   ring: routing points through it would replace the shipped points intro
