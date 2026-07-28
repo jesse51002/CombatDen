@@ -55,11 +55,12 @@ and the boundary between them is load-bearing:
   | `showcase/profile/` | `MobileApp/lib/features/profile/` |
   | `showcase/showcaseVideoDefaults.ts` | *(no counterpart — constants extracted from `VideoService/videos/*.yaml`)* |
 
-  Three files port NOTHING, because the Flutter side has no counterpart to
+  Four things port NOTHING, because the Flutter side has no counterpart to
   port: `appUrl.ts` (the CRM's theme surface is a single tab, so it never had a
-  top-level view switcher), `ViewTabs.tsx` (that switcher) and `inspect/` (the
-  artifact inspector). They are native, and they still obey every rule below —
-  the chrome's tokens, the lint gates and the React Compiler constraints.
+  top-level view switcher), `ViewTabs.tsx` (that switcher), `inspect/` (the
+  artifact inspector) and `studio/` (the generation studio). They are native,
+  and they still obey every rule below — the chrome's tokens, the lint gates and
+  the React Compiler constraints.
 
   The count-up is the one file in `showcase/` that does not come out of
   `CRM/lib/showcase/`. Dart keeps it in `shared/widgets/animation/` because the
@@ -286,6 +287,22 @@ CORS allowlist (`src/core/config.py`) contains `8081`, `8082`, `3000`, `8080` �
 but **not** Vite's default `5173`. On any other port
 `GET /api/v1/theme/showcase-defaults` fails CORS. Pinning is what keeps this a
 zero-backend-change frontend; don't "fix" the port.
+
+## Three backends, and only two of them ship
+
+- **`:8001` — ThemeService's read API** (`cd .. && make api`). Finished themes.
+  Deployed. Every view needs it.
+- **`:8000` — FastApiBackend.** One public call, `showcase-defaults`, for the
+  phone preview's demo classes and rewards.
+- **`:8002` — ThemeService's STUDIO** (`cd .. && make studio`), bound to
+  127.0.0.1 and never deployed. Only `?view=studio` talks to it: launch a run,
+  stream its progress, read a finished image mid-run.
+
+`src/lib/config.ts` resolves the first two through an override → Vite env →
+default ladder. **The studio's base URL is resolved in `src/app/studio/`
+instead, not there** — `src/lib/` is the runtime a consumer installs, and a
+laptop-only tool that spends money starting generation runs has no business in
+a published package. The ladder is mirrored, not imported, on purpose.
 
 ## Local dev needs internet unless you opt out
 

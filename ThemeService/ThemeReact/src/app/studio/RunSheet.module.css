@@ -1,0 +1,382 @@
+/*
+ * Styles for ./RunSheet.tsx — the run as a sheet that fills in.
+ *
+ * Same grammar as ../inspect/InspectView.module.css, because the two are the
+ * same document at two moments: this one is the sheet being made, that one is
+ * the sheet being read. Structure from whitespace, hairlines and type; no
+ * cards; identifiers and measurements in Geist Mono; 64px of air above a
+ * section rule and 40px below it.
+ */
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: var(--adm-space-big);
+}
+
+/* ── Masthead ────────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+/* The sheet's ONE kicker — and the only place the run's phase is named. */
+.kicker {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The brand being made, at the scale the inspector will set it. Capped at 64px
+ * (under the inspector's 76) because this name is not yet an artifact — it is
+ * a claim the run is in the middle of earning.
+ */
+.title {
+  margin: var(--adm-space-small) 0 0;
+  font-size: clamp(36px, 5.2vw, 64px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--adm-ink);
+  text-wrap: balance;
+}
+
+.identity {
+  margin: var(--adm-space-large) 0 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The live sentence. A sentence, not a stat block: the figures ARE the
+ * argument, and they read as one claim rather than four tiles.
+ */
+.status {
+  max-width: 72ch;
+  margin: var(--adm-space-medium) 0 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+.status b {
+  font-weight: 600;
+  color: var(--adm-ink);
+  /* A climbing counter must never resize the sentence around it. */
+  font-variant-numeric: tabular-nums;
+}
+
+.transport,
+.failure {
+  max-width: 72ch;
+  margin: var(--adm-space-medium) 0 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-size);
+  line-height: 1.6;
+}
+
+.transport {
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * A failure is carried by ink weight and face, never by a colour: the CRM's
+ * light palette declares no status red, and inventing one here would put a
+ * token on the page that exists nowhere else in the product.
+ */
+.failure {
+  overflow-wrap: anywhere;
+  color: var(--adm-ink);
+}
+
+/* ── Finish ──────────────────────────────────────────────────────────────── */
+
+.finish {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--adm-space-large);
+  margin-top: var(--adm-space-big);
+}
+
+/*
+ * Capped at a reading measure rather than left to grow: `flex: 1` would push
+ * the remaining button to the far edge of a 1116px column, a metre away from
+ * the sentence it belongs beside.
+ */
+.loaded {
+  flex: 0 1 60ch;
+  margin: 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+.loaded b {
+  font-family: var(--gw-mono);
+  font-weight: 400;
+  color: var(--adm-ink);
+}
+
+.loadFailed {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: var(--adm-p-size);
+  line-height: 1.65;
+  color: var(--adm-ink);
+}
+
+.loadFailed b,
+.loadFailed code {
+  font-family: var(--gw-mono);
+  font-weight: 400;
+}
+
+.loadFailed code {
+  padding: 1px 5px;
+  border-radius: var(--adm-radius-small);
+  background: var(--adm-line-soft);
+}
+
+/* The mid-run way out. A text action, not a button: leaving is available, and
+   it is not what anyone should be looking at while the sheet is filling. */
+.textAction {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: var(--adm-h3-tracking);
+  text-decoration: underline;
+  text-decoration-color: var(--adm-line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.textAction:hover {
+  text-decoration-color: var(--adm-ink);
+}
+
+.leaveNote {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-big);
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.pending {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-size);
+  color: var(--adm-text-2nd);
+}
+
+/* ── The system strip ────────────────────────────────────────────────────── */
+
+.system {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.system > * + * {
+  border-top: 1px solid var(--adm-line-soft);
+}
+
+/*
+ * Label, engine key, timing. The middle column is fixed so five keys of very
+ * different lengths still start on one vertical, and the timing is pushed to
+ * the far edge where the plate captions also put it.
+ */
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 18ch) auto;
+  align-items: baseline;
+  column-gap: var(--adm-space-big);
+  padding-block: var(--adm-space-large);
+}
+
+.rowLabel {
+  min-width: 0;
+  font-size: var(--adm-h2-size);
+  font-weight: var(--adm-h2-weight);
+  letter-spacing: var(--adm-h2-tracking);
+  /*
+   * A node that has not started yet is quiet; one that is working or finished
+   * is at full ink. State is a step in weight of colour, which is the only
+   * status signal this palette has and the only one it needs.
+   */
+  color: var(--adm-ink);
+}
+
+.row[data-state='queued'] .rowLabel {
+  color: var(--adm-text-3rd);
+}
+
+.rowKey,
+.rowTiming {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+.rowKey {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.rowTiming {
+  justify-self: end;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* A node that is working reads at full ink and is the row that moves. */
+.row[data-state='running'] .rowTiming {
+  color: var(--adm-ink);
+}
+
+.row[data-state='running'] .rowLabel::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 8px;
+  border-radius: 50%;
+  background: var(--adm-ink);
+  vertical-align: middle;
+  animation: pulse 1900ms ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+/* ── The plates ──────────────────────────────────────────────────────────── */
+
+/*
+ * FIVE ACROSS, and that is not a taste choice. The executor holds a semaphore
+ * of five (`MAX_CONCURRENT_MODULES`), so a wave of work fills exactly one row
+ * and the queue behind it reads as a queue. `auto-fill` would have produced
+ * six or seven columns at this measure and thrown that away.
+ */
+.plates {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--adm-space-large);
+}
+
+/* ── The brief at the foot ───────────────────────────────────────────────── */
+
+.brief {
+  display: grid;
+  grid-template-columns: minmax(0, 200px) minmax(0, 1fr);
+  gap: var(--adm-space-large) var(--adm-space-big);
+  margin: 0;
+}
+
+.briefKey {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-ink);
+}
+
+.briefValue,
+.briefProse {
+  max-width: 72ch;
+  margin: 0;
+  font-size: var(--adm-p-size);
+  line-height: 1.7;
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The long fields are authored documents with their own line breaks and their
+ * own bullet list; `pre-wrap` is what keeps them the document they were typed
+ * as rather than one reflowed paragraph.
+ */
+.briefProse {
+  white-space: pre-wrap;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .plates {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 700px) {
+  .section {
+    margin-top: 48px;
+    padding-top: var(--adm-space-big);
+  }
+
+  .plates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* The engine key drops below the label rather than squeezing both. */
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: var(--adm-space-small);
+  }
+
+  .rowKey {
+    grid-column: 1;
+  }
+
+  .brief {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--adm-space-medium);
+  }
+
+  .brief > * + .briefKey {
+    margin-top: var(--adm-space-large);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row[data-state='running'] .rowLabel::after {
+    animation: none;
+    opacity: 1;
+  }
+
+  .textAction {
+    transition: none;
+  }
+}

@@ -1,8 +1,20 @@
-/* SCAFFOLD — replaced wholesale when the studio is built. */
-.placeholder {
+/*
+ * Styles for ./StudioView.tsx — the shell around the two surfaces.
+ *
+ * There is almost nothing here on purpose: the brief form and the run sheet
+ * each own their own document, and a shell that also had opinions about width
+ * or rhythm would be a third voice between them and ../App.module.css.
+ */
+
+/*
+ * The one-request pause while `GET /runs/active` answers whether a run is
+ * already going. Same placement as `_CenteredSpinner` in ../App.tsx, so a wait
+ * here looks like a wait anywhere else in this app.
+ */
+.attaching {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 60vh;
-  opacity: 0.6;
+  min-height: 40vh;
+  padding-block: var(--adm-padding-big);
 }

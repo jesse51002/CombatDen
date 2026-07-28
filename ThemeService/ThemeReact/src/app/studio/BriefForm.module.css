@@ -1,0 +1,411 @@
+/*
+ * Styles for ./BriefForm.tsx — the brief as a document, not a settings panel.
+ *
+ * Inherits the sheet grammar of ../inspect/InspectView.module.css exactly:
+ * structure from whitespace, hairlines and type; sections separated by a rule
+ * with more air above a heading than below it; every identifier and measured
+ * value in Geist Mono; the page's own voice in Geist.
+ *
+ * ONE RULE DECIDES HOW A CONTROL LOOKS. The masthead is a SPECIMEN — the brand
+ * name set at the size the inspector will set it, and the identity line the
+ * inspector prints over a finished artifact — so those are underlined, not
+ * boxed: a box around them would say "settings" about the two things on the
+ * page that are meant to read as the artifact. Everything else is body content
+ * being filled in, and takes the CRM's own control surface (white, hairline,
+ * radiusBig), which is the vocabulary a reader already knows means "type here".
+ */
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding-top: var(--adm-space-big);
+}
+
+/* ── Masthead ────────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+.kickerRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-large);
+}
+
+/* The sheet's ONE kicker, exactly as the inspector carries one. */
+.kicker {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The display-scale brand name. Capped at 64px rather than the inspector's 76:
+ * this one is an INPUT, and a caret that tall reads as a cursor artefact.
+ */
+.nameInput {
+  width: 100%;
+  margin-top: var(--adm-space-small);
+  padding: 0 0 var(--adm-space-medium);
+  border: 0;
+  border-bottom: 1px solid var(--adm-line);
+  background: none;
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: clamp(36px, 5.2vw, 64px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  transition: border-color 0.15s ease;
+}
+
+.nameInput:focus {
+  outline: none;
+  border-bottom-color: var(--adm-ink);
+}
+
+/* 0.8 rather than a lighter grey: at this size the placeholder is the biggest
+   thing on the page, and it still has to clear 4.5:1 on the ground. */
+.nameInput::placeholder {
+  color: var(--adm-text-2nd);
+  opacity: 0.8;
+}
+
+/*
+ * `app · run · mode`, made editable — the inspector's identity line.
+ *
+ * 13px rather than the inspector's 11px, because two of these three values are
+ * fields: 11px mono is a caption size, not a typing size.
+ */
+.identity {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--adm-space-medium);
+  margin-top: var(--adm-space-large);
+  font-family: var(--gw-mono);
+  font-size: 13px;
+}
+
+.identityFixed {
+  color: var(--adm-text-2nd);
+}
+
+.identityDot {
+  color: var(--adm-text-3rd);
+}
+
+.runNameInput {
+  padding: 2px 0;
+  border: 0;
+  border-bottom: 1px solid var(--adm-line);
+  background: none;
+  color: var(--adm-ink);
+  font-family: var(--gw-mono);
+  font-size: 13px;
+  transition: border-color 0.15s ease;
+}
+
+.runNameInput:focus {
+  outline: none;
+  border-bottom-color: var(--adm-ink);
+}
+
+.runNameInput::placeholder {
+  color: var(--adm-text-2nd);
+}
+
+.identityNote {
+  max-width: 68ch;
+  margin: var(--adm-space-medium) 0 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+/* ── Mode ────────────────────────────────────────────────────────────────── */
+
+.modes {
+  display: inline-flex;
+  gap: var(--adm-space-medium);
+}
+
+.mode {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: var(--adm-radius-small);
+  background: none;
+  color: var(--adm-text-2nd);
+  font-family: var(--gw-mono);
+  font-size: 13px;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.mode:hover {
+  color: var(--adm-ink);
+}
+
+.mode[aria-pressed='true'] {
+  border-color: var(--adm-line);
+  color: var(--adm-ink);
+}
+
+/*
+ * Each option carries the ground it stands for. The choice decides what every
+ * generated image is authored against, so it is shown, not just named. The
+ * fill is set inline from ./groundColors.ts — the run sheet paints its plates
+ * in the same two values, and they are defined once.
+ */
+.ground {
+  width: 11px;
+  height: 11px;
+  border: 1px solid var(--adm-line);
+  border-radius: 3px;
+}
+
+/* ── Fields ──────────────────────────────────────────────────────────────── */
+
+/*
+ * What the field IS on the left, the field itself on the right — the exact
+ * composition ../inspect/InspectView.module.css gives its `.string` rows
+ * (a fixed metadata column, then the value at full measure). It is what keeps
+ * the note beside the thing it describes rather than stacked above it, and
+ * what stops a document measure from leaving half the page empty.
+ */
+.field {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--adm-space-large) 48px;
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.fieldHead {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+/* Everything that is not the head — the control, then its problem line. */
+.field > *:not(.fieldHead) {
+  grid-column: 2;
+}
+
+.fieldLabel {
+  margin: 0;
+  font-size: var(--adm-h1-size);
+  font-weight: var(--adm-h1-weight);
+  letter-spacing: var(--adm-h1-tracking);
+  color: var(--adm-ink);
+}
+
+.fieldSlot {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+  overflow-wrap: anywhere;
+}
+
+.fieldNote {
+  max-width: 46ch;
+  margin: 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * Both are textareas that grow with what is in them (a ref callback does the
+ * measuring), so both hide their own overflow — a scrollbar inside a field
+ * that already fits its content is the classic autosize tell.
+ */
+.lineInput,
+.proseInput {
+  width: 100%;
+  padding: var(--adm-padding-small);
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-big);
+  background: var(--adm-surface);
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  resize: vertical;
+  transition: border-color 0.15s ease;
+}
+
+.lineInput::placeholder,
+.proseInput::placeholder {
+  color: var(--adm-text-2nd);
+}
+
+.lineInput:focus,
+.proseInput:focus {
+  outline: none;
+  border-color: var(--adm-ink);
+}
+
+.proseInput {
+  /* Autosized from its content; this is the floor an empty one starts at, and
+     it is deliberately tall — the field is asking for a document. */
+  min-height: 14rem;
+  padding: var(--adm-space-large) var(--adm-padding-small);
+}
+
+/*
+ * A field that is being complained about darkens its own edge. The chrome has
+ * no status colour — the CRM's light palette declares none — so state is
+ * carried by ink weight and structure rather than by a red this page would
+ * have had to invent.
+ */
+.field:has(.problem) .lineInput,
+.field:has(.problem) .proseInput {
+  border-color: var(--adm-ink);
+}
+
+.problem {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-size);
+  line-height: 1.5;
+  color: var(--adm-ink);
+}
+
+/* ── Launch ──────────────────────────────────────────────────────────────── */
+
+.launch {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-big);
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--adm-line);
+}
+
+.cost {
+  max-width: 68ch;
+  margin: 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+.launchRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--adm-space-large) var(--adm-space-big);
+}
+
+.refusal {
+  flex: 1 1 24ch;
+  margin: 0;
+  font-size: var(--adm-p-size);
+  line-height: 1.65;
+  color: var(--adm-ink);
+}
+
+.refusalSlug {
+  font-family: var(--gw-mono);
+}
+
+/* ── Small parts ─────────────────────────────────────────────────────────── */
+
+.textAction {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: var(--adm-h3-tracking);
+  text-decoration: underline;
+  text-decoration-color: var(--adm-line);
+  text-underline-offset: 3px;
+  cursor: pointer;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.textAction:hover {
+  text-decoration-color: var(--adm-ink);
+}
+
+.sheet code {
+  padding: 1px 5px;
+  border-radius: var(--adm-radius-small);
+  background: var(--adm-line-soft);
+  font-family: var(--gw-mono);
+  font-size: 0.92em;
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  /* The note stacks above the field it describes rather than squeezing it. */
+  .field {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--adm-space-big);
+  }
+
+  .fieldHead {
+    grid-row: auto;
+  }
+
+  .field > *:not(.fieldHead) {
+    grid-column: 1;
+  }
+
+  .fieldNote {
+    max-width: 68ch;
+  }
+}
+
+@media (max-width: 700px) {
+  .field,
+  .launch {
+    margin-top: 48px;
+    padding-top: var(--adm-space-big);
+  }
+
+  .kickerRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--adm-space-medium);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nameInput,
+  .runNameInput,
+  .lineInput,
+  .proseInput,
+  .mode,
+  .textAction {
+    transition: none;
+  }
+}
