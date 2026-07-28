@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/parts/reward_image_hero.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/parts/reward_points_cost.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
 // Static prototype code — every reward shows the same one for now.

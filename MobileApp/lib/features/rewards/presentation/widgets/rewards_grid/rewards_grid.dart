@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/rewards/data/reward.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_redeem_dialog.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_store_card.dart';
 
 /// Two-column grid of earned rewards. Same shared card as the points
 /// store, but the CTA reads "Use" and triggers the redeem dialog.
@@ -47,20 +46,7 @@ class _RewardsColumn extends StatelessWidget {
       spacing: DesignConstants.spacingLarge,
       children: [
         for (final reward in rewards)
-          RewardCard(
-            imageUrl: reward.imageUrl,
-            title: reward.title,
-            priceLabel: reward.priceLabel,
-            pointsCost: reward.pointsCost,
-            buttonText: 'Use',
-            onPressed: () => RewardRedeemDialog.show(
-              context,
-              imageUrl: reward.imageUrl,
-              title: reward.title,
-              priceLabel: reward.priceLabel,
-              pointsCost: reward.pointsCost,
-            ),
-          ),
+          RewardStoreCard(reward: reward, buttonText: 'Use'),
       ],
     );
   }
