@@ -1,0 +1,14 @@
+/*
+ * Styles for ./rankLayoutData.tsx.
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * The invariant gate's marker (./rankParts.ts). `display: contents` removes the
+ * element from the box tree entirely while leaving it in the DOM, so its
+ * children lay out as direct children of whatever contains the marker — a
+ * marker can never move a pixel of the arrangement it exists to check.
+ */
+.marker {
+  display: contents;
+}

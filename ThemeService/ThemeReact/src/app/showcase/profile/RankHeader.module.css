@@ -1,15 +1,20 @@
 /*
  * Styles for ./RankHeader.tsx (ports MobileApp/lib/features/profile/
- * presentation/widgets/rank_summary/rank_header.dart).
+ * presentation/widgets/rank_summary/{rank_header,rank_belt_band}.dart).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
  */
 
-/* `Row(mainAxisAlignment: center, mainAxisSize: min, spacing: spacingLarge)`. */
+/* `_line(centred: true)` — `Row(center, mainAxisSize: min, spacing: spacingLarge)`. */
 .header {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: var(--sc-spacing-large);
+}
+
+/* `_line(centred: false)` — the same line pinned to the leading edge, full width. */
+.headerStart {
+  justify-content: flex-start;
 }
 
 /*
@@ -24,6 +29,12 @@
   display: block;
 }
 
+/* `_kBeltTileWidth` x `_kBeltTileHeight` — the same aspect, board-cell sized. */
+.beltTile {
+  width: 60px;
+  height: 39px;
+}
+
 /* `Column(mainAxisSize: min, center, spacing: spacingSmall)`. */
 .names {
   display: flex;
@@ -31,6 +42,11 @@
   align-items: center;
   gap: var(--sc-spacing-small);
   min-width: 0;
+}
+
+/* `CrossAxisAlignment.start` — the leading-aligned variants. */
+.namesStart {
+  align-items: flex-start;
 }
 
 /* `Text(rankTitle, style: h1)`. */
@@ -45,4 +61,75 @@
   font: var(--sc-type-h2);
   letter-spacing: var(--sc-type-h2-ls);
   color: var(--sc-text-2nd);
+}
+
+/* `_tile()` steps the pair down to h2 / pSmall so it fits a board cell. */
+.titleTile {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+}
+
+.subtitleTile {
+  font: var(--sc-type-p-small);
+  letter-spacing: var(--sc-type-p-small-ls);
+}
+
+/* `_tile()` — `Column(mainAxisSize: min, spacing: spacingSmall)`. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  min-width: 0;
+}
+
+/*
+ * `RankBeltBand` — `SizedBox(height: _kBandHeight) > Stack`. `_kBandHeight` and
+ * `_kScrimTopAlpha` are the Dart's own file-local consts, not design tokens.
+ */
+.band {
+  --rh-band-height: 220px;
+  --rh-scrim-top-alpha: 35%;
+
+  position: relative;
+  height: var(--rh-band-height);
+  overflow: hidden;
+}
+
+/* `Positioned.fill(child: Image(image: belt, fit: BoxFit.cover))`. */
+.beltBand {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * `Positioned.fill > DecoratedBox(LinearGradient(topCenter -> bottomCenter,
+ * [background @ _kScrimTopAlpha, background]))`.
+ *
+ * `color-mix` is what takes a LIVE `--sc-*` colour to an alpha; writing the
+ * channels here would freeze the theme's background into this stylesheet, which
+ * is the one thing the token indirection exists to prevent.
+ */
+.bandScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sc-background) var(--rh-scrim-top-alpha), transparent),
+    var(--sc-background)
+  );
+}
+
+/*
+ * `Positioned(left: paddingBig, right: paddingBig, bottom: spacingLarge)` —
+ * the names over the band's foot.
+ */
+.bandNames {
+  position: absolute;
+  left: var(--sc-padding-big);
+  right: var(--sc-padding-big);
+  bottom: var(--sc-spacing-large);
 }

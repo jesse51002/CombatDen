@@ -50,6 +50,17 @@ export const RANK_TIMEFRAMES: readonly ShowcaseTimeframe[] = Object.freeze([
   Object.freeze({ label: 'ALL', days: null }),
 ]);
 
+/**
+ * `TimeframeSelector.selected`, and the window ./RatingGraph.tsx plots — ALL.
+ *
+ * Pinned, because every showcase surface is a preview inside a phone frame that
+ * takes no input (../rewards/RewardsTabs.tsx dropped its callbacks for the same
+ * reason). It lives here rather than in either widget so the pill that reads as
+ * active and the window the plot actually uses cannot drift apart when an
+ * arrangement puts them on opposite ends of the screen.
+ */
+export const SHOWCASE_TIMEFRAME_INDEX = RANK_TIMEFRAMES.length - 1;
+
 /** The member the Profile preview shows. Sample data — see the header. */
 export const SHOWCASE_RANK: ShowcaseRank = Object.freeze({
   name: 'Blue',
@@ -63,29 +74,67 @@ export const SHOWCASE_PROFILE_STREAK_WEEKS = 3;
 export const SHOWCASE_PROFILE_POINTS_LABEL = '3.4k';
 
 /**
- * The plotted history: a SAWTOOTH, because that is the shape the real series
- * has. `classesIntoRank` climbs toward `classesNeeded` and the backend resets
- * it to 0 at each promotion, so a member who has been graded twice shows two
- * teeth and then a partial third — which is exactly what makes this graph worth
- * a preview at all. A flat ramp would show the widget without showing the data.
+ * The member's activity stream for the plotted window, oldest first: the day
+ * they were graded to their current rank, then every class they have attended
+ * since. Mon / Wed / Fri, the cadence the rest of this member's sample numbers
+ * already describe.
  *
- * Dates are the raw `YYYY-MM-DD` the backend sends. They are FIXED rather than
- * generated from `Date.now()` so two screenshots of the same theme are
- * byte-identical; the timeframe pills read them, and the preview's own pill is
- * pinned to ALL (../profile/RankProgressGraph.tsx), so a fixed anchor windows
- * identically forever.
+ * ONE ENTRY PER ACTIVITY EVENT, because that is literally what the endpoint
+ * returns — `MemberPortalService._walk_rank_activities` emits a point per
+ * `rank_changed` / `class_attended` row of `member_activities`, never a daily or
+ * weekly bucket. The dates are the gym-local days the backend buckets in, and
+ * they are FIXED rather than generated from `Date.now()` so two screenshots of
+ * the same theme are byte-identical; the timeframe pills read them, and the
+ * preview's own pill is pinned to ALL (./RatingGraph.tsx is fed the ALL window
+ * by ./RankSummarySection.tsx), so a fixed anchor windows identically forever.
+ */
+const SHOWCASE_RANK_ACTIVITY_DATES: readonly string[] = Object.freeze([
+  // The promotion to Blue / Stripe 2 — a `rank_changed`, which resets the count.
+  '2026-04-06',
+  // Seventeen attended classes since, one `class_attended` each.
+  '2026-04-08', '2026-04-10', '2026-04-13', '2026-04-15', '2026-04-17',
+  '2026-04-20', '2026-04-22', '2026-04-24', '2026-04-27', '2026-04-29',
+  '2026-05-01', '2026-05-04', '2026-05-06', '2026-05-08', '2026-05-11',
+  '2026-05-13', '2026-05-15',
+]);
+
+/**
+ * The plotted history: ONE RANK CYCLE — the climb from this member's last
+ * promotion to where they stand today. It rises the whole way and never resets,
+ * and every number in it is derived rather than chosen.
+ *
+ * WHY THIS AND NOT A SAWTOOTH. `classesIntoRank` does reset to 0 at each
+ * promotion, so a window spanning two gradings really does saw up-and-down —
+ * and the previous sample data spanned three cycles, which is what made the
+ * curve read as a member losing ground twice. But a reset is not the only
+ * truthful window: the endpoint returns the member's stream and the client
+ * windows it, so a member whose plotted history sits inside one cycle is an
+ * ordinary member, not a flattering one — it is every member between gradings,
+ * and every member since a gym imported them at the rank they already held.
+ * Showing that member is a choice of WHICH member to preview, which this file
+ * has always been making; it is not a change to what the axis counts.
+ *
+ * WHY THE SHAPE IS FORCED, NOT DESIGNED. The backend's walk adds exactly ONE
+ * per attended class (capped at `classesNeeded`) and emits a point for each, so
+ * inside a cycle the series is `0, 1, 2, …` — and `ratingGraphPath` spaces x by
+ * INDEX, not by date. The line is therefore a straight, steadily rising ramp
+ * for every real member, and nothing here may bend it: the earlier data's +2 /
+ * +3 / +4 weekly jumps were a bucketing the endpoint does not do. The counts
+ * below are computed by the same walk rather than transcribed, so no one can
+ * hand-edit a prettier number into them.
+ *
+ * The series ends at 17, which is `SHOWCASE_RANK.classesSinceRank` — the same
+ * 17 the next-rank badge on this screen counts out as "17 / 24 classes"
+ * (./NextRankSection.tsx). The graph and the badge describe one member.
  */
 export const SHOWCASE_RANK_POINTS: readonly ShowcaseRankPoint[] = Object.freeze(
-  [
-    ['2026-01-06', 2], ['2026-01-13', 5], ['2026-01-20', 9], ['2026-01-27', 13],
-    ['2026-02-03', 17], ['2026-02-10', 21], ['2026-02-17', 24], ['2026-02-24', 3],
-    ['2026-03-03', 6], ['2026-03-10', 10], ['2026-03-17', 12], ['2026-03-24', 16],
-    ['2026-03-31', 20], ['2026-04-07', 24], ['2026-04-14', 2], ['2026-04-21', 5],
-    ['2026-04-28', 7], ['2026-05-05', 11], ['2026-05-12', 14], ['2026-05-19', 17],
-  ].map(([date, into]) =>
+  SHOWCASE_RANK_ACTIVITY_DATES.map((date, index) =>
     Object.freeze({
-      date: String(date),
-      classesIntoRank: Number(into),
+      date,
+      // `_walk_rank_activities`, verbatim: the promotion at index 0 resets the
+      // running count to 0, and each class after it is +1 capped at the
+      // threshold.
+      classesIntoRank: Math.min(index, SHOWCASE_RANK.classesTillNextStep),
       classesNeeded: SHOWCASE_RANK.classesTillNextStep,
     }),
   ),

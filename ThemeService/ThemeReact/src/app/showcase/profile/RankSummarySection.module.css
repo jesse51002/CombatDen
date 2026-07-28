@@ -1,0 +1,19 @@
+/*
+ * Styles for ./RankSummarySection.tsx (ports MobileApp/lib/features/profile/
+ * presentation/widgets/rank_summary/rank_summary_section.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Column(mainAxisSize: min, crossAxisAlignment: center, spacing: spacingLarge)`.
+ *
+ * `stretch` rather than `center` on the cross axis: the plot inside runs the
+ * full width behind its own gutter, and a `center` flex line would shrink it to
+ * its content. The header and the pill row centre themselves.
+ */
+.summary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}

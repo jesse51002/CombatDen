@@ -137,11 +137,37 @@ describe('nextRankProgress', () => {
 });
 
 describe('the bundled profile series', () => {
-  it('plots a sawtooth — the shape a promotion actually produces', () => {
+  it('climbs the whole way — one rank cycle, no promotion reset in the window', () => {
     const series = plottableSeries(SHOWCASE_RANK_POINTS);
-    // At least two resets: a value strictly lower than the one before it.
+    // A reset is a value strictly lower than the one before it, and the plotted
+    // window has none: it sits inside a single cycle (see the WHY THIS AND NOT A
+    // SAWTOOTH note on SHOWCASE_RANK_POINTS). This is the assertion that stops
+    // the preview's curve reading as a member losing ground.
     const resets = series.filter((value, i) => i > 0 && value < (series[i - 1] ?? 0));
-    expect(resets.length).toBeGreaterThanOrEqual(2);
+    expect(resets).toEqual([]);
+    expect(series[0]).toBe(0);
+    expect(series[series.length - 1]).toBeGreaterThan(0);
+  });
+
+  it('steps by exactly one class per point, which is all the endpoint can emit', () => {
+    // `MemberPortalService._walk_rank_activities` emits one point per activity
+    // and adds ONE per attended class. Sample data that jumped by 2 or 3 would
+    // be a weekly bucketing the backend does not do — and the shape of the plot
+    // would be fiction.
+    const counts = SHOWCASE_RANK_POINTS.map((point) => point.classesIntoRank);
+    for (let i = 1; i < counts.length; i++) {
+      expect((counts[i] ?? 0) - (counts[i - 1] ?? 0)).toBe(1);
+    }
+  });
+
+  it('ends on the same number the next-rank badge counts out', () => {
+    // The graph and the badge describe ONE member: the last plotted point is
+    // their classes-since-promotion, which is the badge's numerator.
+    const last = SHOWCASE_RANK_POINTS[SHOWCASE_RANK_POINTS.length - 1];
+    expect(last?.classesIntoRank).toBe(SHOWCASE_RANK.classesSinceRank);
+    expect(nextRankProgress(SHOWCASE_RANK).label).toBe(
+      `${String(SHOWCASE_RANK.classesSinceRank)} / ${String(SHOWCASE_RANK.classesTillNextStep)} classes`,
+    );
   });
 
   it('stays inside the plot box at every sample', () => {
