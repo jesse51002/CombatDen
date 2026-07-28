@@ -1,4 +1,5 @@
 import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/theme/theme_text.dart';
 
 /// The gym this session is showing — chosen on the gym-select screen, then the
 /// single source every content surface reads (videos, classes, rewards all
@@ -28,11 +29,13 @@ class SelectedGym {
   /// loaded design's own name (e.g. "Apex MMA") is the source of truth; the
   /// picker label is the fallback for the brief window before the theme
   /// finishes loading (or if the engine never loaded at all).
-  String get displayName {
-    final designName = ThemeRuntime.activeDesignName;
-    if (designName != null && designName.isNotEmpty) return designName;
-    return _pickedName ?? '';
-  }
+  ///
+  /// Read through [ThemeText.designName], the engine's never-throws
+  /// resolver: `ThemeRuntime.activeDesignName` reaches into DI directly and
+  /// throws when the runtime was never initialised, which is exactly the
+  /// case in a widget test — and every screen's topbar reads this getter.
+  String get displayName =>
+      ThemeText.designName(fallback: _pickedName ?? '');
 
   /// Pick a gym: record its id + theme (+ the picker label) and re-brand to
   /// that theme.
