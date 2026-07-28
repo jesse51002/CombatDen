@@ -31,7 +31,17 @@
 
   /* `flex: none` first: a flex item's `flex-basis: 0%` outranks its `height`. */
   flex: none;
-  height: calc(100dvh - var(--phone-chrome-height) - var(--app-bottom-gutter, 0px));
+  /*
+   * `--app-viewtabs-height` is the view-switcher band (../ViewTabs.module.css),
+   * which sits between the nav and this view and is therefore height this one
+   * does not get. Without the term the browse view grows a 48px scrollbar — in
+   * the one mode deliberately sized never to scroll. The band publishes its own
+   * height on :root so this stays a contract rather than a re-measured literal.
+   */
+  height: calc(
+    100dvh - var(--phone-chrome-height) - var(--app-viewtabs-height, 0px) -
+      var(--app-bottom-gutter, 0px)
+  );
 }
 
 /* Wide: `Row(spacing: spacingBig)` — phone beside the picker. */

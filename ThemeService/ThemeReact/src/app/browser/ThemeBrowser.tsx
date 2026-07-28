@@ -19,7 +19,7 @@
 // FutureBuilder expressed once for the whole tree.
 
 import { useEffect, useState } from 'react';
-import { activeDesignId, selectDesign, useActiveDesign } from 'theme-react';
+import { useActiveDesign } from 'theme-react';
 
 import { SIDE_BY_SIDE_MIN_WIDTH, SIDE_PANE_WIDTH } from '../config';
 import { AppOutlineButton } from '../widgets/AppOutlineButton';
@@ -48,15 +48,10 @@ export function ThemeBrowser() {
     height: window.innerHeight,
   });
 
-  // Ports the tail of `_bootstrap`: the engine seeds on the intended design,
-  // and `selectDesign` corrects the cases where it could not — a returning
-  // visitor whose STICKY localStorage selection outranks the seed (see
-  // ThemeStore.initialize's ladder), or an in-session re-entry where the
-  // memoised bootstrap had already settled on something else. No-throw.
-  useEffect(() => {
-    const intended = INITIAL_URL_THEME;
-    if (intended !== null && activeDesignId() !== intended) void selectDesign(intended);
-  }, []);
+  // The tail of `_bootstrap` — correcting a STICKY localStorage selection that
+  // outranks the deep-linked seed — now lives ONCE in ../App.tsx, as
+  // <DeepLinkTheme> above every view. It was here while the library was the
+  // only view; arriving straight at another one then silently ignored `?theme=`.
 
   // Mirror the current view into the address bar on every theme switch (from
   // the library grid or the side pane) and on every mode change. Only the phone

@@ -11,7 +11,7 @@
 // module-singleton store directly (see ../../CLAUDE.md).
 
 import { useEffect, useState } from 'react';
-import { ThemeProvider, loadFontFamily } from 'theme-react';
+import { ThemeProvider, activeDesignId, loadFontFamily, selectDesign } from 'theme-react';
 
 import styles from './App.module.css';
 import { INITIAL_URL_VIEW, syncViewUrl, type AppView } from './appUrl';
@@ -71,6 +71,7 @@ export function App() {
           expectedIcons={EXPECTED_ICONS}
           fallback={<CenteredSpinner />}
         >
+          <DeepLinkTheme />
           {/* All three views sit INSIDE the gate: the inspector reads the
               resolved theme, and the studio previews what it just produced,
               so neither can render before the runtime has settled. */}
@@ -85,6 +86,37 @@ export function App() {
       </main>
     </div>
   );
+}
+
+/**
+ * Applies the arrival `?theme=` once per page load, for every view.
+ *
+ * WHY IT EXISTS: `ThemeStore.initialize` resolves the design as
+ * `readSelectedDesignId() ?? <the id the provider was constructed with>`, so a
+ * STICKY pick from a previous visit OUTRANKS the deep link. Something has to
+ * correct that after the bootstrap settles.
+ *
+ * WHY IT LIVES HERE: it used to be a mount effect inside `ThemeBrowser`, which
+ * was correct while the library was the only view — but that component only
+ * mounts on the browse view, so arriving straight at `?view=inspect&theme=X`
+ * silently rendered the visitor's last pick instead of X. Since `?view=` exists
+ * precisely so a demo can be handed over as a URL, that broke the feature.
+ *
+ * ONCE PER PAGE LOAD, not once per mount: `INITIAL_URL_THEME` is the ARRIVAL
+ * value. Re-applying it whenever a view remounts would throw away a theme the
+ * visitor picked in this session. This component sits outside the view switch
+ * and never unmounts, so an empty dep array IS "once per page load" — no
+ * module-level flag needed to enforce it.
+ *
+ * Rendered inside <ThemeProvider>, so the runtime has already settled when the
+ * effect runs. `selectDesign` is no-throw; a bad id leaves the theme alone.
+ */
+function DeepLinkTheme() {
+  useEffect(() => {
+    const intended = INITIAL_URL_THEME;
+    if (intended !== null && activeDesignId() !== intended) void selectDesign(intended);
+  }, []);
+  return null;
 }
 
 /** Ports `_CenteredSpinner` (live_theme_preview_tab.dart:308-324). */
