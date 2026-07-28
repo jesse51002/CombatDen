@@ -1,0 +1,105 @@
+/* Styles for ./AssetPlates.tsx — the generated image + icon specimens. */
+
+.plate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+  margin: 0;
+}
+
+/*
+ * The theme's own ground, drawn as a surface. The hairline is what keeps a
+ * pale-ground theme's plate from vanishing into this page's near-white
+ * chrome — the plate must always read as a bounded object, whichever of the
+ * catalog's 76 designs is loaded.
+ */
+.surface {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: var(--adm-padding-small);
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-big);
+}
+
+/* The two full-scale artworks: the mark and the celebration illustration. */
+.wide {
+  aspect-ratio: 16 / 10;
+  padding: var(--adm-space-big);
+}
+
+/* `contain`: an asset is letterboxed on its plate, never cropped to fit it. */
+.art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+/*
+ * Both resolve their COLOUR inline, from the plate's own generated background
+ * (see ./AssetPlates.tsx) — a chrome ink cannot be used on a surface the
+ * chrome does not control, and a fixed neutral that reads on a near-black
+ * ground vanishes on a mid-grey one. `opacity` carries the quietness so the
+ * derived colour stays a single value.
+ */
+.missing,
+.probing {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  opacity: 0.62;
+}
+
+/* A quiet square while ThemeIcon probes the URL — never a failure claim. */
+.probing {
+  width: 44px;
+  height: 44px;
+  border: 1px dashed;
+  border-radius: var(--adm-radius-small);
+  opacity: 0.4;
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.slot,
+.kind {
+  min-width: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+}
+
+/*
+ * Wraps rather than truncates. The slot id is the one thing on a plate a
+ * reader might carry away — `next_rank_belt_image` clipped to
+ * `next_rank_belt_ima…` in a 150px column loses exactly the part that
+ * distinguishes it from `rank_belt`.
+ */
+.slot {
+  overflow-wrap: anywhere;
+  color: var(--adm-ink);
+}
+
+.kind {
+  flex: none;
+  white-space: nowrap;
+}
+
+.kind {
+  color: var(--adm-text-2nd);
+}
+
+@media (max-width: 560px) {
+  .wide {
+    padding: var(--adm-padding-small);
+  }
+}

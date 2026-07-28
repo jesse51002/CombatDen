@@ -1,0 +1,212 @@
+/* Styles for ./ColorRole.tsx — one colour role's dossier entry. */
+
+.role {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: var(--adm-space-big);
+  align-items: start;
+}
+
+/* ── The field ───────────────────────────────────────────────────────────── */
+
+/*
+ * A field, not a swatch. The colour gets a whole column at full section height
+ * because that is the scale it occupies in the product — a member's screen is
+ * mostly `background` with `primary` across a button, not two chips in a row.
+ */
+.field,
+.fieldEmpty {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 232px;
+  padding: var(--adm-padding-small);
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-big);
+}
+
+.fieldEmpty {
+  align-items: center;
+  justify-content: center;
+  border-style: dashed;
+}
+
+.fieldMissing,
+.fieldValue,
+.fieldSample,
+.fieldRatio {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+}
+
+.fieldMissing {
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * Every caption on a field resolves against the generated colour, never the
+ * chrome — an ink from the token sheet would be a guess about this surface.
+ *
+ * NO OPACITY. `readableInk()` returns the BETTER of white / near-black, which
+ * on a mid-tone generated colour clears AA by very little; on the shipped Apex
+ * primary the chosen ink measures 5.43:1, and 85% opacity composited it down to
+ * 4.19:1 — under the floor, at 11px, on the page that prints contrast ratios.
+ * The mono face already reads as secondary beside the 18/600 sample.
+ */
+.fieldValue {
+  align-self: flex-end;
+}
+
+.fieldProof {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-large);
+}
+
+/*
+ * Set at 18/600 so the sample sits in WCAG's LARGE-text band (3:1), which is
+ * the right floor for a specimen: `regular_text` is a body-copy colour and
+ * this is the page showing what it looks like, not a caption to be skimmed.
+ */
+.fieldSample {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/* No opacity, for the reason on `.fieldValue` above — and doubly so here: this
+   IS the measured ratio, so it is the last text on the page allowed to fail. */
+.fieldRatio {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Name + prose ────────────────────────────────────────────────────────── */
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+/*
+ * Set in the THEME's display face, at a size the chrome ramp does not carry.
+ * The page's rule: anything the pipeline authored is set in the pipeline's own
+ * typefaces, and anything the page itself says is Geist. A generated colour
+ * name is the former, so it renders as a specimen of the display slot as well
+ * as a heading.
+ */
+.name {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 38px);
+  font-weight: 600;
+  /* Proportional, so it holds through the clamp — the legitimate `em` case. */
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--adm-ink);
+}
+
+.slot {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The point of the page. Reading measure, generous leading, the theme's own
+ * body face — 16px rather than the chrome's 12px body, because this is the
+ * artifact talking and the surrounding 12px captions are the page talking.
+ */
+.description {
+  max-width: 68ch;
+  margin: var(--adm-space-medium) 0 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.7;
+  color: var(--adm-ink);
+}
+
+.noProse {
+  margin: var(--adm-space-medium) 0 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/* ── The derivation ladder ───────────────────────────────────────────────── */
+
+.ladder {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--adm-space-medium);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rung {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-small);
+  min-width: 0;
+}
+
+.chip,
+.chipEmpty {
+  height: 76px;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-small);
+}
+
+.chipEmpty {
+  border-style: dashed;
+}
+
+.rungKey,
+.rungHex {
+  margin: 0;
+  overflow: hidden;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rungKey {
+  color: var(--adm-ink);
+}
+
+.rungHex {
+  color: var(--adm-text-2nd);
+}
+
+@media (max-width: 900px) {
+  .role {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .field,
+  .fieldEmpty {
+    min-height: 168px;
+  }
+
+  .ladder {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .ladder {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chip,
+  .chipEmpty {
+    height: 60px;
+  }
+}

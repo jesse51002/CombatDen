@@ -1,0 +1,71 @@
+/* Styles for ./TypeSpecimen.tsx — one font slot, set. */
+
+.specimen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.slot {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+.missing {
+  margin: 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The family name at specimen scale. `clamp` because the names run from
+ * "Lora" to "Libre Baskerville" across the catalog and a fixed size would
+ * either wrap the long ones or waste the short ones.
+ */
+.family {
+  margin: 0;
+  font-size: clamp(32px, 4.4vw, 52px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--adm-ink);
+}
+
+.characters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-tiny);
+  padding-top: var(--adm-space-medium);
+  border-top: 1px solid var(--adm-line);
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--adm-text-2nd);
+  /* One line each: the shape of the ramp matters, a wrapped ramp does not. */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A generated headline, set the size a headline is set. */
+.line {
+  margin: 0;
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--adm-ink);
+}
+
+/* A generated paragraph, set at the size body copy is read. */
+.paragraph {
+  max-width: 68ch;
+  margin: 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.7;
+  color: var(--adm-ink);
+}

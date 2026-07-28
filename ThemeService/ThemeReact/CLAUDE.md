@@ -51,6 +51,15 @@ and the boundary between them is load-bearing:
   | `widgets/` | `CRM/lib/shared/widgets/*.dart` |
   | `showcase/` | `CRM/lib/showcase/` |
   | `showcase/celebrations/CountUpText.tsx` | `CRM/lib/shared/widgets/animation/count_up_text.dart` |
+  | `showcase/videos/` | `MobileApp/lib/features/videos/` + `.../shared/widgets/video_recc_card/` |
+  | `showcase/profile/` | `MobileApp/lib/features/profile/` |
+  | `showcase/showcaseVideoDefaults.ts` | *(no counterpart — constants extracted from `VideoService/videos/*.yaml`)* |
+
+  Three files port NOTHING, because the Flutter side has no counterpart to
+  port: `appUrl.ts` (the CRM's theme surface is a single tab, so it never had a
+  top-level view switcher), `ViewTabs.tsx` (that switcher) and `inspect/` (the
+  artifact inspector). They are native, and they still obey every rule below —
+  the chrome's tokens, the lint gates and the React Compiler constraints.
 
   The count-up is the one file in `showcase/` that does not come out of
   `CRM/lib/showcase/`. Dart keeps it in `shared/widgets/animation/` because the
@@ -58,9 +67,58 @@ and the boundary between them is load-bearing:
   celebration screens — so it sits with the other celebration primitives rather
   than in a one-file `animation/` folder.
 
+  **`showcase/videos/` and `showcase/profile/` port from `MobileApp/`, not from
+  `CRM/lib/showcase/`.** The Flutter preview carries seven screens and has no
+  Video or Profile clone to copy, so those two are first ports straight from the
+  member app; every file in them names the `MobileApp/` file it comes from, and
+  anything they need that the CRM clone never had (the two profile belt PNGs in
+  `showcase/assets/`) comes from `MobileApp/assets/` for the same reason. If the
+  Flutter preview ever grows its own clones, these stay the port of record —
+  they are ahead of it, not behind.
+
   Nothing gated on `selectedGym.gymId != null` ports: this browser has no gym,
   no auth and no write path, so the admin's "set as app theme" / "edit gym name"
   actions and the gym-identity plumbing are deliberately absent, not missing.
+
+### The nine showcase screens
+
+`showcase/showcaseScreen.tsx` is the registry, and adding a screen touches four
+compiler-linked spots in it: the `ShowcaseScreen` union, the frozen
+`SHOWCASE_SCREENS` array (slideshow order), `SHOWCASE_SCREEN_LABELS`, and the
+exhaustive switch. Consumers (`browser/ThemePreviewPane.tsx`) derive their chips
+and arrows from those arrays and need no change.
+
+| screen | label | shape | body scrolls |
+| --- | --- | --- | --- |
+| `home` | Home | app surface | **yes** |
+| `booking` | Booking | celebration (loops) | no |
+| `wins` | Achievements | celebration (loops) | no |
+| `points` | Points | celebration (loops) | no |
+| `rewards` | Rewards | celebration (loops) | no |
+| `streak` | Streak | celebration (loops) | no |
+| `store` | Store | app surface | **yes** |
+| `video` | Video | app surface | **yes** |
+| `profile` | Profile | app surface | **yes** |
+
+That split is a rule, not a coincidence. An **app surface** is a screen a member
+scrolls on a real device, so clipping it previews a shorter app than the one
+being licensed — and it is the only kind of screen a future layout-variant pass
+has enough on it to rearrange. A **celebration** is a single-moment composition:
+a post-class reward animation is not a scrolling surface, and giving one a
+scrollbar would invent a behaviour the member app does not have.
+
+`showcase/showcaseSlots.ts` is a SUBSET of the member app's manifest — only what
+these screens render. `next_rank_belt_image` is in it because `profile` renders
+it (`showcase/profile/NextRankSection.tsx`); it is the pipeline's tenth
+generated image, derived from `rank_belt`, and Profile is its only consumer in
+the member app too.
+
+The demo CONTENT ladder is `showcase/useShowcaseContent.ts`: classes and rewards
+resolve real → fetched (`GET /theme/showcase-defaults`) → bundled
+(`showcaseGroupDefaults.ts`), and video feeds resolve real → bundled
+(`showcaseVideoDefaults.ts`) because the wire format carries no videos. Videos
+deliberately skip `fillSlots` — that helper repeats a single item across a FIXED
+four-card layout, and a feed has no slots to fill.
 
 **NOT to be confused with `..` (ThemeService itself)** — that is the Python
 pipeline which *generates* the configs this package *consumes*. Different
@@ -176,6 +234,41 @@ context so a value can reach somewhere, the resolver already reaches there.
   anchoring off for the document, and that line is load-bearing — the Flutter
   original cannot hit this because its collapsing chrome sits OUTSIDE the
   scrollable.
+- **A sticky design selection OUTRANKS the `?theme=` deep link, and each view
+  has to correct it for itself.** `ThemeStore.initialize` resolves the design as
+  `readSelectedDesignId() ?? <the id the provider was constructed with>`, so a
+  pick from a previous visit wins over the URL. `ThemeBrowser` has always
+  corrected that with a mount effect (`selectDesign(INITIAL_URL_THEME)`), but it
+  only mounts on the library view — so `?view=inspect&theme=X` silently rendered
+  the visitor's last pick instead of `X` until `inspect/InspectView.tsx` grew the
+  same effect. Two rules follow. A NEW top-level view needs that correction too.
+  And the correction must **consume** `INITIAL_URL_THEME` once per page load
+  rather than re-reading it on every mount, or returning to the view throws away
+  the theme the visitor picked in this session. The duplication is a smell: the
+  right home is one effect in `App.tsx`, above every view.
+- **Anything the app renders between `GWNav` and `<main>` is a pixel the phone
+  view overflows by.** `browser/ThemeBrowser.module.css` sizes phone mode as
+  `100dvh - --phone-chrome-height - --app-bottom-gutter`, and
+  `--phone-chrome-height` counts ONLY the landing nav (`navHeight + 1px`). The
+  view-switcher band `ViewTabs` sits in that gap and is not in the calc, so the
+  browse view currently grows a 48px scrollbar in the one mode designed never to
+  scroll. `ViewTabs.module.css` publishes its height globally as
+  `--app-viewtabs-height` so the fix is one term in that `calc`, not a
+  re-measured literal — and so the band's height stays a deliberate contract
+  rather than whatever the styling happened to produce.
+- **`overflow-y: auto` also makes a box clip HORIZONTALLY, which is why showcase
+  scrolling is opt-in per screen.** When one of `overflow-x` / `overflow-y` is
+  `visible` and the other is not, the `visible` one COMPUTES to `auto` — so a
+  global "make the phone body scroll" would have cropped every surface that
+  paints outside its box on purpose (`showcase/celebrations/SparkleBurst.tsx`,
+  the `RewardsCarousel` cover flow, `showcase/rewards/SparkleHero.tsx`'s
+  scatter). `ShowcaseScaffold` therefore takes a `bodyScroll` prop that only the
+  four app surfaces pass, and `.bodyScroll` writes `overflow-x: hidden`
+  EXPLICITLY rather than leaving it at `visible` — the difference between a clip
+  and a second, sideways scrollbar the screen never uses. It also hides the
+  scrollbar (`scrollbar-width: none` + the WebKit pseudo-element): a desktop
+  track drawn down the inside of a phone mock is the one detail that gives away
+  that this is not a device, and iOS's overlay bar occupies no layout.
 - **A `.css` import returns `''` under vitest, `?raw` included.** `test.css`
   defaults to false, so the CSS plugin hands back an empty module and an
   assertion against it passes vacuously. `src/app/__tests__/tokens.test.ts`

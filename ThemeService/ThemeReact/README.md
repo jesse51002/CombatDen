@@ -12,9 +12,19 @@ Two things live in one package:
 
 ## Status
 
-**Scaffold.** The toolchain, the library/app split, the architecture gates, and
-the build outputs are in place and verified. The runtime, the resolvers, the
-browsing UI, and the 7 preview screens are not built yet.
+**Built.** The runtime and resolvers, the theme browser (library grid, search,
+filters, phone-frame preview) and the showcase preview screens are all in place,
+alongside the toolchain, the library/app split, the architecture gates and the
+build outputs.
+
+The app carries three top-level views, switched by the tab bar and reachable by
+URL (`?view=`, `src/app/appUrl.ts`):
+
+| `?view=` | What |
+|---|---|
+| *(default)* | **Library** — the catalog, and any design previewed in a phone frame. |
+| `inspect` | **Inspect** — every artifact one pipeline run produced for the loaded design: the four colour roles with their written purposes and 28 derivations, the flat palette, both typefaces set in themselves, the generated copy, and the generated icons and imagery. |
+| `studio` | **Studio** — authoring a brief and watching a run produce a theme. In progress. |
 
 ## Running it
 
