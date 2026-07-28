@@ -27,12 +27,22 @@ class StreakDayBadge extends StatelessWidget {
     final iconColor =
         day.completed ? DesignConstants.primaryColor : DesignConstants.text2nd;
 
+    // Seven of these have to span a phone: at 390pt the strip gets 358pt,
+    // and a badge padded 16pt on both sides is 52pt wide, so the week
+    // overflowed by 6pt. The horizontal pad is the narrower token so the
+    // row fits every celebration arrangement (down to 252pt) with room
+    // for `spaceBetween` to do its job.
     final badge = Container(
-      padding: EdgeInsets.all(DesignConstants.paddingSmall),
+      padding: EdgeInsets.symmetric(
+        horizontal: DesignConstants.spacingMedium,
+        vertical: DesignConstants.paddingSmall,
+      ),
       decoration: BoxDecoration(
-        color: day.completed
-            ? DesignConstants.primaryCard
-            : DesignConstants.backgroundColor,
+        // An incomplete day is UNFILLED, not filled with the canvas
+        // colour: painting the canvas here reads the same on bare
+        // background but punches a hole through any elevated surface the
+        // strip lands on (the `cardReveal` card, the `splitBand` band).
+        color: day.completed ? DesignConstants.primaryCard : null,
         borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
       ),
       child: Column(

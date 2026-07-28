@@ -71,7 +71,7 @@ final List<FormatEntry> kLayoutFormats = [
     slot: CombatDenSlots.celebrationFormat,
     label: 'Celebration',
     values: _names(CelebrationFormat.values),
-    implemented: false,
+    implemented: true,
   ),
 ];
 
