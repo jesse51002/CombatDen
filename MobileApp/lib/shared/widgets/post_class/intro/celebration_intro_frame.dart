@@ -85,9 +85,6 @@ class CelebrationIntroSpec {
 
   final CelebrationIntroFrame Function(double t) frameAt;
 
-  /// True when the card arrives settled and there is nothing to play.
-  bool get isInstant => total == Duration.zero;
-
   /// True when the settled content and the figure share the stage for a
   /// while, instead of the figure leaving as the content arrives.
   bool get overlaps => handoff < total;

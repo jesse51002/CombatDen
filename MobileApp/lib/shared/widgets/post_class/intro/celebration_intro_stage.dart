@@ -7,7 +7,6 @@ import 'package:mobile_app/shared/widgets/post_class/intro/celebration_intro_fig
 import 'package:mobile_app/shared/widgets/post_class/intro/celebration_intro_frame.dart';
 import 'package:mobile_app/shared/widgets/post_class/intro/intro_burst.dart';
 import 'package:mobile_app/shared/widgets/post_class/intro/intro_flip_count.dart';
-import 'package:mobile_app/shared/widgets/post_class/intro/intro_none.dart';
 import 'package:mobile_app/shared/widgets/post_class/intro/intro_orbit.dart';
 import 'package:mobile_app/shared/widgets/post_class/intro/intro_rise.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
@@ -76,7 +75,6 @@ CelebrationIntroSpec introSpec(CelebrationIntro value) => switch (value) {
   CelebrationIntro.burst => kBurstIntro,
   CelebrationIntro.rise => kRiseIntro,
   CelebrationIntro.flipCount => kFlipCountIntro,
-  CelebrationIntro.none => kNoneIntro,
 };
 
 class _IntroRunner extends StatefulWidget {
@@ -123,12 +121,6 @@ class _IntroRunnerState extends State<_IntroRunner>
     // for the whole clip. Mirrors ScaleReveal/StaggeredReveal.
     if (captureRevealClock.value != null) return;
 
-    if (widget.spec.isInstant) {
-      // `none` still has to finish, and promptly: the CTA only appears
-      // on markDone, so a card that never finishes is a dead end.
-      WidgetsBinding.instance.addPostFrameCallback((_) => _finish());
-      return;
-    }
     _ctrl.forward().whenComplete(_finish);
   }
 
@@ -164,7 +156,7 @@ class _IntroRunnerState extends State<_IntroRunner>
         final totalUs = spec.total.inMicroseconds;
 
         final double t;
-        if (_skipped || spec.isInstant) {
+        if (_skipped) {
           t = 1;
         } else if (clock != null) {
           t = (clock.inMicroseconds / totalUs).clamp(0.0, 1.0);
@@ -175,8 +167,7 @@ class _IntroRunnerState extends State<_IntroRunner>
         final elapsedUs = totalUs * t;
         final settledOn =
             _skipped || elapsedUs >= spec.handoff.inMicroseconds;
-        final figureOn =
-            !_skipped && !spec.isInstant && elapsedUs < totalUs;
+        final figureOn = !_skipped && elapsedUs < totalUs;
 
         final settledChild = settledOn
             ? KeyedSubtree(
@@ -201,22 +192,59 @@ class _IntroRunnerState extends State<_IntroRunner>
               )
             : null;
 
-        // A value that hands off early shares the stage for a while, so
-        // it keeps one stable full-bleed shape the whole way through —
-        // otherwise the settled content would change parents when the
-        // figure leaves and restart its own reveals.
-        if (spec.overlaps) {
-          return SizedBox.expand(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [?settledChild, ?figureChild],
-            ),
-          );
-        }
         // The values that hand off cleanly keep the shipped shape: the
-        // figure fills the stage, the settled content sizes to itself.
-        if (figureChild != null) return SizedBox.expand(child: figureChild);
-        return settledChild ?? const SizedBox.shrink();
+        // figure fills the stage, then the settled content sizes to
+        // itself and the stage's own alignment places it.
+        if (!spec.overlaps) {
+          if (figureChild != null) return SizedBox.expand(child: figureChild);
+          return settledChild!;
+        }
+        return _overlapped(settledChild, figureChild);
+      },
+    );
+  }
+
+  /// The shape for a value that hands off before it finishes, so the
+  /// settled content and the figure are both on stage for a while.
+  ///
+  /// Two things have to hold at once, and getting one of them wrong is
+  /// what made `flipCount` drop its stat ~190pt down the screen under
+  /// `figureTop`:
+  ///
+  /// * **The settled content must size the body**, or the stage's own
+  ///   `Align` has nothing to place and every layout that does not
+  ///   centre its stage silently re-centres. A motion value must never
+  ///   move an arrangement.
+  /// * **The figure must still measure against the whole stage**, or it
+  ///   would resize the moment the settled content arrives. Hence the
+  ///   outer `LayoutBuilder` (which sees the stage) feeding an
+  ///   `OverflowBox` (which lets the figure paint past whatever the
+  ///   settled content happens to measure).
+  ///
+  /// One `Stack` for every phase, so the settled content never changes
+  /// parents and never restarts its own reveals mid-count.
+  Widget _overlapped(Widget? settledChild, Widget? figureChild) {
+    return LayoutBuilder(
+      builder: (context, stage) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Sizes the body: the settled content once it is here, the
+            // full stage while the figure still has it to itself.
+            settledChild ??
+                SizedBox(width: stage.maxWidth, height: stage.maxHeight),
+            if (figureChild != null)
+              Positioned.fill(
+                child: OverflowBox(
+                  minWidth: 0,
+                  maxWidth: stage.maxWidth,
+                  minHeight: 0,
+                  maxHeight: stage.maxHeight,
+                  child: figureChild,
+                ),
+              ),
+          ],
+        );
       },
     );
   }

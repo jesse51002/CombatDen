@@ -10,6 +10,7 @@ import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/formats/format_store.dart';
 import 'package:mobile_app/core/formats/layout_formats.dart';
 import 'package:mobile_app/core/formats/motion_formats.dart';
+import 'package:mobile_app/core/formats/theme_motion.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/streak/streak_body.dart';
 import 'package:mobile_app/features/stats/presentation/widgets/streak/streak_day_badge.dart';
@@ -173,22 +174,13 @@ void main() {
           card(controller: controller, onCtaPressed: () => ctaTaps++),
         );
 
-        // `none` arrives settled and must already be finished — the CTA
-        // is the only way off this card.
-        if (introSpec(intro).isInstant) {
-          expect(controller.isAnimating, isFalse);
-        } else {
-          expect(controller.isAnimating, isTrue);
-          expect(ctaOpacity(tester), 0);
-          expect(ctaIgnoresTaps(tester), isTrue);
+        expect(controller.isAnimating, isTrue);
+        expect(ctaOpacity(tester), 0);
+        expect(ctaIgnoresTaps(tester), isTrue);
 
-          await tester.tap(
-            find.byType(AppPrimaryButton),
-            warnIfMissed: false,
-          );
-          await tester.pump();
-          expect(ctaTaps, 0, reason: 'a hidden CTA must not be tappable');
-        }
+        await tester.tap(find.byType(AppPrimaryButton), warnIfMissed: false);
+        await tester.pump();
+        expect(ctaTaps, 0, reason: 'a hidden CTA must not be tappable');
 
         await playOut(tester, intro);
 
@@ -262,24 +254,17 @@ void main() {
       testWidgets('$intro', (tester) async {
         phoneSized(tester);
         pin(intro);
-        final spec = introSpec(intro);
         await tester.pumpWidget(card());
         await tester.pump(const Duration(milliseconds: 16));
 
-        if (spec.isInstant) {
-          // Nothing plays, so nothing is drawn over the card.
-          expect(find.byKey(CelebrationIntroFigure.heroKey), findsNothing);
-          expect(find.byType(CelebrationIntroFigure), findsNothing);
-        } else {
-          expect(
-            find.byKey(CelebrationIntroFigure.heroKey),
-            findsOneWidget,
-            reason: '$intro must move a figure, not nothing',
-          );
-          // Exactly one figure: no value gets to open a second
-          // celebration surface.
-          expect(find.byType(CelebrationIntroFigure), findsOneWidget);
-        }
+        expect(
+          find.byKey(CelebrationIntroFigure.heroKey),
+          findsOneWidget,
+          reason: '$intro must move a figure, not nothing',
+        );
+        // Exactly one figure: no value gets to open a second
+        // celebration surface.
+        expect(find.byType(CelebrationIntroFigure), findsOneWidget);
 
         await playOut(tester, intro);
       });
@@ -367,24 +352,78 @@ void main() {
       }
     });
 
-    test('burst is the shortest value that plays', () {
-      final playing = [
-        for (final intro in CelebrationIntro.values)
-          if (!introSpec(intro).isInstant) introSpec(intro),
-      ];
-      final shortest = playing.reduce(
-        (a, b) => a.total <= b.total ? a : b,
-      );
+    test('burst is the shortest value', () {
+      final shortest = CelebrationIntro.values
+          .map(introSpec)
+          .reduce((a, b) => a.total <= b.total ? a : b);
       expect(shortest.value, CelebrationIntro.burst);
     });
 
     test('only the values that declare a field render particles', () {
       expect(introSpec(CelebrationIntro.rise).particleRadii, isEmpty);
       expect(introSpec(CelebrationIntro.flipCount).particleRadii, isEmpty);
-      expect(introSpec(CelebrationIntro.none).particleRadii, isEmpty);
       expect(introSpec(CelebrationIntro.orbit).particleRadii, isNotEmpty);
       expect(introSpec(CelebrationIntro.burst).particleRadii, isNotEmpty);
     });
+  });
+
+  /// Values are allowed to differ in length — `burst` SHOULD be punchier
+  /// than `orbit`. What is not allowed is motion the viewer cannot
+  /// process. Both floors below are the legibility rule, not a parity
+  /// rule.
+  group('every value is long enough to read', () {
+    /// A post-class intro is a composed moment: a run-up, the event,
+    /// and a beat to take in what happened. The app's own per-element
+    /// budget is 300ms (PRODUCT.md), so three beats plus the pause
+    /// between them cannot fit under about a second and a half — below
+    /// that the beats collapse into a single flash.
+    const floor = Duration(milliseconds: 1500);
+
+    /// Nothing may be fully committed on screen before this: the eye
+    /// needs to catch the run-up starting, or the payoff arrives
+    /// unannounced and reads as a glitch.
+    const leadIn = Duration(milliseconds: 350);
+    const committed = 0.5;
+
+    for (final intro in CelebrationIntro.values) {
+      test('$intro runs at least ${floor.inMilliseconds}ms', () {
+        expect(
+          introSpec(intro).total,
+          greaterThanOrEqualTo(floor),
+          reason: '$intro is too quick to perceive as a moment',
+        );
+      });
+
+      test('$intro holds a lead-in before it commits', () {
+        final spec = introSpec(intro);
+        final steps = spec.total.inMilliseconds;
+        for (var ms = 0; ms <= leadIn.inMilliseconds; ms++) {
+          final f = spec.frameAt(ms / steps);
+          expect(
+            f.heroOpacity,
+            lessThan(committed),
+            reason: '$intro slams its figure on screen at ${ms}ms',
+          );
+          expect(
+            f.particleOpacity,
+            lessThan(committed),
+            reason: '$intro slams its particles on screen at ${ms}ms',
+          );
+        }
+      });
+    }
+  });
+
+  group('a retired or unknown value falls back to what ships', () {
+    // The backend may still send `none`, which used to be a value. The
+    // parser resolves anything it does not recognise to the first value,
+    // and that is now load-bearing rather than incidental.
+    for (final wire in ['none', 'nonsense', '', 'Orbit']) {
+      test('"$wire"', () {
+        FormatStore.instance.set(CombatDenSlots.celebrationIntro, wire);
+        expect(ThemeMotion.celebrationIntro(), CelebrationIntro.orbit);
+      });
+    }
   });
 
   group('the capture clock drives every value deterministically', () {
@@ -400,7 +439,7 @@ void main() {
         captureRevealClock.value = Duration.zero;
         await tester.pumpWidget(card(controller: controller));
 
-        if (!spec.isInstant) {
+        {
           expect(find.byKey(CelebrationIntroFigure.heroKey), findsOneWidget);
 
           // Held at one instant, the frame does not move on its own —
@@ -439,6 +478,45 @@ void main() {
         captureRevealClock.value = spec.total + const Duration(seconds: 5);
         await tester.pump();
         expectSettledCard(tester);
+      });
+    }
+  });
+
+  /// The invariant the whole system exists to protect, measured rather
+  /// than asserted by presence: a motion value may change WHEN the
+  /// settled card appears, never WHERE.
+  ///
+  /// This is the gate that would have caught the real defect. Under
+  /// `figureTop` the stage is top-aligned, and `flipCount` — the one
+  /// value whose figure and settled content are alive at the same time
+  /// — was forcing the body to fill the stage, which swallowed that
+  /// alignment and dropped the stat ~190pt down the screen.
+  group('no value moves the settled card', () {
+    for (final format in CelebrationFormat.values) {
+      testWidgets('$format', (tester) async {
+        final positions = <CelebrationIntro, Offset>{};
+
+        for (final intro in CelebrationIntro.values) {
+          phoneSized(tester);
+          pin(intro);
+          await tester.pumpWidget(card(format: format));
+          await playOut(tester, intro);
+          positions[intro] = tester.getTopLeft(find.byType(StreakWeekStrip));
+          await tester.pumpWidget(const SizedBox());
+          FormatStore.instance.reset();
+        }
+
+        final shipped = positions[CelebrationIntro.orbit];
+        for (final entry in positions.entries) {
+          expect(
+            entry.value,
+            shipped,
+            reason:
+                '${entry.key} settles the card at ${entry.value} under '
+                '$format, but the shipped value settles it at $shipped — '
+                'a motion format changed an arrangement',
+          );
+        }
       });
     }
   });

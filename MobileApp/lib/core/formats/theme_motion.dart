@@ -1,29 +1,19 @@
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:mobile_app/core/formats/format_overrides.dart';
-import 'package:mobile_app/core/formats/format_store.dart';
+import 'package:mobile_app/core/formats/format_resolver.dart';
 import 'package:mobile_app/core/formats/motion_formats.dart';
 import 'package:mobile_app/core/formats/motion_spec.dart';
-import 'package:theme_flutter/theme/theme_text.dart';
 
 /// Resolves the active motion formats from the loaded customization.
 ///
 /// Same seam and same safety guarantees as `ThemeLayout` — see its doc
 /// comment for why this reads the engine's existing string-slot reader
-/// instead of adding a slot kind to the shared package.
+/// instead of adding a slot kind to the shared package. Both share one
+/// precedence chain, in [FormatResolver].
 class ThemeMotion {
   // Private constructor to prevent instantiation
   ThemeMotion._();
 
-  static String? _read(String slot) {
-    // The in-app dev picker wins over everything, then a --dart-define,
-    // then the tenant's slot. See `FormatStore` for the full order.
-    final pinned = FormatStore.instance.read(slot);
-    if (pinned != null) return pinned;
-    final override = FormatOverrides.read(slot);
-    if (override != null) return override;
-    final value = ThemeText.value(slot, fallback: '');
-    return value.isEmpty ? null : value;
-  }
+  static String? _read(String slot) => FormatResolver.read(slot);
 
   static MotionPersonality personality() =>
       MotionPersonality.fromWire(_read(CombatDenSlots.motionPersonality));

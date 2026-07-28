@@ -438,14 +438,23 @@ per tenant. The rules:
 ## Motion formats
 
 A **motion format** is the same idea one level down: the enums live in
-`lib/core/formats/motion_formats.dart`, a surface resolves its value
-through `ThemeMotion.<slot>()`, and the same store / `--dart-define` /
-tenant-slot order applies. The difference is the invariant:
+`lib/core/formats/motion_formats.dart` and a surface resolves its value
+through `ThemeMotion.<slot>()`, which reads the same shared chain as
+`ThemeLayout` (see *Format resolution* below). The difference is the
+invariant:
 
 - **A motion format changes TIMING AND ENTRANCE ONLY.** It may not change
-  which elements exist, what the surface is fed, or the app's motion law.
-  **No value may overshoot** — ease-out only, no bounce, no elastic, no
-  anticipation ("back") curve. Energy comes from stagger density.
+  which elements exist, what the surface is fed, **where the settled
+  content sits**, or the app's motion law. **No value may overshoot** —
+  ease-out only, no bounce, no elastic, no anticipation ("back") curve.
+  Energy comes from stagger density.
+- **Every value must be legible.** Values do NOT have to be the same
+  length (`burst` should be punchier than `orbit`), but none may be so
+  quick the viewer cannot process it. Two floors, both gated: at least
+  1500ms total, and nothing above half opacity in the first 350ms — a
+  short motion needs a run-up, ideally something building rather than
+  dead time. There is deliberately no "no animation" value: a
+  celebration card always animates.
 - `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
   holds it: `celebration_intro_frame.dart` is the pure per-instant model
   (`CelebrationIntroFrame`) plus one value's whole contract
@@ -464,11 +473,44 @@ tenant-slot order applies. The difference is the invariant:
   every value (× every celebration layout) at real phone size. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
+- **`flipCount` is the only value whose figure and settled content share
+  the stage** (it hands off mid-turn). That path must keep the settled
+  content as the thing that SIZES the body, or the stage's own `Align`
+  has nothing to place and every non-centred layout silently re-centres.
+  Getting that wrong is what dropped the stat ~190pt under `figureTop`.
 - **Only the streak card is on the shared stage.** The points card keeps
   its own `_PointSphere`, because the shipped `orbit` value is the streak
   ring: routing points through it would replace the shipped points intro
   for every tenant, which the "first value renders exactly what ships
   today" guarantee forbids.
+
+## Format resolution
+
+Layout and motion share ONE precedence chain, in
+`lib/core/formats/format_resolver.dart`. Highest first: a widget's
+`formatOverride` argument (tests, preview sheets) → `FormatStore` (the
+in-app dev picker) → `FormatOverrides` (`--dart-define`) → the tenant's
+customization slot → the value that ships. `ThemeLayout`, `ThemeMotion`
+and the dev picker all read through it; **never re-implement the chain**
+— three hand-written copies is exactly how the picker came to draw a
+value the app was not using.
+
+**A theme carries its own format slots, so loading one releases every
+pin** (`FormatStore.bindTo`, wired once in `main.dart` against
+`ThemeRuntime.changes`). The theme sets the formats; a pin overrides it
+until the next load, and "Reset" means back to the theme, not back to
+the shipped default. Every pin is released, not just the slots the
+incoming theme mentions.
+
+An unrecognised wire value resolves to the enum's first value
+(`parseFormat`'s `orElse`), so a retired value like `celebration_intro:
+none` degrades to `orbit` instead of breaking a screen. That is
+load-bearing, not incidental, and the gate asserts it.
+
+`CombatDenSlots.expectedLayouts` / `expectedMotion` are documentation
+only — they are deliberately NOT passed to `ThemeRuntime.initialize`,
+because an absent format slot is a supported state (the tenant has not
+opted in) and warning on it would fire on every unbranded build.
 
 ## Development Commands
 
