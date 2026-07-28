@@ -466,13 +466,13 @@ void main() {
     });
   });
 
-  group('the lead-in leaves the flipCount hand-off intact', () {
-    // `CelebrationIntro.flipCount` hands the card over at the flip's
-    // midpoint precisely so the count is already running while the hero
-    // is still turning — so the flip has `handoff` left to run once the
-    // count-up mounts. A lead-in longer than that would push the roll
-    // out past the flip it is meant to overlap.
-    final flipRemaining = kFlipCountIntro.handoff;
+  group('the lead-in fits inside the intro it follows', () {
+    // An intro owns the stage until it is done, so a count-up never
+    // starts before the card has settled. What still matters is that a
+    // value's lead-in is dead time the viewer is paying for AFTER an
+    // intro they already watched — so cap it against the shortest intro
+    // rather than against a hand-off that no longer exists.
+    final flipRemaining = kFlipCountIntro.total;
 
     for (final value in CountUpStyle.values) {
       test('$value', () {
@@ -618,16 +618,17 @@ void main() {
 
         await tester.pumpWidget(card(controller));
 
-        // One frame past the hand-off: the count-up is mounted and the
-        // hero is still turning. That overlap is the whole point of
-        // flipCount, and no count-up value may cost it.
+        // One frame past the intro: the card has settled and the
+        // count-up is mounted, and the hero has left. The intro owns
+        // the stage until it is done — no count-up value may start
+        // before that, and none may delay it afterwards.
         await tester.pump(
-          kFlipCountIntro.handoff + const Duration(milliseconds: 16),
+          kFlipCountIntro.total + const Duration(milliseconds: 16),
         );
         expect(find.byType(CountUpText), findsOneWidget);
         expect(
           find.byKey(CelebrationIntroFigure.heroKey),
-          findsOneWidget,
+          findsNothing,
           reason: 'the count-up no longer starts mid-flip',
         );
 

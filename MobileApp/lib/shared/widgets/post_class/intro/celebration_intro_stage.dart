@@ -29,6 +29,11 @@ typedef CelebrationSettledBuilder =
 /// a tap on the stage jumping to the final state, exactly one
 /// `markDone` — is implemented once here rather than per value.
 class CelebrationIntroStage extends StatelessWidget {
+  /// The settled card. Public so the gate can assert the one rule this
+  /// stage exists to enforce: an intro owns the stage until it is done,
+  /// and the card never appears before the intro has finished.
+  static const Key settledKey = Key('celebration-intro-settled');
+
   const CelebrationIntroStage({
     super.key,
     required this.hero,
@@ -99,7 +104,6 @@ class _IntroRunner extends StatefulWidget {
 
 class _IntroRunnerState extends State<_IntroRunner>
     with SingleTickerProviderStateMixin {
-  static const Key _kSettledKey = Key('celebration-intro-settled');
   static const Key _kFigureKey = Key('celebration-intro-figure');
 
   late final AnimationController _ctrl;
@@ -165,16 +169,18 @@ class _IntroRunnerState extends State<_IntroRunner>
         }
 
         final elapsedUs = totalUs * t;
-        final settledOn =
-            _skipped || elapsedUs >= spec.handoff.inMicroseconds;
+        // Mutually exclusive, always: the figure holds the stage until
+        // the intro is over, then the settled content takes it. Never
+        // both at once.
         final figureOn = !_skipped && elapsedUs < totalUs;
+        final settledOn = !figureOn;
 
         final settledChild = settledOn
             ? KeyedSubtree(
-                key: _kSettledKey,
+                key: CelebrationIntroStage.settledKey,
                 child: widget.settled(
                   context,
-                  clock != null ? spec.handoff : null,
+                  clock != null ? spec.total : null,
                 ),
               )
             : null;
@@ -192,60 +198,14 @@ class _IntroRunnerState extends State<_IntroRunner>
               )
             : null;
 
-        // The values that hand off cleanly keep the shipped shape: the
-        // figure fills the stage, then the settled content sizes to
-        // itself and the stage's own alignment places it.
-        if (!spec.overlaps) {
-          if (figureChild != null) return SizedBox.expand(child: figureChild);
-          return settledChild!;
-        }
-        return _overlapped(settledChild, figureChild);
+        // The figure fills the stage; the settled content sizes to
+        // itself and the stage's own alignment places it. Because the
+        // two never coexist, the settled content can never be re-parented
+        // or re-measured by the figure's box.
+        if (figureChild != null) return SizedBox.expand(child: figureChild);
+        return settledChild!;
       },
     );
   }
 
-  /// The shape for a value that hands off before it finishes, so the
-  /// settled content and the figure are both on stage for a while.
-  ///
-  /// Two things have to hold at once, and getting one of them wrong is
-  /// what made `flipCount` drop its stat ~190pt down the screen under
-  /// `figureTop`:
-  ///
-  /// * **The settled content must size the body**, or the stage's own
-  ///   `Align` has nothing to place and every layout that does not
-  ///   centre its stage silently re-centres. A motion value must never
-  ///   move an arrangement.
-  /// * **The figure must still measure against the whole stage**, or it
-  ///   would resize the moment the settled content arrives. Hence the
-  ///   outer `LayoutBuilder` (which sees the stage) feeding an
-  ///   `OverflowBox` (which lets the figure paint past whatever the
-  ///   settled content happens to measure).
-  ///
-  /// One `Stack` for every phase, so the settled content never changes
-  /// parents and never restarts its own reveals mid-count.
-  Widget _overlapped(Widget? settledChild, Widget? figureChild) {
-    return LayoutBuilder(
-      builder: (context, stage) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Sizes the body: the settled content once it is here, the
-            // full stage while the figure still has it to itself.
-            settledChild ??
-                SizedBox(width: stage.maxWidth, height: stage.maxHeight),
-            if (figureChild != null)
-              Positioned.fill(
-                child: OverflowBox(
-                  minWidth: 0,
-                  maxWidth: stage.maxWidth,
-                  minHeight: 0,
-                  maxHeight: stage.maxHeight,
-                  child: figureChild,
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
 }

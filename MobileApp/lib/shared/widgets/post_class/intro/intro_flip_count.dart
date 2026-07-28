@@ -18,11 +18,6 @@ const Duration _kExit = Duration(milliseconds: 800);
 
 final Duration _kTotal = _kDelay + _kFlip + _kHold + _kExit;
 
-/// The one value that hands off before it finishes. Half way through
-/// the turn the settled content starts revealing underneath, so the
-/// count-up is already rolling while the figure is still moving.
-final Duration _kHandoff = _kDelay + _kFlip ~/ 2;
-
 /// Matches `rise`: the figure fades up while it is still turning, so it
 /// is never fully present before the run-up is.
 final Duration _kFadeIn = CelebrationTimings.revealDuration * 2;
@@ -31,14 +26,13 @@ const double _kExitShrink = 0.3;
 
 /// `CelebrationIntro.flipCount` — the value with the earliest payoff.
 ///
-/// The hero turns in on the vertical axis from edge-on, and the card's
-/// figure starts counting mid-turn rather than waiting for the intro to
-/// clear. Nothing is added or removed by that overlap: the same settled
-/// content arrives, in the same place, while the hero is still moving.
+/// The hero turns in on the vertical axis from edge-on, holds, then
+/// clears. Like every other value it owns the stage until it is done:
+/// the card settles and the count-up starts once the turn has finished,
+/// not during it.
 final CelebrationIntroSpec kFlipCountIntro = CelebrationIntroSpec(
   value: CelebrationIntro.flipCount,
   total: _kTotal,
-  handoff: _kHandoff,
   particleRadii: const [],
   frameAt: _frameAt,
 );

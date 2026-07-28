@@ -39,7 +39,6 @@ final Duration _kTotal =
 final CelebrationIntroSpec kOrbitIntro = CelebrationIntroSpec(
   value: CelebrationIntro.orbit,
   total: _kTotal,
-  handoff: _kTotal,
   particleRadii: List<double>.filled(_kOrbitCount, 1),
   frameAt: _frameAt,
 );

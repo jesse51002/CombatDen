@@ -148,6 +148,40 @@ void main() {
     await tester.pump(const Duration(seconds: 4));
   }
 
+  group('an intro owns the stage until it is done', () {
+    // The founder caught this on a device: `flipCount` used to reveal
+    // the settled card half way through its turn, which reads as the
+    // card giving up on its own animation. No value may move on early.
+    for (final intro in CelebrationIntro.values) {
+      testWidgets('$intro does not settle early', (tester) async {
+        phoneSized(tester);
+        pin(intro);
+        await tester.pumpWidget(card());
+
+        final total = introSpec(intro).total;
+        // Sample across the whole run. The settled card must not appear
+        // at any point before the intro is over.
+        for (var i = 1; i <= 20; i++) {
+          final elapsed = total * (i / 21);
+          await tester.pump(
+            i == 1 ? elapsed : total * (1 / 21),
+          );
+          expect(
+            find.byKey(CelebrationIntroStage.settledKey),
+            findsNothing,
+            reason: '$intro settled at ${elapsed.inMilliseconds}ms of '
+                '${total.inMilliseconds}ms — an intro must finish first',
+          );
+        }
+
+        // And it must arrive once the intro is over, not never.
+        await tester.pump(total);
+        await tester.pumpAndSettle();
+        expect(find.byKey(CelebrationIntroStage.settledKey), findsOneWidget);
+      });
+    }
+  });
+
   group('every value settles into the same element set', () {
     for (final intro in CelebrationIntro.values) {
       testWidgets('$intro', (tester) async {
@@ -344,11 +378,10 @@ void main() {
   });
 
   group('every value holds its timing contract', () {
-    test('the hand-off never lands after the intro is over', () {
+    test('every spec is wired to the value it claims', () {
       for (final intro in CelebrationIntro.values) {
-        final spec = introSpec(intro);
-        expect(spec.handoff, lessThanOrEqualTo(spec.total), reason: '$intro');
-        expect(spec.value, intro, reason: 'the switch is mis-wired');
+        expect(introSpec(intro).value, intro,
+            reason: 'the switch is mis-wired');
       }
     });
 
