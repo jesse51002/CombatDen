@@ -36,6 +36,7 @@ from src.executor.writer import (
 )
 from src.modules.colors.color_models import LLMSlotResponse
 from src.modules.fonts.font_models import LLMFontResponse
+from src.modules.formats.format_models import LLMFormatResponse
 from src.modules.icons.icon_models import LLMIconPrompt, LLMIconResponse
 from src.modules.images.image_models import ImageComplexity, ImagePrompt
 from src.modules.texts.text_models import LLMTextResponse
@@ -115,10 +116,19 @@ _FAKE_ICON_SET_NAME = "Lucide Lite"
 # accepts it and the writer's vocabulary check passes.
 _FAKE_CATEGORY = "Modern"
 
+# What the fake LLM picks per demo format slot. Each value is in THAT slot's
+# own declared vocabulary in the demo app.yaml, so constructing the
+# per-request model runs its per-slot membership validator and passes.
+_FAKE_FORMAT_VALUE = {
+    "home_format": "dayPager",
+    "rewards_format": "listRows",
+}
+
 
 class _FakeLLM:
     """Honours LLMClient: structured colour palette + font selection +
-    text rewrites + classification + image prompt + bg verdict."""
+    text rewrites + classification + format selection + image prompt +
+    bg verdict."""
 
     cost = _FAKE_LLM_COST
     cost_by_model = _FAKE_LLM_BY_MODEL
@@ -223,6 +233,22 @@ class _FakeLLM:
                     sid: LLMIconPrompt(
                         name=f"{sid}_icon",
                         prompt=f"a monochrome {sid} svg icon",
+                    )
+                    for sid in requested
+                }
+            )
+        elif getattr(schema, "__name__", "") == "FormatSelection":
+            # Format selection: the closed per-request model built from the
+            # app's own per-slot vocabularies. Only the requested slots are
+            # fields, so a partial regen (a scoped subset schema) is handled
+            # too. Constructing the model runs the per-slot membership
+            # validator (each value below is in its own slot's list).
+            requested = list(schema.model_fields)
+            result = schema(
+                **{
+                    sid: LLMFormatResponse(
+                        value=_FAKE_FORMAT_VALUE[sid],
+                        reason="fits the demo brand",
                     )
                     for sid in requested
                 }
@@ -564,8 +590,9 @@ def test_run_emits_a_full_progress_stream(tmp_path, monkeypatch):
 
     start = sink.events[0]
     assert start.app_id == ctx.app.id and start.run_id == ctx.run_id
-    # colour + font + text + icon + category roots, then one image node.
-    assert start.total_nodes == 6
+    # colour + font + text + icon + category + format roots, then one
+    # image node.
+    assert start.total_nodes == 7
     assert start.total_levels == 2
 
     levels = [
@@ -573,7 +600,7 @@ def test_run_emits_a_full_progress_stream(tmp_path, monkeypatch):
     ]
     assert [e.level for e in levels] == [0, 1]
     assert levels[0].level_nodes == sorted(
-        ["color", "font", "text", "icon", "category"]
+        ["color", "font", "text", "icon", "category", "format"]
     )
     assert levels[1].level_nodes == ["hero"]
 
@@ -585,7 +612,7 @@ def test_run_emits_a_full_progress_stream(tmp_path, monkeypatch):
     ]
     # Every node reported exactly once at each end.
     assert sorted(e.node for e in started) == sorted(
-        ["color", "font", "text", "icon", "category", "hero"]
+        ["color", "font", "text", "icon", "category", "format", "hero"]
     )
     assert sorted(e.node for e in finished) == sorted(
         e.node for e in started

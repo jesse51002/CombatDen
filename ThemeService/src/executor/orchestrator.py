@@ -33,6 +33,7 @@ from pydantic import BaseModel
 from schema import (
     ColorPalette,
     FontSet,
+    FormatSet,
     IconSet,
     ImageSet,
     Output,
@@ -120,10 +121,11 @@ class Pipeline:
         both *before* any node runs.
         """
         graph: nx.DiGraph = nx.DiGraph()
-        # ``text`` / ``icon`` / ``category`` are optional: an app with no copy
-        # overrides, no icon overrides, or no declared classification
-        # vocabulary doesn't get that node, so it's filtered out of the
-        # level-0 sibling set rather than producing a no-op root.
+        # ``text`` / ``icon`` / ``category`` / ``format`` are optional: an app
+        # with no copy overrides, no icon overrides, no declared
+        # classification vocabulary, or no switchable arrangements doesn't get
+        # that node, so it's filtered out of the level-0 sibling set rather
+        # than producing a no-op root.
         nodes = [
             node_set.color,
             node_set.font,
@@ -135,6 +137,8 @@ class Pipeline:
             nodes.append(node_set.icon)
         if node_set.category is not None:
             nodes.append(node_set.category)
+        if node_set.format is not None:
+            nodes.append(node_set.format)
         for node in nodes:
             graph.add_node(node.key, node=node)
         known = {node.key for node in nodes}
@@ -556,6 +560,20 @@ class Pipeline:
                     "icon node did not resolve — output has no icon "
                     "overrides"
                 )
+        format_set = resolved.get(DependencyKind.FORMAT.value)
+        if format_set is None:
+            # Format node either wasn't built (app declared no format slots —
+            # the registry skipped it) or failed outright. An empty FormatSet
+            # is the honest answer either way; the consuming client renders
+            # the arrangement it ships. Only log a failure when a format node
+            # was actually expected (the registry skip is the normal case for
+            # apps with no switchable arrangements).
+            format_set = FormatSet(formats={})
+            if run_ctx.app.formats:
+                logger.error(
+                    "format node did not resolve — output has no format "
+                    "overrides"
+                )
         category = resolved.get(DependencyKind.CATEGORY.value)
         if category is None and run_ctx.app.categories:
             # The classification node was built (the app declares a
@@ -582,4 +600,5 @@ class Pipeline:
             font_set=font_set,
             text_set=text_set,
             icon_set=icon_set,
+            format_set=format_set,
         )

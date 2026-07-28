@@ -85,9 +85,103 @@ def test_get_output_matches_the_runs_yaml() -> None:
         for slot_id, font in expected["font_set"]["fonts"].items()
     }
 
+    # ...and the font group passes through unchanged beside it, so the
+    # category Google serves for the family and the prose the run wrote
+    # about the face reach a client instead of being dropped at the API.
+    assert body["font_set"] == expected["font_set"]
+    assert body["font_set"]["fonts"]["display"]["category"] == "display"
+    assert (
+        body["font_set"]["fonts"]["display"]["display_name"]
+        == "Editorial Grotesk"
+    )
+
+    # The image group restates the same URLs with the complexity tier a
+    # bare string cannot carry; the server ``path`` and the generation
+    # ``prompt`` still never leave the process.
+    assert body["image_set"] == {
+        "images": {
+            "hero": {
+                "url": f"/apps/{APP}/run1/images/hero?v=testhash1234",
+                "complexity": "medium",
+            }
+        }
+    }
+
+    # run1's output.yaml predates the classification node, so the run-wide
+    # category is null rather than absent — the endpoint still serves it.
+    assert body["category"] is None
+
     # The text group passes through unchanged; run1 declares none, so it
     # is the empty default.
     assert body["text_set"] == {"texts": {}}
+
+
+def test_get_output_carries_the_runs_category() -> None:
+    """The run-wide classification bucket rides the single-run response,
+    not just the styles list. Bare string, exactly as on ``Output``."""
+    body = client.get(f"/apps/{APP}/default").json()
+    assert body["category"] == "Modern"
+
+
+def test_flat_maps_stay_string_valued_for_the_deployed_clients() -> None:
+    """``images`` / ``fonts`` / ``icons`` are `dict[str, str]` and must stay
+    that way.
+
+    ``ThemeFlutter``'s ``_parseStringMap`` (and ``ThemeReact``'s
+    ``parseStringMap``) SKIP any entry whose value is not a bare string, so
+    widening one of these maps would not raise anywhere — it would hand the
+    CRM and the member app an empty map behind a 200 and silently strip
+    every gym's typography. New per-slot metadata belongs on the groups
+    (``image_set`` / ``font_set``) instead, which is why they exist."""
+    body = client.get(f"/apps/{APP}/run1").json()
+    for section in ("images", "fonts", "icons"):
+        assert all(
+            isinstance(value, str) for value in body[section].values()
+        ), f"{section} must stay slot -> string"
+    # And the flat map is exactly the group's URLs, never a second reading
+    # of the run.
+    assert body["images"] == {
+        slot: entry["url"] for slot, entry in body["image_set"]["images"].items()
+    }
+
+
+def test_legacy_run_without_the_new_fields_still_serves(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A run produced before ``category`` / ``complexity`` / ``font_set``
+    existed keeps serving: the new wire fields degrade to null / empty
+    rather than 422-ing an artifact that is still perfectly deliverable.
+
+    The three predate each other by different releases, so they are
+    stripped together — this is the shape a genuinely old ``output.yaml``
+    on disk has."""
+    raw = yaml.safe_load(
+        (FIXTURE_APPS / APP / "run1" / "output.yaml").read_text()
+    )
+    raw.pop("category", None)
+    raw.pop("font_set", None)
+    for image in raw["image_set"]["images"].values():
+        image.pop("complexity", None)
+    run_dir = tmp_path / APP / "legacy"
+    run_dir.mkdir(parents=True)
+    (run_dir / "output.yaml").write_text(yaml.safe_dump(raw))
+
+    monkeypatch.setattr(settings, "apps_root", tmp_path)
+    monkeypatch.setattr(
+        output_service, "_DEFAULT", OutputService(apps_root=tmp_path)
+    )
+
+    resp = client.get(f"/apps/{APP}/legacy")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["category"] is None
+    assert body["font_set"] == {"fonts": {}}
+    assert body["fonts"] == {}
+    assert body["image_set"]["images"]["hero"]["complexity"] is None
+    # The URL half of the group is unaffected by the missing metadata.
+    assert body["image_set"]["images"]["hero"]["url"].endswith(
+        "/images/hero?v=testhash1234"
+    )
 
 
 def test_image_url_carries_version_token() -> None:

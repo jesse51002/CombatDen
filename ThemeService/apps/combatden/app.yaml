@@ -314,3 +314,164 @@ icons:
       videos" at ~24px (e.g. a play triangle, a film/clapper, a media tile —
       brand's choice). Functional navigation, never celebratory; must stay
       legible and obvious at small size in both active and inactive states.
+
+# The switchable LAYOUTS of the member app: one slot per major screen, plus
+# the shell that frames every screen. Each carries its OWN closed
+# vocabulary — the pipeline picks exactly one value per slot from the brand
+# brief, in one batched call, so the whole app reads as one decision rather
+# than seven.
+#
+# Every value here is a Dart enum value name from
+# `../MobileApp/lib/core/formats/layout_formats.dart`, because that is what
+# the app's `fromWire` parses (case-insensitive, whitespace-trimmed,
+# literal otherwise). The descriptions are those enums' own doc comments —
+# they are what the model reads to choose, so they must keep describing the
+# real arrangement.
+#
+# LAYOUT ONLY. The app also carries a sibling `motion_formats.dart`, and it
+# is deliberately NOT declared here: no screen reads those enums yet, so
+# picking values for them would spend money producing tokens nothing can
+# consume. Declare them here when the app consumes them, not before.
+#
+# The invariant those enums hold: a format changes ARRANGEMENT ONLY. No
+# screen is merged or split, no functionality added or removed, and no
+# variant reaches data the shipped screen did not already have.
+#
+# A slot the pipeline never resolved is simply absent from the run's
+# `format_set`, and the app renders what it ships today (the first value of
+# each enum, which is also its parse fallback). So an unpicked, stale or
+# failed format is a non-event, never a broken screen.
+formats:
+  - id: app_shell_format
+    description: >-
+      The chrome that frames every screen: the top bar's brand identity
+      (mark + gym name) and the stats row (rank, streak, points, QR),
+      plus the bottom navigation. Factored out of the per-screen slots
+      because it belongs to none of them and composes with every body —
+      whatever is chosen here is what the member sees on Home, Rank,
+      Rewards and Videos alike, constantly.
+    values:
+      - value: stacked
+        description: Big square mark, name below, stats in a full-width bar.
+      - value: compactRail
+        description: >-
+          One row: mark leading, name centred, stats clustered trailing.
+      - value: statFirst
+        description: Stats promoted above identity.
+      - value: markOnly
+        description: >-
+          Mark only, stats inline, floating pill nav. The gym name stays in
+          the tree (a11y + switch target) but leaves the screen.
+  - id: home_format
+    description: >-
+      The class schedule — the app's default landing destination and the
+      screen a member opens most. It lists the gym's upcoming classes by
+      day; this slot decides how those days and classes are arranged.
+    values:
+      - value: agendaList
+        description: >-
+          Pinned date rail over day groups; text left, thumb right.
+      - value: dayPager
+        description: One day per swipe; classes as wide media cards.
+      - value: timeSpine
+        description: >-
+          A time gutter runs the day; classes hang off their start time.
+      - value: nextUpHero
+        description: Next class as a full-bleed hero; the rest goes dense.
+      - value: boardGrid
+        description: Two-up card grid per day under a sticky day header.
+  - id: videos_format
+    description: >-
+      The video feed — the technique / level-up library, browsed by tag.
+      This slot decides how the tags and their videos are laid out.
+    values:
+      - value: carouselRows
+        description: Featured hero over one horizontal row per tag.
+      - value: editorialStack
+        description: >-
+          No horizontal scrolling; two large cards per tag then view-all.
+      - value: mosaic
+        description: Featured spans two columns inside a mixed-size grid.
+      - value: shortsColumn
+        description: >-
+          One column of tall cards with the tag overlaid on each.
+      - value: tagRail
+        description: Tags move to a scroll-spy rail; content is one column.
+  - id: rank_format
+    description: >-
+      Rank and progress — the member's current earned tier, their streak,
+      their rating graph and their distance to the next rank. The screen
+      where earned status is displayed back to them.
+    values:
+      - value: sparkleStack
+        description: Streak hero, rank summary, next rank, level-up videos.
+      - value: beltHero
+        description: >-
+          Belt takes the top with the streak over it, progress rail beneath.
+      - value: statTiles
+        description: >-
+          A four-tile board opens the screen, graph runs full bleed beneath.
+      - value: progressFirst
+        description: >-
+          Next-rank progress becomes a large arc with the belt inside it.
+      - value: splitRank
+        description: Now over next, graph collapsed onto the seam.
+  - id: rewards_format
+    description: >-
+      The points store — the catalogue of rewards a member spends earned
+      points on. This slot decides how the rewards and their prices are
+      presented.
+    values:
+      - value: cardGrid
+        description: Two-up image-top cards with the price tag on the image.
+      - value: listRows
+        description: "Full-width rows: square thumb left, action trailing."
+      - value: posterDeck
+        description: >-
+          A snapping deck of posters with one action pinned beneath it.
+      - value: priceLadder
+        description: >-
+          Banded by cost with the points total as an affordability bar.
+      - value: storefrontHero
+        description: >-
+          One promoted reward full bleed, the rest two-up beneath.
+  - id: class_format
+    description: >-
+      Class detail and booking — the screen a member lands on from the
+      schedule, holding the class image, its meta (time, instructor,
+      location) and the action that commits them to attend.
+    values:
+      - value: bannerStack
+        description: >-
+          Banner, meta, then three divided sections; action pinned.
+      - value: overlayHero
+        description: >-
+          Meta rides the image under a scrim; instructor promoted.
+      - value: detailSheet
+        description: Image is a fixed backdrop; content rises as a sheet.
+      - value: sectionTabs
+        description: >-
+          Details / instructor / location share one swipeable pane.
+      - value: specBrief
+        description: "No banner: a spec table and an inline action."
+  - id: celebration_format
+    description: >-
+      The post-class celebration cards — the five-card payoff a member
+      walks through after finishing a session (streak, wins, points,
+      rewards, rank). One slot for all five: the body content differs per
+      card, the arrangement around it does not. This is the app's emotional
+      peak, so the arrangement carries real brand weight.
+    values:
+      - value: centerHero
+        description: Everything centred, action pinned.
+      - value: figureTop
+        description: >-
+          The earned figure top-aligned; illustration bleeds off the bottom.
+      - value: cardReveal
+        description: >-
+          Stat on a raised card, illustration breaking over its top edge.
+      - value: splitBand
+        description: An illustration band over a plain lower half.
+      - value: fullBleed
+        description: >-
+          Illustration fills the screen; everything else stacks on a scrim.

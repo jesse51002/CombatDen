@@ -10,6 +10,7 @@ from schema.color_role import ColorRole
 from schema.slots import (
     ColorSlot,
     FontSlot,
+    FormatSlot,
     IconSlot,
     ImageSlot,
     TextSlot,
@@ -17,18 +18,20 @@ from schema.slots import (
 
 _ID_PATTERN = re.compile(r"^[a-z][a-z0-9_]*$")
 
-# Image slot ids that collide with an executor-injected dependency key are
+# Slot ids that collide with an executor-injected dependency key are
 # rejected: a node's resolved-input dict is keyed by these, so an image
 # named "color" would shadow the palette. Source of truth for the values
 # is ``src.modules.base.DependencyKind`` (kept local so schema/ imports no
 # src/ — same reason ColorRole lives in schema/). ``font``, ``text``,
-# ``icon`` and ``category`` are reserved for the same keyspace reason even
-# though no image module depends on any of them today, so a future
-# ``depends_on: font`` / ``depends_on: category`` doesn't get shadowed.
-# ``category`` is additionally the classification node's pseudo-slot id in
-# the slot-level seed, so an image of that name would collide there too.
+# ``icon``, ``category`` and ``format`` are reserved for the same keyspace
+# reason even though no image module depends on any of them today, so a
+# future ``depends_on: font`` / ``depends_on: category`` doesn't get
+# shadowed. ``category`` is additionally the classification node's
+# pseudo-slot id in the slot-level seed, so an image of that name would
+# collide there too. Checked for images and formats — the two slot lists
+# whose ids are free-form enough to hit one by accident.
 _EXECUTOR_NODE_NAMES = frozenset(
-    {"color", "font", "text", "icon", "category"}
+    {"color", "font", "text", "icon", "category", "format"}
 )
 
 
@@ -68,6 +71,18 @@ class AppFormat(BaseModel):
     fonts: list[FontSlot] = Field(default_factory=list)
     texts: list[TextSlot] = Field(default_factory=list)
     icons: list[IconSlot] = Field(default_factory=list)
+    # The app-declared arrangement / behaviour choices: one slot per
+    # switchable surface, each carrying its OWN closed vocabulary of
+    # values. App-agnostic by construction — the code supports "pick one
+    # of these per slot"; which surfaces exist and what their values mean
+    # is the app's own (this package never hardcodes either). The format
+    # node builds its per-request response schema from these lists, so a
+    # value outside a slot's vocabulary can't be written; the consuming
+    # client falls back to whatever it ships for any slot the run has no
+    # value for. Empty ⇒ the app has no format concept: no node is built,
+    # no call is made. The default also keeps the frozen per-run
+    # ``app.yaml`` snapshots valid.
+    formats: list[FormatSlot] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod
@@ -197,4 +212,22 @@ class AppFormat(BaseModel):
         models are keyed by slot id, so a collision would silently
         overwrite a slot."""
         _assert_unique_ids(v, kind="icon")
+        return v
+
+    @field_validator("formats")
+    @classmethod
+    def _formats_well_formed(cls, v: list[FormatSlot]) -> list[FormatSlot]:
+        """Format-only invariants: unique ids (the format module's
+        per-request closed response model is keyed by slot id, so a
+        collision would silently overwrite a slot) and no shadowing of an
+        executor-injected dependency key — a format slot id IS a seed slot
+        id, so one named ``format`` would collide with the node's own graph
+        key. Per-slot vocabulary invariants live on ``FormatSlot``."""
+        _assert_unique_ids(v, kind="format")
+        reserved = sorted({s.id for s in v} & _EXECUTOR_NODE_NAMES)
+        if reserved:
+            raise ValueError(
+                f"format slot ids {reserved} are reserved executor "
+                "dependency keys (see src.modules.base.DependencyKind)"
+            )
         return v

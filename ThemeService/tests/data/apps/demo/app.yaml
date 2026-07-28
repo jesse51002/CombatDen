@@ -57,3 +57,27 @@ texts:
     max_words: 6
     min_chars: 6
     max_chars: 40
+
+# Two format slots — enough to exercise the multi-slot batched call and the
+# per-slot vocabulary (each slot's list is its own), so the format node is
+# covered end to end (registry -> graph -> assemble -> writer -> seed ->
+# expand) without every fixture assertion carrying the real app's seven.
+# Neither is in default/output.yaml, so they also stand in for the
+# not-yet-done slots an `expand` pass backfills.
+formats:
+  - id: home_format
+    description: How the schedule screen arranges its days and classes.
+    values:
+      - value: agendaList
+        description: Pinned date rail over day groups; text left, thumb right.
+      - value: dayPager
+        description: One day per swipe; classes as wide media cards.
+      - value: timeSpine
+        description: A time gutter runs the day; classes hang off their start.
+  - id: rewards_format
+    description: How the points store presents its rewards and prices.
+    values:
+      - value: cardGrid
+        description: Two-up image-top cards with the price tag on the image.
+      - value: listRows
+        description: "Full-width rows: square thumb left, action trailing."

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schema.output.color_palette import ColorPalette
 from schema.output.font_set import FontSet
+from schema.output.format_set import FormatSet
 from schema.output.icon_set import IconSet
 from schema.output.image_set import ImageSet
 from schema.output.run_cost import RunCost
@@ -55,7 +56,12 @@ class Output(BaseModel):
     path (use the bundled default string) is one branch, not two.
     ``icon_set`` follows the same shape — every fresh run sets it, older
     files predate it and default to an empty ``IconSet()`` (no icon
-    overrides; the app falls back to its bundled icons).
+    overrides; the app falls back to its bundled icons). ``format_set``
+    does the same — older files predate it and default to an empty
+    ``FormatSet()``, which is also the honest answer when the app declared
+    no format slots; the client then renders the arrangement it ships.
+    It is a *group*, not a scalar like ``category``, because it holds one
+    resolved item per declared format slot.
 
     ``extra="ignore"`` (not the package-wide ``forbid``) is a deliberate
     exception, matching ``ImageOutput`` / ``ColorPalette`` / ``ImageSet``:
@@ -73,6 +79,7 @@ class Output(BaseModel):
     font_set: FontSet = Field(default_factory=lambda: FontSet(fonts={}))
     text_set: TextSet = Field(default_factory=TextSet)
     icon_set: IconSet = Field(default_factory=IconSet)
+    format_set: FormatSet = Field(default_factory=FormatSet)
     cost: RunCost | None = None
 
     @field_validator("app")
