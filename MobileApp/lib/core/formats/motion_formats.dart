@@ -61,6 +61,12 @@ enum CelebrationIntro {
 }
 
 /// The per-element entrance used across the celebration stack.
+///
+/// Every value is an entrance: there is no "arrives already there"
+/// option, because an element that never animates in is not a motion
+/// treatment a tenant gets to pick. A value may be quiet; it may not be
+/// absent, and it may not be so quick that nobody sees it — see
+/// `kRevealLegibilityFloor`.
 enum RevealStyle {
   /// Opacity in with an upward translate. `StaggeredReveal` today.
   fadeUp,
@@ -73,10 +79,7 @@ enum RevealStyle {
 
   /// Revealed by a clip along its own axis. No transform, so text
   /// stays pin-sharp throughout.
-  maskWipe,
-
-  /// Present at full opacity; stagger still orders appearance.
-  none;
+  maskWipe;
 
   static RevealStyle fromWire(String? wire) =>
       parseFormat(values, wire, RevealStyle.fadeUp);

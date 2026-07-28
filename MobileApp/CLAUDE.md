@@ -446,6 +446,15 @@ tenant-slot order applies. The difference is the invariant:
   which elements exist, what the surface is fed, or the app's motion law.
   **No value may overshoot** — ease-out only, no bounce, no elastic, no
   anticipation ("back") curve. Energy comes from stagger density.
+- **Every value must be an entrance, and a legible one.** There is no
+  "arrives already there" value: an element that never animates in is
+  not a treatment a tenant gets to pick. Values do NOT have to be the
+  same length, but none may be over before it is seen — each value's own
+  run clears `kRevealLegibilityFloor` (240ms, in
+  `shared/widgets/animation/reveal/reveal_frame.dart`) and stays inside
+  `MotionSpec.elementDurationCeiling` (300ms). A value whose motion is
+  inherently quick pays for legibility with a `RevealSpec.leadIn` — a
+  held beat before it starts — rather than by being abrupt.
 - `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
   holds it: `celebration_intro_frame.dart` is the pure per-instant model
   (`CelebrationIntroFrame`) plus one value's whole contract
@@ -457,11 +466,35 @@ tenant-slot order applies. The difference is the invariant:
   exactly one `markDone`, capture-clock driving). A card supplies its
   hero mark, its particle mark, and its settled content — it never
   implements an intro.
+- `reveal_style` is wired, and it is the one slot every screen feels:
+  `lib/shared/widgets/animation/reveal/` holds it, in the same shape as
+  the intro. `reveal_frame.dart` is the pure per-instant model
+  (`RevealFrame` — opacity, rise, slide, scale, clip, every default the
+  SETTLED state) plus `RevealGeometry` (the call site's own `offset` /
+  `startScale`) and one value's whole contract (`RevealSpec` — lead-in,
+  legibility floor, frame function); one file per value declares a spec;
+  `reveal_figure.dart` + `reveal_wipe_clipper.dart` are the only things
+  that paint one; and `reveal_stage.dart` holds the
+  `FormatBuilder`-wrapped switch and the whole runner contract (delay +
+  lead-in, self-run vs capture clock, a wrapper chain fixed for the
+  entrance so a stateful child is never re-parented mid-reveal).
+  `StaggeredReveal` and `ScaleReveal` keep their exact public APIs and
+  are now thin faces on that engine — they differ only in the geometry
+  they bring, which is why `fadeUp` reproduces BOTH shipped entrances
+  frame for frame. A call site owns WHEN (its `delay`, and therefore the
+  stagger order); the value owns only HOW. `offset: 0` means "do not
+  move me" and every value honours it.
 - Because the values are pure `double t -> frame` functions, the gate can
   assert the motion law numerically rather than by eye:
   `test/celebration_intro_invariants_test.dart` samples every value's
   frames for overshoot, scans the module for banned curves, and pumps
-  every value (× every celebration layout) at real phone size. Same rule
+  every value (× every celebration layout) at real phone size.
+  `test/reveal_style_invariants_test.dart` is the same gate for reveals,
+  and it checks monotonicity as well as range — a bounce is a REVERSAL,
+  which a range check alone waves through — plus that every value lands
+  on the exact pixels an un-revealed element occupies, that the stagger a
+  call site authored is never reordered, and that an unknown wire value
+  (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
 - **Only the streak card is on the shared stage.** The points card keeps
