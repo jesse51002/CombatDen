@@ -20,6 +20,12 @@
 // Slot count is 4 everywhere (every VideoService gym has exactly 4 classes and
 // 4 rewards). Time slots are synthesised by ./home/homeScheduleGenerator.ts, so
 // only name / instructorName / imageUrl are carried here.
+//
+// THE THIRD MAP LIVES NEXT DOOR. The per-group VIDEO feeds are the same kind of
+// constant with the same provenance, but there are ~110 of them against 32
+// classes and 32 rewards — enough to bury both maps here — so they sit in
+// ./showcaseVideoDefaults.ts. `DEFAULT_SHOWCASE_GROUP` and the group set below
+// stay the single source of truth for all three; that module imports them.
 
 import type { ShowcaseClassInfo, ShowcaseReward } from './showcaseContent';
 

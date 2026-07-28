@@ -8,16 +8,25 @@
 // Dart resolves a filename to an `AssetImage` at runtime. Vite resolves it at
 // BUILD time — each import below becomes a hashed URL — so the map is keyed by
 // the same filenames the Dart call sites use and the ports read one-to-one.
-// The 19 PNGs are COPIES of CRM/assets/showcase/; the CRM keeps its own.
+// Most of the PNGs are COPIES of CRM/assets/showcase/; the CRM keeps its own.
 //
 // `ShowcaseAsset.network` has no counterpart: Dart needs
 // `CachedNetworkImageProvider` to get disk caching, and the browser's HTTP
 // cache already does that for a plain `src`.
 //
-// ONE ASSET BEYOND the CRM's `assets/showcase/` set: `combatden_logo.png`,
-// copied from `CRM/assets/images/`. `showcase_topbar.dart:97` reaches for it by
-// that path as the LAST rung of its logo ladder (below the host gym's logo and
-// the theme's `logo_primary` slot), so the ladder cannot be ported without it.
+// THREE ASSETS BEYOND the CRM's `assets/showcase/` set:
+//
+//   * `combatden_logo.png`, copied from `CRM/assets/images/`.
+//     `showcase_topbar.dart:97` reaches for it by that path as the LAST rung of
+//     its logo ladder (below the host gym's logo and the theme's `logo_primary`
+//     slot), so the ladder cannot be ported without it.
+//   * `profile_rank_belt_gold.png` and `profile_next_rank_belt.png`, copied from
+//     `MobileApp/assets/ranks/`. They are the bundled fallbacks under the
+//     Profile screen's two belt slots (`rank_belt` and `next_rank_belt_image`)
+//     — `rank_header.dart:11` and `next_rank_section.dart:9` name exactly these
+//     two files. The CRM's showcase never rendered Profile, so its own asset
+//     folder has neither; they come straight from the member app, which is also
+//     where that screen is ported from.
 
 import classBookedCelebration from './assets/class_booked_celebration.png';
 import combatDenLogo from './assets/combatden_logo.png';
@@ -29,6 +38,8 @@ import giftbox from './assets/giftbox.png';
 import gymLogoGlobalMma from './assets/gym_logo_global_mma.png';
 import iconQrcode from './assets/icon_qrcode.png';
 import iconRankBelt from './assets/icon_rank_belt.png';
+import profileNextRankBelt from './assets/profile_next_rank_belt.png';
+import profileRankBeltGold from './assets/profile_rank_belt_gold.png';
 import rewardBringFriend from './assets/reward_bring_friend.png';
 import rewardGloves from './assets/reward_gloves.png';
 import rewardHandWraps from './assets/reward_hand_wraps.png';
@@ -55,6 +66,8 @@ export const SHOWCASE_ASSETS = {
   'gym_logo_global_mma.png': gymLogoGlobalMma,
   'icon_qrcode.png': iconQrcode,
   'icon_rank_belt.png': iconRankBelt,
+  'profile_next_rank_belt.png': profileNextRankBelt,
+  'profile_rank_belt_gold.png': profileRankBeltGold,
   'reward_bring_friend.png': rewardBringFriend,
   'reward_gloves.png': rewardGloves,
   'reward_hand_wraps.png': rewardHandWraps,
@@ -67,7 +80,7 @@ export const SHOWCASE_ASSETS = {
   'streak_icon.png': streakIcon,
 } as const;
 
-/** One of the 19 bundled filenames. */
+/** One of the bundled filenames. */
 export type ShowcaseAssetFile = keyof typeof SHOWCASE_ASSETS;
 
 /** Ports `ShowcaseAsset.image` — the built URL for a bundled filename. */

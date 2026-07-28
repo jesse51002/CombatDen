@@ -1,0 +1,48 @@
+/*
+ * Styles for ./RankHeader.tsx (ports MobileApp/lib/features/profile/
+ * presentation/widgets/rank_summary/rank_header.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Row(mainAxisAlignment: center, mainAxisSize: min, spacing: spacingLarge)`. */
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `_kBeltWidth` x `_kBeltHeight` at `BoxFit.contain`. Per-asset layout
+ * dimensions, not design tokens — the Dart spells them as file-local consts too.
+ */
+.belt {
+  flex: 0 0 auto;
+  width: 77px;
+  height: 50px;
+  object-fit: contain;
+  display: block;
+}
+
+/* `Column(mainAxisSize: min, center, spacing: spacingSmall)`. */
+.names {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  min-width: 0;
+}
+
+/* `Text(rankTitle, style: h1)`. */
+.title {
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-text);
+}
+
+/* `Text(sub, style: h2.copyWith(color: text2nd))`. */
+.subtitle {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text-2nd);
+}

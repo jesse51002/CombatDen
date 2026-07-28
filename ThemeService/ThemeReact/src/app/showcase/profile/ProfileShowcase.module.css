@@ -1,0 +1,39 @@
+/*
+ * Styles for ./ProfileShowcase.tsx (ports MobileApp/lib/features/profile/
+ * presentation/screens/profile_screen.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Column(mainAxisSize: min, crossAxisAlignment: stretch, spacing: spacingBig)`
+ * inside `SingleChildScrollView(padding: only(bottom: _kBottomScrollPadding))`.
+ *
+ * The 64 is the Dart's own const — the room the persistent bottom nav needs, so
+ * the last carousel can scroll clear of it rather than ending underneath it.
+ */
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding-bottom: 64px;
+}
+
+/* `RankSummarySection` — `Column(mainAxisSize: min, center, spacing: spacingLarge)`. */
+.rankSummary {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `SectionDivider` — `Container(height: dividerThickness, color: text3rd)`,
+ * full-bleed on purpose: it is the one element on this page that runs edge to
+ * edge, which is what separates the blocks without a card around each.
+ */
+.divider {
+  flex: 0 0 auto;
+  height: var(--sc-divider-thickness);
+  background: var(--sc-text-3rd);
+}

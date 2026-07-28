@@ -6,18 +6,20 @@
  */
 
 /*
- * `ClipRect > OverflowBox(minHeight: 0, maxHeight: infinity,
- * alignment: topCenter) > Column(mainAxisSize: min, stretch, spacing: spacingBig)`.
+ * `Column(mainAxisSize: min, stretch, spacing: spacingBig)` inside the
+ * scaffold's opted-in scroller.
  *
- * The whole `OverflowBox` dance is Flutter's way of saying "lay this out at its
- * natural height and clip the rest" — which is what a block box in a clipping
- * parent does by default here, so there is no height and no scroll: the store
- * is taller than the phone on purpose, and the scaffold body's own
- * `overflow: hidden` is the `ClipRect`.
+ * Dart wraps this in `ClipRect > OverflowBox(minHeight: 0, maxHeight: infinity,
+ * alignment: topCenter)` — its way of saying "lay this out at its natural
+ * height and clip the rest". The column still lays out at its natural height
+ * here; what changed is that the tail is now REACHABLE rather than clipped (see
+ * ./RewardsShowcase.tsx). The bottom padding is the room the persistent bottom
+ * nav needs, so the last row of cards scrolls clear of it.
  */
 .store {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: var(--sc-spacing-big);
+  padding-bottom: var(--sc-spacing-big);
 }

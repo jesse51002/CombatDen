@@ -1,0 +1,75 @@
+/*
+ * Styles for ./VideoCarouselCard.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/gym_video_carousel_card.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `SizedBox(width: _kCardWidth) > Container(color: card, borderRadius:
+ * radiusSmall, clipBehavior: Clip.hardEdge) > Column(stretch, spacing:
+ * spacingLarge)`.
+ *
+ * `flex: 0 0 auto` is what keeps the 258 fixed inside the carousel's flex row —
+ * without it the cards would share the row's width and shrink as the feed grows.
+ */
+.card {
+  flex: 0 0 auto;
+  width: 258px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+}
+
+/* `SizedBox(height: _kThumbHeight)` over the cover image. */
+.thumbFrame {
+  flex: 0 0 auto;
+  height: 145px;
+  background: var(--sc-card);
+  overflow: hidden;
+}
+
+/*
+ * `Padding(spacingMedium, 0, spacingMedium, spacingLarge) >
+ * Row(center, spacing: spacingMedium)`.
+ */
+.info {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  padding: 0 var(--sc-spacing-medium) var(--sc-spacing-large);
+}
+
+/*
+ * `Expanded > Padding(right: spacingMedium) > Column(start, spacing: spacingMedium)`.
+ */
+.text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+  padding-right: var(--sc-spacing-medium);
+}
+
+/* `Text(title, style: p, maxLines: 1, overflow: ellipsis)`. */
+.title {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+/* `Text(style: pSmall.copyWith(color: text2nd))`. */
+.meta {
+  font: var(--sc-type-p-small);
+  letter-spacing: var(--sc-type-p-small-ls);
+  color: var(--sc-text-2nd);
+}

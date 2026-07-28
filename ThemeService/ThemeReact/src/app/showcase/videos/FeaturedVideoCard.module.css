@@ -1,0 +1,25 @@
+/*
+ * Styles for ./FeaturedVideoCard.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/featured_video_card.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(color: card, borderRadius: radiusBig, clipBehavior: Clip.hardEdge)
+ * > Column(stretch, spacing: spacingLarge)`. The clip is what rounds the
+ * thumbnail's top corners without the thumbnail itself carrying a radius.
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-big);
+  overflow: hidden;
+}
+
+/* `Padding(fromLTRB(paddingBig, 0, paddingBig, spacingLarge))`. */
+.ctaRow {
+  padding: 0 var(--sc-padding-big) var(--sc-spacing-large);
+}

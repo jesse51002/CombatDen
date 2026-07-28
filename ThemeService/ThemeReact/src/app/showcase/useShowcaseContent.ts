@@ -21,9 +21,10 @@ import { useEffect, useSyncExternalStore } from 'react';
 import type { ShowcaseDefaults } from '../data/showcaseDefaults';
 import { EMPTY_SHOWCASE_DEFAULTS, loadShowcaseDefaults, showcaseDefaultsFor } from '../data/showcaseDefaults';
 
-import type { ShowcaseClassInfo, ShowcaseReward } from './showcaseContent';
+import type { ShowcaseClassInfo, ShowcaseReward, ShowcaseVideo } from './showcaseContent';
 import { fillSlots } from './showcaseContent';
 import { bundledClasses, bundledRewards, showcaseGroupFor } from './showcaseGroupDefaults';
+import { bundledVideos } from './showcaseVideoDefaults';
 
 let current: ShowcaseDefaults = EMPTY_SHOWCASE_DEFAULTS;
 let inFlight = false;
@@ -66,25 +67,41 @@ export function useShowcaseDefaults(): ShowcaseDefaults {
   return defaults;
 }
 
-/** What the phone renders: four class cards and four reward cards. */
+/** What the phone renders: four class cards, four reward cards, and a video feed. */
 export interface ShowcaseContent {
   readonly classes: readonly ShowcaseClassInfo[];
   readonly rewards: readonly ShowcaseReward[];
+  readonly videos: readonly ShowcaseVideo[];
 }
 
 /**
  * The resolved content for `category` (`Fighting`, `Yoga`, … — the previewed
  * style's own bucket; null falls back to the default group).
  *
- * `realClasses` / `realRewards` are the selected gym's own content. They are
- * always absent in this browser and are kept on the signature because
- * `fillSlots` is the shared rule: an admin host that DOES have a gym passes
- * them, and one real item then fills all four cards.
+ * `realClasses` / `realRewards` / `realVideos` are the selected gym's own
+ * content. They are always absent in this browser and are kept on the signature
+ * because `fillSlots` is the shared rule: an admin host that DOES have a gym
+ * passes them, and one real item then fills all four cards.
+ *
+ * VIDEOS DO NOT GO THROUGH `fillSlots`, and that is deliberate rather than an
+ * omission. `fillSlots` exists because the schedule and the store are FIXED
+ * FOUR-CARD layouts that a one-class gym would otherwise leave three-quarters
+ * empty. A feed has no slots — it is however long it is — so repeating a single
+ * video fourteen times would invent a feed rather than fill a layout, and the
+ * genre carousels would all hold the same card. An empty real feed simply falls
+ * through to the bundled one, which is the same rule minus the repeat.
+ *
+ * The FETCHED tier has no video branch either: `GET /theme/showcase-defaults`
+ * serves `{classes, rewards}` only (`FastApiBackend/src/theme/schema/
+ * theme_schema.py`), so a video feed resolves real → bundled with nothing in
+ * between. Wiring a third tier the wire format cannot fill would be a branch
+ * that is dead by construction.
  */
 export function useShowcaseContent(
   category: string | null,
   realClasses?: readonly ShowcaseClassInfo[] | null,
   realRewards?: readonly ShowcaseReward[] | null,
+  realVideos?: readonly ShowcaseVideo[] | null,
 ): ShowcaseContent {
   const defaults = useShowcaseDefaults();
   // `selectedGym.themeCategory ?? showcaseGroupFor(selectedGym.videoGymId)` —
@@ -98,5 +115,9 @@ export function useShowcaseContent(
   return {
     classes: fillSlots(realClasses, fetched?.classes ?? bundledClasses(key)),
     rewards: fillSlots(realRewards, fetched?.rewards ?? bundledRewards(key)),
+    videos:
+      realVideos === null || realVideos === undefined || realVideos.length === 0
+        ? bundledVideos(key)
+        : realVideos,
   };
 }

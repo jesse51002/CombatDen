@@ -22,11 +22,22 @@
 // PER-MEMBER chrome and stays sample data even when a gym's rewards are
 // injected (rewards_showcase.dart:18-20).
 //
-// IT DELIBERATELY OVERFLOWS. Dart wraps the column in
+// IT OVERFLOWED DELIBERATELY, AND NOW IT SCROLLS. Dart wraps the column in
 // `ClipRect > OverflowBox(maxHeight: infinity, alignment: topCenter)`: the
 // store lays out at its natural height, top-aligned, and whatever falls past
-// the phone's edge is clipped rather than scrolled or reported as an overflow
-// error. Here the scaffold body already clips, so the column just grows.
+// the phone's edge is CLIPPED. That was the only option in a preview with no
+// scroller, but the surface it clips is the member app's `PointsStoreScreen`,
+// which scrolls on a real device — and the store grid is exactly the place
+// where clipping hides the thing being sold (the second row of redeemable
+// items). So the body opts into `bodyScroll` and the column keeps growing.
+//
+// THE HERO STILL ESCAPES ITS BOX. `bodyScroll` also makes the body clip
+// horizontally (see ../support/ShowcaseScaffold.tsx), which would have been
+// fatal for ./rewards/SparkleHero.tsx — its scatter is `Clip.none` and reaches
+// 172px either side of centre. It survives because the hero is full-bleed: at
+// the phone's 390 logical px the farthest sparkle lands at x = 23 and x = 367,
+// inside the body on both sides. That is why scrolling is opt-in per screen
+// rather than a global flip; the four celebration surfaces do NOT opt in.
 
 import { PointsHeadline } from './rewards/PointsHeadline';
 import { RewardsTabs } from './rewards/RewardsTabs';
@@ -84,6 +95,7 @@ export function RewardsShowcase({
   return (
     <ShowcaseScaffold
       horizontalPadding="none"
+      bodyScroll
       bottomNav={<ShowcaseBottomNav selected="reward" />}
     >
       {/* `Column(mainAxisSize: min, stretch, spacing: spacingBig)`. */}

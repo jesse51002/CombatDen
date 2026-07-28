@@ -1,0 +1,85 @@
+/*
+ * Styles for ./VideoCategoryTabs.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/video_category_tabs.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(vertical: spacingLarge) > SingleChildScrollView(horizontal,
+ * padding: horizontal: screenHorizontalPadding)`.
+ *
+ * The scrollbar is hidden for the same reason the carousels' is: a desktop
+ * track drawn inside a phone mock breaks the illusion, and iOS's overlay bar
+ * occupies no layout.
+ */
+.strip {
+  padding-block: var(--sc-spacing-large);
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.strip::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * `Row(mainAxisAlignment: center, spacing: spacingLarge)`.
+ *
+ * `width: max-content` + `margin-inline: auto` is the centring Flutter gets
+ * from `mainAxisAlignment: center` inside a scroller: a SHORT row sits centred,
+ * and a row wider than the viewport falls back to starting at the inset instead
+ * of clipping its own leading pills, which is what a plain
+ * `justify-content: center` would do to an overflowing flex row.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+  width: max-content;
+  margin-inline: auto;
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/*
+ * `_CategoryPill` — `Container(color: bg, borderRadius: radiusBig, padding:
+ * symmetric(horizontal: paddingSmall, vertical: spacingMedium)) > Text(h3)`.
+ *
+ * INACTIVE IS THE CANVAS, NOT A TINT: Dart fills an inactive pill with
+ * `backgroundColor`, so the row reads as one selected chip against the page
+ * rather than a segmented control. Kept verbatim.
+ */
+.pill {
+  flex: 0 0 auto;
+  padding: var(--sc-spacing-medium) var(--sc-padding-small);
+  border-radius: var(--sc-radius-big);
+  background: var(--sc-background);
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text-2nd);
+  white-space: nowrap;
+}
+
+/*
+ * `isActive ? primaryColor : backgroundColor`.
+ *
+ * ONE DELIBERATE DEVIATION, and it is a contrast fix rather than a taste call.
+ * Dart writes the active label as `DesignConstants.text` — the ink tuned for
+ * the BACKGROUND — on top of a `primary` fill. That holds for CombatDen's own
+ * dark canvas and light primary, and breaks for any of the 76 generated themes
+ * whose primary lands near its text colour; this preview exists to be switched
+ * across all of them. `primary_button_text` is the theme's own AA-checked
+ * `regular_text` derivation of `primary` — the service's answer to "what reads
+ * on this fill" — and it is already what every other primary fill in this
+ * island uses (../support/ShowcasePrimaryButton.module.css, the price tag in
+ * ../rewards/RewardCard.module.css). Reproducing the hazard to stay "faithful"
+ * is exactly what ../../../../CLAUDE.md's don't-inherit rule forbids; the
+ * member app's own widget wants the same fix.
+ */
+.active {
+  background: var(--sc-primary);
+  color: var(--sc-primary-button-text);
+}

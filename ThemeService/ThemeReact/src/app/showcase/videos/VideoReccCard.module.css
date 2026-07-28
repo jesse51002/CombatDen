@@ -1,0 +1,71 @@
+/*
+ * Styles for ./VideoReccCard.tsx
+ * (ports MobileApp/lib/shared/widgets/video_recc_card/video_recc_card.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(mainAxisSize: min, crossAxisAlignment: stretch, spacing: spacingLarge)`. */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `AspectRatio(aspectRatio: 16 / 9)`. The `card` fill is Dart's
+ * `errorBuilder: ColoredBox(color: card)` — it shows through while the
+ * thumbnail loads and stays put when the URL is dead, because the <img> is
+ * removed on error rather than left as a broken box.
+ */
+.thumbFrame {
+  aspect-ratio: 16 / 9;
+  background: var(--sc-card);
+  overflow: hidden;
+}
+
+/* `Padding(horizontal: paddingSmall) > Row(center, spacing: spacingMedium)`. */
+.creatorRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  padding-inline: var(--sc-padding-small);
+}
+
+/*
+ * `Expanded(child: Column(start, spacing: spacingMedium))`. `min-width: 0` is
+ * what makes the flex child behave like `Expanded` — without it a long title
+ * refuses to shrink and pushes the avatar out of the card.
+ */
+.creatorText {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * `Text(title, style: h2)`. Dart wraps freely here (no maxLines), but a real
+ * feed carries the occasional 84-character title and three lines of h2 would
+ * unbalance the hero against the carousels below it, so the port caps at two —
+ * the same reserve ../rewards/RewardCard.tsx makes for its own titles.
+ */
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+}
+
+/* `Text(metaLabel, style: p.copyWith(color: text2nd))`. */
+.meta {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}

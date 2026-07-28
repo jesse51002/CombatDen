@@ -4,6 +4,9 @@
 // under the themed bottom nav.
 //
 // A STATIC surface: nothing here animates, which is why it takes no loop knobs.
+// It DOES scroll (`bodyScroll`) — the schedule board is a multi-day list on a
+// real device, and previewing one clipped day would sell a shorter app than the
+// one being licensed. See ./HomeNotBookedBody.tsx for the board's own shape.
 // `gymName` / `gymLogoSrc` are the HOST's gym identity and are NOT customization
 // slots — a theme pick must never rename the mock's gym. `themeTabPreview`
 // selects the topbar's middle logo rung (see ../support/ShowcaseTopbar.tsx).
@@ -39,6 +42,7 @@ export function HomeShowcase({
   return (
     <ShowcaseScaffold
       horizontalPadding="none"
+      bodyScroll
       bottomNav={<ShowcaseBottomNav selected="home" />}
     >
       <HomeNotBookedBody

@@ -16,7 +16,7 @@
 //
 // The output is `showcaseCssVars`, the ~67 `--sc-*` custom properties
 // ./ShowcaseThemeVars.tsx writes onto ONE element. Every showcase `.module.css`
-// reads `var(--sc-…)` and nothing else, so a theme switch re-skins all seven
+// reads `var(--sc-…)` and nothing else, so a theme switch re-skins all nine
 // screens by rewriting variables on that single element.
 //
 // TWO PORTING RULES THIS FILE OBEYS, both from ../../../CLAUDE.md:

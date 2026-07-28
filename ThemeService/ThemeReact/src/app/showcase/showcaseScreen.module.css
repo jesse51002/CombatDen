@@ -1,6 +1,6 @@
 /*
  * Styles for ./showcaseScreen.tsx — the island's ROOT box, and nothing else.
- * Every one of the seven surfaces brings its own stylesheet.
+ * Every one of the nine surfaces brings its own stylesheet.
  *
  * Everything here reads `--sc-*` and nothing else. Those variables are written
  * onto `.root` by ./ShowcaseThemeVars.tsx; the surrounding admin chrome's

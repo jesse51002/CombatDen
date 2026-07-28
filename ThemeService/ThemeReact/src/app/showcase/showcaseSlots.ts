@@ -3,7 +3,7 @@
 // The slot manifest the showcase screens consume — the ids the pipeline keys
 // its wire payload by, so the same loaded theme resolves identically here and
 // in the member app. It is deliberately a SUBSET of the member app's own
-// manifest: only what the seven preview screens render, so the engine's
+// manifest: only what the nine preview screens render, so the engine's
 // startup missing-slot warning stays scoped to what the phone actually shows.
 //
 // These are the lists ../App.tsx hands to <ThemeProvider>'s `expected*` props

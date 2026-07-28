@@ -7,7 +7,7 @@
 // whole token surface ONCE and writes it as ~67 `--sc-*` variables onto a
 // SINGLE element — the phone screen's root. Every showcase `.module.css`
 // underneath reads `var(--sc-…)` and nothing else, so `selectDesign` re-skins
-// all seven screens by rewriting variables on that one element: the cascade
+// all nine screens by rewriting variables on that one element: the cascade
 // does the work Flutter's rebuild does, and the screens themselves never
 // subscribe to the theme for a colour, a font or a measurement.
 //

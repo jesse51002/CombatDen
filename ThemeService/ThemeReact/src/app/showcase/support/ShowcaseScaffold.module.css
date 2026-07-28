@@ -18,7 +18,7 @@
   color: var(--sc-text);
   font: var(--sc-type-p);
   letter-spacing: var(--sc-type-p-ls);
-  /* The phone screen clips; nothing inside a member-app surface scrolls here. */
+  /* The phone screen clips. Individual bodies opt into scrolling below. */
   overflow: hidden;
 }
 
@@ -37,6 +37,34 @@
   flex: 1 1 auto;
   min-height: 0;
   overflow: hidden;
+}
+
+/*
+ * `bodyScroll` — the app-shaped screens' `SingleChildScrollView`.
+ *
+ * `overflow-x: hidden` is written EXPLICITLY rather than left at `visible`: a
+ * `visible` sibling of a scrolling axis computes to `auto`, so omitting it
+ * would hand the body a horizontal scrollbar it never uses and let a 1px
+ * rounding error scroll the whole screen sideways. Spelling it out is the
+ * difference between a clip and a second scroller.
+ *
+ * The scrollbar is hidden because a desktop track drawn down the inside of a
+ * phone mock is the one detail that gives away that this is not a device; iOS
+ * paints an overlay bar that occupies no layout, which is what this matches.
+ * `overscroll-behavior: contain` keeps a flick at the end of the feed from
+ * chaining out into the surrounding admin page.
+ */
+.bodyScroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bodyScroll::-webkit-scrollbar {
+  display: none;
 }
 
 /* `ShowcasePadding.standard` — `screenHorizontalPadding`. */
