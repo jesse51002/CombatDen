@@ -18,6 +18,7 @@ import 'package:mobile_app/features/videos/presentation/widgets/video_category_t
 import 'package:mobile_app/features/videos/presentation/widgets/video_view_all_action.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_body.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_status.dart';
+import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
@@ -204,7 +205,7 @@ void main() {
           tester.widget<VideosFeedStatus>(find.byType(VideosFeedStatus)).kind,
           VideosFeedStatusKind.loading,
         );
-        expect(find.byType(CircularProgressIndicator), findsOneWidget);
+        expect(find.byType(LoadingDots), findsOneWidget);
 
         // Error: the request failed.
         pending.completeError(Exception('feed down'));

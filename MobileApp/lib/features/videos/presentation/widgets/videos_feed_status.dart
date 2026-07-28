@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 
 /// Why the feed is showing a message instead of videos.
 enum VideosFeedStatusKind {
@@ -39,7 +40,7 @@ class VideosFeedStatus extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
       child: Center(
         child: kind == VideosFeedStatusKind.loading
-            ? const CircularProgressIndicator()
+            ? const LoadingDots()
             : Text(
                 _message,
                 textAlign: TextAlign.center,

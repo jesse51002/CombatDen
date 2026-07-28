@@ -3,6 +3,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/video_recc_header.dart';
+import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_layout.dart';
@@ -85,7 +86,7 @@ class _ReccPlaceholder extends StatelessWidget {
             Expanded(
               child: Center(
                 child: loading
-                    ? const CircularProgressIndicator()
+                    ? const LoadingDots()
                     : Text(
                         'No recommendation right now.',
                         textAlign: TextAlign.center,
