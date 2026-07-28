@@ -1,0 +1,36 @@
+/*
+ * Styles for ./RewardsPriceLadder.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/layouts/rewards_price_ladder.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Expanded(child: SingleChildScrollView(padding: symmetric(horizontal:
+ * screenHorizontalPadding, vertical: spacingMedium)) >
+ * Column(min, stretch, spacing: spacingBig))`.
+ *
+ * `overflow-x: hidden` is written EXPLICITLY: a `visible` sibling of a
+ * scrolling axis COMPUTES to `auto`, which would give the ladder a sideways
+ * scrollbar it never uses (see ../../../CLAUDE.md). The scrollbar is hidden for
+ * the reason ../../support/ShowcaseScaffold.module.css hides its own.
+ */
+.bands {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding: var(--sc-spacing-medium) var(--sc-screen-padding-x);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bands::-webkit-scrollbar {
+  display: none;
+}

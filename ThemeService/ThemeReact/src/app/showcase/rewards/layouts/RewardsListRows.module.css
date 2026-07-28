@@ -1,0 +1,22 @@
+/*
+ * Styles for ./RewardsListRows.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/layouts/rewards_list_rows.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `_RowList` — `Padding(horizontal: screenHorizontalPadding) >
+ * Column(min, stretch)`.
+ *
+ * NO `gap` on purpose, and that is the Dart's own note: each row owns its
+ * vertical padding and closes with a hairline (../RewardCard.module.css's
+ * `.row`), which IS the rhythm. A gap here would double-space it and detach
+ * the rule from the row it belongs to.
+ */
+.rows {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-inline: var(--sc-screen-padding-x);
+}

@@ -1,6 +1,6 @@
 /*
- * Styles for ./RewardsTabs.tsx
- * (ports CRM/lib/showcase/rewards/rewards_tabs.dart).
+ * Styles for ./RewardsTabs.tsx (ports MobileApp/lib/features/rewards/
+ * presentation/widgets/rewards_tabs/).
  *
  * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
  */
@@ -46,4 +46,66 @@
 /* `isActive ? accent : text2nd` — accent is the member app's active-state role. */
 .active .label {
   color: var(--sc-accent);
+}
+
+/* ------------------------------------------------------------------------ */
+/* `RewardsTabsLayout.segmented` — both tabs inside one pill.                */
+/* ------------------------------------------------------------------------ */
+
+/* `Padding(horizontal: screenHorizontalPadding)`. */
+.segmentedOuter {
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/*
+ * `Container(padding: spacingSmall, color: card, borderRadius: radiusCircle)
+ * > Row(spacing: spacingSmall)`.
+ */
+.segmented {
+  display: flex;
+  gap: var(--sc-spacing-small);
+  padding: var(--sc-spacing-small);
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-circle);
+}
+
+/*
+ * `Expanded(child: Container(padding: symmetric(vertical: spacingMedium),
+ * borderRadius: radiusCircle))`. Inactive is the canvas at zero alpha — i.e.
+ * no fill — exactly as the Dart writes it.
+ */
+.segment {
+  flex: 1 1 0;
+  min-width: 0;
+  padding-block: var(--sc-spacing-medium);
+  border-radius: var(--sc-radius-circle);
+}
+
+.segmentActive {
+  background: var(--sc-accent);
+}
+
+/* `Text(label, style: h2 @ text2nd, maxLines: 1, ellipsis)`, centred. */
+.segmentLabel {
+  display: block;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text-2nd);
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * `isActive ? primaryButtonText : text2nd`, verbatim.
+ *
+ * Note what that means: the fill is ACCENT but the ink is the theme's
+ * `regular_text` derivation of PRIMARY. The two roles usually sit in the same
+ * family, so it reads — but it is the Dart's own pairing rather than an
+ * accent-specific contrast answer, and it is transcribed rather than
+ * "corrected" here so the two runtimes cannot disagree about one pixel.
+ */
+.segmentActive .segmentLabel {
+  color: var(--sc-primary-button-text);
 }

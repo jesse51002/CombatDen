@@ -1,0 +1,60 @@
+/*
+ * Styles for ./RewardBandSection.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/layouts/rewards_band_section.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(min, stretch, spacing: spacingLarge)`. */
+.band {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `Text(band.label, style: h3.copyWith(letterSpacing: 0.16 * h3.fontSize))`.
+ *
+ * `em` HERE IS CORRECT, and it is the exception the package's rule names. The
+ * standing rule is that Flutter's `letterSpacing` is an absolute logical-pixel
+ * value and ports as `px` (see ../../../CLAUDE.md) — but this Dart writes the
+ * tracking as a MULTIPLE OF THE FONT SIZE, and CSS `em` on `letter-spacing`
+ * resolves against the element's own font size. h3 is 13px, so `0.16em` is the
+ * 2.08px the Dart computes, and it stays right if the rung ever moves.
+ */
+.label {
+  font: var(--sc-type-h3);
+  letter-spacing: 0.16em;
+}
+
+/* `band.affordable ? accent : text3rd` — the label's ONLY variable. */
+.affordable {
+  color: var(--sc-accent);
+}
+
+.distant {
+  color: var(--sc-text-3rd);
+}
+
+/*
+ * `_TileRows` — `Column(spacing: spacingMedium)` of `Row(start, spacing:
+ * spacingMedium)`s, three `Expanded` cells each.
+ *
+ * A CSS grid rather than the Dart's chunked rows, and the difference is only in
+ * how the same result is reached: the Dart pads a short last row with
+ * `SizedBox.shrink()` inside an `Expanded` to hold its columns open, which is
+ * precisely what a fixed three-track grid does for free. `align-items: start`
+ * is its `crossAxisAlignment: start` — a short tile does not stretch to its
+ * row's tallest neighbour.
+ *
+ * This is NOT the call ../StoreGrid.tsx makes, and the two are not in tension:
+ * the store zig-zags down two independent columns so each packs to its own
+ * height, whereas a band is genuinely row-major and its rows must line up.
+ */
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--sc-spacing-medium);
+  align-items: start;
+}

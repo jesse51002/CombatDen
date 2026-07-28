@@ -1,90 +1,203 @@
-// Ports ../../../../../../CRM/lib/showcase/rewards/reward_card.dart — a clone
-// of MobileApp's shared reward card: a 3:2 photo with a brand-coloured price
-// tag pinned top-right, then a fixed-height title slot, the points cost, and a
-// full-width CTA.
+// Ports ../../../../../../MobileApp/lib/features/rewards/presentation/widgets/
+// reward_card/{reward_card.dart,reward_card_data.dart,layouts/*.dart} — the
+// shared reward card and its five ARRANGEMENTS.
 //
-// The photo is the injected gym URL when the host supplied one, else the
-// bundled sample (`ShowcaseAsset.imageOrNetwork`). A network photo that fails
-// to load degrades to a flat `card` rectangle rather than a broken-image box —
-// Dart's `errorBuilder`, and the same reset ../home/ClassListItem.tsx uses.
+// PRESENTATION ONLY, AND THAT IS THE WHOLE POINT. Every value of `layout`
+// renders the identical element set from the identical item: the image, exactly
+// one price tag, the title, the points cost, and exactly ONE redeem action that
+// belongs to this card. A value may move them and change their prominence. It
+// may not drop one, add one, or hand one to somebody else — including the
+// screen arrangement that placed the card.
+// ./__tests__/rewardsFormats.test.tsx counts them per card, per screen format.
 //
-// FOUR PUBLIC WIDGETS THERE, ONE HERE. Dart also exports `RewardImageHero`,
-// `RewardPriceTag` and `RewardPointsCost` because its kiosk and its My-Rewards
-// list reuse them; this island has neither surface, so they stay private
-// helpers rather than an export surface nothing imports. `formatRewardPoints`
-// is likewise the island's single ../formatPoints.ts.
+// `imageTop` is what ships and reproduces the previous single-arrangement card
+// value for value, which is why that test also freezes ./StoreGrid.tsx's markup.
 //
-// NO TAP CALLBACK. Dart requires `onPressed` and the store passes an empty
-// closure; every showcase surface is a preview that takes no input, so the port
-// leans on ../support/ShowcasePrimaryButton.tsx's own no-op default.
+// NO TAP CALLBACK, AND NO REDEEM DIALOG. Dart's `RewardStoreCard` wires every
+// card's action to `RewardRedeemDialog`; every showcase surface is a preview
+// inside a phone frame that takes no input, so the port leans on
+// ../support/ShowcasePrimaryButton.tsx's own no-op default. The action is still
+// exactly one <button> per card — which is what the gate counts.
 
-import { useState } from 'react';
+import type { ReactElement } from 'react';
 
-import { formatThousands } from '../formatPoints';
-import { showcaseAssetOrNetwork } from '../showcaseAssets';
+import { cx } from '../cx';
 import { ShowcasePrimaryButton } from '../support/ShowcasePrimaryButton';
 
 import type { ShowcasePointsStoreItem } from './mockPointsStore';
 import styles from './RewardCard.module.css';
+import { RewardImageHero, RewardPointsCost, RewardPriceTag, RewardTitle } from './rewardCardParts';
+
+/**
+ * `RewardCardLayout` — how a reward card is arranged.
+ *
+ *   * `imageTop`  — image on top, title / cost / action stacked. Ships today.
+ *   * `thumbLeft` — full-width row: square thumb leading, action trailing.
+ *   * `poster`    — tall single-focus poster; the image takes the height it is given.
+ *   * `tile`      — dense square tile for a multi-column band.
+ *   * `hero`      — full-bleed promoted card; text and action ride the image.
+ */
+export type RewardCardLayout = 'imageTop' | 'thumbLeft' | 'poster' | 'tile' | 'hero';
 
 export interface RewardCardProps {
   item: ShowcasePointsStoreItem;
   /** `RewardCard.buttonText` — the CTA's label ("Redeem", "Use"). */
   buttonText: string;
+  layout?: RewardCardLayout | undefined;
 }
 
-export function RewardCard({ item, buttonText }: RewardCardProps) {
+export function RewardCard({ item, buttonText, layout = 'imageTop' }: RewardCardProps) {
+  // A switch rather than a ternary chain at five cases, and exhaustive over the
+  // union — a new arrangement fails to typecheck here until it is built.
+  let card: ReactElement;
+  switch (layout) {
+    case 'imageTop':
+      card = <RewardCardImageTop item={item} buttonText={buttonText} />;
+      break;
+    case 'thumbLeft':
+      card = <RewardCardThumbLeft item={item} buttonText={buttonText} />;
+      break;
+    case 'poster':
+      card = <RewardCardPoster item={item} buttonText={buttonText} />;
+      break;
+    case 'tile':
+      card = <RewardCardTile item={item} buttonText={buttonText} />;
+      break;
+    case 'hero':
+      card = <RewardCardHero item={item} buttonText={buttonText} />;
+      break;
+  }
+  return card;
+}
+
+interface ArrangementProps {
+  item: ShowcasePointsStoreItem;
+  buttonText: string;
+}
+
+/**
+ * `RewardCardLayout.imageTop` — the card that ships today.
+ *
+ * `Container(color: card, borderRadius: radiusBig, clipBehavior: antiAlias)`;
+ * the clip is what rounds the photo's top corners. 3:2 image with the price tag
+ * pinned top-right, then a fixed-height title slot, the cost, and a full-width
+ * action.
+ */
+function RewardCardImageTop({ item, buttonText }: ArrangementProps) {
   return (
-    // `Container(color: card, borderRadius: radiusBig, clipBehavior: antiAlias)`.
-    <div className={styles.card}>
+    <div className={styles.shell} data-reward-card="imageTop">
       <RewardImageHero item={item} />
-      {/* `Padding(paddingSmall) > Column(stretch, spacing: spacingMedium)`. */}
+      {/* `Padding(paddingSmall) > Column(min, stretch, spacing: spacingMedium)`. */}
       <div className={styles.body}>
-        {/*
-          `SizedBox(height: 42) > Align(topCenter) > Text(maxLines: 2, ellipsis)`.
-          Two lines of `h2` are reserved whether the title needs one or two, so
-          every card in a column lines up.
-        */}
-        <div className={styles.titleSlot}>
-          <span className={styles.title}>{item.title}</span>
-        </div>
-        <span className={styles.points}>{formatThousands(item.pointsCost)} pts</span>
+        <RewardTitle title={item.title} maxLines={2} reserveTwoLines />
+        <RewardPointsCost pointsCost={item.pointsCost} />
         <ShowcasePrimaryButton text={buttonText} fullWidth />
       </div>
     </div>
   );
 }
 
-/** `RewardImageHero` — `AspectRatio(1.5) > Stack(expand)`. */
-function RewardImageHero({ item }: { item: ShowcasePointsStoreItem }) {
-  const src = showcaseAssetOrNetwork(item.imageUrl, item.imageAsset ?? 'reward_bring_friend.png');
+/**
+ * `RewardCardLayout.thumbLeft` — a full-width row.
+ *
+ * Square thumb leading, title over an inline price tag + cost, action trailing,
+ * hairline rule beneath. Scans faster than a grid when titles are long, which
+ * is the case the two-line clamp papers over — so the title takes the full
+ * width and the clamp stops deciding what a reward is called.
+ */
+function RewardCardThumbLeft({ item, buttonText }: ArrangementProps) {
   return (
-    <div className={styles.hero}>
-      {/*
-        `key` remounts the frame whenever the photo changes — a category switch
-        swaps the whole store, and without the reset one dead URL would pin this
-        slot to the empty box forever. Resetting in an effect is a lint error in
-        this package (see ../../../CLAUDE.md).
-      */}
-      <RewardPhoto key={src} src={src} alt={item.title} />
-      {/* `Positioned(top: spacingMedium, right: spacingMedium)`. */}
-      <span className={styles.priceTag}>{item.priceLabel}</span>
+    // `Container(padding: symmetric(vertical: spacingLarge),
+    // border: Border(bottom: divider @ dividerThickness))`.
+    <div className={styles.row} data-reward-card="thumbLeft">
+      {/* `SizedBox(width: 76)` — an asset-bound dimension, not a spacing token. */}
+      <div className={styles.thumb}>
+        <RewardImageHero item={item} fit="square" showPriceTag={false} rounded />
+      </div>
+      {/* `Expanded(child: _RowMeta)` — `Column(start, spacing: spacingSmall)`. */}
+      <div className={styles.rowMeta}>
+        <RewardTitle title={item.title} maxLines={1} align="left" />
+        {/* `Row(mainAxisSize: min, spacing: spacingMedium)` — the tag moves inline. */}
+        <div className={styles.rowInline}>
+          <RewardPriceTag label={item.priceLabel} />
+          <RewardPointsCost pointsCost={item.pointsCost} variant="h3" align="left" />
+        </div>
+      </div>
+      <ShowcasePrimaryButton text={buttonText} />
     </div>
   );
 }
 
-/** `Image(fit: BoxFit.cover, errorBuilder: ColoredBox(card))`. */
-function RewardPhoto({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  if (failed) return null;
+/**
+ * `RewardCardLayout.poster` — one reward, given the whole deck.
+ *
+ * THE ACTION STAYS INSIDE THE POSTER. Lifting it out to a single pinned button
+ * under the deck would leave the card without the one element the reward-card
+ * contract says it carries, and would make the button ambiguous mid-swipe —
+ * halfway between two posters it belongs to neither.
+ */
+function RewardCardPoster({ item, buttonText }: ArrangementProps) {
   return (
-    <img
-      className={styles.photo}
-      src={src}
-      alt={alt}
-      onError={() => {
-        setFailed(true);
-      }}
-    />
+    <div className={cx(styles.shell, styles.poster)} data-reward-card="poster">
+      <RewardImageHero item={item} fit="flex" />
+      <div className={styles.body}>
+        <RewardTitle title={item.title} maxLines={2} reserveTwoLines />
+        <RewardPointsCost pointsCost={item.pointsCost} variant="h1" />
+        <ShowcasePrimaryButton text={buttonText} fullWidth />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * `RewardCardLayout.tile` — the dense square used inside a cost band, three to
+ * a row: square image with the tag in its corner, one line of title, a small
+ * cost, and a small full-width action.
+ *
+ * The button's overrides are CSS STRINGS rather than resolved values, which is
+ * how ../support/ShowcasePrimaryButton.tsx keeps a call site inside the token
+ * system (`textStyle: pSmall`, `padding: all(spacingSmall)` in the Dart).
+ */
+function RewardCardTile({ item, buttonText }: ArrangementProps) {
+  return (
+    <div className={styles.shell} data-reward-card="tile">
+      <RewardImageHero item={item} fit="square" />
+      {/* `Padding(spacingMedium) > Column(min, stretch, spacing: spacingSmall)`. */}
+      <div className={styles.tileBody}>
+        <RewardTitle title={item.title} maxLines={1} variant="p" />
+        <RewardPointsCost pointsCost={item.pointsCost} variant="pSmall" />
+        <ShowcasePrimaryButton
+          text={buttonText}
+          fullWidth
+          font="var(--sc-type-p-small)"
+          letterSpacing="var(--sc-type-p-small-ls)"
+          padding="var(--sc-spacing-small)"
+        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * `RewardCardLayout.hero` — the promoted reward, full bleed.
+ *
+ * The image runs edge to edge with the price tag in its corner; title, cost and
+ * action ride the bottom of the image over a scrim. Same five elements as every
+ * other arrangement, stacked instead of listed.
+ */
+function RewardCardHero({ item, buttonText }: ArrangementProps) {
+  return (
+    // `AspectRatio(16 / 9) > Stack(fit: expand)`.
+    <div className={styles.hero} data-reward-card="hero">
+      <RewardImageHero item={item} fit="absolute" />
+      {/* `_HeroScrim` — keeps the overlaid text legible over any photograph. */}
+      <div className={styles.heroScrim} aria-hidden="true" />
+      {/* `Positioned(left/right/bottom: 0) > Padding(paddingSmall) > Column`. */}
+      <div className={styles.heroBody}>
+        <RewardTitle title={item.title} maxLines={1} variant="h1" />
+        <RewardPointsCost pointsCost={item.pointsCost} />
+        <ShowcasePrimaryButton text={buttonText} fullWidth />
+      </div>
+    </div>
   );
 }

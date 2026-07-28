@@ -6,6 +6,13 @@
 // content height — a CSS `grid` with row tracks would instead stretch every row
 // to its tallest card and leave gaps under the short ones, which is exactly the
 // layout the Dart's two `Expanded(Column)`s avoid.
+//
+// TWO ARRANGEMENTS RENDER IT: `cardGrid` gives it the whole store, and
+// `storefrontHero` gives it everything but the promoted reward. Neither passes
+// a card layout, so both get the shipped `imageTop` card
+// (./layouts/, ./RewardCard.tsx). ./RewardBandSection.tsx does NOT use it — a
+// cost band is genuinely row-major, so it takes a three-track grid instead;
+// that contrast is spelled out in ./RewardBandSection.module.css.
 
 import type { ShowcasePointsStoreItem } from './mockPointsStore';
 import { RewardCard } from './RewardCard';

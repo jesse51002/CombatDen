@@ -1,54 +1,55 @@
-// Ports ../../../../../CRM/lib/showcase/rewards_showcase.dart — an exact visual
-// clone of the member app's POINTS STORE (`PointsStoreScreen`): the Points
-// Store / My Rewards tabs, the sparkle "YOU EARNED — POINTS" hero over the
-// member's balance, and the two-column store of redeemable items.
+// The member app's POINTS STORE (`PointsStoreScreen`) — the Points Store / My
+// Rewards tabs, the sparkle "YOU EARNED — POINTS" hero over the member's
+// balance, and the store of redeemable items.
+//
+// Ports ../../../../../MobileApp/lib/features/rewards/presentation/layouts/
+// rewards_layout.dart: this file is the FRAME plus the `rewards_format` switch,
+// exactly as `RewardsLayout` is. It was a port of `CRM/lib/showcase/
+// rewards_showcase.dart` when the store had one arrangement; the CRM clone has
+// no format seam, so the member app is now the port of record and the five
+// bodies live in ./rewards/layouts/.
 //
 // NOT to be confused with ./RewardsCardShowcase.tsx, which ports
 // `rewards_card_showcase.dart` — the animated post-class rewards CELEBRATION.
 // The two Dart files are named that way and the ports keep their names, because
-// a reviewer runs the two side by side.
+// a reviewer runs the two side by side. This screen is registered as `store`;
+// that one is registered as `rewards`.
 //
-// A STATIC surface. `loop` / `onCycleComplete` exist on the Dart widget only to
-// keep the seven screens' API uniform and are unused there; the port simply
-// does not take them, because nothing in this browser passes them and an
-// ignored prop is a lie about what the screen does. The one thing that does
-// animate is the hero's sparkle scatter, which fires once on mount
-// (./rewards/SparkleHero.tsx).
+// THE FRAME IS PART OF THE ARRANGEMENT, which is why the switch lives here and
+// not one level down. Dart's own note: the formats differ in whether the
+// headline scrolls away or pins, and that is a question about the frame rather
+// than about its contents. Three arrangements scroll as one surface and pass
+// `bodyScroll`; two pin their chrome and scroll only the store, so they must
+// NOT — their inner `Expanded` scroller needs a body with a definite height,
+// and a second scroller around it would fight it.
 //
-// WHAT IS THE GYM'S AND WHAT IS THE MEMBER'S. `gymName` / `gymLogoSrc` are the
-// HOST's gym identity and are NOT customization slots — a theme pick must never
-// rename the mock's gym. `rewards` is the gym's real catalogue. Everything else
-// on this screen — the streak, the points balance, the rank badge — is
-// PER-MEMBER chrome and stays sample data even when a gym's rewards are
-// injected (rewards_showcase.dart:18-20).
+// A STATIC SURFACE. `loop` / `onCycleComplete` exist on the Dart showcase
+// widget only to keep the seven screens' API uniform and are unused there; the
+// port does not take them. The one thing that animates is the hero's sparkle
+// scatter, which fires once on mount (./rewards/SparkleHero.tsx).
 //
-// IT OVERFLOWED DELIBERATELY, AND NOW IT SCROLLS. Dart wraps the column in
-// `ClipRect > OverflowBox(maxHeight: infinity, alignment: topCenter)`: the
-// store lays out at its natural height, top-aligned, and whatever falls past
-// the phone's edge is CLIPPED. That was the only option in a preview with no
-// scroller, but the surface it clips is the member app's `PointsStoreScreen`,
-// which scrolls on a real device — and the store grid is exactly the place
-// where clipping hides the thing being sold (the second row of redeemable
-// items). So the body opts into `bodyScroll` and the column keeps growing.
+// WHAT IS THE GYM'S AND WHAT IS THE MEMBER'S: see ./rewards/rewardsLayoutData.ts.
 //
-// THE HERO STILL ESCAPES ITS BOX. `bodyScroll` also makes the body clip
-// horizontally (see ../support/ShowcaseScaffold.tsx), which would have been
-// fatal for ./rewards/SparkleHero.tsx — its scatter is `Clip.none` and reaches
-// 172px either side of centre. It survives because the hero is full-bleed: at
-// the phone's 390 logical px the farthest sparkle lands at x = 23 and x = 367,
-// inside the body on both sides. That is why scrolling is opt-in per screen
-// rather than a global flip; the four celebration surfaces do NOT opt in.
+// THE HERO ESCAPES ITS BOX AND SURVIVES ANYWAY. The body clips horizontally in
+// both modes (see ./support/ShowcaseScaffold.tsx), which would have been fatal
+// for the scatter — it is `Clip.none` and reaches 172px either side of centre.
+// It survives because the hero is full-bleed: at the phone's 390 logical px the
+// farthest sparkle lands at x = 23 and x = 367, inside the body on both sides.
 
-import { PointsHeadline } from './rewards/PointsHeadline';
-import { RewardsTabs } from './rewards/RewardsTabs';
+import type { ReactElement } from 'react';
+
+import { FORMAT_SLOTS, REWARDS_FORMATS, useFormat } from './formats';
+import { RewardsCardGrid } from './rewards/layouts/RewardsCardGrid';
+import { RewardsListRows } from './rewards/layouts/RewardsListRows';
+import { RewardsPosterDeck } from './rewards/layouts/RewardsPosterDeck';
+import { RewardsPriceLadder } from './rewards/layouts/RewardsPriceLadder';
+import { RewardsStorefrontHero } from './rewards/layouts/RewardsStorefrontHero';
 import type { ShowcasePointsStoreItem } from './rewards/mockPointsStore';
 import { SHOWCASE_POINTS_STORE_DATA } from './rewards/mockPointsStore';
-import { StoreGrid } from './rewards/StoreGrid';
-import styles from './RewardsShowcase.module.css';
+import type { RewardsLayoutData } from './rewards/rewardsLayoutData';
 import type { ShowcaseReward } from './showcaseContent';
 import { ShowcaseBottomNav } from './support/ShowcaseBottomNav';
 import { ShowcaseScaffold } from './support/ShowcaseScaffold';
-import { ShowcaseTopbar } from './support/ShowcaseTopbar';
 
 /** `RewardsShowcase.gymName`'s default. */
 const DEFAULT_GYM_NAME = 'Your Gym';
@@ -59,7 +60,7 @@ const DEFAULT_GYM_NAME = 'Your Gym';
  *
  * The card's own `imageAsset` stays absent for an injected reward, exactly as
  * Dart leaves it null: the gym's photo URL is what renders, and a dead one
- * degrades to the flat `card` rectangle (./rewards/RewardCard.tsx).
+ * degrades to the flat `card` rectangle (./rewards/rewardCardParts.tsx).
  */
 export function storeItemsFor(
   rewards: readonly ShowcaseReward[] | null | undefined,
@@ -89,29 +90,52 @@ export function RewardsShowcase({
   gymLogoSrc,
   rewards,
 }: RewardsShowcaseProps) {
-  const data = SHOWCASE_POINTS_STORE_DATA;
-  const items = storeItemsFor(rewards);
+  const format = useFormat(FORMAT_SLOTS.rewards, REWARDS_FORMATS, 'cardGrid');
+  const sample = SHOWCASE_POINTS_STORE_DATA;
+
+  // One payload, handed unchanged to whichever arrangement renders. There is
+  // deliberately no second source for a variant to reach into.
+  const data: RewardsLayoutData = {
+    gymName,
+    gymLogoSrc,
+    streakDays: sample.streakDays,
+    pointsLabel: sample.pointsLabel,
+    rankBadgeAsset: sample.rankBadgeAsset,
+    totalPoints: sample.totalPoints,
+    items: storeItemsFor(rewards),
+  };
+
+  // Exhaustive over `RewardsFormat` — a new arrangement fails to typecheck here
+  // until it is built.
+  let body: ReactElement;
+  switch (format) {
+    case 'cardGrid':
+      body = <RewardsCardGrid data={data} />;
+      break;
+    case 'listRows':
+      body = <RewardsListRows data={data} />;
+      break;
+    case 'posterDeck':
+      body = <RewardsPosterDeck data={data} />;
+      break;
+    case 'priceLadder':
+      body = <RewardsPriceLadder data={data} />;
+      break;
+    case 'storefrontHero':
+      body = <RewardsStorefrontHero data={data} />;
+      break;
+  }
+
+  // See the header: the two pinned arrangements own their own scroller.
+  const bodyScroll = format !== 'posterDeck' && format !== 'priceLadder';
 
   return (
     <ShowcaseScaffold
       horizontalPadding="none"
-      bodyScroll
+      bodyScroll={bodyScroll}
       bottomNav={<ShowcaseBottomNav selected="reward" />}
     >
-      {/* `Column(mainAxisSize: min, stretch, spacing: spacingBig)`. */}
-      <div className={styles.store}>
-        <ShowcaseTopbar
-          mode="nameOnly"
-          gymName={gymName}
-          logoSrc={gymLogoSrc}
-          streakDays={data.streakDays}
-          pointsLabel={data.pointsLabel}
-          rankBadgeAsset={data.rankBadgeAsset}
-        />
-        <RewardsTabs active="pointsStore" />
-        <PointsHeadline points={data.totalPoints} />
-        <StoreGrid items={items} />
-      </div>
+      {body}
     </ShowcaseScaffold>
   );
 }
