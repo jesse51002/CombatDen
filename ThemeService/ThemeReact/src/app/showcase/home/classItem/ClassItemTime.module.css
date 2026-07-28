@@ -1,0 +1,34 @@
+/*
+ * Styles for ./ClassItemTime.tsx
+ * (ports .../class_schedule/class_item/class_item_time.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* Inline form — `Text('$timeRange ($durationMinutes min)', style: p)`. */
+.meta {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+/* `Column(start, spacing: spacingTiny)` — the gutter form. */
+.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-tiny);
+}
+
+/* `Text(startTime, style: h3)`. */
+.start {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text);
+}
+
+/* `Text('$durationMinutes min', style: pSmall.copyWith(color: text2nd))`. */
+.duration {
+  font: var(--sc-type-p-small);
+  letter-spacing: var(--sc-type-p-small-ls);
+  color: var(--sc-text-2nd);
+}

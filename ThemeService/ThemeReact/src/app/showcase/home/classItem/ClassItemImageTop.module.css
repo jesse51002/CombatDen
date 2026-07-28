@@ -1,0 +1,41 @@
+/*
+ * Styles for ./ClassItemImageTop.tsx
+ * (ports .../class_item/layouts/class_item_image_top.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding, vertical: spacingMedium)` over
+ * `Column(stretch, spacing: spacingLarge)`.
+ */
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  padding: var(--sc-spacing-medium) var(--sc-screen-padding-x);
+}
+
+/* `ClipRRect(radiusSmall, child: AspectRatio(16 / 9))` at full column width. */
+.photo {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* `ClassItemMeta` at the default gap — `Column(start, spacing: spacingMedium)`. */
+.info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+}

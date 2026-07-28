@@ -1,22 +1,33 @@
 // Ports ../../../../../../CRM/lib/showcase/home_showcase.dart — an exact visual
-// clone of the member app's HOME screen (`HomeScreen` -> `HomeNotBookedBody`):
-// the big-logo topbar, a pinned date strip, and the day-by-day class schedule
-// under the themed bottom nav.
+// clone of the member app's HOME screen (`HomeScreen` -> `HomeBody`): the
+// big-logo topbar, the date rail, and the day-by-day class schedule under the
+// themed bottom nav.
 //
 // A STATIC surface: nothing here animates, which is why it takes no loop knobs.
 // It DOES scroll (`bodyScroll`) — the schedule board is a multi-day list on a
 // real device, and previewing one clipped day would sell a shorter app than the
-// one being licensed. See ./HomeNotBookedBody.tsx for the board's own shape.
+// one being licensed. Every arrangement keeps that one scroller, `dayPager`
+// included: its pager rides INSIDE it rather than beside it (see
+// ./layouts/HomeDayPager.tsx).
+//
+// WHICH ARRANGEMENT IT RENDERS is the tenant's `home_format` slot, resolved by
+// `useFormat` in the store's own order — the preview override, then the theme's
+// classified pick, then `agendaList`, the value that ships. The topbar is built
+// here and handed DOWN, because it is the same in every arrangement: its own
+// layout is the tenant's `app_shell_format`, not home's, so no home layout has
+// any business changing what it is given.
+//
 // `gymName` / `gymLogoSrc` are the HOST's gym identity and are NOT customization
-// slots — a theme pick must never rename the mock's gym. `themeTabPreview`
-// selects the topbar's middle logo rung (see ../support/ShowcaseTopbar.tsx).
+// slots — a theme pick must never rename the mock. `themeTabPreview` selects the
+// topbar's middle logo rung (see ../support/ShowcaseTopbar.tsx).
 
+import { FORMAT_SLOTS, HOME_FORMATS, useFormat } from '../formats';
 import type { ShowcaseClassInfo } from '../showcaseContent';
 import { ShowcaseBottomNav } from '../support/ShowcaseBottomNav';
 import { ShowcaseScaffold } from '../support/ShowcaseScaffold';
 import { ShowcaseTopbar } from '../support/ShowcaseTopbar';
 
-import { HomeNotBookedBody } from './HomeNotBookedBody';
+import { HomeLayoutBody } from './HomeLayoutBody';
 
 // Dummy non-identity data: the streak / points / rank chips in the info bar.
 // Gym name + logo come from the host.
@@ -39,13 +50,15 @@ export function HomeShowcase({
   classes,
   themeTabPreview = false,
 }: HomeShowcaseProps) {
+  const format = useFormat(FORMAT_SLOTS.home, HOME_FORMATS, 'agendaList');
   return (
     <ShowcaseScaffold
       horizontalPadding="none"
       bodyScroll
       bottomNav={<ShowcaseBottomNav selected="home" />}
     >
-      <HomeNotBookedBody
+      <HomeLayoutBody
+        format={format}
         classes={classes}
         topbar={
           <ShowcaseTopbar

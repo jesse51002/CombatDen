@@ -70,6 +70,16 @@ export default tseslint.config(
               // Both spellings of the token modules are listed on purpose: the
               // pattern is matched against the IMPORT STRING, so a rename that
               // changed only the case would silently open the gate.
+              //
+              // AND THAT IS WHY THESE GLOBS CANNOT BE ANCHORED. `../widgets/X`
+              // is the same string whether it leaves the island or stays inside
+              // it, so `**/app/widgets/**` — the obvious "fix" when a
+              // showcase-internal folder named `widgets` trips this — matches
+              // NEITHER, and quietly lets the showcase import the admin chrome.
+              // The constraint is therefore a NAMING one: no directory under
+              // `src/app/showcase/` may be called `widgets`, `chrome` or
+              // `browser`, because those three names belong to the surrounding
+              // app and this gate can only see the name.
               group: [
                 '**/tokens/gw',
                 '**/tokens/adminTokens',

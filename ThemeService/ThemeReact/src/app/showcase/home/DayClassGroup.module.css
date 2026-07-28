@@ -1,11 +1,15 @@
 /*
  * Styles for ./DayClassGroup.tsx
- * (ports CRM/lib/showcase/home/day_class_group.dart).
+ * (ports CRM/lib/showcase/home/day_class_group.dart +
+ * MobileApp/.../class_schedule/day_group/day_group_{list,grid}.dart).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
  */
 
 /*
  * `Padding(vertical: spacingBig)` over `Column(stretch, spacing: spacingLarge)`.
+ *
+ * That gap is BOTH the label-to-classes gap and, in the stacked case, Dart's
+ * `DayGroupList(spacing: spacingLarge)` — the rows are direct children here.
  */
 .group {
   display: flex;
@@ -26,4 +30,20 @@
   font: var(--sc-type-h2-bold);
   letter-spacing: var(--sc-type-h2-bold-ls);
   color: var(--sc-text);
+}
+
+/*
+ * `DayGroupGrid` — `Padding(horizontal: screenHorizontalPadding)` over rows of
+ * two `Expanded` cards, `spacing: spacingLarge` on both axes.
+ *
+ * A CSS grid rather than hand-paired rows: Dart pairs them so an
+ * `IntrinsicHeight` can equalise each pair without a second scroll view, and a
+ * grid row already stretches its cells to the tallest one — the same result
+ * from the layout algorithm instead of from a loop.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--sc-spacing-large);
+  padding-inline: var(--sc-screen-padding-x);
 }

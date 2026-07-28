@@ -1,92 +1,50 @@
-// Ports ../../../../../../CRM/lib/showcase/home/class_list_item.dart — a clone
-// of MobileApp's `ClassListItem`: one schedule row (name, time, mentor, the
-// demo attending count and booked tick) with the class photo on the right, over
-// a `divider` hairline. The tap is a preview no-op.
+// Ports ../../../../../../CRM/lib/showcase/home/class_list_item.dart and, for
+// the treatment switch, MobileApp's own
+// `lib/features/home/presentation/widgets/class_schedule/class_list_item.dart`.
 //
-// The photo is the injected gym URL when the host supplied one, else the
-// bundled sample (`ShowcaseAsset.imageOrNetwork`). A network photo that fails
-// to load degrades to a flat `card` rectangle rather than a broken-image box —
-// Dart's `errorBuilder`.
+// One class in the schedule.
+//
+// THE DATA PROPS ARE FIXED — every home format hands this the same `classData`
+// and the same `showBookings`. `layout` is PRESENTATION ONLY: it picks which of
+// the treatments in ./classItem/ draws the row, and each of those renders the
+// identical element set (title, time, instructor, attendee count, thumbnail,
+// and the booked mark on a page that carries one). That is what keeps
+// `home_format` an arrangement-only choice.
+//
+// The row's tap is still a preview no-op: this browser has no class-detail
+// screen to open, so — unlike Dart's `ClassItemTap` — no treatment wraps itself
+// in a control. Adding one would add an affordance the shipped screen does not
+// have.
 
-import { useState } from 'react';
-
-import { showcaseAssetOrNetwork } from '../showcaseAssets';
-import { CheckIcon, PersonIcon } from '../support/icons';
-
-import styles from './ClassListItem.module.css';
+import { ClassItemCard } from './classItem/ClassItemCard';
+import { ClassItemDense } from './classItem/ClassItemDense';
+import { ClassItemImageTop } from './classItem/ClassItemImageTop';
+import type { ClassItemLayout } from './classItem/classItemLayout';
+import { ClassItemSpine } from './classItem/ClassItemSpine';
+import { ClassItemTextLeft } from './classItem/ClassItemTextLeft';
 import type { ShowcaseClass } from './homeClass';
 
 export interface ClassListItemProps {
   classData: ShowcaseClass;
   showBookings?: boolean;
+  layout?: ClassItemLayout;
 }
 
-export function ClassListItem({ classData, showBookings = true }: ClassListItemProps) {
-  return (
-    <div className={styles.item}>
-      <div className={styles.row}>
-        <div className={styles.info}>
-          <span className={styles.name}>{classData.name}</span>
-          <span className={styles.meta}>
-            {classData.timeRange} ({String(classData.durationMinutes)} min)
-          </span>
-          <span className={styles.mentor}>{classData.mentor}</span>
-          {classData.attending !== undefined && <BookedCount count={classData.attending} />}
-          {showBookings && classData.isBooked && <BookedConfirmation />}
-        </div>
-        <ClassPhoto classData={classData} />
-      </div>
-      <div className={styles.divider} />
-    </div>
-  );
-}
-
-function ClassPhoto({ classData }: { classData: ShowcaseClass }) {
-  const src = showcaseAssetOrNetwork(
-    classData.imageUrl,
-    classData.imageAsset ?? 'class_photo_1.png',
-  );
-  // `key` remounts the frame whenever the photo changes — a theme switch swaps
-  // the whole class list, and without the reset one dead URL would pin this
-  // slot to the empty box forever. The same trick <ThemedImage> uses, and for
-  // the same reason: resetting in an effect is a lint error in this package.
-  return <ClassPhotoFrame key={src} src={src} />;
-}
-
-function ClassPhotoFrame({ src }: { src: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div className={styles.photo}>
-      {!failed && (
-        <img
-          src={src}
-          alt=""
-          className={styles.photoImg}
-          onError={() => {
-            setFailed(true);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-/** `_BookedConfirmation`. */
-function BookedConfirmation() {
-  return (
-    <span className={styles.booked}>
-      <CheckIcon size={16} className={styles.bookedIcon} />
-      You booked this class!
-    </span>
-  );
-}
-
-/** `_BookedCount`. */
-function BookedCount({ count }: { count: number }) {
-  return (
-    <span className={styles.attending}>
-      <PersonIcon size={16} className={styles.attendingIcon} />
-      {String(count)} attending
-    </span>
-  );
+export function ClassListItem({
+  classData,
+  showBookings = true,
+  layout = 'textLeftThumbRight',
+}: ClassListItemProps) {
+  switch (layout) {
+    case 'textLeftThumbRight':
+      return <ClassItemTextLeft classData={classData} showBookings={showBookings} />;
+    case 'imageTop':
+      return <ClassItemImageTop classData={classData} showBookings={showBookings} />;
+    case 'spine':
+      return <ClassItemSpine classData={classData} showBookings={showBookings} />;
+    case 'dense':
+      return <ClassItemDense classData={classData} showBookings={showBookings} />;
+    case 'card':
+      return <ClassItemCard classData={classData} showBookings={showBookings} />;
+  }
 }

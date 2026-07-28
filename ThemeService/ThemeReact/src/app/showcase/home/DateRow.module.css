@@ -1,26 +1,14 @@
 /*
- * Styles for ./HomeNotBookedBody.tsx
- * (ports CRM/lib/showcase/home/home_not_booked_body.dart +
- * MobileApp/lib/features/home/presentation/widgets/home_body.dart).
+ * Styles for ./DateRow.tsx
+ * (ports MobileApp/.../class_schedule/date_row.dart).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
- */
-
-/*
- * The scroller's content column — `CustomScrollView`'s slivers, in order.
  *
- * The bottom padding is the room the persistent bottom nav needs, so the last
- * day scrolls clear of it instead of ending underneath it. It is the same 64
- * the profile screen's `_kBottomScrollPadding` reserves, for the same reason.
+ * Lifted unchanged from the shipped HomeNotBookedBody.module.css, so the
+ * arrangement that ships keeps exactly the rail it had.
  */
-.body {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  padding-bottom: 64px;
-}
 
 /*
- * `SliverPersistentHeader(pinned: true, delegate: PinnedDateRowDelegate)`.
+ * `SliverPersistentHeader(pinned: true, delegate: DateRowHeaderDelegate)`.
  *
  * `position: sticky` IS a pinned sliver: the row scrolls up with the topbar
  * until it reaches the top of the scroller, then stays while the days move
@@ -29,10 +17,9 @@
  * does because it paints its own box.
  *
  * `Container(color: backgroundColor, border bottom: text3rd, padding:
- * only(top: spacingSmall, bottom: spacingTiny))` — `date_row.dart`'s own box,
- * NOT the flattened clone's `symmetric(horizontal: paddingBig)`. The horizontal
- * inset belongs to the scroller inside it, which is what lets a pill scroll all
- * the way to the edge instead of stopping at a padding wall.
+ * only(top: spacingSmall, bottom: spacingTiny))` — `date_row.dart`'s own box.
+ * The horizontal inset belongs to the scroller inside it, which is what lets a
+ * pill scroll all the way to the edge instead of stopping at a padding wall.
  */
 .dateStrip {
   position: sticky;
@@ -56,16 +43,24 @@
 }
 
 /*
+ * `SliverPersistentHeader(pinned: false)` — the rail scrolls away with the
+ * content instead of holding the top. `nextUpHero`'s call, and the reason it
+ * pairs that with the segmented chips: a rail that leaves has to read as a
+ * control while it is there, not as a permanent index.
+ */
+.unpinned {
+  position: static;
+}
+
+/*
  * `ListView.separated(scrollDirection: horizontal, padding: only(left:
  * paddingBig, right: spacingMedium), separatorBuilder: SizedBox(spacingBig))`.
  *
  * IT IS MEANT TO RUN OFF THE EDGE. The real board carries 14 days and grows to
  * 60, so this row has always been a scroller whose trailing pills sit past the
- * screen — the app centres the selected one rather than fitting them all. The
- * flattened showcase clone could spread three pills `space-between` because it
- * had exactly three and no scroller; with a real window that would compress the
- * gaps until the labels touched. `width: max-content` keeps the pills at their
- * natural pitch and lets the row scroll, which is the widget being ported.
+ * screen — the app centres the selected one rather than fitting them all.
+ * `width: max-content` keeps the pills at their natural pitch and lets the row
+ * scroll, which is the widget being ported.
  */
 .dateRow {
   display: flex;

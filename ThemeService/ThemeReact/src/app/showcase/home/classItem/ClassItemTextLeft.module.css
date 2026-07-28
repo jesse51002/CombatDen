@@ -1,0 +1,58 @@
+/*
+ * Styles for ./ClassItemTextLeft.tsx
+ * (ports .../class_item/layouts/class_item_text_left.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ *
+ * VALUE FOR VALUE THE SHIPPED ROW. Every declaration here was lifted unchanged
+ * from the flat ../ClassListItem.module.css this treatment replaces, and the
+ * class NAMES were kept too so the baseline fixture stays byte-identical.
+ */
+
+/* `Column(stretch, spacing: spacingLarge)` — the row over its hairline. */
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding, vertical: spacingMedium)` over
+ * `Row(center, spacing: spacingLarge)`.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+  padding: var(--sc-spacing-medium) var(--sc-screen-padding-x);
+}
+
+/* `Expanded(child: ClassItemMeta)` — `Column(start, spacing: spacingMedium)`. */
+.info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * `ClipRRect(radiusSmall)` around a 122x73 `BoxFit.cover` image. The box keeps
+ * its size when the image fails, showing a flat `card` rectangle — Dart's
+ * `errorBuilder`.
+ */
+.photo {
+  flex: 0 0 auto;
+  width: 122px;
+  height: 73px;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

@@ -1,5 +1,6 @@
 /*
- * Styles for ./DateTab.tsx (ports CRM/lib/showcase/home/date_tab.dart).
+ * Styles for ./DateTab.tsx (ports CRM/lib/showcase/home/date_tab.dart +
+ * MobileApp/.../class_schedule/date_tab.dart's `DateTabStyle`).
  * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
  */
 
@@ -14,7 +15,7 @@
 .tab {
   display: block;
   padding: var(--sc-spacing-medium) var(--sc-spacing-large);
-  border: none;
+  border: 0;
   border-bottom: var(--sc-button-border) solid transparent;
   background: none;
   font: var(--sc-type-h2);
@@ -24,7 +25,28 @@
   cursor: pointer;
 }
 
+/* `DateTabStyle.underline` selected — `Border(bottom: primary, buttonBorder)`. */
 .selected {
   border-bottom-color: var(--sc-primary);
   color: var(--sc-primary);
+}
+
+/*
+ * `DateTabStyle.segmented` — a bordered chip per day. The full border replaces
+ * the bottom-only one, so the pill reads as a control rather than as a rail.
+ */
+.segmented {
+  border: var(--sc-divider-thickness) solid var(--sc-divider);
+  border-radius: var(--sc-radius-small);
+}
+
+/*
+ * Selected chip — filled with `primary`, label in `primaryButtonText` so it
+ * stays legible on whatever the tenant's primary turns out to be. AFTER
+ * `.selected` on purpose: it has to beat that rule's `border-bottom-color`.
+ */
+.segmented.selected {
+  background: var(--sc-primary);
+  border-color: var(--sc-primary);
+  color: var(--sc-primary-button-text);
 }
