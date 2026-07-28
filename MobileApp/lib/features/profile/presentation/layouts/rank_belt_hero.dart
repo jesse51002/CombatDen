@@ -15,7 +15,6 @@ import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
 /// The streak sits over the belt band rather than under it, and the
 /// small belt beside "Next Rank" reads at a glance next to the big one.
-const double _kOverlayHeroHeight = 120;
 const double _kInlineBadgeSize = 56;
 
 /// `RankFormat.beltHero` — the belt leads.
@@ -52,10 +51,7 @@ class RankBeltHero extends StatelessWidget {
                   rankBadgeAsset: profile.rankBadgeLargeAsset,
                   layout: RankHeaderLayout.beltBleed,
                 ),
-                RankStreakHero(
-                  weeks: profile.streakWeeks,
-                  maxHeight: _kOverlayHeroHeight,
-                ),
+                RankStreakHero(weeks: profile.streakWeeks),
               ],
             ),
             NextRankProgress(

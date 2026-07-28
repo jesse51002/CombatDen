@@ -13,7 +13,6 @@ import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
 /// The hero scaled to a cell. Small enough that its sparkles read as
 /// texture rather than as the screen's main event.
-const double _kTileHeroHeight = 108;
 
 /// `RankFormat.statTiles` — a dashboard.
 ///
@@ -43,28 +42,30 @@ class RankStatTiles extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             spacing: DesignConstants.spacingMedium,
             children: [
+              // The streak hero sits ABOVE the board, unwrapped. It is
+              // the app's celebration signature and renders at its own
+              // intrinsic size; a tile imposes a fixed height, which is
+              // what forced the earlier scale-down that read as squashed
+              // rather than small. The board stays a board beneath it.
+              RankStreakHero(weeks: profile.streakWeeks),
               _TileRow(
-                left: RankStreakHero(
-                  weeks: profile.streakWeeks,
-                  maxHeight: _kTileHeroHeight,
-                ),
-                right: RankHeader(
+                left: RankHeader(
                   rankTitle: profile.rankTitle,
                   rankSubtitle: profile.rankSubtitle,
                   rankBadgeAsset: profile.rankBadgeLargeAsset,
                   layout: RankHeaderLayout.tile,
                 ),
+                right: const TimeframeSelector(
+                  layout: TimeframeLayout.tile,
+                ),
               ),
-              _TileRow(
-                left: NextRankSection(
+              RankTile(
+                child: NextRankSection(
                   title: profile.nextRankTitle,
                   progressLabel: profile.nextRankProgressLabel,
                   progress: profile.nextRankProgress,
                   badgeAsset: profile.nextRankBadgeAsset,
                   layout: NextRankLayout.tile,
-                ),
-                right: const TimeframeSelector(
-                  layout: TimeframeLayout.tile,
                 ),
               ),
             ],

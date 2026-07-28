@@ -11,7 +11,6 @@ import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/ti
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
 /// The streak demotes to a line so the arc keeps the top of the screen.
-const double _kLineHeroHeight = 76;
 
 /// `RankFormat.progressFirst` — the arc leads.
 ///
@@ -50,10 +49,7 @@ class RankProgressFirst extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: DesignConstants.spacingLarge,
           children: [
-            RankStreakHero(
-              weeks: profile.streakWeeks,
-              maxHeight: _kLineHeroHeight,
-            ),
+            RankStreakHero(weeks: profile.streakWeeks),
             Padding(
               padding: EdgeInsets.symmetric(
                 horizontal: DesignConstants.paddingBig,

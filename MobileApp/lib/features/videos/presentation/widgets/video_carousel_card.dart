@@ -37,7 +37,6 @@ class VideoCarouselCard extends StatelessWidget {
 
   static const double _kCardWidth = 258;
   static const double _kThumbHeight = 145;
-  static const double _kTallAspect = 3 / 4;
   static const double _kWideAspect = 16 / 9;
 
   @override
@@ -125,9 +124,14 @@ class _Captioned extends StatelessWidget {
       clipBehavior: Clip.hardEdge,
       child: Stack(
         children: [
+          // 16:9, always. YouTube serves thumbnails at a fixed aspect,
+          // so a card that re-proportions the artwork either crops the
+          // subject or letterboxes it. A layout may make the CARD taller
+          // — here by riding a caption band over it — but the image
+          // itself is not a free variable.
           VideoCardThumb.ratio(
             video: video,
-            aspectRatio: VideoCarouselCard._kTallAspect,
+            aspectRatio: VideoCarouselCard._kWideAspect,
           ),
           Positioned(
             left: 0,

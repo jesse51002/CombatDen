@@ -10,7 +10,6 @@ import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/ra
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 
 /// The streak reads as a line in the "now" half, not as the hero.
-const double _kLineHeroHeight = 76;
 
 /// `RankFormat.splitRank` — now over next.
 ///
@@ -48,10 +47,7 @@ class RankSplitRank extends StatelessWidget {
                 layout: RankHeaderLayout.beltLeft,
               ),
             ),
-            RankStreakHero(
-              weeks: profile.streakWeeks,
-              maxHeight: _kLineHeroHeight,
-            ),
+            RankStreakHero(weeks: profile.streakWeeks),
           ],
         ),
         const RankGraphStrip(),
