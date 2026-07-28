@@ -395,12 +395,14 @@ reveal + post-class celebration animations deterministically — read by
 stage (`shared/widgets/post_class/intro/`), the points intro controller
 (`_PointSphere`), and the streak badge pulse. See `tools/capture/README.md`.
 
-Also outside `lib/`, **`docs/`** holds design docs for this app. Today that is
-`layout_and_motion_formats.md` — the layout and motion enum library (one
-whole-screen layout enum per major screen, plus a motion personality and five
-per-surface motion slots), with `layout_formats_preview.html` rendering every
-value as a wireframe specimen. **It is a design doc, not the contract: the code
-is.** Where the two disagree, fix the doc.
+There is deliberately **no prose spec for the formats.** One existed while they
+were being designed and it drifted wrong in about fifteen places within a day —
+values that were removed, an animation direction stated backwards, a
+decomposition that turned out to be unbuildable. The enums and their
+`test/*_invariants_test.dart` gates ARE the contract: the gates assert what a
+value may and may not change, and they fail when it is broken, which a document
+cannot. Read `lib/core/formats/` and the gates. Do not reintroduce a parallel
+description of them.
 
 ## Layout formats
 
