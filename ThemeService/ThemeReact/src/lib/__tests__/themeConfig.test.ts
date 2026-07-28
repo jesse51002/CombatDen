@@ -54,12 +54,31 @@ describe('parseThemeConfig against the real ApexMMA wire shape', () => {
     expect(config.colors['broken']?.color).toBeNull();
   });
 
+  it('reads the run classification bucket', () => {
+    expect(config.category).toBe('Fighting');
+  });
+
   it('collapses images / fonts / icons to flat maps and drops empty slots', () => {
     expect(config.images['logo_primary']).toContain('logo_primary.png');
     expect(config.images['trophy_image']).toBeUndefined();
     expect(config.fonts['body']).toBe('Roboto Flex');
     expect(config.fonts['display']).toBe('Space Grotesk');
     expect(config.icons['nav_home']).toContain('nav_home');
+  });
+
+  it('reads each image complexity tier, skipping a slot that has none', () => {
+    expect(config.imageComplexity['logo_primary']).toBe('high');
+    expect(config.imageComplexity['celebration_image']).toBe('high');
+    expect(config.imageComplexity['trophy_image']).toBeUndefined();
+  });
+
+  it('keeps the font prose the flat map has nowhere to put', () => {
+    const display = config.fontFaces['display'];
+    expect(display?.family).toBe('Space Grotesk');
+    expect(display?.category).toBe('sans-serif');
+    expect(display?.displayName).toBe('Athletic Modern');
+    expect(display?.description).toContain('confident geometric sans');
+    expect(config.fontFaces['body']?.displayName).toBe('Professional Grotesque');
   });
 
   it('unwraps text_set.texts and drops empty copy', () => {
@@ -75,14 +94,59 @@ describe('parseThemeConfig lossy tolerance', () => {
       const config = parseThemeConfig(raw);
       expect(config.app).toBe('');
       expect(config.designName).toBe('');
+      expect(config.category).toBe('');
       expect(config.colorMode).toBe('dark');
       expect(config.colors).toEqual({});
       expect(config.palette).toEqual({});
       expect(config.images).toEqual({});
+      expect(config.imageComplexity).toEqual({});
       expect(config.fonts).toEqual({});
+      expect(config.fontFaces).toEqual({});
       expect(config.texts).toEqual({});
       expect(config.icons).toEqual({});
     }
+  });
+
+  it('parses a payload written before category / font_set / image_set existed', () => {
+    // The exact shape of a `customization_last_good_json` written by a build
+    // that predates this change: every OLD field resolves, every NEW one
+    // degrades. A returning visitor must not need a network round-trip to get
+    // their theme back, so this is the case that has to keep working.
+    const legacy = { ...APEX_MMA_PAYLOAD };
+    delete legacy['category'];
+    delete legacy['font_set'];
+    delete legacy['image_set'];
+
+    const config = parseThemeConfig(legacy);
+    expect(config.designName).toBe('Apex MMA');
+    expect(config.fonts['display']).toBe('Space Grotesk');
+    expect(config.images['logo_primary']).toContain('logo_primary.png');
+    expect(config.colors['primary']?.color).toEqual({ r: 212, g: 12, b: 26, a: 1 });
+    expect(config.category).toBe('');
+    expect(config.fontFaces).toEqual({});
+    expect(config.imageComplexity).toEqual({});
+  });
+
+  it('drops a font face with no family, keeping the flat map authoritative', () => {
+    // "Absent" and "present but blank" stay one case, exactly as an empty
+    // image URL does — a surface never has to test for both.
+    const config = parseThemeConfig({
+      fonts: { display: 'Space Grotesk' },
+      font_set: {
+        fonts: {
+          display: { family: '', category: 'sans-serif', display_name: 'Ghost' },
+          body: { family: 'Inter' },
+        },
+      },
+    });
+    expect(config.fontFaces['display']).toBeUndefined();
+    expect(config.fonts['display']).toBe('Space Grotesk');
+    expect(config.fontFaces['body']).toEqual({
+      family: 'Inter',
+      category: '',
+      displayName: '',
+      description: '',
+    });
   });
 
   it('skips only the malformed slot, keeping its neighbours', () => {

@@ -7,15 +7,37 @@
   min-width: 0;
 }
 
-.slot {
+/*
+ * The plate caption from ./AssetPlates.module.css, on the specimen's own terms:
+ * identifier left, the small factual classification right, both mono. Reused so
+ * "sans-serif" reads as the same KIND of value as "png" — a fact about the
+ * object, not a badge attached to it.
+ */
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.slot,
+.category {
   margin: 0;
+  min-width: 0;
   font-family: var(--gw-mono);
   font-size: var(--adm-p-small-size);
   letter-spacing: var(--adm-p-small-tracking);
   color: var(--adm-text-2nd);
 }
 
-.missing {
+.category {
+  flex: none;
+  white-space: nowrap;
+}
+
+.missing,
+.noProse {
   margin: 0;
   font-size: var(--adm-p-size);
   letter-spacing: var(--adm-p-tracking);
@@ -33,6 +55,21 @@
   font-weight: 600;
   letter-spacing: -0.02em;
   line-height: 1.05;
+  color: var(--adm-ink);
+}
+
+/*
+ * The run's own name for the face — the type section's answer to a colour's
+ * "Red Corner" (./ColorRole.module.css `.name`). Set in the face like every
+ * pipeline-authored word on this sheet, and at book weight so the family above
+ * stays the heading and this reads as its subtitle rather than a second one.
+ */
+.faceName {
+  margin: calc(-1 * var(--adm-space-small)) 0 0;
+  font-size: clamp(19px, 2vw, 22px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
   color: var(--adm-ink);
 }
 
@@ -61,10 +98,14 @@
   color: var(--adm-ink);
 }
 
-/* A generated paragraph, set at the size body copy is read. */
-.paragraph {
+/*
+ * The run's reasoning, set at the size body copy is read — the same treatment
+ * ./ColorRole.module.css `.description` gives a colour's prose, because it is
+ * the same kind of thing: the engine explaining a decision it made.
+ */
+.description {
   max-width: 68ch;
-  margin: 0;
+  margin: var(--adm-space-small) 0 0;
   font-size: var(--adm-p-big-size);
   line-height: 1.7;
   color: var(--adm-ink);

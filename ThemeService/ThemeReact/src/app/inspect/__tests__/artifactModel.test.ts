@@ -28,8 +28,24 @@ function wireTheme() {
     app: 'combatden',
     display_name: 'CombatDen',
     design_name: 'Apex MMA',
+    category: 'Fighting',
     images: { logo_primary: 'https://cdn/logo.png' },
+    image_set: {
+      images: { logo_primary: { url: 'https://cdn/logo.png', complexity: 'high' } },
+    },
     fonts: { display: 'Space Grotesk', body: 'Roboto Flex' },
+    font_set: {
+      fonts: {
+        display: {
+          family: 'Space Grotesk',
+          category: 'sans-serif',
+          display_name: 'Athletic Modern',
+          description: 'A confident geometric sans with sharp proportions.',
+        },
+        // A face the run produced without prose — the specimen still sets it.
+        body: { family: 'Roboto Flex', category: 'sans-serif' },
+      },
+    },
     icons: { nav_home: 'https://cdn/home.svg' },
     color_set: {
       mode: 'dark',
@@ -146,8 +162,29 @@ describe('buildInspection', () => {
   it('reads the artifact identity', () => {
     expect(inspection.appId).toBe('combatden');
     expect(inspection.designName).toBe('Apex MMA');
+    expect(inspection.category).toBe('Fighting');
     expect(inspection.colorMode).toBe('dark');
     expect(inspection.background).toEqual(rgba(10, 10, 12, 1));
+  });
+
+  it('keeps the font prose that the rest of the app never renders either', () => {
+    const display = inspection.fonts[0];
+    expect(display?.slot).toBe('display');
+    expect(display?.value?.family).toBe('Space Grotesk');
+    expect(display?.value?.category).toBe('sans-serif');
+    expect(display?.value?.displayName).toBe('Athletic Modern');
+    expect(display?.value?.description).toBe(
+      'A confident geometric sans with sharp proportions.',
+    );
+    // A face with no prose is still a produced face; only its prose is a hole.
+    expect(inspection.fonts[1]?.value?.family).toBe('Roboto Flex');
+    expect(inspection.fonts[1]?.value?.description).toBe('');
+  });
+
+  it('carries each image complexity tier beside its URL', () => {
+    const logo = inspection.images.find((image) => image.slot === 'logo_primary');
+    expect(logo?.value?.url).toBe('https://cdn/logo.png');
+    expect(logo?.value?.complexity).toBe('high');
   });
 
   it('keeps the prose that the rest of the app never renders', () => {
@@ -202,7 +239,80 @@ describe('buildInspection', () => {
       fonts: 2,
       texts: 1,
       icons: 1,
+      // The fixture declares no `format_set`, which is the shape of every run
+      // generated before the pipeline chose arrangements.
+      formats: 0,
     });
+  });
+
+  it('reads arrangements off the payload, since the browser has no format manifest', () => {
+    const withFormats = wireTheme();
+    (withFormats as Record<string, unknown>)['format_set'] = {
+      formats: {
+        // Deliberately out of order: the section sorts so two runs of one app
+        // list their surfaces identically.
+        rank_format: { value: 'beltHero' },
+        home_format: { value: 'timeSpine' },
+        // An empty pick means "no override", exactly as an empty text does. It
+        // is dropped by the parser, so it never reaches the slot list — the
+        // section reports what the run CHOSE, and a surface left at its shipped
+        // arrangement was not a choice.
+        videos_format: { value: '' },
+      },
+    };
+    const built = buildInspection(parseThemeConfig(withFormats));
+
+    expect(built.formats.map((f) => f.slot)).toEqual(['home_format', 'rank_format']);
+    expect(built.formats.map((f) => f.value)).toEqual(['timeSpine', 'beltHero']);
+    expect(built.counts.formats).toBe(2);
+  });
+
+  it('accepts an arrangement this build has never heard of', () => {
+    // The vocabulary lives in the APP's app.yaml, not here. A value added there
+    // must still reach a surface that prints it, or the inspector silently
+    // under-reports what the engine produced.
+    const exotic = wireTheme();
+    (exotic as Record<string, unknown>)['format_set'] = {
+      formats: { some_future_format: { value: 'aShapeNobodyHasBuiltYet' } },
+    };
+    const built = buildInspection(parseThemeConfig(exotic));
+
+    expect(built.formats).toEqual([
+      { slot: 'some_future_format', value: 'aShapeNobodyHasBuiltYet' },
+    ]);
+  });
+});
+
+describe('buildInspection on a theme that predates the new wire fields', () => {
+  // A last-good copy stored by an older build, or a run whose output.yaml was
+  // written before the pipeline stamped a category or a complexity tier. The
+  // page must degrade — every count, family and URL still resolves off the flat
+  // maps, and only the metadata beside them reads as absent.
+  const legacy = wireTheme();
+  delete (legacy as Record<string, unknown>)['category'];
+  delete (legacy as Record<string, unknown>)['font_set'];
+  delete (legacy as Record<string, unknown>)['image_set'];
+  const degraded = buildInspection(parseThemeConfig(legacy));
+
+  it('still counts every produced slot', () => {
+    expect(degraded.counts).toEqual(inspection.counts);
+  });
+
+  it('keeps each font family and reads its prose as absent', () => {
+    expect(degraded.fonts[0]?.value?.family).toBe('Space Grotesk');
+    expect(degraded.fonts[0]?.value?.category).toBe('');
+    expect(degraded.fonts[0]?.value?.displayName).toBe('');
+    expect(degraded.fonts[0]?.value?.description).toBe('');
+  });
+
+  it('keeps each image URL and reads its tier as absent', () => {
+    const logo = degraded.images.find((image) => image.slot === 'logo_primary');
+    expect(logo?.value?.url).toBe('https://cdn/logo.png');
+    expect(logo?.value?.complexity).toBe('');
+  });
+
+  it('reads the run category as absent rather than inventing one', () => {
+    expect(degraded.category).toBe('');
   });
 });
 

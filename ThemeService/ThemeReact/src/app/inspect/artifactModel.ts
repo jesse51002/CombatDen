@@ -23,6 +23,32 @@ import {
 } from '../showcase/showcaseSlots';
 
 /**
+ * The prose fields are why the font list is a record and not a family string.
+ *
+ * They arrive on `font_set`, the group the API added beside the flat `fonts`
+ * map, and — exactly like `ThemeColorValue.description` — no other surface in
+ * either client renders them. A theme cached before that group existed still
+ * has a `family` here and empty prose, which is the case every field below is
+ * shaped for.
+ */
+export interface FontView {
+  readonly family: string;
+  /** Google's classification for the family. `''` when the run carried none. */
+  readonly category: string;
+  /** The run's own name for the face, e.g. "Athletic Modern". */
+  readonly displayName: string;
+  /** The run's written reasoning for the pick. The point of the section. */
+  readonly description: string;
+}
+
+/** One produced image: where to fetch it, and the tier that made it. */
+export interface ImageView {
+  readonly url: string;
+  /** `''` when the run stamped no complexity tier on the slot. */
+  readonly complexity: string;
+}
+
+/**
  * The seven derivations in the order the wire and `ThemeDerivation` state them.
  *
  * Deliberately the CONTRACT order, not a tonal sort: two roles read side by
@@ -103,21 +129,37 @@ export interface ArtifactCounts {
   readonly fonts: number;
   readonly texts: number;
   readonly icons: number;
+  readonly formats: number;
 }
 
 export interface Inspection {
   readonly appId: string;
   readonly displayName: string;
   readonly designName: string;
+  /**
+   * The run's classification bucket ("Fighting"). `''` for a run produced
+   * before the pipeline classified its runs — the styles list refuses to LIST
+   * such a run, so the only way to see one here is a hand-typed `?theme=`.
+   */
+  readonly category: string;
   readonly colorMode: 'light' | 'dark';
   /** The theme's own ground. Every specimen plate is painted with it. */
   readonly background: Rgba;
   readonly roles: readonly RoleView[];
   readonly paletteGroups: readonly PaletteGroup[];
-  readonly images: readonly SlotView<string>[];
-  readonly fonts: readonly SlotView<string>[];
+  readonly images: readonly SlotView<ImageView>[];
+  readonly fonts: readonly SlotView<FontView>[];
   readonly texts: readonly SlotView<string>[];
   readonly icons: readonly SlotView<string>[];
+  /**
+   * The ARRANGEMENT chosen for each surface — `home_format` → `timeSpine`.
+   * Unlike every other section here, the slot list is read off the payload
+   * rather than an expected manifest: the app declares its format vocabulary
+   * in `app.yaml`, this browser does not, and inventing a "not produced" row
+   * for a slot this build merely hasn't heard of would report a hole that
+   * isn't one. Empty for a theme generated before the pipeline chose.
+   */
+  readonly formats: readonly SlotView<string>[];
   readonly counts: ArtifactCounts;
 }
 
@@ -194,15 +236,19 @@ function tokenOf(config: ThemeConfig, key: string, fallback: Rgba): Rgba {
 export function buildInspection(config: ThemeConfig): Inspection {
   const background = tokenOf(config, 'background', FALLBACK_BACKGROUND);
   const roles = EXPECTED_COLORS.map((slot) => roleView(config, slot));
-  const images = slotViews(EXPECTED_IMAGES, config.images);
-  const fonts = slotViews(EXPECTED_FONTS, config.fonts);
+  const images = EXPECTED_IMAGES.map((slot) => imageView(config, slot));
+  const fonts = EXPECTED_FONTS.map((slot) => fontView(config, slot));
   const texts = slotViews(EXPECTED_TEXT, config.texts);
   const icons = slotViews(EXPECTED_ICONS, config.icons);
+  // Slots off the PAYLOAD, not a manifest — see `Inspection.formats`. Sorted so
+  // two runs of the same app list their arrangements in the same order.
+  const formats = slotViews(Object.keys(config.formats).sort(), config.formats);
 
   return {
     appId: config.app,
     displayName: config.displayName,
     designName: config.designName,
+    category: config.category,
     colorMode: config.colorMode,
     background,
     roles,
@@ -211,6 +257,7 @@ export function buildInspection(config: ThemeConfig): Inspection {
     fonts,
     texts,
     icons,
+    formats,
     counts: {
       roles: roles.filter((role) => role.color !== null).length,
       derivations: roles.reduce(
@@ -222,6 +269,7 @@ export function buildInspection(config: ThemeConfig): Inspection {
       fonts: present(fonts),
       texts: present(texts),
       icons: present(icons),
+      formats: present(formats),
     },
   };
 }
@@ -253,6 +301,44 @@ function slotViews(
     const value = source[slot];
     return { slot, value: value === undefined || value === '' ? null : value };
   });
+}
+
+/**
+ * One image slot, read from BOTH halves of the wire: the URL off the flat
+ * `images` map, the tier off the `image_set` group beside it.
+ *
+ * The URL decides whether the slot counts as produced — the group restates the
+ * same URLs, but the flat map is the one shape the API can never change, so it
+ * stays the authority here too.
+ */
+function imageView(config: ThemeConfig, slot: string): SlotView<ImageView> {
+  const url = config.images[slot] ?? '';
+  if (url === '') return { slot, value: null };
+  return { slot, value: { url, complexity: config.imageComplexity[slot] ?? '' } };
+}
+
+/**
+ * One font slot, read the same two-source way: the family off the flat `fonts`
+ * map, the category and prose off `font_set`.
+ *
+ * The fallback to the face's own family is what keeps a slot legible if the two
+ * ever disagree; the empty prose is what a theme cached before `font_set`
+ * existed degrades to, and the specimen renders that absence rather than
+ * hiding the slot.
+ */
+function fontView(config: ThemeConfig, slot: string): SlotView<FontView> {
+  const face = config.fontFaces[slot];
+  const family = config.fonts[slot] ?? face?.family ?? '';
+  if (family === '') return { slot, value: null };
+  return {
+    slot,
+    value: {
+      family,
+      category: face?.category ?? '',
+      displayName: face?.displayName ?? '',
+      description: face?.description ?? '',
+    },
+  };
 }
 
 /**

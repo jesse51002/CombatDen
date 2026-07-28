@@ -45,6 +45,8 @@ export { parseThemeConfig } from './models/themeConfig';
 export type { ThemeConfig } from './models/themeConfig';
 export { parseThemeColorValue, parseColorValue } from './models/themeColorValue';
 export type { ThemeColorValue } from './models/themeColorValue';
+export { parseThemeFontFace } from './models/themeFontFace';
+export type { ThemeFontFace } from './models/themeFontFace';
 export { parseThemeStyle } from './models/themeStyle';
 export type { ThemeStyle } from './models/themeStyle';
 export {

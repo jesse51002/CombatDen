@@ -53,7 +53,7 @@ import {
 } from '../showcase/showcaseSlots';
 import { usePrefersReducedMotion } from '../widgets/usePrefersReducedMotion';
 
-import type { Inspection, SlotView } from './artifactModel';
+import type { FontView, ImageView, Inspection, SlotView } from './artifactModel';
 import { buildInspection, spectrumBands } from './artifactModel';
 import { IconPlate, ImagePlate } from './AssetPlates';
 import { ColorRole } from './ColorRole';
@@ -86,6 +86,24 @@ const TEXT_PLACEMENT: Readonly<Record<string, string>> = Object.freeze({
   wins_title: 'Headline of the post-class recap',
   wins_subtitle: 'The line under it — the chattiest brand voice in the app',
   book_next_class_cta: 'The CTA back into booking, at the end of the recap',
+});
+
+/**
+ * What each format slot governs, quoted down from the enum's own doc comment in
+ * `MobileApp/lib/core/formats/layout_formats.dart`. Without it a reader sees
+ * `rank_format → beltHero` and cannot tell which screen changed.
+ *
+ * A slot with no entry prints nothing rather than guessing: the vocabulary is
+ * the app's, declared in its `app.yaml`, and this browser is a reader of it.
+ */
+const FORMAT_SURFACE: Readonly<Record<string, string>> = Object.freeze({
+  app_shell_format: 'The chrome that frames every screen',
+  home_format: 'The class schedule',
+  videos_format: 'The video feed',
+  rank_format: 'Rank and progress',
+  rewards_format: 'The points store',
+  class_format: 'Class detail and booking',
+  celebration_format: 'The post-class cards',
 });
 
 export function InspectView() {
@@ -160,21 +178,23 @@ export function InspectView() {
             count={`${String(artifact.counts.fonts)} slots`}
           >
             A display face and a body face, picked for the brand and validated
-            against Google Fonts during the run. Set below in themselves, with
-            copy from this same run.
+            against Google Fonts during the run. Each is set in itself, under
+            the name the run gave it and the reasoning it wrote for the pick.
           </SectionHead>
           <div className={styles.typeGrid}>
+            {/* The display face is judged on a headline, so it gets one of the
+                run's own generated strings at headline scale; the body face is
+                judged on running copy, and its own description IS running copy
+                the run wrote — so it needs no borrowed paragraph. */}
             <TypeSpecimen
               slot={SLOT_FONT_DISPLAY}
-              family={emptyToNull(displayFont)}
+              face={fontFace(artifact, SLOT_FONT_DISPLAY)}
               sample={displaySample(artifact)}
-              asParagraph={false}
             />
             <TypeSpecimen
               slot={SLOT_FONT_BODY}
-              family={emptyToNull(bodyFont)}
-              sample={bodySample(artifact)}
-              asParagraph
+              face={fontFace(artifact, SLOT_FONT_BODY)}
+              sample={null}
             />
           </div>
         </section>
@@ -240,14 +260,17 @@ export function InspectView() {
           >
             Transparent artwork generated for this theme and authored against
             its ground. Every plate below is painted in that ground, so what
-            renders here is what renders on the phone.
+            renders here is what renders on the phone. Each caption carries the
+            complexity tier the run gave that prompt — the tier that chose how
+            much compute the generator spent on it.
           </SectionHead>
           <div className={styles.featureGrid}>
             {featureImages(artifact.images).map((image) => (
               <ImagePlate
                 key={image.slot}
                 slot={image.slot}
-                url={image.value}
+                url={image.value?.url ?? null}
+                complexity={image.value?.complexity ?? ''}
                 background={artifact.background}
                 wide
               />
@@ -258,12 +281,51 @@ export function InspectView() {
               <ImagePlate
                 key={image.slot}
                 slot={image.slot}
-                url={image.value}
+                url={image.value?.url ?? null}
+                complexity={image.value?.complexity ?? ''}
                 background={artifact.background}
               />
             ))}
           </div>
         </section>
+
+        {/*
+          Rendered only when the run HAS arrangements. Every other section
+          declares its slots up front and prints "not produced" for a miss,
+          which is honest because this browser knows what it expects. It does
+          not know an app's format vocabulary, so an empty section here would
+          claim a hole rather than report one.
+        */}
+        {artifact.formats.length > 0 && (
+          <section className={styles.section}>
+            <SectionHead
+              id="arrangement"
+              title="Arrangement"
+              count={`${String(artifact.counts.formats)} surfaces`}
+            >
+              The engine also chose the SHAPE of each surface, not only what
+              fills it. Each value names one complete, reviewed arrangement in
+              the app&rsquo;s own vocabulary. Arrangement only: no screen gains or
+              loses anything, so the app a member gets is rearranged, never
+              reduced.
+            </SectionHead>
+            <ol className={styles.strings}>
+              {artifact.formats.map((format) => (
+                <li key={format.slot} className={styles.string}>
+                  <div className={styles.stringMeta}>
+                    <p className={styles.stringSlot}>{format.slot}</p>
+                    <p className={styles.stringWhere}>{FORMAT_SURFACE[format.slot] ?? ''}</p>
+                  </div>
+                  {format.value === null ? (
+                    <p className={styles.stringMissing}>not produced</p>
+                  ) : (
+                    <p className={styles.stringSlot}>{format.value}</p>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
 
         <footer className={styles.colophon}>
           <p className={styles.colophonId}>
@@ -297,8 +359,20 @@ function Masthead({
       <h1 className={styles.designName} style={{ fontFamily: fontStack(displayFont) }}>
         {artifact.designName === '' ? (designId ?? 'Untitled design') : artifact.designName}
       </h1>
+      {/*
+        The identity line is the sheet's address, and the run's CATEGORY is one
+        of its coordinates: it is the bucket the library filtered on to reach
+        this design, so a reader who arrived from there sees the same word they
+        picked. It sits here rather than in the colophon because the colophon
+        answers "where do these values come from", not "what is this".
+        Omitted when the run carries none — the styles list refuses to list an
+        uncategorised run, so an address with a blank coordinate can only be
+        reached by a hand-typed `?theme=`.
+      */}
       <p className={styles.identity}>
-        {artifact.appId} · {designId ?? '—'} · {artifact.colorMode} mode
+        {artifact.appId} · {designId ?? '—'}
+        {artifact.category === '' ? '' : ` · ${artifact.category}`} ·{' '}
+        {artifact.colorMode} mode
       </p>
       <Spectrum bands={spectrumBands(artifact.roles, artifact.background)} />
       <p className={styles.inventory}>
@@ -340,11 +414,30 @@ function railEntries(artifact: Inspection): readonly RailEntry[] {
     { id: 'voice', label: 'Written copy', count: `${String(artifact.counts.texts)} strings` },
     { id: 'icons', label: 'Navigation icons', count: `${String(artifact.counts.icons)} slots` },
     { id: 'imagery', label: 'Imagery', count: `${String(artifact.counts.images)} slots` },
+    // Omitted, not zeroed, when the run predates the format node — the rail
+    // indexes what the sheet actually renders.
+    ...(artifact.formats.length > 0
+      ? [
+          {
+            id: 'arrangement',
+            label: 'Arrangement',
+            count: `${String(artifact.counts.formats)} surfaces`,
+          },
+        ]
+      : []),
   ];
 }
 
-function emptyToNull(value: string): string | null {
-  return value === '' ? null : value;
+/**
+ * One font slot's record, or `null` when the run produced no family for it.
+ *
+ * Read off the artifact rather than through `useThemeFontFamily`, because the
+ * specimen is reporting what THIS run carries — the resolvers exist to hand a
+ * live value to a surface that must render regardless, which is the opposite
+ * job. The two agree on the family; only the artifact has the prose.
+ */
+function fontFace(artifact: Inspection, slot: string): FontView | null {
+  return artifact.fonts.find((font) => font.slot === slot)?.value ?? null;
 }
 
 /**
@@ -353,12 +446,12 @@ function emptyToNull(value: string): string | null {
  * Split so the section has a shape: a uniform grid of ten would render a
  * 512px illustration at the size of a star.
  */
-function featureImages(images: readonly SlotView<string>[]): readonly SlotView<string>[] {
+function featureImages(images: readonly SlotView<ImageView>[]): readonly SlotView<ImageView>[] {
   const featured = [SLOT_LOGO_PRIMARY, SLOT_CELEBRATION_IMAGE];
   return images.filter((image) => featured.includes(image.slot));
 }
 
-function restImages(images: readonly SlotView<string>[]): readonly SlotView<string>[] {
+function restImages(images: readonly SlotView<ImageView>[]): readonly SlotView<ImageView>[] {
   const featured = [SLOT_LOGO_PRIMARY, SLOT_CELEBRATION_IMAGE];
   return images.filter((image) => !featured.includes(image.slot));
 }
@@ -375,20 +468,4 @@ function restImages(images: readonly SlotView<string>[]): readonly SlotView<stri
 function displaySample(artifact: Inspection): string {
   const produced = artifact.texts.filter((text) => text.value !== null).at(-1);
   return produced?.value ?? 'Handgloves & Jiu-jitsu';
-}
-
-/**
- * A generated paragraph for the body specimen — a colour's own description.
- *
- * The LAST described role rather than the first: the first is `primary`, whose
- * prose opens the sheet, and re-setting the page's opening paragraph as its
- * type specimen reads as a mistake rather than a demonstration.
- */
-function bodySample(artifact: Inspection): string {
-  // `findLast` is ES2023 and this project's lib is ES2022 — hence the filter.
-  const described = artifact.roles.filter((role) => role.description !== '').at(-1);
-  return (
-    described?.description ??
-    'The body face carries every screen of running copy in the member app, so it is picked for a generous x-height and quiet colour rather than character.'
-  );
 }

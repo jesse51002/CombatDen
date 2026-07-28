@@ -33,16 +33,31 @@ export interface PlateProps {
 export interface ImagePlateProps extends PlateProps {
   /** `null` when the pipeline produced no image for this slot. */
   url: string | null;
+  /**
+   * The visual-complexity tier the run assigned this image's prompt, which is
+   * what picked the generator's quality. `''` when the run stamped none.
+   */
+  complexity?: string;
 }
 
-export function ImagePlate({ slot, url, background, wide = false }: ImagePlateProps) {
+export function ImagePlate({
+  slot,
+  url,
+  background,
+  complexity = '',
+  wide = false,
+}: ImagePlateProps) {
   const ink = toCss(readableInk(background));
   return (
     <figure className={styles.plate}>
       <Surface background={background} wide={wide}>
         {url === null ? <Missing ink={ink} /> : <PlateImage url={url} slot={slot} ink={ink} />}
       </Surface>
-      <Caption slot={slot} kind="png" />
+      {/* The tier rides the existing kind slot rather than earning a mark of
+          its own: both are one-word facts about the file, the section head
+          says what a tier is, and a badge here would be the first boxed
+          object on a sheet that has none. */}
+      <Caption slot={slot} kind={complexity === '' ? 'png' : `${complexity} · png`} />
     </figure>
   );
 }
