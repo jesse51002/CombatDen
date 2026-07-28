@@ -55,9 +55,19 @@ HTTP API). Architecture, mirroring the customization engine:
 
 Top filters are derived from the distinct `big_groups` present in the loaded
 feed (an `All` tab plus one per group, labels auto-formatted), and filter the
-home feed **in place**; sub-groups are per-`tag` carousels. Tapping a video is a
+home feed **in place**; sub-groups are per-`tag` sections. Tapping a video is a
 `debugPrint` no-op (real YouTube playback needs `url_launcher`, a deliberate
 follow-up). Mock video data and the old detail screen were deleted.
+
+**How that feed is arranged is the tenant's `videos_format`** (see *Layout and
+motion formats* below). `VideosScreen` derives one `VideosLayoutData` payload —
+tabs, hero, sections, callbacks — and `widgets/videos_feed_body.dart` switches
+on `ThemeLayout.videos()` to one of the five layouts in
+`presentation/layouts/`, each of which arranges that identical payload and
+**must** render every element in it. The screen's scroll is a `CustomScrollView`
+and each layout returns a sliver, so a format can pin its filter (`mosaic`) or
+its rail (`tagRail`). `test/videos_invariants_test.dart` is the gate that proves
+no layout adds or drops an element.
 
 **The home schedule is a live/mock hybrid.**
 `lib/features/home/data/schedule_generator.dart` builds the day's classes from
@@ -385,12 +395,21 @@ intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
 See `tools/capture/README.md`.
 
 Also outside `lib/`, **`docs/`** holds design proposals for this app. Today that
-is `layout_and_motion_formats.md` — the proposed layout and motion enum library
-(one whole-screen layout enum per major screen, plus a motion personality and
-five per-surface motion slots), with `layout_formats_preview.html` rendering
-every value as a wireframe specimen. It is a **proposal**: nothing under `lib/`
-implements it, and `lib/core/app_slots.dart` does not yet declare layout or
-motion slots. If those slots are added, update that doc in the same change.
+is `layout_and_motion_formats.md` — the layout and motion enum library (one
+whole-screen layout enum per major screen, plus a motion personality and five
+per-surface motion slots), with `layout_formats_preview.html` rendering every
+value as a wireframe specimen.
+
+That doc is **design intent, not the contract** — the code is. Where they
+disagree, fix the doc. `lib/core/app_slots.dart` declares the layout and motion
+slots; `lib/core/formats/` holds the enums, the `ThemeLayout` resolver, the
+`--dart-define` overrides and the in-app dev picker. Two screen enums are wired
+so far: `app_shell_format` (`lib/shared/widgets/topbar/layouts/` + the bottom
+nav) and `videos_format` (`lib/features/videos/presentation/layouts/`). Every
+wired enum owns two tests — an invariant gate (`test/*_invariants_test.dart`,
+always run) proving each value renders the identical element set, and a golden
+preview (`test/*_preview_test.dart`, tagged `golden`). When another enum is
+wired, add both and update this list and that doc in the same change.
 
 ## Development Commands
 
