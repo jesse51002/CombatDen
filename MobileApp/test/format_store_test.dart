@@ -64,7 +64,7 @@ void main() {
     expect(find.byType(TopbarStacked), findsNothing);
   });
 
-  testWidgets('the picker is reachable as a drawer on a screen', (
+  testWidgets('the picker is reachable from its handle on a screen', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -75,11 +75,14 @@ void main() {
       ),
     );
 
-    // Debug builds attach it; this also compiles the whole panel graph.
+    // An END drawer, opened only by its own handle: both screen edges
+    // belong to Android's system back gesture.
     final scaffold = tester.widget<Scaffold>(find.byType(Scaffold).first);
-    expect(scaffold.drawer, isA<FormatPanel>());
+    expect(scaffold.endDrawer, isA<FormatPanel>());
+    expect(scaffold.endDrawerEnableOpenDragGesture, isFalse);
 
-    tester.state<ScaffoldState>(find.byType(Scaffold).first).openDrawer();
+    // Tapping the visible handle is the only way in.
+    await tester.tap(find.text('FMT'));
     await tester.pumpAndSettle();
     expect(find.text('Formats'), findsOneWidget);
     expect(find.text('markOnly'), findsOneWidget);
