@@ -64,6 +64,7 @@ and the boundary between them is load-bearing:
   | `showcase/celebrations/CelebrationFrame.tsx` | `MobileApp/lib/shared/widgets/post_class/{post_class_scaffold,layouts/celebration_*}.dart` |
   | `showcase/videos/` | `MobileApp/lib/features/videos/` + `.../shared/widgets/video_recc_card/` |
   | `showcase/profile/` | `MobileApp/lib/features/profile/` |
+  | `showcase/classdetail/` | `MobileApp/lib/features/class_booking/presentation/` (`ClassScreen`, NOT `ClassBookedScreen`) |
   | `showcase/showcaseVideoDefaults.ts` | *(no counterpart — constants extracted from `VideoService/videos/*.yaml`)* |
 
   Four things port NOTHING, because the Flutter side has no counterpart to
@@ -79,20 +80,25 @@ and the boundary between them is load-bearing:
   celebration screens — so it sits with the other celebration primitives rather
   than in a one-file `animation/` folder.
 
-  **`showcase/videos/` and `showcase/profile/` port from `MobileApp/`, not from
-  `CRM/lib/showcase/`.** The Flutter preview carries seven screens and has no
-  Video or Profile clone to copy, so those two are first ports straight from the
-  member app; every file in them names the `MobileApp/` file it comes from, and
-  anything they need that the CRM clone never had (the two profile belt PNGs in
-  `showcase/assets/`) comes from `MobileApp/assets/` for the same reason. If the
-  Flutter preview ever grows its own clones, these stay the port of record —
-  they are ahead of it, not behind.
+  **`showcase/videos/`, `showcase/profile/` and `showcase/classdetail/` port
+  from `MobileApp/`, not from `CRM/lib/showcase/`.** The Flutter preview carries
+  seven screens and has no Video, Profile or class-detail clone to copy, so
+  those three are first ports straight from the member app; every file in them
+  names the `MobileApp/` file it comes from, and anything they need that the CRM
+  clone never had (the two profile belt PNGs in `showcase/assets/`, the static
+  map tile in `showcase/classdetail/assets/`) comes from `MobileApp/assets/` for
+  the same reason. If the Flutter preview ever grows its own clones, these stay
+  the port of record — they are ahead of it, not behind.
+
+  The class-detail map is `classdetail/assets/`, not the shared
+  `showcase/assets/` + `showcaseAssets.ts` registry, because exactly one screen
+  reads it. Fold it into the registry if a second one ever does.
 
   Nothing gated on `selectedGym.gymId != null` ports: this browser has no gym,
   no auth and no write path, so the admin's "set as app theme" / "edit gym name"
   actions and the gym-identity plumbing are deliberately absent, not missing.
 
-### The nine showcase screens
+### The ten showcase screens
 
 `showcase/showcaseScreen.tsx` is the registry, and adding a screen touches four
 compiler-linked spots in it: the `ShowcaseScreen` union, the frozen
@@ -103,6 +109,7 @@ and arrows from those arrays and need no change.
 | screen | label | shape | body scrolls |
 | --- | --- | --- | --- |
 | `home` | Home | app surface | **yes** |
+| `class` | Class | app surface | **per arrangement** |
 | `booking` | Booking | celebration (loops) | no |
 | `wins` | Achievements | celebration (loops) | no |
 | `points` | Points | celebration (loops) | no |
@@ -132,8 +139,8 @@ all four are registered in — never learns the slot exists.
 Two things about that set are easy to get wrong. The member app has a **fifth**
 consumer, `rank_screen.dart`; the Flutter preview this island ports never
 carried a rank celebration, so there is no rank card here to rearrange. And
-`BookingShowcase` is **not** one of them — it clones `ClassBookedScreen`, a
-class-detail surface, which belongs to `class_format`.
+`BookingShowcase` is **not** one of them — it clones `ClassBookedScreen`, which
+is governed by **no format slot at all** (see the section below).
 
 The member app's layouts arrange four slots (header, body, close, one primary
 action); a preview card ships exactly one, its **body**, so the frame places
@@ -145,11 +152,44 @@ between the card and the canvas the action stands on.
 stage's subtree must come out byte-identical across all five values, per card,
 in both of each card's views.
 
+### `class` and `booking` are two different screens
+
+The single easiest mistake in this island, because both port out of the Dart's
+one `features/class_booking/` folder and both have "booking" in the name.
+
+- **`class`** (`showcase/classdetail/`) ports **`ClassScreen`** — the class
+  DETAIL page: topbar + back, photo, meta, details, instructor, location, and
+  exactly one reserve action. It is the **only** consumer of `class_format`;
+  `ThemeLayout.classDetail()` is read in exactly one place on the Dart side,
+  `class_screen.dart`.
+- **`booking`** (`showcase/BookingShowcase.tsx`) clones **`ClassBookedScreen`** —
+  the post-reservation CELEBRATION: image scale-pop, caption cascade, CTA fade,
+  then a hold and a replay. It is routed at `AppRoutes.reservingLoading`, reads
+  **no** format slot, and is not a `celebration_format` card either (that slot
+  belongs to `post_class/`, which backs `wins`/`points`/`rewards`/`streak`).
+
+So `class_format` never had a surface in this package until `classdetail/` was
+built, and `booking` must never be reshaped into a detail page — doing so would
+delete the looping animation the preview run depends on.
+
+`class` is the only screen whose scrolling is **per arrangement** rather than
+per screen: each of the five layouts owns its own scroller exactly as the Dart's
+five do, so `ClassDetailShowcase` passes no `bodyScroll` and `ShowcaseScaffold`
+stays `overflow: hidden`. That is what keeps `detailSheet`'s full-bleed backdrop
+from being clipped by an ancestor scroller it never asked for.
+
+Its section folder is `showcase/classdetail/sections/`, where the Dart says
+`widgets/`: Gate 2a bans `**/widgets/**` anywhere in this island and matches the
+IMPORT STRING, so `../widgets/ClassMetaSection` trips it even pointing at the
+screen's own folder.
+
 `showcase/showcaseSlots.ts` is a SUBSET of the member app's manifest — only what
 these screens render. `next_rank_belt_image` is in it because `profile` renders
 it (`showcase/profile/NextRankSection.tsx`); it is the pipeline's tenth
 generated image, derived from `rank_belt`, and Profile is its only consumer in
-the member app too.
+the member app too. `reserve_cta` was in it from the start and rendered by
+nothing until `class` arrived — `showcase/classdetail/sections/
+ClassReserveFooter.tsx` is its first consumer here.
 
 The demo CONTENT ladder is `showcase/useShowcaseContent.ts`: classes and rewards
 resolve real → fetched (`GET /theme/showcase-defaults`) → bundled
@@ -157,6 +197,21 @@ resolve real → fetched (`GET /theme/showcase-defaults`) → bundled
 (`showcaseVideoDefaults.ts`) because the wire format carries no videos. Videos
 deliberately skip `fillSlots` — that helper repeats a single item across a FIXED
 four-card layout, and a feed has no slots to fill.
+
+**That ladder picks ONE TIER for the whole class list, which is why the class
+detail screen resolves three of its fields per-FIELD instead.** A
+`ShowcaseClassInfo` carries `description`, `instructorBio` and
+`instructorImageUrl` as OPTIONAL — the bundled tier has all three for every
+group (extracted from `VideoService/gyms/*.yaml`, which is also where the rest
+of that file came from), and the fetched tier declares them (`str | None` on
+`FastApiBackend/src/theme/schema/theme_schema.py`) but serves NULL for every
+one, because its source
+`FastApiBackend/src/theme/showcase_defaults/theme_showcase_defaults.yaml` was
+ported from the CRM constants that predate the fields, and says so in its own
+header. A per-tier ladder therefore lets the fetched nulls hide the richer
+bundled copy whenever `:8000` is up. `showcase/classdetail/classDetail.ts`
+closes that by filling each missing field from the bundled class of the same
+name; the real fix is for that yaml to carry them.
 
 **NOT to be confused with `..` (ThemeService itself)** — that is the Python
 pipeline which *generates* the configs this package *consumes*. Different

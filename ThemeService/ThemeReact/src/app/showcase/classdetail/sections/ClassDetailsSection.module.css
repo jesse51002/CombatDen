@@ -1,0 +1,12 @@
+/*
+ * Styles for ./ClassDetailsSection.tsx
+ * (ports MobileApp/.../widgets/class_details_section.dart).
+ */
+
+/* `Text(description, style: pBig.copyWith(color: text2nd))`. */
+.body {
+  margin: 0;
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+}

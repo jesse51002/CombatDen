@@ -1,0 +1,51 @@
+/*
+ * Styles for ./ClassLocationSection.tsx
+ * (ports MobileApp/.../widgets/class_location_section.dart).
+ */
+
+/* `Column(crossAxisAlignment: start, spacing: spacingMedium)` — ships today. */
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* `Row(crossAxisAlignment: center, spacing: spacingMedium)`. */
+.content.row {
+  flex-direction: row;
+  align-items: center;
+}
+
+/* `AspectRatio(_kMapRatio 1160/580)`, over the `card` degrade fill. */
+.map {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 1160 / 580;
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+/* `_kRowMapWidth` 116 — the compact strip keeps the same ratio. */
+.mapSmall {
+  width: 116px;
+}
+
+.mapImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* `Text(address, style: p.copyWith(color: text2nd))`. */
+.address {
+  /* `Expanded` in the row value; a plain block in the stacked one. */
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}

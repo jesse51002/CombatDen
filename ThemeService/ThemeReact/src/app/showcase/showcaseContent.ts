@@ -27,6 +27,23 @@ export interface ShowcaseReward {
 /**
  * One class card to preview (maps to a schedule row; its time slot is
  * synthesised by the schedule generator).
+ *
+ * THE LAST THREE ARE OPTIONAL, and the reason is the resolution ladder rather
+ * than indecision. Every field here exists on the gym file's class entry
+ * (`VideoService/gyms/*.yaml`), so the BUNDLED tier
+ * (./showcaseGroupDefaults.ts) carries all six. The FETCHED tier declares them
+ * too — they are `str | None` on `FastApiBackend/src/theme/schema/
+ * theme_schema.py` — but its source, `src/theme/showcase_defaults/
+ * theme_showcase_defaults.yaml`, leaves every one NULL and says so in its own
+ * header: it was ported from the CRM's bundled constants, which predate these
+ * three fields.
+ *
+ * So a fetched class legitimately arrives without them, and because the ladder
+ * picks ONE tier for the whole list, the fetched nulls would otherwise hide the
+ * bundled copy sitting right beside them. ./classdetail/classDetail.ts closes
+ * that by resolving these three PER FIELD against the bundled group; the real
+ * fix is for that yaml to carry them, since it is generated from the same gym
+ * files these were extracted from.
  */
 export interface ShowcaseClassInfo {
   readonly name: string;
@@ -34,6 +51,12 @@ export interface ShowcaseClassInfo {
   readonly imageUrl: string;
   /** Shown as the class mentor. */
   readonly instructorName: string;
+  /** Long-form class description. Rendered by the class DETAIL screen only. */
+  readonly description?: string;
+  /** The instructor's bio paragraph. Detail screen only. */
+  readonly instructorBio?: string;
+  /** Network headshot for the instructor. Detail screen only. */
+  readonly instructorImageUrl?: string;
 }
 
 /**

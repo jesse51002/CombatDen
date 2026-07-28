@@ -1,0 +1,35 @@
+/*
+ * Styles for ./ClassTabBar.tsx
+ * (ports MobileApp/.../layouts/parts/class_tab_bar.dart).
+ */
+
+/* `Row(children: [for each label Expanded(_Tab)])`. */
+.bar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+/*
+ * `_Tab` — `padding: symmetric(vertical: spacingMedium)` over a
+ * `buttonBorder`-thick bottom border, `h3` centred.
+ */
+.tab {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: var(--sc-spacing-medium) 0;
+  border: none;
+  border-bottom: var(--sc-button-border) solid var(--sc-divider);
+  background: none;
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text-3rd);
+  text-align: center;
+  cursor: pointer;
+}
+
+/* The selected tab takes `accent` on both the label and the rule. */
+.active {
+  border-bottom-color: var(--sc-accent);
+  color: var(--sc-accent);
+}
