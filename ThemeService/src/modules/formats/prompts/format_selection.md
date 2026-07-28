@@ -37,6 +37,23 @@ How to decide:
   for the plainest, quietest option in a slot, pick it and say so. A
   brand does not have to be loud on every surface — but it does have to
   be the SAME brand on every surface.
+- **COMMIT. The neutral answer is usually the wrong one.** Every value in
+  every list was designed, built and reviewed for a real kind of brand.
+  A slot where one value would suit almost anybody is a slot where that
+  value suits almost nobody *particularly* — and the arrangement a member
+  lives in every day is not the place to be non-committal. So do not
+  reach for whichever option feels safest, most balanced, or hardest to
+  argue with. Ask instead: **of these, which one was built for a brand
+  like THIS one?** Then pick that, even when a blander option would also
+  have been fine.
+  Two brands with genuinely different briefs should come out of this with
+  genuinely different apps. If you would give the same answer to a hard
+  gym and a restorative studio, you have not read the brief closely
+  enough — go back to it and find what makes this brand specific, then
+  choose from that.
+  This is not licence to be strange. It is licence to be **decisive**:
+  the evidence in the brief should push you off centre, and when it does,
+  follow it.
 - **You must choose, once, per slot.** There is no "either", no "it
   depends", and no second choice. If two values feel close, pick the one
   the brief spends more of its words supporting and name the runner-up in

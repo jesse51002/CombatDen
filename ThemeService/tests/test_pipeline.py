@@ -58,6 +58,37 @@ def _load_script(rel_path: str) -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize(
+    "app_yaml",
+    sorted((_REPO_ROOT / "apps").glob("*/app.yaml")),
+    ids=lambda p: p.parent.name,
+)
+def test_every_live_app_manifest_validates(app_yaml: Path) -> None:
+    """Every real ``apps/<app_id>/app.yaml`` parses as an ``AppFormat``.
+
+    The rest of this module deliberately runs off the committed fixture
+    tree, which means the manifests that actually drive production runs
+    were validated by NOTHING until a paid run tried to read one. That is
+    the wrong place to discover a typo: a malformed slot costs a real
+    generation to find, and a slot id or enum value that is merely WRONG
+    rather than malformed is not caught even then — the app's own
+    ``fromWire`` silently falls back to what it ships, so the mistake
+    reads forever as "the classifier chose the default".
+
+    This only proves the manifest is well-formed. It cannot prove a value
+    name matches the client's enum; that contract lives in another repo
+    and is asserted where the two meet.
+    """
+    app = AppFormat.model_validate(yaml.safe_load(app_yaml.read_text()))
+    assert app.id, f"{app_yaml} declares no id"
+    for slot in app.formats:
+        assert slot.values, f"{app_yaml}: format slot {slot.id!r} offers no values"
+        seen = [value.value for value in slot.values]
+        assert len(seen) == len(set(seen)), (
+            f"{app_yaml}: format slot {slot.id!r} repeats a value {seen}"
+        )
+
+
 # Committed fixture tree — never the live ``apps/`` production runs.
 APP_DIR = Path(__file__).resolve().parent / "data" / "apps" / "demo"
 # The resolved Output lives in a run subdir; the committed baseline
