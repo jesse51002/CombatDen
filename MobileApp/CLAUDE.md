@@ -446,7 +446,8 @@ tenant-slot order applies. The difference is the invariant:
   which elements exist, what the surface is fed, or the app's motion law.
   **No value may overshoot** — ease-out only, no bounce, no elastic, no
   anticipation ("back") curve. Energy comes from stagger density.
-- `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
+- `celebration_intro` is wired (see below), and so is `count_up_style`.
+  `lib/shared/widgets/post_class/intro/`
   holds it: `celebration_intro_frame.dart` is the pure per-instant model
   (`CelebrationIntroFrame`) plus one value's whole contract
   (`CelebrationIntroSpec` — total, hand-off, particle field, frame
@@ -464,6 +465,27 @@ tenant-slot order applies. The difference is the invariant:
   every value (× every celebration layout) at real phone size. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
+- `count_up_style` follows the same shape one level down.
+  `lib/shared/widgets/animation/count_up/` holds it: `count_up_frame.dart`
+  is the pure per-instant model (`CountUpFrame`) plus one value's whole
+  contract (`CountUpSpec` — run length, whether its digits ride reels,
+  whether it carries an arc, frame function); one file per value declares
+  a spec; `count_up_figure.dart` is the only widget that paints one, and
+  it assembles the same prefix, the same tabular digit cells, the same
+  thousands separators and the same suffix for every value — a value only
+  chooses what goes *inside* a cell. `count_up_text.dart` is the
+  `FormatBuilder`-wrapped switch plus the driver (controller, capture
+  clock, `delay`); its public API is unchanged, which is what keeps
+  `CelebrationIntro.flipCount`'s mid-flip hand-off working.
+  `test/count_up_style_invariants_test.dart` is the gate.
+- **The earned figure also has a legibility floor.** It is the payoff of
+  the whole post-class moment, so a `count_up_style` value must run at
+  least 900ms with at least 600ms of visibly changing figure, and every
+  value except the shipped `odometer` holds a lead-in beat before the
+  number moves — but shorter than `kFlipCountIntro.handoff`, or the roll
+  would start after the flip it is meant to overlap. `instant` is the one
+  exemption: "no animation" and "an animation too fast to read" are
+  different things. The gate asserts all of it.
 - **Only the streak card is on the shared stage.** The points card keeps
   its own `_PointSphere`, because the shipped `orbit` value is the streak
   ring: routing points through it would replace the shipped points intro
