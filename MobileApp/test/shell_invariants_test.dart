@@ -1,7 +1,8 @@
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import 'helpers/stub_asset_bundle.dart';
 
 import 'package:mobile_app/core/formats/layout_formats.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
@@ -22,33 +23,6 @@ import 'package:mobile_app/shared/widgets/topbar/parts/topbar_back_button.dart';
 ///
 /// This is the check that makes the "no feature added, none removed"
 /// claim verifiable instead of argued.
-/// A 1x1 transparent PNG, served for every asset key so image loading
-/// never decides whether a layout test passes. The gate is about which
-/// elements a layout renders, not about bundled bitmaps.
-final Uint8List _kPixel = Uint8List.fromList(const [
-  0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D,
-  0x49, 0x48, 0x44, 0x52, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-  0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, 0x89, 0x00, 0x00, 0x00,
-  0x0A, 0x49, 0x44, 0x41, 0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-  0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, 0x00, 0x00, 0x00, 0x49,
-  0x45, 0x4E, 0x44, 0xAE, 0x42, 0x60, 0x82,
-]);
-
-class _StubAssetBundle extends CachingAssetBundle {
-  @override
-  Future<ByteData> load(String key) async {
-    // The manifest must still decode, or every AssetImage fails while
-    // resolving variants rather than while loading bytes.
-    if (key == 'AssetManifest.bin' || key == 'AssetManifest.bin.json') {
-      return const StandardMessageCodec().encodeMessage(<String, Object>{})!;
-    }
-    return ByteData.sublistView(_kPixel);
-  }
-
-  @override
-  Future<String> loadString(String key, {bool cache = true}) async => '';
-}
-
 void main() {
   /// Pump at a real phone width. At the default 800x600 test surface a
   /// cramped row still fits, so an arrangement that overflows on an
@@ -61,7 +35,7 @@ void main() {
 
   Widget host(Widget child) {
     return DefaultAssetBundle(
-      bundle: _StubAssetBundle(),
+      bundle: StubAssetBundle(),
       child: MaterialApp(home: Scaffold(body: child)),
     );
   }

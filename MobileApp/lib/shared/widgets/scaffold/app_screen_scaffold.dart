@@ -1,5 +1,7 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/core/formats/dev/format_panel.dart';
 
 /// Horizontal-padding variant for [AppScreenScaffold].
 enum AppScreenHorizontalPadding {
@@ -59,6 +61,11 @@ class AppScreenScaffold extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: backgroundColor ?? DesignConstants.backgroundColor,
+      // The format picker, reachable by dragging in from the left edge of
+      // any screen. Debug builds only: `kDebugMode` is a const, so the
+      // panel and its imports are tree-shaken out of a release build and
+      // cannot ship to a tenant.
+      drawer: kDebugMode ? const FormatPanel() : null,
       body: SafeArea(
         top: !hasTopNav,
         bottom: !hasBottomNav,

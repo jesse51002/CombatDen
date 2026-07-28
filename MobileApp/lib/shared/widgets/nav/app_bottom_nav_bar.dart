@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/formats/format_builder.dart';
 import 'package:mobile_app/core/formats/layout_formats.dart';
 import 'package:mobile_app/core/formats/theme_layout.dart';
 import 'package:mobile_app/shared/widgets/nav/app_nav_item.dart';
@@ -41,6 +42,10 @@ class AppBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return FormatBuilder(builder: _build);
+  }
+
+  Widget _build(BuildContext context) {
     final format = formatOverride ?? ThemeLayout.shell();
     final pill = format == AppShellFormat.markOnly;
 

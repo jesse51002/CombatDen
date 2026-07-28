@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/formats/format_builder.dart';
 import 'package:mobile_app/core/formats/layout_formats.dart';
 import 'package:mobile_app/core/formats/theme_layout.dart';
 import 'package:mobile_app/shared/widgets/topbar/layouts/topbar_compact_rail.dart';
@@ -62,6 +63,10 @@ class AppTopbar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return FormatBuilder(builder: _build);
+  }
+
+  Widget _build(BuildContext context) {
     final data = TopbarData(
       mode: mode,
       showBackButton: showBackButton,
