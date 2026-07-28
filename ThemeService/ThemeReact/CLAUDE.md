@@ -31,6 +31,16 @@ and the boundary between them is load-bearing:
   | `motion/` | `theme/animation/*.dart` |
 
   `src/lib/index.ts` is the ONLY export surface; nothing else is importable.
+
+  **`models/themeFontFace.ts` ports nothing, and `ThemeConfig` carries three
+  fields the Dart one does not** — `category`, `fontFaces` and
+  `imageComplexity`. All three come off wire sections ThemeFlutter's
+  `ThemeConfig.fromJson` never reads (`category`, `font_set`, `image_set`),
+  because Flutter needs only a family name to call `GoogleFonts.getFont` and
+  only a URL to fetch an image. This runtime reads them because `src/app/`'s
+  artifact inspector renders the pipeline's own reasoning, which nothing on
+  the Flutter side does. The divergence is additive: every field the Dart
+  model has, this one still has, parsed the same lossy-tolerant way.
 - **`src/app/`** — the **standalone theme browser**: the public, unauthenticated
   page that pages ThemeService's catalog and previews each design inside a phone
   frame. It is a *consumer* of `src/lib`, exactly as `../../CRM` is a consumer of
@@ -51,6 +61,7 @@ and the boundary between them is load-bearing:
   | `widgets/` | `CRM/lib/shared/widgets/*.dart` |
   | `showcase/` | `CRM/lib/showcase/` |
   | `showcase/celebrations/CountUpText.tsx` | `CRM/lib/shared/widgets/animation/count_up_text.dart` |
+  | `showcase/celebrations/CelebrationFrame.tsx` | `MobileApp/lib/shared/widgets/post_class/{post_class_scaffold,layouts/celebration_*}.dart` |
   | `showcase/videos/` | `MobileApp/lib/features/videos/` + `.../shared/widgets/video_recc_card/` |
   | `showcase/profile/` | `MobileApp/lib/features/profile/` |
   | `showcase/showcaseVideoDefaults.ts` | *(no counterpart — constants extracted from `VideoService/videos/*.yaml`)* |
@@ -103,10 +114,36 @@ and arrows from those arrays and need no change.
 
 That split is a rule, not a coincidence. An **app surface** is a screen a member
 scrolls on a real device, so clipping it previews a shorter app than the one
-being licensed — and it is the only kind of screen a future layout-variant pass
-has enough on it to rearrange. A **celebration** is a single-moment composition:
-a post-class reward animation is not a scrolling surface, and giving one a
-scrollbar would invent a behaviour the member app does not have.
+being licensed. A **celebration** is a single-moment composition: a post-class
+reward animation is not a scrolling surface, and giving one a scrollbar would
+invent a behaviour the member app does not have. Both kinds are rearranged by a
+`*_format` slot (below); neither may earn its arrangement by scrolling.
+
+### The celebration cards share ONE arrangement
+
+`wins`, `points`, `rewards` and `streak` are the post-class cards, and the
+pipeline classifies all four with a single slot — `celebration_format`, whose
+own doc says "the body slot differs per card, the arrangement around it does
+not". So the hook lives in **`showcase/celebrations/CelebrationFrame.tsx`**, the
+port of `PostClassScaffold` and its five layouts, and the four screens compose
+into it. One choice moves all four, and `showcase/showcaseScreen.tsx` — the file
+all four are registered in — never learns the slot exists.
+
+Two things about that set are easy to get wrong. The member app has a **fifth**
+consumer, `rank_screen.dart`; the Flutter preview this island ports never
+carried a rank celebration, so there is no rank card here to rearrange. And
+`BookingShowcase` is **not** one of them — it clones `ClassBookedScreen`, a
+class-detail surface, which belongs to `class_format`.
+
+The member app's layouts arrange four slots (header, body, close, one primary
+action); a preview card ships exactly one, its **body**, so the frame places
+exactly that one and never invents an action to arrange. What the absent action
+leaves behind is a measurement: `splitBand` and `fullBleed` still reserve
+`kCelebrationCtaZone` beneath the celebration, because both values ARE the seam
+between the card and the canvas the action stands on.
+`showcase/__tests__/celebrationFormats.test.tsx` is the mechanical gate — the
+stage's subtree must come out byte-identical across all five values, per card,
+in both of each card's views.
 
 `showcase/showcaseSlots.ts` is a SUBSET of the member app's manifest — only what
 these screens render. `next_rank_belt_image` is in it because `profile` renders
@@ -195,6 +232,19 @@ context so a value can reach somewhere, the resolver already reaches there.
 
 ## Things that will bite
 
+- **The wire's flat `images` / `fonts` / `icons` maps are FROZEN at
+  `slot -> string`, and widening one breaks the Flutter clients silently.**
+  Both runtimes parse them with a helper that SKIPS any entry whose value is
+  not a bare string (`parseStringMap` here, `_parseStringMap` in
+  `../ThemeFlutter`), so turning `fonts` into `slot -> {family, …}` would not
+  raise anywhere — the CRM and the member app would take a 200 with an empty
+  font map and fall back to their bundled faces. New per-slot metadata
+  therefore arrives on a GROUP beside the flat map (`font_set` passes the
+  artifact's own group through; `image_set` is projected because
+  `ImageOutput` carries a server path and a prompt), and the flat map stays a
+  projection of it. `parseThemeConfig` reads both: the family/URL off the
+  flat map, the metadata off the group, so a `localStorage` last-good copy
+  written before a group existed still resolves everything it ever did.
 - **`letterSpacing` ports as `px`, never `em`.** Flutter's `letterSpacing` is an
   absolute logical pixel value that does NOT scale with font size; CSS `em` does.
   `ShowcaseTokens.h1` is `letterSpacing: -0.02` at 24px → `-0.02px`. Writing

@@ -27,6 +27,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CelebrationTimings, EASE_OUT_QUART, ThemedImage } from 'theme-react';
 
+import { CelebrationFrame } from './celebrations/CelebrationFrame';
 import { CountUpText } from './celebrations/CountUpText';
 import { SHOWCASE_POINTS_STATS } from './celebrations/showcaseCelebrationStats';
 import { formatThousands } from './formatPoints';
@@ -35,7 +36,6 @@ import styles from './PointsShowcase.module.css';
 import { showcaseAsset } from './showcaseAssets';
 import { SLOT_POINTS_STARS_IMAGE, SLOT_SINGLE_POINT } from './showcaseSlots';
 import { showcaseStyle } from './showcaseTokens';
-import { ShowcaseScaffold } from './support/ShowcaseScaffold';
 import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 
 /**
@@ -95,12 +95,13 @@ export function PointsShowcase({ loop = true, onCycleComplete }: PointsShowcaseP
   // Reduced motion goes straight to the finished statement: the sphere is pure
   // motion, so there is no "end state" of it worth rendering.
   return (
-    <ShowcaseScaffold>
-      {/* `Padding(vertical: spacingBig)` wraps BOTH branches on this screen. */}
-      <div className={styles.screen}>
-        {showPoints || reduceMotion ? <FocusedView key={cycle} /> : <PointSphere key={cycle} />}
-      </div>
-    </ShowcaseScaffold>
+    // The celebration's arrangement — `PostClassScaffold`, resolved from the
+    // tenant's `celebration_format` (./celebrations/CelebrationFrame.tsx). It
+    // frames BOTH branches on this screen, exactly as the `Padding(vertical:
+    // spacingBig)` it replaces did (points_showcase.dart:77).
+    <CelebrationFrame>
+      {showPoints || reduceMotion ? <FocusedView key={cycle} /> : <PointSphere key={cycle} />}
+    </CelebrationFrame>
   );
 }
 

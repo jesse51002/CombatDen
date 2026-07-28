@@ -32,13 +32,13 @@
 import { useEffect, useState } from 'react';
 import { CelebrationTimings, EASE_OUT_QUART, ThemedImage, useThemeText } from 'theme-react';
 
+import { CelebrationFrame } from './celebrations/CelebrationFrame';
 import { SparkleBurst } from './celebrations/SparkleBurst';
 import { SHOWCASE_WINS_STATS } from './celebrations/showcaseCelebrationStats';
 import { WinsTileRow } from './celebrations/WinsTileRow';
 import { showcaseAsset } from './showcaseAssets';
 import { SLOT_TROPHY_IMAGE, SLOT_WINS_SUBTITLE, SLOT_WINS_TITLE } from './showcaseSlots';
 import { showcaseStyle } from './showcaseTokens';
-import { ShowcaseScaffold } from './support/ShowcaseScaffold';
 import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 import styles from './WinsShowcase.module.css';
 
@@ -98,12 +98,12 @@ export function WinsShowcase({ loop = true, onCycleComplete }: WinsShowcaseProps
   }, [loop, reduceMotion, onCycleComplete]);
 
   return (
-    <ShowcaseScaffold>
-      {/* `Padding(vertical: spacingBig) > Center`. */}
-      <div className={styles.screen}>
-        <WinsContent key={cycle} />
-      </div>
-    </ShowcaseScaffold>
+    // The recap's arrangement — `PostClassScaffold`, resolved from the tenant's
+    // `celebration_format` (./celebrations/CelebrationFrame.tsx). The shipped
+    // value re-applies this screen's own `Padding(vertical: spacingBig) > Center`.
+    <CelebrationFrame>
+      <WinsContent key={cycle} />
+    </CelebrationFrame>
   );
 }
 

@@ -32,6 +32,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { CelebrationTimings, EASE_OUT_QUART, ThemedImage } from 'theme-react';
 
+import { CelebrationFrame } from './celebrations/CelebrationFrame';
 import { RewardsCarousel } from './celebrations/RewardsCarousel';
 import { cx } from './cx';
 import { SLIDE_MS, wrapIndex } from './celebrations/rewardsCoverFlow';
@@ -60,7 +61,6 @@ import { showcaseAsset } from './showcaseAssets';
 import type { ShowcaseReward } from './showcaseContent';
 import { SLOT_GIFTBOX, SLOT_SINGLE_POINT } from './showcaseSlots';
 import { showcaseStyle } from './showcaseTokens';
-import { ShowcaseScaffold } from './support/ShowcaseScaffold';
 import { usePrefersReducedMotion } from './usePrefersReducedMotion';
 
 /** `subtitleDelay` — one standard stagger after the title. */
@@ -171,16 +171,18 @@ function RewardsCelebration({ stats, loop, onCycleComplete }: RewardsCelebration
   // Reduced motion goes straight to the carousel: the giftbox intro is pure
   // motion, so there is no "end state" of it worth rendering.
   return (
-    <ShowcaseScaffold>
-      {/* `Padding(vertical: spacingBig) > Center`. */}
-      <div className={styles.screen} style={showcaseStyle(REWARDS_VARS)}>
-        {showCarousel || reduceMotion ? (
-          <CarouselLayout stats={stats} page={page} switched={page !== firstPage} />
-        ) : (
-          <GiftboxIntro key={cycle} />
-        )}
-      </div>
-    </ShowcaseScaffold>
+    // The celebration's arrangement — `PostClassScaffold`, resolved from the
+    // tenant's `celebration_format` (./celebrations/CelebrationFrame.tsx). It
+    // frames BOTH views, exactly as the `Padding(vertical: spacingBig) > Center`
+    // it replaces did; `REWARDS_VARS` therefore rides each view's own root,
+    // where the rest of this island already puts its motion variables.
+    <CelebrationFrame>
+      {showCarousel || reduceMotion ? (
+        <CarouselLayout stats={stats} page={page} switched={page !== firstPage} />
+      ) : (
+        <GiftboxIntro key={cycle} />
+      )}
+    </CelebrationFrame>
   );
 }
 
@@ -198,7 +200,7 @@ function CarouselLayout({
   const featured = stats.items[featuredIndex];
 
   return (
-    <div className={styles.carouselLayout}>
+    <div className={styles.carouselLayout} style={showcaseStyle(REWARDS_VARS)}>
       {/* `Column(min, spacing: spacingMedium)` — both lines are reveals. */}
       <div className={styles.headings}>
         <p className={styles.title}>{stats.title}</p>
@@ -287,7 +289,7 @@ function GiftboxIntro() {
     // `SizedBox.expand > Stack(alignment: center)`, with the box painted OVER
     // the stars exactly as Dart orders them. Everything starts invisible, which
     // is what the driver's own frame 0 resolves to.
-    <div ref={rootRef} className={styles.stage}>
+    <div ref={rootRef} className={styles.stage} style={showcaseStyle(REWARDS_VARS)}>
       {BURST_SEEDS.map((seed, index) => (
         <div
           key={index}

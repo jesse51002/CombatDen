@@ -1,0 +1,196 @@
+/*
+ * Styles for ./CelebrationFrame.tsx (ports MobileApp's
+ * `shared/widgets/post_class/layouts/celebration_*.dart` — the five
+ * arrangements `celebration_format` chooses between).
+ *
+ * `--sc-*` for the design tokens (see ../ShowcaseThemeVars.tsx); `--cf-*` for
+ * this frame's own geometry, which the component derives from the ported
+ * arithmetic and writes inline, so no measurement is restated as a literal here.
+ *
+ * EACH ARRANGEMENT IS THREE VARIABLES AND, AT MOST, ONE SURFACE. The frame, the
+ * surface and the stage carry the same declarations in every value; a value
+ * only re-points `--cf-frame-inset-*`, `--cf-stage-inset-*` and
+ * `--cf-stage-anchor`, and paints the surface where it has one. That is what
+ * keeps "an arrangement is a rearrangement" true in the stylesheet and not only
+ * in prose — there is no value-specific rule that could add or drop a part.
+ *
+ * NOTHING IN HERE MAY CLIP. `overflow: visible` is spelled out on all three
+ * boxes: ../RewardsCarousel.tsx's cover flow is wider than its slot on purpose
+ * and ../SparkleBurst.tsx spills past the surface's rounded corners, which is
+ * the only surviving echo of `cardReveal`'s "illustration breaking over the
+ * card's top edge". A scrolling axis anywhere here would compute the other one
+ * to `auto` and crop both (../../../CLAUDE.md, "Things that will bite").
+ */
+
+/*
+ * The layout root — what `AppScreenScaffold(horizontalPadding: none)` hands the
+ * chosen layout. `position: relative` is the `Stack` `fullBleed` floats its
+ * scrim in.
+ */
+.frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding-inline: var(--cf-frame-inset-x, 0);
+  padding-top: var(--cf-frame-inset-top, 0);
+  padding-bottom: var(--cf-frame-inset-bottom, 0);
+  overflow: visible;
+}
+
+/*
+ * The raised object `cardReveal` and `splitBand` paint, and nothing at all in
+ * the other three. Deliberately never a clipping box — Flutter reaches for a
+ * `DecoratedBox` here rather than a `Container` for exactly that reason.
+ *
+ * `min-height: 0` is what lets it shrink below its content instead of pushing
+ * the reserved lower zone off the screen.
+ */
+.surface {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: visible;
+}
+
+/*
+ * `CelebrationStage` — `Align(alignment, child: body)`. A column so a body that
+ * sizes itself settles at the anchor, while a body that asks for `height: 100%`
+ * (the three `SizedBox.expand` intros) fills the box instead.
+ */
+.stage {
+  display: flex;
+  flex-direction: column;
+  justify-content: var(--cf-stage-anchor, center);
+  height: 100%;
+  padding-block: var(--cf-stage-inset-top, 0px) var(--cf-stage-inset-bottom, 0px);
+  overflow: visible;
+}
+
+/*
+ * `bleed` — the body takes the stage whole. Written as variables ON the stage
+ * rather than as a competing declaration, so it wins over whatever the
+ * arrangement inherited without depending on rule order or specificity.
+ */
+.bleed {
+  --cf-stage-inset-top: 0px;
+  --cf-stage-inset-bottom: 0px;
+}
+
+/*
+ * `CelebrationFormat.centerHero` — the arrangement that ships today.
+ *
+ * The body centred in everything there is, at the standard screen inset. These
+ * three declarations ARE the shipped rendering: the `padStandard` the scaffold
+ * used to apply, plus each card's own `Padding(vertical: spacingBig) > Center`.
+ * ../__tests__/celebrationFormats.test.tsx pins them, because "unchanged" is
+ * the one claim a screenshot of a looping animation cannot settle.
+ */
+.centerHero {
+  --cf-frame-inset-x: var(--sc-screen-padding-x);
+  --cf-stage-inset-top: var(--sc-spacing-big);
+  --cf-stage-inset-bottom: var(--sc-spacing-big);
+}
+
+/*
+ * `CelebrationFormat.figureTop` — the earned figure at the top of the read.
+ *
+ * The frame opens tighter and the body settles against the TOP of the stage
+ * instead of its centre, so on a screen opened at arm's length the number is
+ * where the eye lands first. The cards that size themselves visibly ride up;
+ * Points fills the stage in both of its views and is unmoved, exactly as the
+ * Dart layout's own doc says.
+ */
+.figureTop {
+  --cf-frame-inset-x: var(--sc-screen-padding-x);
+  --cf-frame-inset-top: var(--sc-spacing-large);
+  --cf-frame-inset-bottom: var(--sc-spacing-big);
+  --cf-stage-anchor: flex-start;
+}
+
+/*
+ * `CelebrationFormat.cardReveal` — the stat as a collectible.
+ *
+ * The whole celebration rides one raised, rounded object floating on the
+ * canvas. The card floats on the narrow token and pads on the narrow token, so
+ * the stage still gets the full width the shipped value gives it
+ * (8 + 8 = the 16 of `screenHorizontalPadding`). That is deliberate: the Points
+ * count-up reel already fills the shipped width, and a card that stole a
+ * `screenHorizontalPadding` a side would overflow it.
+ */
+.cardReveal {
+  --cf-frame-inset-x: var(--sc-spacing-medium);
+  --cf-frame-inset-top: var(--sc-spacing-large);
+  --cf-frame-inset-bottom: var(--sc-spacing-big);
+}
+
+.cardReveal .surface {
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-big);
+  padding: var(--sc-spacing-large) var(--sc-spacing-medium);
+}
+
+/*
+ * `CelebrationFormat.splitBand` — the calmest of the five.
+ *
+ * The celebration is contained in a band that bleeds to the top and both side
+ * edges; plain canvas sits beneath it. The seam gives the figure its own
+ * surface, which is what keeps it legible under a very busy tenant
+ * illustration. The band takes everything the lower zone does not, rather than
+ * a fixed fraction: the tallest card needs roughly 85% of the canvas before the
+ * layout gets a vote, and there is nothing to move down into the lower half to
+ * earn the space back, because the stat and the caption live inside the opaque
+ * body.
+ */
+.splitBand {
+  --cf-frame-inset-bottom: var(--cf-lower-zone);
+}
+
+.splitBand .surface {
+  background: var(--sc-card);
+  border-end-start-radius: var(--sc-radius-big);
+  border-end-end-radius: var(--sc-radius-big);
+  padding: var(--sc-spacing-large) var(--sc-screen-padding-x);
+}
+
+/*
+ * `CelebrationFormat.fullBleed` — the highest-impact value.
+ *
+ * No frame: the stage runs the whole canvas and the scrim floats over it
+ * instead of reserving a row in a column. It hands the body the largest box of
+ * the five, which is what the intros that size themselves to their box (the
+ * points sphere, the streak orbit, the giftbox burst) turn into reach.
+ *
+ * Two things it deliberately does NOT do. It keeps the screen inset on the
+ * stage's sides: an edge-to-edge stage puts the Wins tiles and the Streak week
+ * strip flush against the screen edge, and an arrangement cannot inset just the
+ * content of an opaque body. And it keeps the lower zone clear, because Points
+ * pins a caption to the bottom of its own box and a truly unbounded stage would
+ * park it under where the action stands.
+ */
+.fullBleed {
+  --cf-frame-inset-x: var(--sc-screen-padding-x);
+  --cf-frame-inset-bottom: var(--cf-lower-zone);
+}
+
+/*
+ * `CelebrationScrim`. Rises out of the canvas rather than glowing: the fill is
+ * the background, never the primary. Orange is reserved for agency, and a
+ * second bright wash here would spend celebration the cards have already earned
+ * once.
+ *
+ * It overlaps the stage by exactly one `spacingBig`, at the very top of the
+ * gradient where alpha is still near zero, so a caption pinned to the body's
+ * own bottom edge stays readable. `transparent` is the right stop and not a
+ * grey one: CSS interpolates gradients with premultiplied alpha, which is what
+ * Flutter's `backgroundColor.withValues(alpha: 0)` does too.
+ */
+.scrim {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: var(--cf-scrim-height);
+  background: linear-gradient(to bottom, transparent, var(--sc-background));
+  /* `IgnorePointer`. */
+  pointer-events: none;
+}

@@ -12,14 +12,12 @@
  * the classes below give it is only the box each element sits in.
  */
 
-/* `Padding(vertical: spacingBig) > Center` — wraps BOTH views. */
-.screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding-block: var(--sc-spacing-big);
-}
+/*
+ * The `Padding(vertical: spacingBig) > Center` that wrapped BOTH views belongs
+ * to the ARRANGEMENT and now lives with it, in
+ * ./celebrations/CelebrationFrame.module.css's `centerHero`. `--rw-*` therefore
+ * arrives on each view's own root below rather than on a screen box.
+ */
 
 /* --- The giftbox intro ---------------------------------------------------- */
 

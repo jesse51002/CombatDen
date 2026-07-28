@@ -8,21 +8,16 @@
  * literal here.
  */
 
-/* `Padding(vertical: spacingBig) > Center`. */
-.screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding-block: var(--sc-spacing-big);
-}
-
 /*
  * `Column(mainAxisSize: min, crossAxisAlignment: stretch, spacing: spacingBig)`.
  *
  * `stretch` inside a `Center` hands every child TIGHT cross constraints of the
  * body's full width — so the column is the body's width and each child fills
  * it, which is `width: 100%` here (see the component header on `_kHeroBoxWidth`).
+ *
+ * The `Padding(vertical: spacingBig) > Center` this used to sit in belongs to
+ * the ARRANGEMENT and now lives with it, in
+ * ./celebrations/CelebrationFrame.module.css's `centerHero`.
  */
 .content {
   display: flex;

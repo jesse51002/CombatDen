@@ -25,11 +25,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { CelebrationTimings, EASE_OUT_QUART, ThemedImage } from 'theme-react';
 
+import { CelebrationFrame } from './celebrations/CelebrationFrame';
 import { CountUpText } from './celebrations/CountUpText';
 import { showcaseAsset } from './showcaseAssets';
 import { SLOT_STREAK_ICON } from './showcaseSlots';
 import { showcaseStyle } from './showcaseTokens';
-import { ShowcaseScaffold } from './support/ShowcaseScaffold';
 import type { ShowcaseStreakDay } from './support/StreakWeekStrip';
 import { StreakWeekStrip } from './support/StreakWeekStrip';
 import styles from './StatsShowcase.module.css';
@@ -103,16 +103,20 @@ export function StatsShowcase({ loop = true, onCycleComplete }: StatsShowcasePro
 
   // Reduced motion goes straight to the finished statement: the orbit is pure
   // motion, so there is no "end state" of it worth rendering.
+  const settled = showStats || reduceMotion;
+
   return (
-    <ShowcaseScaffold>
-      {showStats || reduceMotion ? (
-        <div className={styles.screen}>
-          <StatsContent key={cycle} />
-        </div>
-      ) : (
-        <StreakOrbit key={cycle} />
-      )}
-    </ShowcaseScaffold>
+    // The celebration's arrangement — `PostClassScaffold`, resolved from the
+    // tenant's `celebration_format` (./celebrations/CelebrationFrame.tsx).
+    //
+    // `bleed` is the one asymmetry this screen ships and it is carried through
+    // rather than tidied away: the orbit is a bare `SizedBox.expand` while the
+    // statement sits inside a `Padding(vertical: spacingBig)`
+    // (stats_showcase.dart:95), so only the statement takes the arrangement's
+    // vertical inset. `centerHero` has to render exactly what ships today.
+    <CelebrationFrame bleed={!settled}>
+      {settled ? <StatsContent key={cycle} /> : <StreakOrbit key={cycle} />}
+    </CelebrationFrame>
   );
 }
 

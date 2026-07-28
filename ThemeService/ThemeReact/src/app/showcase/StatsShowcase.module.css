@@ -51,14 +51,13 @@
 
 /* --- The stats statement -------------------------------------------------- */
 
-/* `Padding(vertical: spacingBig) > Center`. */
-.screen {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  padding-block: var(--sc-spacing-big);
-}
+/*
+ * The `Padding(vertical: spacingBig) > Center` the statement used to sit in
+ * belongs to the ARRANGEMENT and now lives with it, in
+ * ./celebrations/CelebrationFrame.module.css's `centerHero`. The orbit above
+ * never had it (stats_showcase.dart:95) and still does not — the component
+ * asks for `bleed` on that branch.
+ */
 
 /* `Column(mainAxisSize: min, spacing: spacingLarge)`, centred. */
 .stats {

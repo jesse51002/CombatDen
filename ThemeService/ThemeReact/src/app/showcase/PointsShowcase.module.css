@@ -13,13 +13,11 @@
  */
 
 /*
- * `Padding(vertical: spacingBig)` — on this screen it wraps BOTH branches, so
- * it is the screen box rather than a per-view wrapper (points_showcase.dart:77).
+ * The `Padding(vertical: spacingBig)` that wrapped BOTH branches here
+ * (points_showcase.dart:77) belongs to the ARRANGEMENT and now lives with it,
+ * in ./celebrations/CelebrationFrame.module.css's `centerHero` — which is why
+ * this screen has no box of its own left.
  */
-.screen {
-  height: 100%;
-  padding-block: var(--sc-spacing-big);
-}
 
 /* --- The sphere ----------------------------------------------------------- */
 
