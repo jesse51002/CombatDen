@@ -14,7 +14,6 @@ from PIL import Image
 from schema import (
     AbsolutePath,
     AppFormat,
-    ColorOutput,
     ColorRole,
     Complexity,
     Customization,

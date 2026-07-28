@@ -147,7 +147,7 @@ def test_stale_run_returns_422_with_reason() -> None:
 
 
 def test_unknown_app_run_and_slot_404() -> None:
-    assert client.get(f"/apps/nope/run1").status_code == 404
+    assert client.get("/apps/nope/run1").status_code == 404
     assert client.get(f"/apps/{APP}/no_such_run").status_code == 404
 
 

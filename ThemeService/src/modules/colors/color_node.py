@@ -25,7 +25,6 @@ from src.core.run_context import RunContext
 from src.modules.base import DependencyKind, Node
 from src.modules.colors.color_correction_service import ColorCorrectionService
 from src.modules.colors.color_derivation_service import ColorDerivationService
-from src.modules.colors.color_models import LLMPalette
 from src.modules.colors.color_scheme_service import (
     COLOR_MODEL,
     ColorSchemeService,

@@ -20,7 +20,6 @@ from schema import (
     ExpansionEntry,
     ExpansionKind,
     FontOutput,
-    FontSet,
     IconOutput,
     IconSet,
     ImageOutput,
