@@ -1,14 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs/rewards_tabs.dart';
 
-/// Which tab is currently selected in the rewards tab strip.
-enum RewardsTab { pointsStore, myRewards }
-
-/// Two-tab segmented selector used on both rewards screens. Mimics the
-/// underline-on-active treatment from the design — the inactive tab is dim and
-/// has no underline.
-class RewardsTabs extends StatelessWidget {
-  const RewardsTabs({
+/// `RewardsTabsLayout.underline` — the strip that ships today. Mimics
+/// the underline-on-active treatment from the design; the inactive tab
+/// is dim and has no underline.
+class RewardsTabsUnderline extends StatelessWidget {
+  const RewardsTabsUnderline({
     super.key,
     required this.active,
     this.onPointsStoreTap,
@@ -40,14 +38,14 @@ class RewardsTabs extends StatelessWidget {
         spacing: DesignConstants.spacingBig,
         children: [
           Expanded(
-            child: _RewardsTabItem(
+            child: _TabItem(
               label: 'Points Store',
               isActive: active == RewardsTab.pointsStore,
               onTap: onPointsStoreTap,
             ),
           ),
           Expanded(
-            child: _RewardsTabItem(
+            child: _TabItem(
               label: 'My Rewards',
               isActive: active == RewardsTab.myRewards,
               onTap: onMyRewardsTap,
@@ -59,8 +57,8 @@ class RewardsTabs extends StatelessWidget {
   }
 }
 
-class _RewardsTabItem extends StatelessWidget {
-  const _RewardsTabItem({
+class _TabItem extends StatelessWidget {
+  const _TabItem({
     required this.label,
     required this.isActive,
     this.onTap,
