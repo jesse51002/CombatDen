@@ -223,6 +223,11 @@ another `RootModel[str]` and reuse it across schemas. Don't repeat
 the same regex check across multiple field validators when one
 primitive captures it.
 
+`PathSegment` is the one to reach for whenever a **caller-supplied name
+becomes a path**: a run folder under `<out_root>/<app_id>/` (the CLI's
+`--run-name`, the studio's launch) or a saved brief's filename stem. One
+rule, one place — not a near-identical guard per caller.
+
 ---
 
 ## Output groups
@@ -280,6 +285,46 @@ Poetry resolve and write the lock. Run all code, scripts, and tests via
 bare `python3` or the raw `.venv/bin/*` entrypoints. `poetry run` resolves
 the project venv itself, so it sidesteps the stale hardcoded-shebang
 breakage the `.venv/bin/*` scripts hit when this package was renamed.
+
+---
+
+## Two FastAPI apps, and why they are separate
+
+- **`src/api/`** — the read-only output API. Deployed (App Runner, :8001
+  locally). Serves *finished* runs.
+- **`src/studio/`** — the local launch surface. `make studio`, bound to
+  **127.0.0.1:8002**, never deployed. Writes a brief, starts a run, streams
+  its progress.
+
+**Never merge the studio into `src/api/`.** Both `Settings` classes
+instantiate at import time, and `src/api/config.py` deliberately needs only
+`APPS_ROOT` / `CORS_ORIGINS` / `ASSETS_CDN_BASE_URL` / `GOOGLE_FONTS_API_KEY`
+— `src/api/` **never imports `src.core.config`**, which is exactly what lets
+the deployed container boot without the four provider keys. Importing the
+pipeline into the read API destroys that property. The studio imports the
+pipeline freely; it runs on a laptop that has the keys.
+
+Rules that hold inside `src/studio/`:
+
+- **Nothing wire-shaped leaks down.** The studio owns SSE framing, JSONL,
+  HTTP status mapping; the executor owns `ProgressEvent`. Anything
+  transport-flavoured belongs here, never in `src/executor/`.
+- **State lives in `.studio/`, never in a run directory.** One append-only
+  `.studio/runs/<run_id>.jsonl` per launch, and committed briefs under
+  `.studio/briefs/`. Writing anything into `apps/<app_id>/<run_id>/` would
+  break the iron-clad rule above. `.studio/` is gitignored.
+- **The launch path only ever CREATES a run directory.** A name collision is
+  refused, never re-run in place — that keeps
+  `Pipeline._overwrite_existing`'s delete path unreachable from a browser.
+- **One run at a time, globally**, refused with 409 rather than queued: the
+  providers rate-limit and concurrent runs get throttled
+  (`.claude/skills/brand-brief/SKILL.md`). This guards the studio only; a
+  `python -m src` in a terminal is invisible to it.
+- **Briefs never overwrite `apps/<app_id>/customization.yaml`.** That is a
+  checked-in input and what `make run` generates from. The brief contract is
+  `schema/customization.py` — **five** fields, `extra="forbid"` — and
+  `BriefRequest.build` runs that model, so there is exactly one definition of
+  a valid brief. Never add a sixth field.
 
 ---
 

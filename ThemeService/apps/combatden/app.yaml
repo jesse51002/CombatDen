@@ -6,8 +6,10 @@ display_name: CombatDen
 # mirrors ParentGymType in the FastApi backend / the CRM's showcase
 # groups). A run whose category is missing or outside this set is skipped
 # by GET /apps/{id}/styles. The category itself lives per-run in
-# output.yaml (stamped today; a pipeline classification step is the
-# README TODO).
+# output.yaml, produced by the pipeline's classification node — it builds
+# its response schema from this very list, so a value outside it can't be
+# written. `expand` backfills an unclassified run; `regen --slot category`
+# re-files a mis-classified one.
 categories:
   - Fighting
   - Yoga

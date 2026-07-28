@@ -6,21 +6,20 @@ import argparse
 import logging
 from pathlib import Path
 
+from pydantic import ValidationError
+
 from src.core.errors import PipelineError
 from src.core.logging_setup import configure_logging
 from src.core.run_context import OUTPUT_ROOT_DIRNAME, RunContext
 from src.core.util import load_yaml
 from src.executor.orchestrator import Pipeline
 from src.executor.writer import Writer
-from schema import AppFormat, Customization
+from schema import AppFormat, Customization, PathSegment
 
 logger = logging.getLogger(__name__)
 
 # Default output root: <package parent>/apps -> apps/<app_id>/<run_id>/
 DEFAULT_OUT_ROOT = Path(__file__).resolve().parent.parent / OUTPUT_ROOT_DIRNAME
-# A run name becomes a single folder segment under <out_root>/<app_id>/, so it
-# must not be empty or carry a path separator / parent-dir escape.
-ILLEGAL_RUN_NAME_CHARS = ("/", "\\", "..")
 
 
 def _existing_category(output_path: Path) -> str | None:
@@ -49,13 +48,18 @@ def _existing_category(output_path: Path) -> str | None:
 
 
 def _run_name(value: str) -> str:
-    """argparse type: validate ``--run-name`` is one safe folder segment."""
-    if not value or any(token in value for token in ILLEGAL_RUN_NAME_CHARS):
+    """argparse type: validate ``--run-name`` is one safe folder segment.
+
+    The rule itself is the shared ``PathSegment`` primitive (the studio's
+    launch names a run folder the same way) — this only translates its
+    ``ValueError`` into the exception argparse renders.
+    """
+    try:
+        return str(PathSegment(value))
+    except ValidationError as exc:
         raise argparse.ArgumentTypeError(
-            f"run name {value!r} must be a non-empty single folder segment "
-            "with no '/', '\\', or '..'"
-        )
-    return value
+            f"run name: {exc.errors()[0]['msg']}"
+        ) from None
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:

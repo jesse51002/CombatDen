@@ -377,6 +377,96 @@ The first three preserve `output.yaml`'s original `cost` and append one entry to
 `regenerate`), the slots (re)generated, the `OverwriteSpecs` applied, and that
 pass's spend.
 
+---
+
+## The studio — press a button, watch a theme generate
+
+`make studio` serves a **local-only** FastAPI app on **127.0.0.1:8002**. It
+writes a brief, launches a run, and streams that run's progress to a
+browser. It is the launch surface; the read-only API (`make api`, :8001) is
+still the thing that serves finished themes.
+
+It is a **separate app from `src/api/`, deliberately.** Both `Settings`
+classes instantiate at import time, and `src/api/` never imports
+`src.core.config` — which is exactly what lets the deployed App Runner
+container boot with only `GOOGLE_FONTS_API_KEY` set. Pulling the pipeline
+into the read API would drag the four provider keys in with it and break
+that. The studio imports the pipeline freely because it runs on a laptop
+that has the keys.
+
+### The endpoints
+
+| | |
+| --- | --- |
+| `POST /briefs` | Validate the five brief fields and write `.studio/briefs/<slug>.yaml`. |
+| `POST /runs` | Start a run from a brief + a **new** run name. Returns a `run_id` immediately — it never blocks on generation. |
+| `GET /runs/{id}/events` | Server-Sent Events: the run, live. |
+| `GET /runs/{id}` | The same records as one snapshot (the poll fallback). |
+| `GET /runs/{id}/images/{slot}` | One slot's PNG, **servable mid-run**. |
+| `GET /runs/active` | The run currently in flight, or `null`. |
+
+### Four things worth knowing
+
+**The stream replays from index 0.** Every subscriber gets every record from
+the beginning, so a tab that opens late — or reconnects — misses nothing.
+Each frame is a default (unnamed) `message` event carrying one `RunRecord`
+as JSON, with the record's index as the SSE `id:`, so a client needs only
+`EventSource.onmessage`. **The client must `close()` on the terminal record**
+(`kind === "settled"`): the server ends the stream there and an open
+`EventSource` reconnects automatically — and would be replayed from 0 again,
+forever. There is no `sse-starlette` and no npm dependency on either side;
+`StreamingResponse` and the browser's built-in `EventSource` are enough.
+
+**One run at a time, globally.** The pipeline hits rate-limited LLM / image
+providers and concurrent runs get throttled, so a second launch is refused
+with **409** carrying the active run's id/app/name rather than queued. This
+guards the studio only — someone running `python -m src` in a terminal at
+the same time is invisible to it.
+
+**The launch path only ever CREATES a run directory.** A name that already
+exists is refused (409), never re-run in place, so the pipeline's
+destructive in-place overwrite is unreachable from a browser.
+
+**State lives in `.studio/`, never in a run.** Each launch appends one JSON
+line per record to `.studio/runs/<run_id>.jsonl` — outside every run
+directory, because a run's produced artifacts are the pipeline's alone. A
+log whose last line is not a terminal record identifies a **crashed** run,
+which nothing else can tell you: done-ness is otherwise inferred purely from
+`output.yaml` being on disk, and that cannot distinguish "still going" from
+"the process died half way". `.studio/` is gitignored.
+
+### Images as they land
+
+`GET /runs/{id}/images/{slot}` serves the PNG straight off disk, so a client
+can display each image the moment its `node_finished` event arrives carrying
+that slot's `image_slot`. The read API cannot answer this during a run —
+`OutputService.image_file` loads the run's `output.yaml` first, and that file
+is written only when the whole run finishes (and it 307-redirects to the CDN
+by default, where a run made thirty seconds ago on a laptop does not exist).
+That is the read API being right about its own job — serving *finished* runs
+— so the studio serves the live bytes itself.
+
+### The brief form
+
+`POST /briefs` takes the five brief fields flat (`name`, `short_desc`,
+`long_desc`, `colors_description`, `mode`) and writes
+`.studio/briefs/<slug>.yaml`. The contract is `schema/customization.py` —
+five fields, `extra="forbid"`, non-empty validators — and `BriefRequest.build`
+runs *that* model, so there is never a second copy of what a valid brief is.
+A blank field is a 422 and nothing is written.
+
+Briefs land in `.studio/briefs/`, **not** `apps/<app_id>/customization.yaml`:
+that file is a checked-in input and what `make run` generates from, so
+writing it here would silently change what a plain `make run` does. A launch
+consumes either an inline `brief` or a saved `brief_slug` — exactly one.
+
+> A conversational (Pydantic AI) agent that authors this brief is a planned
+> follow-up. It is not built here on purpose; when it lands its accept path
+> calls the same `BriefService.commit`, so the form and the agent share one
+> validate-and-commit path rather than growing two.
+
+---
+
 ## TODO
 
 ### Corner rounding — one paid call, the rest derived
@@ -423,7 +513,8 @@ codebase/CustomizationService/
 ├── src/
 │   ├── __main__, cli    # CLI entrypoint
 │   ├── core/            # config, errors, run_context, logging, util
-│   ├── executor/        # orchestrator (the DAG), registry, writer
+│   ├── executor/        # orchestrator (the DAG), registry, writer,
+│   │                    #   progress_event + progress_sink (watch a run)
 │   ├── modules/         # base = Node + DependencyKind
 │   │   ├── colors/      # ColorNode + scheme (LLM) / correction /
 │   │   │                #   derivation / surface services, prompts/*.md
@@ -443,9 +534,14 @@ codebase/CustomizationService/
 │   │                    #   Recraft remover, Google Fonts catalog,
 │   │                    #   local icon set catalog, Recraft icon generator,
 │   │                    #   cost, prompts/*.md
-│   └── api/             # read-only FastAPI over output.yaml
-├── tests/               # core, modules, executor, pipeline, services, api
+│   ├── api/             # read-only FastAPI over output.yaml (deployed)
+│   └── studio/          # local launch surface: POST a brief, launch a
+│                        #   run, stream it (SSE) — routers, schema/,
+│                        #   service/ (registry, launcher, reader, briefs)
+├── tests/               # core, modules, executor, pipeline, services,
+│                        #   api, studio
 ├── scripts/             # expand, regen, regen_image, edit_customization, …
+├── .studio/             # gitignored: run logs (jsonl) + committed briefs
 └── apps/
     ├── combatden/       # app.yaml, customization.yaml, runs
     └── smoketest/       # app.yaml, customization.yaml, runs (every module)
@@ -453,6 +549,7 @@ codebase/CustomizationService/
 
 `make test` runs the suite; `make run` customizes `apps/combatden/` end
 to end, `make smoke` does the same on `apps/smoketest/` (the one app that
-exercises all six modules); `make api` serves the read-only output API.
-Entry point: `src/executor/orchestrator.py`. Read the schemas for the
-exact YAML shapes; read `apps/combatden/` for a worked example.
+exercises all six modules); `make api` serves the read-only output API and
+`make studio` serves the local launch surface. Entry point:
+`src/executor/orchestrator.py`. Read the schemas for the exact YAML shapes;
+read `apps/combatden/` for a worked example.

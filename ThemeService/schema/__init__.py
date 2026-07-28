@@ -28,7 +28,14 @@ from schema.output import (
     TextOutput,
     TextSet,
 )
-from schema.primitives import AbsolutePath, HexColor, HslColor, OklchColor, RgbColor
+from schema.primitives import (
+    AbsolutePath,
+    HexColor,
+    HslColor,
+    OklchColor,
+    PathSegment,
+    RgbColor,
+)
 from schema.slots import (
     ColorSlot,
     FontSlot,
@@ -72,6 +79,7 @@ __all__ = [
     "OklchColor",
     "Output",
     "OverwriteSpecs",
+    "PathSegment",
     "RgbColor",
     "RunCost",
     "SlotBase",

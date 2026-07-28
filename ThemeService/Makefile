@@ -1,4 +1,4 @@
-.PHONY: run smoke api test sync-assets assets-install assets-provision assets-finalize docker-build ecr-push pause resume react-install react-dev react-build react-check
+.PHONY: run smoke api studio test sync-assets assets-install assets-provision assets-finalize docker-build ecr-push pause resume react-install react-dev react-build react-check
 
 run:
 	poetry run python -m src --app-yaml apps/combatden/app.yaml --customization-yaml apps/combatden/customization.yaml
@@ -8,6 +8,12 @@ smoke:
 
 api:
 	poetry run python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8001 --reload
+
+# The local launch surface (start a run, watch it stream). NOT deployed and
+# NOT 0.0.0.0: it starts runs that spend real money, so it is bound to
+# loopback only. Needs the full .env (it imports the pipeline).
+studio:
+	poetry run python -m uvicorn src.studio.main:app --host 127.0.0.1 --port 8002 --reload
 
 test:
 	poetry run pytest tests/ -v
