@@ -2,6 +2,7 @@ import 'package:theme_flutter/customization_service.dart';
 import 'package:theme_flutter/data/customization_api_client.dart';
 import 'package:theme_flutter/data/models/color_mode.dart';
 import 'package:theme_flutter/data/models/customization.dart';
+import 'package:theme_flutter/data/models/customization_format.dart';
 import 'package:theme_flutter/service_locator.dart';
 
 /// A [ThemeService] whose loaded customization is set by hand.
@@ -9,12 +10,17 @@ import 'package:theme_flutter/service_locator.dart';
 /// The real service only ever loads over the network or from
 /// `SharedPreferences`, neither of which belongs in a resolution test.
 /// This overrides the one getter the format resolver reads through
-/// (`current.texts`), and — because [ThemeService] is a
+/// (`current.formats`, the wire's `format_set` — NOT `texts`, which is
+/// brand copy and which the app once wrongly read formats from), and —
+/// because [ThemeService] is a
 /// `ChangeNotifier` — [load] is a genuine theme-change notification on
 /// the real listenable type, not a stand-in for one.
 class StubThemeService extends ThemeService {
-  StubThemeService([Map<String, String> texts = const {}])
-    : _texts = Map.of(texts),
+  StubThemeService([Map<String, String> formats = const {}])
+    : _formats = {
+        for (final e in formats.entries)
+          e.key: ThemeFormatValue(value: e.value),
+      },
       super(
         ThemeApiClient(appId: 'test', designId: 'test'),
         expectedColorKeys: const [],
@@ -24,12 +30,15 @@ class StubThemeService extends ThemeService {
         expectedIconKeys: const [],
       );
 
-  Map<String, String> _texts;
+  Map<String, ThemeFormatValue> _formats;
 
   /// Swap the tenant's slots and fire the change, exactly as loading a
   /// new design does.
-  void load(Map<String, String> texts) {
-    _texts = Map.of(texts);
+  void load(Map<String, String> formats) {
+    _formats = {
+      for (final e in formats.entries)
+        e.key: ThemeFormatValue(value: e.value),
+    };
     notifyListeners();
   }
 
@@ -43,8 +52,9 @@ class StubThemeService extends ThemeService {
     palette: const {},
     images: const {},
     fonts: const {},
-    texts: _texts,
+    texts: const {},
     icons: const {},
+    formats: _formats,
   );
 }
 

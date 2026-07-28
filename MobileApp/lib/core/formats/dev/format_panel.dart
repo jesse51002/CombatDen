@@ -4,6 +4,7 @@ import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/formats/format_catalog.dart';
 import 'package:mobile_app/core/formats/format_resolver.dart';
 import 'package:mobile_app/core/formats/format_store.dart';
+import 'package:theme_flutter/theme/theme_format.dart';
 
 /// Marks the chip a row is currently showing as live, so a test can read
 /// back what the panel displays rather than infer it from a decoration.
@@ -158,6 +159,23 @@ class _FormatRow extends StatelessWidget {
                 ),
             ],
           ),
+          // Why the generator chose this arrangement, in its own words.
+          // Only shown when the tenant is what is actually live: a
+          // rationale next to a value the reviewer has overridden would
+          // be explaining a screen they are not looking at.
+          if (source == FormatSource.tenant)
+            Builder(
+              builder: (context) {
+                final reason = ThemeFormat.entry(entry.slot)?.reason ?? '';
+                if (reason.isEmpty) return const SizedBox.shrink();
+                return Text(
+                  reason,
+                  style: DesignConstants.pSmall.copyWith(
+                    color: DesignConstants.text2nd,
+                  ),
+                );
+              },
+            ),
           Wrap(
             spacing: DesignConstants.spacingSmall,
             runSpacing: DesignConstants.spacingSmall,

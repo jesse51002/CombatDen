@@ -1,6 +1,6 @@
 import 'package:mobile_app/core/formats/format_overrides.dart';
 import 'package:mobile_app/core/formats/format_store.dart';
-import 'package:theme_flutter/theme/theme_text.dart';
+import 'package:theme_flutter/theme/theme_format.dart';
 
 /// Which layer supplied a format's live value.
 enum FormatSource {
@@ -42,8 +42,9 @@ enum FormatSource {
 /// missing the tenant step.
 ///
 /// Deliberately built on the engine's existing string-slot reader
-/// (`ThemeText.value`) rather than on a new slot kind inside the shared
-/// `theme_flutter` package — see `ThemeLayout` for why. `ThemeText`
+/// (`ThemeFormat.value`), which reads the wire's own `format_set` —
+/// the section the generator writes its chosen arrangements into,
+/// alongside the rationale for each. `ThemeFormat`
 /// returns the fallback when no customization is loaded, the slot is
 /// absent, or DI is not registered (widget tests), and never throws, so
 /// every accessor here is safe in every context.
@@ -58,7 +59,7 @@ class FormatResolver {
     if (pinned != null) return (pinned, FormatSource.pinned);
     final override = FormatOverrides.read(slot);
     if (override != null) return (override, FormatSource.dartDefine);
-    final tenant = ThemeText.value(slot, fallback: '');
+    final tenant = ThemeFormat.value(slot, fallback: '');
     if (tenant.isNotEmpty) return (tenant, FormatSource.tenant);
     return (null, FormatSource.shipped);
   }
