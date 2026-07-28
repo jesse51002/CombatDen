@@ -87,7 +87,7 @@ final List<FormatEntry> kMotionFormats = [
     slot: CombatDenSlots.celebrationIntro,
     label: 'Celebration intro',
     values: _names(CelebrationIntro.values),
-    implemented: false,
+    implemented: true,
   ),
   FormatEntry(
     slot: CombatDenSlots.revealStyle,
