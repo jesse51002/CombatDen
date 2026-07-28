@@ -1,6 +1,7 @@
 @Tags(['golden'])
 library;
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -62,6 +63,21 @@ Future<void> _loadFont() async {
   }
 }
 
+/// Swallows the platform noise the real-async window lets through.
+///
+/// Letting the frame advance for real (the [WidgetTester.runAsync]
+/// below, which is what makes the bundled images decode) also lets
+/// `google_fonts` reach for Jura. The test binding answers every HTTP
+/// request with a 400, so it fails — as a dangling future, whose error
+/// lands in the ambient zone and fails the test AFTER the golden has
+/// already been written. Guarding the pump keeps it in a zone of its
+/// own.
+///
+/// This does NOT hide layout errors: an overflow is reported through
+/// `FlutterError.onError`, not through the zone, so it still reddens
+/// the test.
+void _ignorePlatformNoise(Object error, StackTrace stack) {}
+
 void main() {
   setUpAll(_loadFont);
 
@@ -71,61 +87,63 @@ void main() {
       tester.view.devicePixelRatio = 3.0;
       addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(
-        DefaultAssetBundle(
-          bundle: _StubAssetBundle(),
-          child: MaterialApp(
-            debugShowCheckedModeBanner: false,
-            home: Scaffold(
-              backgroundColor: DesignConstants.backgroundColor,
-              body: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    color: DesignConstants.primaryColor,
-                    padding: EdgeInsets.all(DesignConstants.spacingSmall),
-                    child: Text(
-                      'app_shell_format = ${format.name}',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: DesignConstants.primaryButtonText,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+      await runZonedGuarded(() async {
+        await tester.pumpWidget(
+          DefaultAssetBundle(
+            bundle: _StubAssetBundle(),
+            child: MaterialApp(
+              debugShowCheckedModeBanner: false,
+              home: Scaffold(
+                backgroundColor: DesignConstants.backgroundColor,
+                body: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      color: DesignConstants.primaryColor,
+                      padding: EdgeInsets.all(DesignConstants.spacingSmall),
+                      child: Text(
+                        'app_shell_format = ${format.name}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: DesignConstants.primaryButtonText,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
-                  ),
-                  AppTopbar(
-                    formatOverride: format,
-                    mode: AppTopbarMode.bigLogo,
-                    showBackButton: false,
-                    gymName: 'Global MMA',
-                    logoAsset: 'logo_primary.png',
-                    streakDays: 12,
-                    pointsLabel: '2,480',
-                    rankBadgeAsset: 'rank_belt.png',
-                  ),
-                  const Expanded(
-                    child: SingleChildScrollView(child: _BodyStandIn()),
-                  ),
-                  AppBottomNavBar(
-                    formatOverride: format,
-                    selected: AppBottomNavTab.home,
-                  ),
-                ],
+                    AppTopbar(
+                      formatOverride: format,
+                      mode: AppTopbarMode.bigLogo,
+                      showBackButton: false,
+                      gymName: 'Global MMA',
+                      logoAsset: 'logo_primary.png',
+                      streakDays: 12,
+                      pointsLabel: '2,480',
+                      rankBadgeAsset: 'rank_belt.png',
+                    ),
+                    const Expanded(
+                      child: SingleChildScrollView(child: _BodyStandIn()),
+                    ),
+                    AppBottomNavBar(
+                      formatOverride: format,
+                      selected: AppBottomNavTab.home,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
-        ),
-      );
-      // Asset decode is async: let the image futures complete, then
-      // pump so the decoded frames are actually painted.
-      await tester.runAsync(() => Future<void>.delayed(
-        const Duration(milliseconds: 50),
-      ));
-      for (var i = 0; i < 3; i++) {
-        await tester.pump(const Duration(milliseconds: 32));
-      }
+        );
+        // Asset decode is async: let the image futures complete, then
+        // pump so the decoded frames are actually painted.
+        await tester.runAsync(() => Future<void>.delayed(
+          const Duration(milliseconds: 50),
+        ));
+        for (var i = 0; i < 3; i++) {
+          await tester.pump(const Duration(milliseconds: 32));
+        }
+      }, _ignorePlatformNoise);
 
       await expectLater(
         find.byType(MaterialApp),

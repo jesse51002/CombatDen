@@ -28,8 +28,16 @@ class SelectedGym {
   /// loaded design's own name (e.g. "Apex MMA") is the source of truth; the
   /// picker label is the fallback for the brief window before the theme
   /// finishes loading (or if the engine never loaded at all).
+  ///
+  /// Guarded on [ThemeRuntime.isReady]: the engine throws from
+  /// `activeDesignName` until it has been initialized, and the package
+  /// documents that every consumer that can build before the first
+  /// `initialize` must check first. A topbar is exactly that consumer — it
+  /// paints on screens the engine did not boot, and in a widget test the
+  /// engine is never registered at all.
   String get displayName {
-    final designName = ThemeRuntime.activeDesignName;
+    final designName =
+        ThemeRuntime.isReady ? ThemeRuntime.activeDesignName : null;
     if (designName != null && designName.isNotEmpty) return designName;
     return _pickedName ?? '';
   }

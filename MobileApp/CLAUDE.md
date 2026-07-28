@@ -384,13 +384,43 @@ reveal + post-class celebration animations deterministically — read by
 intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
 See `tools/capture/README.md`.
 
-Also outside `lib/`, **`docs/`** holds design proposals for this app. Today that
-is `layout_and_motion_formats.md` — the proposed layout and motion enum library
-(one whole-screen layout enum per major screen, plus a motion personality and
-five per-surface motion slots), with `layout_formats_preview.html` rendering
-every value as a wireframe specimen. It is a **proposal**: nothing under `lib/`
-implements it, and `lib/core/app_slots.dart` does not yet declare layout or
-motion slots. If those slots are added, update that doc in the same change.
+Also outside `lib/`, **`docs/`** holds design docs for this app. Today that is
+`layout_and_motion_formats.md` — the layout and motion enum library (one
+whole-screen layout enum per major screen, plus a motion personality and five
+per-surface motion slots), with `layout_formats_preview.html` rendering every
+value as a wireframe specimen. **It is a design doc, not the contract: the code
+is.** Where the two disagree, fix the doc.
+
+## Layout formats
+
+A **layout format** is one complete, reviewed arrangement of a screen, selected
+per tenant. The rules:
+
+- The enums live in `lib/core/formats/layout_formats.dart`, one per screen, and
+  the **first value is what ships today** and is the parse fallback.
+- A screen resolves its own value through `ThemeLayout.<screen>()`
+  (`lib/core/formats/theme_layout.dart`), which reads the tenant's slot
+  (declared in `lib/core/app_slots.dart`) behind the dev picker and a
+  `--dart-define`. Wrap the switch in a `FormatBuilder` so the in-app picker
+  swaps it live without remounting the screen.
+- `lib/core/formats/format_catalog.dart` lists every format and carries the
+  `implemented` flag the dev picker shows — flip it when a screen is wired.
+- **A format changes ARRANGEMENT ONLY.** No element is added, none removed, no
+  variant reaches data the shipped screen did not already have. This is not a
+  convention, it is enforced: every screen with a format has an invariants test
+  (`test/shell_invariants_test.dart`, `test/class_invariants_test.dart`) that
+  pumps EVERY value at real phone size and asserts the full element set — and
+  any single-commit-point action, e.g. the class screen's one reserve CTA — is
+  still there exactly once. Add to that test in the same change as a new value.
+- Per-screen layouts live in `features/<feature>/presentation/layouts/`, one
+  file per value, composing a shared payload (`*_layout_data.dart`) and the
+  shared `parts/` — with the section widgets in `presentation/widgets/` gaining
+  **presentation** props (treatment / position enums) but never new data props.
+  The shell's version of the same shape is `shared/widgets/topbar/layouts/`.
+- Each screen also has a golden preview (`test/*_preview_test.dart`, tagged
+  `golden`) rendering every value to `test/goldens/` for side-by-side review.
+  Regenerate with
+  `flutter test --tags golden --update-goldens --run-skipped`.
 
 ## Development Commands
 
