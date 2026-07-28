@@ -390,9 +390,10 @@ inert in normal use (all null / false / clock-unset): `captureController` on
 `ClassBookedScreen`; and the global `captureRevealClock`
 (`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
 reveal + post-class celebration animations deterministically — read by
-`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the points/streak
-intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
-See `tools/capture/README.md`.
+`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the shared
+celebration intro stage (`shared/widgets/post_class/intro/`), the points intro
+controller (`_PointSphere`), and the streak badge pulse. See
+`tools/capture/README.md`.
 
 Also outside `lib/`, **`docs/`** holds design docs for this app. Today that is
 `layout_and_motion_formats.md` — the layout and motion enum library (one
@@ -433,6 +434,41 @@ per tenant. The rules:
   `golden`) rendering every value to `test/goldens/` for side-by-side review.
   Regenerate with
   `flutter test --tags golden --update-goldens --run-skipped`.
+
+## Motion formats
+
+A **motion format** is the same idea one level down: the enums live in
+`lib/core/formats/motion_formats.dart`, a surface resolves its value
+through `ThemeMotion.<slot>()`, and the same store / `--dart-define` /
+tenant-slot order applies. The difference is the invariant:
+
+- **A motion format changes TIMING AND ENTRANCE ONLY.** It may not change
+  which elements exist, what the surface is fed, or the app's motion law.
+  **No value may overshoot** — ease-out only, no bounce, no elastic, no
+  anticipation ("back") curve. Energy comes from stagger density.
+- `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
+  holds it: `celebration_intro_frame.dart` is the pure per-instant model
+  (`CelebrationIntroFrame`) plus one value's whole contract
+  (`CelebrationIntroSpec` — total, hand-off, particle field, frame
+  function); one file per value declares a spec; `celebration_intro_figure.dart`
+  is the only widget that paints one; and `celebration_intro_stage.dart`
+  holds the `FormatBuilder`-wrapped switch **and** the whole
+  `PostClassController` contract (CTA inert while playing, tap-to-skip,
+  exactly one `markDone`, capture-clock driving). A card supplies its
+  hero mark, its particle mark, and its settled content — it never
+  implements an intro.
+- Because the values are pure `double t -> frame` functions, the gate can
+  assert the motion law numerically rather than by eye:
+  `test/celebration_intro_invariants_test.dart` samples every value's
+  frames for overshoot, scans the module for banned curves, and pumps
+  every value (× every celebration layout) at real phone size. Same rule
+  as the layout gates — add to it in the same change as a new value, and
+  mutation-test it.
+- **Only the streak card is on the shared stage.** The points card keeps
+  its own `_PointSphere`, because the shipped `orbit` value is the streak
+  ring: routing points through it would replace the shipped points intro
+  for every tenant, which the "first value renders exactly what ships
+  today" guarantee forbids.
 
 ## Development Commands
 
