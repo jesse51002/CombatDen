@@ -93,7 +93,7 @@ final List<FormatEntry> kMotionFormats = [
     slot: CombatDenSlots.revealStyle,
     label: 'Reveal',
     values: _names(RevealStyle.values),
-    implemented: false,
+    implemented: true,
   ),
   FormatEntry(
     slot: CombatDenSlots.loaderStyle,
