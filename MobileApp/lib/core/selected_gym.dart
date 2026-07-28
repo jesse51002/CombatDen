@@ -28,7 +28,13 @@ class SelectedGym {
   /// loaded design's own name (e.g. "Apex MMA") is the source of truth; the
   /// picker label is the fallback for the brief window before the theme
   /// finishes loading (or if the engine never loaded at all).
+  ///
+  /// Gated on [ThemeRuntime.isReady]: `activeDesignName` reaches into
+  /// the engine's DI and THROWS when nothing is registered, which is the
+  /// case in every widget test that pumps a topbar. Same value either
+  /// way once a design is loaded.
   String get displayName {
+    if (!ThemeRuntime.isReady) return _pickedName ?? '';
     final designName = ThemeRuntime.activeDesignName;
     if (designName != null && designName.isNotEmpty) return designName;
     return _pickedName ?? '';

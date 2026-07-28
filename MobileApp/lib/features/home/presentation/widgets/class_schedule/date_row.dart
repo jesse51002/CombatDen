@@ -9,19 +9,22 @@ import 'package:mobile_app/features/home/presentation/widgets/class_schedule/dat
 // exactly via Scrollable.ensureVisible.
 const double _kDateTabPitchEstimate = 120;
 
-const int _kDateTabCount = 365;
-
 class DateRow extends StatefulWidget {
   const DateRow({
     super.key,
     required this.currentDayIndex,
     required this.scrollController,
     required this.onDateTap,
+    this.style = DateTabStyle.underline,
   });
 
   final int currentDayIndex;
   final ScrollController scrollController;
   final ValueChanged<int> onDateTap;
+
+  /// How each day marks itself as selected. Presentation only — the tab
+  /// count, the labels and the tap contract are the same either way.
+  final DateTabStyle style;
 
   @override
   State<DateRow> createState() => _DateRowState();
@@ -121,7 +124,7 @@ class _DateRowState extends State<DateRow> {
           left: DesignConstants.paddingBig,
           right: DesignConstants.spacingMedium,
         ),
-        itemCount: _kDateTabCount,
+        itemCount: kScheduleDayCount,
         separatorBuilder: (_, _) =>
             SizedBox(width: DesignConstants.spacingBig),
         itemBuilder: (context, index) => DateTab(
@@ -129,6 +132,7 @@ class _DateRowState extends State<DateRow> {
           label: formatDayLabel(index),
           isSelected: index == widget.currentDayIndex,
           onTap: () => widget.onDateTap(index),
+          style: widget.style,
         ),
       ),
     );
