@@ -1,24 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/core/selected_gym.dart';
+import 'package:mobile_app/core/formats/format_builder.dart';
+import 'package:mobile_app/core/formats/layout_formats.dart';
+import 'package:mobile_app/core/formats/theme_layout.dart';
 import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_details_section.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_image_banner.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_instructor_section.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_location_section.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_meta_section.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_reserve_footer.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_banner_stack.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_detail_sheet.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_layout_data.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_overlay_hero.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_section_tabs.dart';
+import 'package:mobile_app/features/class_booking/presentation/layouts/class_spec_brief.dart';
 import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
-import 'package:mobile_app/features/home/data/mock_gym.dart';
-import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
-import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
 /// Class detail / booking screen.
 ///
 /// Accepts a [MockClass] via `Navigator.pushNamed` route arguments and
 /// falls back to the canonical Muay Thai sample if none is provided.
+///
+/// The arrangement is resolved from the tenant's `class_format` slot and
+/// delegated to one of the layouts in `presentation/layouts/`, each of
+/// which composes the same sections from `presentation/widgets/`. Every
+/// layout renders the same element set — topbar, photo, meta, details,
+/// instructor, location, and exactly ONE reserve action — and every
+/// layout keeps the screen's hooks: the capture harness's controller and
+/// keys, and the horizontal swipe into the post-class flow, which is
+/// owned here so no arrangement can lose it.
 class ClassScreen extends StatelessWidget {
   const ClassScreen({
     super.key,
@@ -26,6 +33,7 @@ class ClassScreen extends StatelessWidget {
     this.captureController,
     this.imageKey,
     this.reserveKey,
+    this.formatOverride,
   });
 
   /// Injected by the capture harness (`tools/capture/`) to render a specific
@@ -40,12 +48,24 @@ class ClassScreen extends StatelessWidget {
   final GlobalKey? imageKey;
   final GlobalKey? reserveKey;
 
+  /// Forces a layout instead of resolving it from the customization.
+  /// Used by the layout-invariant tests and the format preview; null in
+  /// normal app use.
+  final ClassFormat? formatOverride;
+
   @override
   Widget build(BuildContext context) {
     final args = ModalRoute.of(context)?.settings.arguments;
     final data = classData ?? (args is MockClass ? args : fallbackClass);
-    final detail = detailFor(data);
-    final gym = mockGym;
+    final layoutData = ClassLayoutData(
+      detail: detailFor(data),
+      onReserve: () => Navigator.of(
+        context,
+      ).pushReplacementNamed(AppRoutes.reservingLoading),
+      captureController: captureController,
+      imageKey: imageKey,
+      reserveKey: reserveKey,
+    );
 
     return AppScreenScaffold(
       horizontalPadding: AppScreenHorizontalPadding.none,
@@ -59,73 +79,18 @@ class ClassScreen extends StatelessWidget {
             ).pushReplacementNamed(AppRoutes.postClassStreak);
           }
         },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                controller: captureController,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    AppTopbar(
-                      mode: AppTopbarMode.nameOnly,
-                      showBackButton: true,
-                      gymName: selectedGym.displayName,
-                      logoAsset: gym.logoAsset,
-                      streakDays: gym.streakDays,
-                      pointsLabel: gym.pointsLabel,
-                      rankBadgeAsset: gym.rankBadgeAsset,
-                    ),
-                    KeyedSubtree(
-                      key: imageKey,
-                      child: ClassImageBanner(imageUrl: data.imageUrl),
-                    ),
-                    _Body(detail: detail),
-                  ],
-                ),
-              ),
-            ),
-            ClassReserveFooter(
-              buttonKey: reserveKey,
-              onReserve: () => Navigator.of(
-                context,
-              ).pushReplacementNamed(AppRoutes.reservingLoading),
-            ),
-          ],
-        ),
+        child: FormatBuilder(builder: (context) => _layout(layoutData)),
       ),
     );
   }
-}
 
-class _Body extends StatelessWidget {
-  const _Body({required this.detail});
-
-  final MockClassDetail detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(
-        DesignConstants.screenHorizontalPadding,
-        DesignConstants.spacingBig,
-        DesignConstants.screenHorizontalPadding,
-        DesignConstants.spacingBig,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingBig,
-        children: [
-          ClassMetaSection(detail: detail),
-          const SectionDivider(),
-          ClassDetailsSection(description: detail.classData.description),
-          const SectionDivider(),
-          ClassInstructorSection(detail: detail),
-          const SectionDivider(),
-          ClassLocationSection(detail: detail),
-        ],
-      ),
-    );
+  Widget _layout(ClassLayoutData data) {
+    return switch (formatOverride ?? ThemeLayout.classDetail()) {
+      ClassFormat.bannerStack => ClassBannerStack(data: data),
+      ClassFormat.overlayHero => ClassOverlayHero(data: data),
+      ClassFormat.detailSheet => ClassDetailSheet(data: data),
+      ClassFormat.sectionTabs => ClassSectionTabs(data: data),
+      ClassFormat.specBrief => ClassSpecBrief(data: data),
+    };
   }
 }
