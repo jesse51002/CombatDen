@@ -521,40 +521,17 @@ invariant:
   (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
-<<<<<<< HEAD
 - **`flipCount` is the only value whose figure and settled content share
   the stage** (it hands off mid-turn). That path must keep the settled
   content as the thing that SIZES the body, or the stage's own `Align`
   has nothing to place and every non-centred layout silently re-centres.
   Getting that wrong is what dropped the stat ~190pt under `figureTop`.
-=======
-- `count_up_style` follows the same shape one level down.
-  `lib/shared/widgets/animation/count_up/` holds it: `count_up_frame.dart`
-  is the pure per-instant model (`CountUpFrame`) plus one value's whole
-  contract (`CountUpSpec` — run length, whether its digits ride reels,
-  whether it carries an arc, frame function); one file per value declares
-  a spec; `count_up_figure.dart` is the only widget that paints one, and
-  it assembles the same prefix, the same tabular digit cells, the same
-  thousands separators and the same suffix for every value — a value only
-  chooses what goes *inside* a cell. `count_up_text.dart` is the
-  `FormatBuilder`-wrapped switch plus the driver (controller, capture
-  clock, `delay`); its public API is unchanged, which is what keeps
-  `CelebrationIntro.flipCount`'s mid-flip hand-off working.
-  `test/count_up_style_invariants_test.dart` is the gate.
-- **The earned figure also has a legibility floor.** It is the payoff of
-  the whole post-class moment, so a `count_up_style` value must run at
-  least 900ms with at least 600ms of visibly changing figure, and every
-  value except the shipped `odometer` holds a lead-in beat before the
-  number moves — but shorter than `kFlipCountIntro.handoff`, or the roll
-  would start after the flip it is meant to overlap. `instant` is the one
-  exemption: "no animation" and "an animation too fast to read" are
-  different things. The gate asserts all of it.
->>>>>>> worktree-agent-a0aa68a194fb38669
 - **Only the streak card is on the shared stage.** The points card keeps
   its own `_PointSphere`, because the shipped `orbit` value is the streak
   ring: routing points through it would replace the shipped points intro
   for every tenant, which the "first value renders exactly what ships
   today" guarantee forbids.
+<<<<<<< HEAD
 - **`loader_style` is wired, and it governs every waiting state.**
   `lib/shared/widgets/animation/loader/` holds it, same split as the
   intro: `loader_frame.dart` is the pure per-instant model (`LoaderMark`
@@ -603,6 +580,32 @@ load-bearing, not incidental, and the gate asserts it.
 only — they are deliberately NOT passed to `ThemeRuntime.initialize`,
 because an absent format slot is a supported state (the tenant has not
 opted in) and warning on it would fire on every unbranded build.
+=======
+- `transition_style` is wired, and its seam is the **theme**, not the
+  navigator: `lib/shared/themes/transitions/` holds one
+  `PageTransitionsBuilder` per authored value plus `app_page_transitions.dart`,
+  whose `PageTransitionsTheme` `AppTheme.forCanvas()` installs on
+  `MaterialApp.theme`. Sitting there means the enum can only decide how a
+  route animates — it never sees which route was pushed and cannot touch
+  the back stack. Resolution is **deferred**: one delegating builder per
+  `TargetPlatform` reads `ThemeMotion.transition()` at the moment a route
+  animates, so the dev picker is live on the next navigation with no
+  rebuild (a `FormatBuilder` would be wrong here — there is no build-time
+  switch, and rebuilding the theme re-keys the tree). The shipped
+  `platformDefault` hands the route straight back to Flutter's own
+  `const PageTransitionsTheme()` for that platform, read from the
+  framework rather than copied, so it stays a no-op if the framework's
+  default moves. Two extra rules apply to a transition because it answers
+  a tap: **no lead-in** (delay reads as input lag, never as drama) and a
+  **legibility floor** (`TransitionMotion.legibilityFloor`, 200ms) that
+  every authored value must clear — values may differ in length, but a
+  movement too short to perceive is a flicker, not a transition.
+  `platformDefault` and `none` sit outside the floor on purpose.
+  `test/transition_style_invariants_test.dart` is the gate: it samples
+  the rendered geometry numerically for overshoot and lead-in, proves
+  push/pop/replace still behave, and proves `platformDefault` is
+  frame-for-frame identical to the theme the app carried before.
+>>>>>>> worktree-agent-a76fe566f85428698
 
 ## Development Commands
 
