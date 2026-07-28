@@ -1,4 +1,5 @@
 import 'package:theme_flutter/customization_runtime.dart';
+import 'package:theme_flutter/theme/theme_text.dart';
 
 /// The gym this session is showing — chosen on the gym-select screen, then the
 /// single source every content surface reads (videos, classes, rewards all
@@ -28,18 +29,15 @@ class SelectedGym {
   /// loaded design's own name (e.g. "Apex MMA") is the source of truth; the
   /// picker label is the fallback for the brief window before the theme
   /// finishes loading (or if the engine never loaded at all).
-  String get displayName {
-    // `activeDesignName` reads the engine's service out of DI and
-    // THROWS while it is unregistered, which is exactly the "engine
-    // never loaded at all" case this fallback is for (and the case
-    // every widget test runs in). `ThemeRuntime.isReady` is the guard
-    // the engine documents for consumers that can build first.
-    final designName = ThemeRuntime.isReady
-        ? ThemeRuntime.activeDesignName
-        : null;
-    if (designName != null && designName.isNotEmpty) return designName;
-    return _pickedName ?? '';
-  }
+  /// Read through [ThemeText.designName], the engine's own never-throws
+  /// resolver. The obvious alternative, `ThemeRuntime.activeDesignName`,
+  /// reaches into DI directly and THROWS while the runtime is
+  /// unregistered — which is exactly the "engine never loaded" case this
+  /// fallback exists for, and the case every widget test runs in. Every
+  /// screen's topbar reads this getter, so an unguarded call made a
+  /// screen-level widget test impossible.
+  String get displayName =>
+      ThemeText.designName(fallback: _pickedName ?? '');
 
   /// Pick a gym: record its id + theme (+ the picker label) and re-brand to
   /// that theme.
