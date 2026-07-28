@@ -105,7 +105,7 @@ final List<FormatEntry> kMotionFormats = [
     slot: CombatDenSlots.transitionStyle,
     label: 'Transition',
     values: _names(TransitionStyle.values),
-    implemented: false,
+    implemented: true,
   ),
   FormatEntry(
     slot: CombatDenSlots.countUpStyle,

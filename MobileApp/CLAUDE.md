@@ -469,6 +469,30 @@ tenant-slot order applies. The difference is the invariant:
   ring: routing points through it would replace the shipped points intro
   for every tenant, which the "first value renders exactly what ships
   today" guarantee forbids.
+- `transition_style` is wired, and its seam is the **theme**, not the
+  navigator: `lib/shared/themes/transitions/` holds one
+  `PageTransitionsBuilder` per authored value plus `app_page_transitions.dart`,
+  whose `PageTransitionsTheme` `AppTheme.forCanvas()` installs on
+  `MaterialApp.theme`. Sitting there means the enum can only decide how a
+  route animates — it never sees which route was pushed and cannot touch
+  the back stack. Resolution is **deferred**: one delegating builder per
+  `TargetPlatform` reads `ThemeMotion.transition()` at the moment a route
+  animates, so the dev picker is live on the next navigation with no
+  rebuild (a `FormatBuilder` would be wrong here — there is no build-time
+  switch, and rebuilding the theme re-keys the tree). The shipped
+  `platformDefault` hands the route straight back to Flutter's own
+  `const PageTransitionsTheme()` for that platform, read from the
+  framework rather than copied, so it stays a no-op if the framework's
+  default moves. Two extra rules apply to a transition because it answers
+  a tap: **no lead-in** (delay reads as input lag, never as drama) and a
+  **legibility floor** (`TransitionMotion.legibilityFloor`, 200ms) that
+  every authored value must clear — values may differ in length, but a
+  movement too short to perceive is a flicker, not a transition.
+  `platformDefault` and `none` sit outside the floor on purpose.
+  `test/transition_style_invariants_test.dart` is the gate: it samples
+  the rendered geometry numerically for overshoot and lead-in, proves
+  push/pop/replace still behave, and proves `platformDefault` is
+  frame-for-frame identical to the theme the app carried before.
 
 ## Development Commands
 
