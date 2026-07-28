@@ -29,7 +29,14 @@ class SelectedGym {
   /// picker label is the fallback for the brief window before the theme
   /// finishes loading (or if the engine never loaded at all).
   String get displayName {
-    final designName = ThemeRuntime.activeDesignName;
+    // `activeDesignName` reads the engine's service out of DI and
+    // THROWS while it is unregistered, which is exactly the "engine
+    // never loaded at all" case this fallback is for (and the case
+    // every widget test runs in). `ThemeRuntime.isReady` is the guard
+    // the engine documents for consumers that can build first.
+    final designName = ThemeRuntime.isReady
+        ? ThemeRuntime.activeDesignName
+        : null;
     if (designName != null && designName.isNotEmpty) return designName;
     return _pickedName ?? '';
   }
