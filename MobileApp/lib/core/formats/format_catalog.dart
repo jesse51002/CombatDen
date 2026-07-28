@@ -111,6 +111,6 @@ final List<FormatEntry> kMotionFormats = [
     slot: CombatDenSlots.countUpStyle,
     label: 'Count-up',
     values: _names(CountUpStyle.values),
-    implemented: false,
+    implemented: true,
   ),
 ];

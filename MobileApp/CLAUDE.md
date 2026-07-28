@@ -468,6 +468,17 @@ invariant:
     `shared/widgets/animation/reveal/reveal_frame.dart`) and stays
     inside `MotionSpec.elementDurationCeiling` (300ms). Under a quarter
     second an entrance stops reading as a transition and reads as a cut.
+  - `count_up_style`: at least **900ms** total and **600ms** of visibly
+    changing figure. A saccade onto a moving target plus numeral
+    recognition costs ~250-400ms, and reading the settled figure another
+    ~250ms, so a shorter count is over before it is seen.
+  - `loader_style`: cycle at least **800ms** — set below the shipped
+    1100ms deliberately, so the floor constrains future values instead
+    of restating today's. A loader takes NO lead-in: a waiting state
+    that shows nothing for a beat reads as a freeze.
+- The **shipped value of each enum keeps its exact timing**, lead-in
+  included (i.e. usually none). It is the parse fallback, so padding it
+  would change what every unbranded build already ships.
 - `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
   holds it: `celebration_intro_frame.dart` is the pure per-instant model
   (`CelebrationIntroFrame`) plus one value's whole contract
@@ -510,11 +521,35 @@ invariant:
   (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
   as the layout gates — add to it in the same change as a new value, and
   mutation-test it.
+<<<<<<< HEAD
 - **`flipCount` is the only value whose figure and settled content share
   the stage** (it hands off mid-turn). That path must keep the settled
   content as the thing that SIZES the body, or the stage's own `Align`
   has nothing to place and every non-centred layout silently re-centres.
   Getting that wrong is what dropped the stat ~190pt under `figureTop`.
+=======
+- `count_up_style` follows the same shape one level down.
+  `lib/shared/widgets/animation/count_up/` holds it: `count_up_frame.dart`
+  is the pure per-instant model (`CountUpFrame`) plus one value's whole
+  contract (`CountUpSpec` — run length, whether its digits ride reels,
+  whether it carries an arc, frame function); one file per value declares
+  a spec; `count_up_figure.dart` is the only widget that paints one, and
+  it assembles the same prefix, the same tabular digit cells, the same
+  thousands separators and the same suffix for every value — a value only
+  chooses what goes *inside* a cell. `count_up_text.dart` is the
+  `FormatBuilder`-wrapped switch plus the driver (controller, capture
+  clock, `delay`); its public API is unchanged, which is what keeps
+  `CelebrationIntro.flipCount`'s mid-flip hand-off working.
+  `test/count_up_style_invariants_test.dart` is the gate.
+- **The earned figure also has a legibility floor.** It is the payoff of
+  the whole post-class moment, so a `count_up_style` value must run at
+  least 900ms with at least 600ms of visibly changing figure, and every
+  value except the shipped `odometer` holds a lead-in beat before the
+  number moves — but shorter than `kFlipCountIntro.handoff`, or the roll
+  would start after the flip it is meant to overlap. `instant` is the one
+  exemption: "no animation" and "an animation too fast to read" are
+  different things. The gate asserts all of it.
+>>>>>>> worktree-agent-a0aa68a194fb38669
 - **Only the streak card is on the shared stage.** The points card keeps
   its own `_PointSphere`, because the shipped `orbit` value is the streak
   ring: routing points through it would replace the shipped points intro
