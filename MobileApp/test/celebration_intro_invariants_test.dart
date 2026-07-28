@@ -344,11 +344,9 @@ void main() {
   });
 
   group('every value holds its timing contract', () {
-    test('the hand-off never lands after the intro is over', () {
+    test('the switch is wired to the value it claims', () {
       for (final intro in CelebrationIntro.values) {
-        final spec = introSpec(intro);
-        expect(spec.handoff, lessThanOrEqualTo(spec.total), reason: '$intro');
-        expect(spec.value, intro, reason: 'the switch is mis-wired');
+        expect(introSpec(intro).value, intro);
       }
     });
 
@@ -482,9 +480,60 @@ void main() {
     }
   });
 
-  /// The invariant the whole system exists to protect, measured rather
-  /// than asserted by presence: a motion value may change WHEN the
-  /// settled card appears, never WHERE.
+  /// The founder's complaint, as an assertion: an intro that lets the
+  /// card settle while it is still playing reads as the card giving up
+  /// on its own animation and jumping ahead, not as one composed
+  /// moment. The intro owns the stage until it is done.
+  ///
+  /// This is the honest form of the invariant — stronger than checking
+  /// where the settled card lands, because it says the settled card
+  /// must not be there AT ALL yet.
+  group('the intro owns the stage until it finishes', () {
+    for (final intro in CelebrationIntro.values) {
+      testWidgets('$intro', (tester) async {
+        phoneSized(tester);
+        pin(intro);
+        final spec = introSpec(intro);
+        final controller = PostClassController();
+        addTearDown(controller.dispose);
+
+        await tester.pumpWidget(card(controller: controller));
+
+        // Sampled across the whole run, not just at one instant: an
+        // early hand-off anywhere in the intro is the bug.
+        const samples = 12;
+        for (var i = 1; i < samples; i++) {
+          await tester.pump(spec.total ~/ samples);
+          expect(
+            find.byType(CountUpText),
+            findsNothing,
+            reason:
+                '$intro settled its card ${i * 100 ~/ samples}% of the way '
+                'through the intro, before the intro was done',
+          );
+          expect(find.byType(StreakWeekStrip), findsNothing, reason: '$intro');
+          expect(
+            find.byKey(CelebrationIntroFigure.heroKey),
+            findsOneWidget,
+            reason: '$intro dropped its figure before it finished',
+          );
+          expect(controller.isAnimating, isTrue, reason: '$intro');
+        }
+
+        // ...and once it IS done, the card is there and the figure is not.
+        await playOut(tester, intro);
+        expect(find.byType(CountUpText), findsOneWidget);
+        expect(find.byType(StreakWeekStrip), findsOneWidget);
+        expect(find.byKey(CelebrationIntroFigure.heroKey), findsNothing);
+        expect(controller.isAnimating, isFalse);
+      });
+    }
+  });
+
+  /// A motion value may change WHEN the settled card appears, never
+  /// WHERE. Kept alongside the ownership gate above: that one proves the
+  /// card does not arrive early, this one proves it does not arrive
+  /// somewhere else.
   ///
   /// This is the gate that would have caught the real defect. Under
   /// `figureTop` the stage is top-aligned, and `flipCount` — the one

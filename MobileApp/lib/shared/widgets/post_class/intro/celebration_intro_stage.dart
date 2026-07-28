@@ -164,86 +164,28 @@ class _IntroRunnerState extends State<_IntroRunner>
           t = _ctrl.value;
         }
 
-        final elapsedUs = totalUs * t;
-        final settledOn =
-            _skipped || elapsedUs >= spec.handoff.inMicroseconds;
-        final figureOn = !_skipped && elapsedUs < totalUs;
-
-        final settledChild = settledOn
-            ? KeyedSubtree(
-                key: _kSettledKey,
-                child: widget.settled(
-                  context,
-                  clock != null ? spec.handoff : null,
-                ),
-              )
-            : null;
-        final figureChild = figureOn
-            ? KeyedSubtree(
-                key: _kFigureKey,
-                child: IgnorePointer(
-                  child: CelebrationIntroFigure(
-                    spec: spec,
-                    frame: spec.frameAt(t),
-                    hero: widget.hero,
-                    particle: widget.particle,
-                  ),
-                ),
-              )
-            : null;
-
-        // The values that hand off cleanly keep the shipped shape: the
-        // figure fills the stage, then the settled content sizes to
-        // itself and the stage's own alignment places it.
-        if (!spec.overlaps) {
-          if (figureChild != null) return SizedBox.expand(child: figureChild);
-          return settledChild!;
-        }
-        return _overlapped(settledChild, figureChild);
-      },
-    );
-  }
-
-  /// The shape for a value that hands off before it finishes, so the
-  /// settled content and the figure are both on stage for a while.
-  ///
-  /// Two things have to hold at once, and getting one of them wrong is
-  /// what made `flipCount` drop its stat ~190pt down the screen under
-  /// `figureTop`:
-  ///
-  /// * **The settled content must size the body**, or the stage's own
-  ///   `Align` has nothing to place and every layout that does not
-  ///   centre its stage silently re-centres. A motion value must never
-  ///   move an arrangement.
-  /// * **The figure must still measure against the whole stage**, or it
-  ///   would resize the moment the settled content arrives. Hence the
-  ///   outer `LayoutBuilder` (which sees the stage) feeding an
-  ///   `OverflowBox` (which lets the figure paint past whatever the
-  ///   settled content happens to measure).
-  ///
-  /// One `Stack` for every phase, so the settled content never changes
-  /// parents and never restarts its own reveals mid-count.
-  Widget _overlapped(Widget? settledChild, Widget? figureChild) {
-    return LayoutBuilder(
-      builder: (context, stage) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            // Sizes the body: the settled content once it is here, the
-            // full stage while the figure still has it to itself.
-            settledChild ??
-                SizedBox(width: stage.maxWidth, height: stage.maxHeight),
-            if (figureChild != null)
-              Positioned.fill(
-                child: OverflowBox(
-                  minWidth: 0,
-                  maxWidth: stage.maxWidth,
-                  minHeight: 0,
-                  maxHeight: stage.maxHeight,
-                  child: figureChild,
+        // The intro owns the stage until it is done. One or the other,
+        // never both: the figure fills the stage while it plays, then
+        // the settled content sizes to itself and the stage's own
+        // alignment places it, exactly as the shipped card always did.
+        if (!_skipped && t < 1) {
+          return SizedBox.expand(
+            child: KeyedSubtree(
+              key: _kFigureKey,
+              child: IgnorePointer(
+                child: CelebrationIntroFigure(
+                  spec: spec,
+                  frame: spec.frameAt(t),
+                  hero: widget.hero,
+                  particle: widget.particle,
                 ),
               ),
-          ],
+            ),
+          );
+        }
+        return KeyedSubtree(
+          key: _kSettledKey,
+          child: widget.settled(context, clock != null ? spec.total : null),
         );
       },
     );

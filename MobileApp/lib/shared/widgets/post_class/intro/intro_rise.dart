@@ -37,7 +37,6 @@ const double _kExitShrink = 0.3;
 final CelebrationIntroSpec kRiseIntro = CelebrationIntroSpec(
   value: CelebrationIntro.rise,
   total: _kTotal,
-  handoff: _kTotal,
   particleRadii: const [],
   frameAt: _frameAt,
 );

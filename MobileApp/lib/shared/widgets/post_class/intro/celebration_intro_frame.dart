@@ -62,20 +62,23 @@ class CelebrationIntroSpec {
   const CelebrationIntroSpec({
     required this.value,
     required this.total,
-    required this.handoff,
     required this.particleRadii,
     required this.frameAt,
   });
 
   final CelebrationIntro value;
 
-  /// When the intro is over: the figure leaves and `markDone` fires.
+  /// When the intro is over: the figure leaves, the settled content
+  /// arrives, and `markDone` fires.
+  ///
+  /// There is deliberately no "hand off early" knob. An earlier draft
+  /// let `flipCount` reveal the settled content mid-turn so the
+  /// count-up overlapped the flip; on a real screen that read as the
+  /// card abandoning its own animation rather than as one composed
+  /// moment. **The intro owns the stage until it is finished**, and
+  /// because that is now true of every value, the settled content can
+  /// only ever be behind one shape.
   final Duration total;
-
-  /// When the settled content starts revealing. Equal to [total] for
-  /// every value except `flipCount`, which hands off mid-flip so the
-  /// count-up is already running when the figure lands.
-  final Duration handoff;
 
   /// One entry per particle, each a multiplier on the stage radius.
   /// Empty for the values that carry no particle field, which is what
@@ -84,8 +87,4 @@ class CelebrationIntroSpec {
   final List<double> particleRadii;
 
   final CelebrationIntroFrame Function(double t) frameAt;
-
-  /// True when the settled content and the figure share the stage for a
-  /// while, instead of the figure leaving as the content arrives.
-  bool get overlaps => handoff < total;
 }
