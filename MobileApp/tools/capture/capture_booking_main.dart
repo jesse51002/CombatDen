@@ -31,8 +31,7 @@ import 'package:mobile_app/core/selected_gym.dart';
 import 'package:mobile_app/features/class_booking/data/class_info.dart';
 import 'package:mobile_app/features/gym/data/gym_detail.dart';
 import 'package:mobile_app/features/gym/data/gym_repository.dart';
-import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
-import 'package:mobile_app/features/home/data/schedule_dates.dart';
+import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
 import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
 import 'package:mobile_app/features/videos/data/video_selectors.dart';
 import 'package:mobile_app/shared/themes/app_theme.dart';
@@ -146,7 +145,7 @@ class _BookingCaptureAppState extends State<_BookingCaptureApp> {
   final GlobalKey _reserveKey = GlobalKey();
   final ScrollController _classController = ScrollController();
   BookingPhase _phase = BookingPhase.classDetail;
-  ClassOccurrence? _class;
+  MockClass? _class;
   double? _dotsValue;
   double _tapProgress = 0;
   Offset? _tapCenter;
@@ -280,11 +279,8 @@ class _BookingCaptureAppState extends State<_BookingCaptureApp> {
   }
 
   /// Fetch the selected gym's live classes and map its first class to a
-  /// synthetic [ClassOccurrence] for the class-detail screen (the live board
-  /// isn't reachable from the offline harness, so the slot/date/counts are
-  /// stand-ins — only the name + image + instructor come from the feed).
-  /// Retries a transient feed failure.
-  Future<ClassOccurrence?> _loadClass() async {
+  /// [MockClass] for the class-detail screen. Retries a transient feed failure.
+  Future<MockClass?> _loadClass() async {
     GymDetail? detail;
     for (var attempt = 0; attempt < 3; attempt++) {
       try {
@@ -298,30 +294,22 @@ class _BookingCaptureAppState extends State<_BookingCaptureApp> {
     final classes = detail?.classes ?? const <ClassInfo>[];
     if (classes.isEmpty) return null;
     final ci = classes.first;
-    final today = isoDate(todayLocal());
-    return ClassOccurrence(
-      classId: '',
-      gymId: '',
-      className: ci.name,
-      classDate: today,
-      originalDate: today,
-      originalTime: '18:00:00',
-      occurredAt: '',
-      resolvedClassTime: '18:00:00',
-      resolvedDurationMinutes: 55,
-      resolvedInstructorName: ci.instructorName,
+    return MockClass(
+      name: ci.name,
+      timeRange: '6:00pm - 6:55pm',
+      durationMinutes: 55,
+      mentor: ci.instructorName,
       imageUrl: ci.imageUrl,
-      pointsWorth: 50,
-      isCancelled: false,
-      hasInstanceException: false,
-      hasRangeException: false,
-      signupCount: 12,
+      description: ci.description,
+      instructorBio: ci.instructorBio,
+      instructorImageUrl: ci.instructorImageUrl,
+      attending: 12,
     );
   }
 
   /// Pre-load fonts + the class photo + the video card's images so no phase
   /// captures a blank. Retries the feed fetch on a transient failure.
-  Future<void> _warmUp(ClassOccurrence cls) async {
+  Future<void> _warmUp(MockClass cls) async {
     await GoogleFonts.pendingFonts();
     await _precache(cls.imageUrl);
     if (_kBookingEnd == 'confirm') {

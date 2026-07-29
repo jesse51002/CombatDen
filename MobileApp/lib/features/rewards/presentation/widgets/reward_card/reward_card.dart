@@ -1,19 +1,23 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/layouts/reward_card_hero.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/layouts/reward_card_image_top.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/layouts/reward_card_poster.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/layouts/reward_card_thumb_left.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/layouts/reward_card_tile.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card_data.dart';
 
-// Reserve two lines of h2 (16px font, ~1.3 line height) so all cards have
-// the same title block whether the title is one line or two.
-const double _kCardTitleHeight = 42;
-
-/// Shared reward card used by both the Points Store and My Rewards grids.
-/// 3:2 image with a brand-orange price tag pinned to the top-right; below
-/// the image a fixed-height title slot, the points cost, and a CTA whose
-/// label is provided by the caller (e.g. "Redeem" on the store vs a redemption
-/// status on My Rewards). A null [onPressed] renders the CTA disabled — the
-/// store uses it to gate an unaffordable reward, My Rewards to show a
-/// non-interactive status.
+/// Shared reward card used by the Points Store and My Rewards.
+///
+/// The DATA arguments are unchanged and identical for every layout —
+/// image, title, price label, points cost, and one action with its
+/// label. [layout] is the only addition and is presentation: it picks
+/// one of the arrangements in `reward_card/layouts/`, each of which
+/// composes the same parts from `reward_card/parts/`.
+///
+/// Every layout must render every element: image, price tag, title,
+/// points cost, and exactly one action. It may move them. It may not
+/// drop one or add one. `test/rewards_invariants_test.dart` asserts this
+/// per card, for every screen format.
 class RewardCard extends StatelessWidget {
   const RewardCard({
     super.key,
@@ -23,6 +27,7 @@ class RewardCard extends StatelessWidget {
     required this.pointsCost,
     required this.buttonText,
     required this.onPressed,
+    this.layout = RewardCardLayout.imageTop,
   });
 
   final String imageUrl;
@@ -30,158 +35,26 @@ class RewardCard extends StatelessWidget {
   final String priceLabel;
   final int pointsCost;
   final String buttonText;
-  final VoidCallback? onPressed;
+  final VoidCallback onPressed;
+  final RewardCardLayout layout;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: DesignConstants.card,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusBig),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          RewardImageHero(
-            imageUrl: imageUrl,
-            priceLabel: priceLabel,
-          ),
-          Padding(
-            padding: EdgeInsets.all(DesignConstants.paddingSmall),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              spacing: DesignConstants.spacingMedium,
-              children: [
-                SizedBox(
-                  height: _kCardTitleHeight,
-                  child: Align(
-                    alignment: Alignment.topCenter,
-                    child: Text(
-                      title,
-                      style: DesignConstants.h2,
-                      textAlign: TextAlign.center,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ),
-                RewardPointsCost(pointsCost: pointsCost),
-                AppPrimaryButton(
-                  text: buttonText,
-                  fullWidth: true,
-                  onPressed: onPressed,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    final data = RewardCardData(
+      imageUrl: imageUrl,
+      title: title,
+      priceLabel: priceLabel,
+      pointsCost: pointsCost,
+      buttonText: buttonText,
+      onPressed: onPressed,
     );
+
+    return switch (layout) {
+      RewardCardLayout.imageTop => RewardCardImageTop(data: data),
+      RewardCardLayout.thumbLeft => RewardCardThumbLeft(data: data),
+      RewardCardLayout.poster => RewardCardPoster(data: data),
+      RewardCardLayout.tile => RewardCardTile(data: data),
+      RewardCardLayout.hero => RewardCardHero(data: data),
+    };
   }
-}
-
-/// 3:2 image with a brand-orange price tag in the top-right. Used by the
-/// reward card and by the redeem dialog so the visual identity carries
-/// from list to detail.
-class RewardImageHero extends StatelessWidget {
-  const RewardImageHero({
-    super.key,
-    required this.imageUrl,
-    required this.priceLabel,
-    this.borderRadius,
-  });
-
-  final String imageUrl;
-  final String priceLabel;
-
-  /// Optional rounded corners. Pass when used outside the card's own clip
-  /// (e.g. inside the dialog) so the image visibly rounds.
-  final BorderRadius? borderRadius;
-
-  @override
-  Widget build(BuildContext context) {
-    final image = AspectRatio(
-      aspectRatio: 1.5,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Image(
-            image: CachedNetworkImageProvider(imageUrl),
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) =>
-                ColoredBox(color: DesignConstants.card),
-          ),
-          Positioned(
-            top: DesignConstants.spacingMedium,
-            right: DesignConstants.spacingMedium,
-            child: RewardPriceTag(label: priceLabel),
-          ),
-        ],
-      ),
-    );
-    if (borderRadius != null) {
-      return ClipRRect(borderRadius: borderRadius!, child: image);
-    }
-    return image;
-  }
-}
-
-class RewardPriceTag extends StatelessWidget {
-  const RewardPriceTag({super.key, required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) {
-    final brand = DesignConstants.primaryColor;
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: DesignConstants.spacingMedium,
-        vertical: DesignConstants.spacingTiny,
-      ),
-      decoration: BoxDecoration(
-        color: brand,
-        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
-      ),
-      child: Text(
-        label,
-        style: DesignConstants.pSmall.copyWith(
-          color: DesignConstants.primaryButtonText,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class RewardPointsCost extends StatelessWidget {
-  const RewardPointsCost({super.key, required this.pointsCost});
-
-  final int pointsCost;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      '${formatRewardPoints(pointsCost)} pts',
-      style: DesignConstants.h2.copyWith(
-        color: DesignConstants.primaryColor,
-      ),
-      textAlign: TextAlign.center,
-    );
-  }
-}
-
-/// Formats a points integer with thousand-separator commas.
-String formatRewardPoints(int n) {
-  if (n < 1000) return '$n';
-  final s = n.toString();
-  final buf = StringBuffer();
-  for (var i = 0; i < s.length; i++) {
-    if (i > 0 && (s.length - i) % 3 == 0) buf.write(',');
-    buf.write(s[i]);
-  }
-  return buf.toString();
 }

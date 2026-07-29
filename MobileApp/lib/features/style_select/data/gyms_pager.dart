@@ -15,7 +15,7 @@ const String _kThemeServiceBaseUrl = String.fromEnvironment(
 );
 
 /// Accumulates a paged + searchable view of the VideoService **gym browser**
-/// (`GET /gyms`), mapping each gym to a [ThemeStyle] the existing
+/// (`GET /presets/templates`), mapping each gym to a [ThemeStyle] the existing
 /// style picker renders — `id` is the gym's **theme** (so tapping it loads that
 /// theme), the card art is the gym's celebration image. Gyms are the entry
 /// point; the theme lives on the gym.
@@ -96,7 +96,7 @@ class GymsPager extends ChangeNotifier {
     _safeNotify();
     try {
       final response = await _dio.get<dynamic>(
-        '/gyms',
+        '/presets/templates',
         queryParameters: {
           'offset': _items.length,
           'limit': pageSize,
@@ -136,13 +136,13 @@ class GymsPager extends ChangeNotifier {
     final raw = (gym['celebration_image_url'] as String?) ?? '';
     return ThemeStyle(
       id: (gym['theme'] as String?) ?? '',
-      displayName: _titleize((gym['gym_id'] as String?) ?? ''),
+      displayName: _titleize((gym['video_gym_id'] as String?) ?? ''),
       celebrationImageUrl: raw.isEmpty ? '' : _resolve(raw),
       // The coarse parent bucket (Fighting/Yoga/…) is what the picker filters by.
       category: gym['parent_gym_type'] as String?,
       // The content key: stored on selection so videos / classes / rewards
       // fetch this gym's content, not just re-brand.
-      gymId: gym['gym_id'] as String?,
+      gymId: gym['video_gym_id'] as String?,
     );
   }
 

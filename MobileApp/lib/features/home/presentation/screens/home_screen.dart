@@ -1,43 +1,55 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
-
-import 'package:mobile_app/core/network/api_client.dart';
-import 'package:mobile_app/features/home/bloc/home_bloc.dart';
-import 'package:mobile_app/features/home/bloc/home_event.dart';
-import 'package:mobile_app/features/home/data/repositories/member_class_history_repository.dart';
-import 'package:mobile_app/features/home/data/repositories/member_classes_repository.dart';
-import 'package:mobile_app/features/home/presentation/widgets/home_body.dart';
+import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/selected_gym.dart';
+import 'package:mobile_app/features/home/presentation/widgets/home_body/home_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
-import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
-import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
-/// The home tab: the member's gym schedule board joined with their open
-/// reservations. Provides the [HomeBloc] fresh each time the tab is entered
-/// (the nav pushes a new route), so returning to Home re-loads — the
-/// refetch-on-tab-focus rule.
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
   @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+    // No gym picked yet → the gym-select screen is the real entry point. (After
+    // a pick the gym is set and this never fires; the theme re-key rebuilds
+    // Home with the chosen gym.)
+    if (selectedGym.gymId == null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed(AppRoutes.styleSelect);
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final apiClient = ApiClient();
-    return BlocProvider<HomeBloc>(
-      create: (_) => HomeBloc(
-        classesRepository: MemberClassesRepository(apiClient: apiClient),
-        historyRepository: MemberClassHistoryRepository(apiClient: apiClient),
-      )..add(const HomeLoadRequested()),
-      // Re-composes when a pull brings back new capability flags — the tab set
-      // is derived from them.
-      child: SelectedMemberScope(
-        builder: (context) => AppScreenScaffold(
-          horizontalPadding: AppScreenHorizontalPadding.none,
-          bottomNav: AppBottomNavBar(
-            selected: AppBottomNavTab.home,
-            tabs: gymNavTabs(),
-          ),
-          child: const HomeBody(),
-        ),
+    // While redirecting to the gym-select (no gym yet), render nothing.
+    if (selectedGym.gymId == null) return const SizedBox.shrink();
+    return AppScreenScaffold(
+      horizontalPadding: AppScreenHorizontalPadding.none,
+      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.home),
+      child: PageView(
+        controller: _pageController,
+        children: const [
+          HomeBody(booked: false),
+          HomeBody(booked: true),
+        ],
       ),
     );
   }

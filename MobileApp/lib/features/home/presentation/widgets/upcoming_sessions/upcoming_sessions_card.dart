@@ -1,21 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/home/data/models/upcoming_session.dart';
+import 'package:mobile_app/features/home/data/mock_upcoming_sessions.dart';
 import 'package:mobile_app/features/home/presentation/widgets/upcoming_sessions/upcoming_session_row.dart';
-import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
 import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 
-/// "Your upcoming sessions" card — the member's open reservations (soonest
-/// first) with the live weekly streak footer (read from the shared profile
-/// bloc). Shown only when the member has at least one open reservation.
 class UpcomingSessionsCard extends StatelessWidget {
-  const UpcomingSessionsCard({super.key, required this.sessions});
-
-  final List<UpcomingSession> sessions;
+  const UpcomingSessionsCard({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +24,12 @@ class UpcomingSessionsCard extends StatelessWidget {
         spacing: DesignConstants.spacingLarge,
         children: [
           Text('Your upcoming sessions', style: DesignConstants.h2),
-          _SessionList(sessions: sessions),
+          _SessionList(sessions: mockUpcomingSessions),
           AppPrimaryButton(
             text: 'Book another Session',
             onPressed: () {},
           ),
-          const _StreakFooter(),
+          const _StreakFooter(weeks: mockStreakWeeks),
         ],
       ),
     );
@@ -44,17 +37,11 @@ class UpcomingSessionsCard extends StatelessWidget {
 }
 
 class _StreakFooter extends StatelessWidget {
-  const _StreakFooter();
+  const _StreakFooter({required this.weeks});
+  final int weeks;
 
   @override
   Widget build(BuildContext context) {
-    final weeks = context
-            .watch<MemberProfileBloc>()
-            .state
-            .profile
-            ?.retention
-            .classStreakWeeks ??
-        0;
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -80,7 +67,7 @@ class _StreakFooter extends StatelessWidget {
 
 class _SessionList extends StatelessWidget {
   const _SessionList({required this.sessions});
-  final List<UpcomingSession> sessions;
+  final List<MockUpcomingSession> sessions;
 
   @override
   Widget build(BuildContext context) {
@@ -101,3 +88,4 @@ class _SessionList extends StatelessWidget {
     );
   }
 }
+

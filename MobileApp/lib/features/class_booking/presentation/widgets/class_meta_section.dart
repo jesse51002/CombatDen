@@ -1,31 +1,59 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
-import 'package:mobile_app/features/home/data/schedule_dates.dart';
-import 'package:mobile_app/shared/widgets/class_reserved_tag.dart';
+import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_attending_row.dart';
+import 'package:mobile_app/features/class_booking/presentation/widgets/class_meta_spec_table.dart';
 
-/// Class title + reserved status + gym / date / instructor / attending block,
-/// from the real occurrence.
+/// How a layout arranges the class meta block.
 ///
-/// The order is deliberate: what this class IS, then where the member STANDS
-/// with it, then the facts. The reservation is the member's own relationship
-/// to the class, so it is answered before the details rather than being left
-/// to be inferred from a "Cancel reservation" button at the far end of the
-/// screen.
+/// Every value renders the same facts: title, location, date, time and
+/// the attending count. Only their shape and their surface change.
+enum ClassMetaLayout {
+  /// Title over the specifics, on the page background. Ships today.
+  stacked,
+
+  /// The same block, sitting on the photo behind a scrim.
+  overlay,
+
+  /// Title beside an inline photo thumb, specifics as a label/value
+  /// table.
+  specTable,
+}
+
+/// Class title + location/time/attending block. Mirrors the
+/// `ClassMetatext` group.
 class ClassMetaSection extends StatelessWidget {
   const ClassMetaSection({
     super.key,
-    required this.occurrence,
-    required this.gymName,
-    this.reserved = false,
+    required this.detail,
+    this.layout = ClassMetaLayout.stacked,
+    this.leading,
   });
 
-  final ClassOccurrence occurrence;
-  final String gymName;
+  final MockClassDetail detail;
+  final ClassMetaLayout layout;
 
-  /// The member holds this occurrence.
-  final bool reserved;
+  /// Presentation slot used by [ClassMetaLayout.specTable] only: the
+  /// class photo, inline with the title instead of above the block.
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    return switch (layout) {
+      ClassMetaLayout.stacked => _StackedMeta(detail: detail),
+      ClassMetaLayout.overlay => _OverlayMeta(detail: detail),
+      ClassMetaLayout.specTable => ClassMetaSpecTable(
+        detail: detail,
+        leading: leading,
+      ),
+    };
+  }
+}
+
+class _StackedMeta extends StatelessWidget {
+  const _StackedMeta({required this.detail});
+
+  final MockClassDetail detail;
 
   @override
   Widget build(BuildContext context) {
@@ -33,40 +61,61 @@ class ClassMetaSection extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingMedium,
       children: [
-        Text(occurrence.className, style: DesignConstants.h1),
-        if (reserved) const ClassReservedTag(),
-        _SpecificsBlock(occurrence: occurrence, gymName: gymName),
+        Text(detail.classData.name, style: DesignConstants.h1),
+        _SpecificsBlock(detail: detail),
       ],
     );
   }
 }
 
-class _SpecificsBlock extends StatelessWidget {
-  const _SpecificsBlock({required this.occurrence, required this.gymName});
+/// The stacked block on a fade to the page background, so it reads
+/// against a photograph instead of against the page.
+class _OverlayMeta extends StatelessWidget {
+  const _OverlayMeta({required this.detail});
 
-  final ClassOccurrence occurrence;
-  final String gymName;
+  final MockClassDetail detail;
 
   @override
   Widget build(BuildContext context) {
-    final date = parseIsoDate(occurrence.classDate);
-    final dayLabel = date != null
-        ? fullDayLabelForOffset(dayOffsetForDate(date))
-        : occurrence.classDate;
-    final range = formatSlotRange(
-      occurrence.resolvedClassTime,
-      occurrence.resolvedDurationMinutes,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            DesignConstants.backgroundColor.withValues(alpha: 0),
+            DesignConstants.backgroundColor.withValues(alpha: 0.94),
+          ],
+        ),
+      ),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          DesignConstants.screenHorizontalPadding,
+          DesignConstants.spacingBig,
+          DesignConstants.screenHorizontalPadding,
+          DesignConstants.spacingLarge,
+        ),
+        child: _StackedMeta(detail: detail),
+      ),
     );
-    final instructor = occurrence.resolvedInstructorName;
+  }
+}
+
+class _SpecificsBlock extends StatelessWidget {
+  const _SpecificsBlock({required this.detail});
+
+  final MockClassDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final cls = detail.classData;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       spacing: DesignConstants.spacingTiny,
       children: [
-        if (gymName.isNotEmpty) _MetaText(gymName),
-        _MetaText('$dayLabel ‧ $range'),
-        if (instructor != null && instructor.isNotEmpty)
-          _MetaText('with $instructor'),
-        _AttendingRow(count: occurrence.signupCount),
+        _MetaText(detail.location),
+        _MetaText('${detail.dateLabel} ‧ ${cls.timeRange}'),
+        if (cls.attending != null) ClassAttendingRow(count: cls.attending!),
       ],
     );
   }
@@ -82,33 +131,6 @@ class _MetaText extends StatelessWidget {
     return Text(
       text,
       style: DesignConstants.pBig.copyWith(color: DesignConstants.text2nd),
-    );
-  }
-}
-
-class _AttendingRow extends StatelessWidget {
-  const _AttendingRow({required this.count});
-
-  final int count;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.center,
-      spacing: DesignConstants.spacingSmall,
-      children: [
-        Icon(
-          Symbols.person_sharp,
-          weight: DesignConstants.iconWeight,
-          color: DesignConstants.primaryColor,
-          size: DesignConstants.iconSizeSm,
-        ),
-        Text(
-          '$count attending',
-          style: DesignConstants.pBig.copyWith(color: DesignConstants.text2nd),
-        ),
-      ],
     );
   }
 }

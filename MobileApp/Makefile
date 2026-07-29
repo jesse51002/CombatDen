@@ -1,4 +1,4 @@
-.PHONY: help run run-dev run-phone run-ios run-release tunnel tunnel-phone analyze format test clean get reset devices doctor capture capture-booking capture-app capture-shots stitch
+.PHONY: help run run-phone run-ios run-release tunnel tunnel-phone analyze format test clean get reset devices doctor capture capture-booking capture-app capture-shots stitch
 
 # Physical device serial (from `adb devices` / `flutter devices`).
 DEVICE := 52121FDAS0018S
@@ -6,16 +6,15 @@ DEVICE := 52121FDAS0018S
 EMULATOR := emulator-5554
 
 help:
-	@echo "MobileApp — live member app (FastApiBackend member portal)"
+	@echo "MobileApp — visual prototype Flutter app"
 	@echo ""
 	@echo "Targets:"
-	@echo "  make run          Run on emulator (auto adb-reverse :8000/:8001/:8002/:54321)"
-	@echo "  make run-dev      Run on emulator with dev auto-login credentials (Phase B)"
-	@echo "  make run-phone    Run on physical device (USB tunnels + dev auto-login)"
+	@echo "  make run          Run on emulator (auto adb-reverse :8000/:8002 to backend)"
+	@echo "  make run-phone    Run on physical device (USB adb-reverse tunnel to backend)"
 	@echo "  make run-ios      Run on iOS simulator"
 	@echo "  make run-release  Run on emulator in release mode (tunneled)"
-	@echo "  make tunnel       (Re)open adb-reverse :8000/:8001/:8002/:54321 to the emulator"
-	@echo "  make tunnel-phone (Re)open adb-reverse :8000/:8001/:8002/:54321 to the USB device"
+	@echo "  make tunnel       (Re)open adb-reverse :8000/:8002 to the emulator"
+	@echo "  make tunnel-phone (Re)open adb-reverse :8000/:8002 to the USB device"
 	@echo "  make analyze      Static analysis (must be clean before committing)"
 	@echo "  make format       Format every Dart file"
 	@echo "  make test         Run all tests"
@@ -25,34 +24,27 @@ help:
 	@echo "  make devices      List connected devices / simulators"
 	@echo "  make doctor       Flutter doctor"
 
-# Tunnel the device's localhost to the host so the app reaches every service it
-# needs: FastApiBackend (:8000 — the member portal), ThemeService (:8001 —
-# branding), VideoService (:8002 — tools/capture only) and Supabase GoTrue
-# (:54321 — login). adb reverse tunnels reset on an emulator/adb restart, so
-# re-run before each session.
+# Tunnel the emulator's localhost:8000/8002 to the host so the app reaches the
+# CustomizationService (:8000) and VideoService (:8002). adb reverse tunnels
+# reset on an emulator/adb restart, so re-run before each session. Both
+# services must be up: the FastApiBackend on :8000 (content -- gyms, classes,
+# rewards, videos) and ThemeService on :8001 (customization).
 run: tunnel
 	flutter run -d $(EMULATOR)
-
-# Same as `run`, plus the dev auto-login credentials. The defines are consumed
-# by the Phase B auth bootstrap (harmless no-op until then).
-run-dev: tunnel
-	flutter run -d $(EMULATOR) \
-		--dart-define=DEV_AUTOLOGIN_EMAIL=member1@test.com \
-		--dart-define=DEV_AUTOLOGIN_PASSWORD=abcd1234
 
 # Same tunnels over USB to a physical device (Wi-Fi-independent — sidesteps
 # router AP/client isolation), then run pointed at localhost. Re-run after
 # unplugging/rebooting the device.
-#
-# CUST_BASE_URL is deliberately NOT overridden: theme_flutter already defaults
-# to localhost:8001, which the tunnel forwards. Pointing it at :8000 reaches
-# the FastApiBackend, which serves no /apps/... routes — every theme slot then
-# 404s and silently falls back to the bundled design.
+# No --dart-define here on purpose: the Dart defaults are already
+# localhost:8001 for ThemeService and localhost:8000/api/v1 for the
+# content API, and the tunnels below map exactly those two ports. Pinning
+# them here a second time is how they went stale -- this target used to
+# point CUST_BASE_URL at :8000 (the backend, which has no /apps route, so
+# every theme fetch 404'd) and VIDEO_BASE_URL at :8002 (the standalone
+# VideoService, whose HTTP API no longer exists). Override on the command
+# line for a LAN IP instead of editing this.
 run-phone: tunnel-phone
-	flutter run -d $(DEVICE) \
-		--dart-define=VIDEO_BASE_URL=http://localhost:8002 \
-		--dart-define=DEV_AUTOLOGIN_EMAIL=member1@test.com \
-		--dart-define=DEV_AUTOLOGIN_PASSWORD=abcd1234
+	flutter run -d $(DEVICE)
 
 run-ios:
 	flutter run -d ios
@@ -66,14 +58,10 @@ run-release: tunnel
 tunnel:
 	adb -s $(EMULATOR) reverse tcp:8000 tcp:8000
 	adb -s $(EMULATOR) reverse tcp:8001 tcp:8001
-	adb -s $(EMULATOR) reverse tcp:8002 tcp:8002
-	adb -s $(EMULATOR) reverse tcp:54321 tcp:54321
 
 tunnel-phone:
 	adb -s $(DEVICE) reverse tcp:8000 tcp:8000
 	adb -s $(DEVICE) reverse tcp:8001 tcp:8001
-	adb -s $(DEVICE) reverse tcp:8002 tcp:8002
-	adb -s $(DEVICE) reverse tcp:54321 tcp:54321
 
 # Landing-page theme reel: render the video feed scrolling, once per theme, as
 # frame-exact 1080x1920 clips (tools/capture/). To keep device storage bounded,

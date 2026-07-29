@@ -1,144 +1,116 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/features/profile/data/mock_profile.dart';
+import 'package:mobile_app/features/profile/presentation/widgets/rank_summary/rating_graph_painter.dart';
 import 'package:mobile_app/shared/widgets/text/threshold_label.dart';
 
-const double _kStrokeWidth = 3;
-const double _kGraphAspect = 393 / 196.5;
+const List<double> _kThresholdTopOffsets = [12, 80, 140];
 
-/// Rank-progress line graph: the member's classes-into-rank sawtooth
-/// (normalized 0..1, resetting to 0 at each promotion) with the classes axis
-/// bracketed on the right edge — [classesNeeded] (the promotion line) at the
-/// top, `0` at the bottom. A too-short / empty series renders a graceful empty
-/// state instead of a blank box.
+/// The shipped plot box: 393 wide by 196.5 tall. Every other size is
+/// that ratio re-proportioned, and the threshold offsets above scale
+/// with it so an annotation never falls outside a shorter plot.
+const double _kNominalWidth = 393;
+const double _kNominalHeight = 196.5;
+const double _kShortHeight = 110;
+const double _kTallHeight = 248;
+
+/// How much room the plot gets.
+enum RatingGraphSize {
+  /// A strip — the collapsible seam in `splitRank`.
+  sm,
+
+  /// The shipped plot.
+  md,
+
+  /// A tall band for a graph that is the screen's main event.
+  lg,
+}
+
+/// Rating-over-time line graph with rank threshold annotations on the
+/// right edge.
 class RatingGraph extends StatelessWidget {
   const RatingGraph({
     super.key,
-    required this.series,
-    required this.classesNeeded,
+    this.size = RatingGraphSize.md,
+    this.bleed = false,
+    this.card = false,
   });
 
-  /// The normalized 0..1 y-values, spaced uniformly across the width.
-  final List<double> series;
+  final RatingGraphSize size;
 
-  /// The next-rank threshold in classes — the value at the top of the axis.
-  final int classesNeeded;
+  /// Runs the plot to the screen edges instead of inside the standard
+  /// gutter.
+  final bool bleed;
+
+  /// Seats the plot on a raised surface.
+  final bool card;
+
+  double get _height => switch (size) {
+    RatingGraphSize.sm => _kShortHeight,
+    RatingGraphSize.md => _kNominalHeight,
+    RatingGraphSize.lg => _kTallHeight,
+  };
 
   @override
   Widget build(BuildContext context) {
+    final plot = AspectRatio(
+      aspectRatio: _kNominalWidth / _height,
+      child: _Plot(thresholdScale: _height / _kNominalHeight),
+    );
+    if (bleed) return plot;
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: DesignConstants.screenHorizontalPadding,
       ),
-      child: AspectRatio(
-        aspectRatio: _kGraphAspect,
-        child: series.length < 2
-            ? const _GraphEmpty()
-            : _GraphPlot(series: series, classesNeeded: classesNeeded),
-      ),
+      child: card ? _Surface(child: plot) : plot,
     );
   }
 }
 
-/// The plotted line with the two classes-axis reference labels on the right.
-class _GraphPlot extends StatelessWidget {
-  const _GraphPlot({required this.series, required this.classesNeeded});
+/// The raised surface the `card` treatment seats the plot on.
+class _Surface extends StatelessWidget {
+  const _Surface({required this.child});
 
-  final List<double> series;
-  final int classesNeeded;
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
+    return Container(
+      padding: EdgeInsets.all(DesignConstants.spacingMedium),
+      decoration: BoxDecoration(
+        color: DesignConstants.card,
+        borderRadius: BorderRadius.circular(DesignConstants.radiusSmall),
+      ),
+      child: child,
+    );
+  }
+}
+
+class _Plot extends StatelessWidget {
+  const _Plot({required this.thresholdScale});
+
+  final double thresholdScale;
+
+  @override
+  Widget build(BuildContext context) {
+    final thresholds = ratingGraphThresholds;
     return Stack(
       children: [
         Positioned.fill(
           child: CustomPaint(
-            painter: _RatingGraphPainter(
-              series: series,
+            painter: RatingGraphPainter(
+              series: mockRatingGraphSeries,
               color: DesignConstants.text,
             ),
           ),
         ),
-        if (classesNeeded > 0)
+        for (var i = 0; i < thresholds.length; i++)
           Positioned(
             right: 0,
-            top: 0,
-            child: ThresholdLabel(label: '$classesNeeded'),
+            top: _kThresholdTopOffsets[i] * thresholdScale,
+            child: ThresholdLabel(label: thresholds[i]),
           ),
-        const Positioned(
-          right: 0,
-          bottom: 0,
-          child: ThresholdLabel(label: '0'),
-        ),
       ],
     );
-  }
-}
-
-/// Shown when the series has no plottable history (no rank / no activity yet).
-class _GraphEmpty extends StatelessWidget {
-  const _GraphEmpty();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Text(
-        'No rank history yet.',
-        textAlign: TextAlign.center,
-        style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-      ),
-    );
-  }
-}
-
-class _RatingGraphPainter extends CustomPainter {
-  _RatingGraphPainter({required this.series, required this.color});
-
-  final List<double> series;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (series.length < 2) return;
-
-    final points = <Offset>[
-      for (var i = 0; i < series.length; i++)
-        Offset(
-          size.width * (i / (series.length - 1)),
-          size.height * (1 - series[i].clamp(0.0, 1.0)),
-        ),
-    ];
-
-    final path = Path()..moveTo(points.first.dx, points.first.dy);
-    for (var i = 0; i < points.length - 1; i++) {
-      final p0 = i == 0 ? points[0] : points[i - 1];
-      final p1 = points[i];
-      final p2 = points[i + 1];
-      final p3 = i + 2 < points.length ? points[i + 2] : points[i + 1];
-
-      final cp1 = Offset(
-        p1.dx + (p2.dx - p0.dx) / 6,
-        p1.dy + (p2.dy - p0.dy) / 6,
-      );
-      final cp2 = Offset(
-        p2.dx - (p3.dx - p1.dx) / 6,
-        p2.dy - (p3.dy - p1.dy) / 6,
-      );
-
-      path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
-    }
-
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = _kStrokeWidth
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(_RatingGraphPainter oldDelegate) {
-    return oldDelegate.color != color || oldDelegate.series != series;
   }
 }

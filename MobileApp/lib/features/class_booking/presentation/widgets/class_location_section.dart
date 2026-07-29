@@ -1,104 +1,93 @@
 import 'package:flutter/material.dart';
-import 'package:material_symbols_icons/symbols.dart';
-
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/class_booking/presentation/widgets/class_location_helpers.dart';
-import 'package:mobile_app/shared/widgets/buttons/app_outline_button.dart';
+import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
+import 'package:mobile_app/shared/widgets/api_image.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
-/// "Location" header + the gym the class runs at: its name, its street address
-/// when the gym has one, and a deep link into the phone's native map app.
-/// (The member board carries no per-class address, so this is the gym's.)
+/// How a layout arranges the location block.
+///
+/// The map preview and the street address are in both values; only
+/// the map's size and the direction they stack change.
+enum ClassLocationLayout {
+  /// Full-width map with the address beneath it. Ships today.
+  stacked,
+
+  /// A compact strip: small map leading, address filling the rest.
+  row,
+}
+
+const double _kMapRatio = 1160 / 580;
+const double _kRowMapWidth = 116;
+
+/// "Location" header + static map preview + street address.
+/// Mirrors the `MapWidget` group.
 class ClassLocationSection extends StatelessWidget {
   const ClassLocationSection({
     super.key,
-    required this.gymName,
-    this.address,
+    required this.detail,
+    this.layout = ClassLocationLayout.stacked,
   });
 
-  final String gymName;
-
-  /// The gym's street address. Null/blank when the gym hasn't set one — the
-  /// section then falls back to the name alone.
-  final String? address;
+  final MockClassDetail detail;
+  final ClassLocationLayout layout;
 
   @override
   Widget build(BuildContext context) {
-    final line = address?.trim();
-    if (line == null || line.isEmpty) {
-      return SubtitleSection(
-        title: 'Location',
-        spacing: DesignConstants.spacingMedium,
-        child: Text(
-          gymName,
-          style: DesignConstants.pBig.copyWith(color: DesignConstants.text2nd),
-        ),
-      );
-    }
-
     return SubtitleSection(
       title: 'Location',
       spacing: DesignConstants.spacingMedium,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: DesignConstants.spacingMedium,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            spacing: DesignConstants.spacingSmall,
-            children: [
-              Text(gymName, style: DesignConstants.pBig),
-              Text(
-                line,
-                style: DesignConstants.pBig.copyWith(
-                  color: DesignConstants.text2nd,
-                ),
+      child: switch (layout) {
+        ClassLocationLayout.stacked => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            AspectRatio(aspectRatio: _kMapRatio, child: _Map(detail: detail)),
+            _Address(detail: detail),
+          ],
+        ),
+        ClassLocationLayout.row => Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          spacing: DesignConstants.spacingMedium,
+          children: [
+            SizedBox(
+              width: _kRowMapWidth,
+              child: AspectRatio(
+                aspectRatio: _kMapRatio,
+                child: _Map(detail: detail),
               ),
-            ],
-          ),
-          _OpenInMapsButton(address: line),
-        ],
-      ),
+            ),
+            Expanded(child: _Address(detail: detail)),
+          ],
+        ),
+      },
     );
   }
 }
 
-class _OpenInMapsButton extends StatelessWidget {
-  const _OpenInMapsButton({required this.address});
+class _Map extends StatelessWidget {
+  const _Map({required this.detail});
 
-  final String address;
-
-  Future<void> _open(BuildContext context) async {
-    final messenger = ScaffoldMessenger.of(context);
-    final opened = await launchMapsFor(address);
-    if (opened) return;
-    messenger
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text("Couldn't open Maps", style: DesignConstants.p),
-        ),
-      );
-  }
+  final MockClassDetail detail;
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: 'Open $address in Maps',
-      child: AppOutlineButton(
-        text: 'Open in Maps',
-        borderColor: DesignConstants.primaryColor,
-        textColor: DesignConstants.primaryColor,
-        textStyle: DesignConstants.h3,
-        icon: Icon(
-          Symbols.directions_sharp,
-          weight: DesignConstants.iconWeight,
-          size: DesignConstants.iconSizeSm,
-          color: DesignConstants.primaryColor,
-        ),
-        onPressed: () => _open(context),
-      ),
+    return Image(
+      image: ApiImage.classAsset(detail.mapAsset),
+      fit: BoxFit.cover,
+    );
+  }
+}
+
+class _Address extends StatelessWidget {
+  const _Address({required this.detail});
+
+  final MockClassDetail detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      detail.address,
+      style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
     );
   }
 }

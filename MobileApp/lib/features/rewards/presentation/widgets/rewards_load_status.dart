@@ -1,15 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
+import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 
-/// Loading (null [message]) / error / empty chrome for a rewards grid, shared
-/// by the Points Store and My Rewards. Pass [onRetry] to render a retry button
-/// under the message (the retry-able error state).
+/// Loading (null [message]) / error / empty chrome for a rewards grid that
+/// loads from the VideoService, shared by the Points Store and My Rewards.
 class RewardsLoadStatus extends StatelessWidget {
-  const RewardsLoadStatus(this.message, {super.key, this.onRetry});
+  const RewardsLoadStatus(this.message, {super.key});
 
   final String? message;
-  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -17,28 +15,13 @@ class RewardsLoadStatus extends StatelessWidget {
       padding: EdgeInsets.all(DesignConstants.paddingBig),
       child: Center(
         child: message == null
-            ? SizedBox(
-                height: 24,
-                width: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: DesignConstants.primaryColor,
+            ? const LoadingDots()
+            : Text(
+                message!,
+                style: DesignConstants.p.copyWith(
+                  color: DesignConstants.text2nd,
                 ),
-              )
-            : Column(
-                mainAxisSize: MainAxisSize.min,
-                spacing: DesignConstants.spacingLarge,
-                children: [
-                  Text(
-                    message!,
-                    style: DesignConstants.p.copyWith(
-                      color: DesignConstants.text2nd,
-                    ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (onRetry != null)
-                    AppPrimaryButton(text: 'Try again', onPressed: onRetry),
-                ],
+                textAlign: TextAlign.center,
               ),
       ),
     );
