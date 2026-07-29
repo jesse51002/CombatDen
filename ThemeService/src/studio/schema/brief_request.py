@@ -10,10 +10,12 @@ uses) plus an optional filename ``slug``; it invents nothing. ``build()``
 is the single conversion, so validation always runs through
 ``Customization`` — never a second copy of its rules.
 
-The conversational (Pydantic AI) authoring agent is a follow-up. When it
-lands, its accept path calls the same ``BriefService.commit`` over this
-same model — the agent will be another caller of the commit path, not a
-second commit path.
+``from_brief()`` is that conversion in reverse, and lives here beside it so
+the flat ⇄ nested mapping has exactly one home. The conversational agent
+(``src/studio/agent/``) proposes a real ``Customization``; its accept path
+flattens it through ``from_brief`` and commits it via the same
+``BriefService.commit`` the form posts to. The agent is another caller of
+the commit path, never a second commit path.
 """
 
 from __future__ import annotations
@@ -54,6 +56,26 @@ class BriefRequest(BaseModel):
                     "mode": self.mode,
                 },
             }
+        )
+
+    @classmethod
+    def from_brief(
+        cls, brief: Customization, slug: PathSegment | None = None
+    ) -> BriefRequest:
+        """``build()`` in reverse: a nested brief flattened for committing.
+
+        The agent proposes the real ``Customization``, not this flat shape,
+        so its accept path needs the mapping the other way round. It lives
+        here rather than in the agent so both directions stay in one file and
+        can never disagree about which flat name feeds which nested field.
+        """
+        return cls(
+            name=brief.design_direction.name,
+            short_desc=brief.design_direction.short_desc,
+            long_desc=brief.design_direction.long_desc,
+            colors_description=brief.colors_direction.description,
+            mode=brief.colors_direction.mode,
+            slug=slug,
         )
 
 

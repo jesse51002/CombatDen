@@ -43,6 +43,19 @@ class Settings(BaseSettings):
     # emulator vs. one local browser tab).
     studio_cors_origins: list[str] = _DEFAULT_CORS_ORIGINS
 
+    # --- The brief agent (src/studio/agent/) ------------------------------
+    # A BARE Anthropic model name, never a litellm "provider/model" string:
+    # the agent names its provider explicitly (`AnthropicProvider`), so the
+    # id stands alone. Override with BRIEF_AGENT_MODEL.
+    #
+    # Its ANTHROPIC_API_KEY is deliberately NOT redeclared here — the studio
+    # already imports the pipeline, so `src.core.config.settings` is the one
+    # definition of that secret and `brief_agent_service()` reads it there.
+    # A second copy would be a second requiredness rule for one env var.
+    brief_agent_model: str = "claude-opus-5"
+    # Extra re-asks when the agent's structured output misses the schema.
+    brief_agent_retries: int = 3
+
     @property
     def runs_dir(self) -> Path:
         """Where one append-only `<run_id>.jsonl` per launch is written."""

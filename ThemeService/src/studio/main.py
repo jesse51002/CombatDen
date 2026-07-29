@@ -10,13 +10,14 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.studio.agent_router import agent_router
 from src.studio.brief_router import brief_router
 from src.studio.config import settings
 from src.studio.run_router import run_router
 
 
 def create_app() -> FastAPI:
-    """Build the studio app: CORS, the two routers, and a health probe."""
+    """Build the studio app: CORS, the three routers, and a health probe."""
     application = FastAPI(title="ThemeService Studio", version="0.1.0")
 
     application.add_middleware(
@@ -30,6 +31,9 @@ def create_app() -> FastAPI:
 
     application.include_router(run_router)
     application.include_router(brief_router)
+    # The agent is optional: with no ANTHROPIC_API_KEY its service is never
+    # built and only its own endpoint 503s, so mounting it is always safe.
+    application.include_router(agent_router)
 
     @application.get("/health", tags=["meta"])
     async def health_check() -> dict[str, str]:

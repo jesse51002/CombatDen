@@ -325,6 +325,44 @@ Rules that hold inside `src/studio/`:
   `schema/customization.py` — **five** fields, `extra="forbid"` — and
   `BriefRequest.build` runs that model, so there is exactly one definition of
   a valid brief. Never add a sixth field.
+- **One commit path, two callers.** The plain form (`POST /briefs`) and the
+  conversational agent (`POST /brief-agent`) both write through
+  `BriefService.commit`. The agent is a *caller* of that path, never a second
+  one — `BriefRequest.from_brief` is the only flattening it does, and it lives
+  beside `build()` so the two directions can't disagree.
+- **The agent authors; code commits.** `src/studio/agent/` holds a Pydantic AI
+  agent with **ZERO tools**: it converses to propose a `Customization`, ask a
+  multiple-choice `AgentQuestion`, or reply in text, and it writes nothing.
+  The accept path (`accepted_brief` in the POST body) runs the deterministic
+  commit FIRST, then re-runs the agent on a short outcome note so it can
+  acknowledge — a brief is never reported saved because a model said so. If
+  that post-save call throws, the turn degrades to a fixed reply rather than
+  propagating: the save already succeeded. **Never give this agent a tool** —
+  a tool would be a second way to write a brief, around `BriefService`.
+- **The agent is stateless and optional.** The client holds the transcript and
+  posts it back each turn (serialized with Pydantic AI's
+  `ModelMessagesTypeAdapter`); there is no session store to expire. And when
+  `ANTHROPIC_API_KEY` is empty the agent is simply **not built** — the studio
+  boots, launches runs and commits form briefs exactly as before, and only
+  `POST /brief-agent` fails (503). Keep that property: an unconfigured
+  optional feature must never take the app down with it.
+- **Two LLM libraries, one boundary.** litellm drives every *pipeline* call
+  (`src/modules/`, `src/shared/services/`); Pydantic AI drives the studio's
+  conversational agent and nothing else. Its model id is a **bare** Anthropic
+  name from `src/studio/config.py` (`brief_agent_model`) — never a litellm
+  `provider/model` string — because the agent names its provider explicitly.
+  The key is read from `src.core.config` rather than redeclared on the studio
+  settings: the studio already imports the pipeline, so one secret keeps one
+  definition and one env var.
+- **The system prompt is a file, never a literal.** It lives at
+  `src/studio/agent/prompts/brief_agent_system.md` and is read at use, like
+  every other prompt in this package. It is the web-app port of the
+  `brand-brief` skill (`.claude/skills/brand-brief/`) — the same ≤10-question,
+  one-at-a-time, multiple-choice-by-default interview, and the same hard rules
+  (stylised never photoreal, brand-not-app prose, no colour values, only
+  contrast-satisfiable palettes). **When that skill's rules change, change
+  this prompt in the same edit**, and vice versa; they are one interview with
+  two front doors.
 
 ---
 
