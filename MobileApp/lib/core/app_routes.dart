@@ -35,6 +35,7 @@ class AppRoutes {
   static const String postClassPoints = '/post-class/points';
   static const String postClassRewards = '/post-class/rewards';
   static const String postClassRank = '/post-class/rank';
+  static const String postClassWins = '/post-class/wins';
 
   AppRoutes._();
 }

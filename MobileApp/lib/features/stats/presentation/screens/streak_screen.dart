@@ -13,7 +13,7 @@ import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';
 /// First card in the post-class flow — celebrates the member's live weekly
 /// streak, this week's day strip, and the points the attended class was worth.
 /// Continues to whatever card `celebration_flow.dart` says comes next for this
-/// gym (wins removed from the flow).
+/// gym.
 class StreakScreen extends StatefulWidget {
   const StreakScreen({super.key});
 

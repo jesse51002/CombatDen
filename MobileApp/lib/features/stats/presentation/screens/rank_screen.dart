@@ -12,8 +12,9 @@ import 'package:mobile_app/features/stats/presentation/widgets/rank/rank_body.da
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';
 
-/// Final card in the post-class flow — celebrates the member's live rank and
-/// progress toward the next step. Closing / continuing both return home.
+/// The rank card — celebrates the member's live rank and progress toward the
+/// next step, then hands off to the wins recap that closes the flow. Closing
+/// (the X) returns home.
 ///
 /// The flow no longer ROUTES here when the gym runs no rank ladder or the
 /// member holds no rank: `celebration_flow.dart` composes the card out, so the
@@ -67,10 +68,10 @@ class _RankScreenState extends State<RankScreen> {
           }
           return ColoredBox(color: DesignConstants.backgroundColor);
         }
-        // The rank card is last in every composed flow, so this resolves to
-        // null and the CTA reads "Done" — but it is READ from the flow rather
-        // than hardcoded, like its three siblings. A hardcoded "Continue" here
-        // told the member there was another card and then dropped them home.
+        // READ from the flow rather than hardcoded, like its three siblings —
+        // which is exactly why appending the wins card flipped this CTA from
+        // "Done" to "Continue" with no edit here. A hardcoded label is how the
+        // member gets told there is another card and then dropped home.
         final next = nextCelebrationCard(
           current: AppRoutes.postClassRank,
           hasRank: true,

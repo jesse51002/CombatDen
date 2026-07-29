@@ -22,6 +22,7 @@ import 'package:mobile_app/features/stats/presentation/screens/points_screen.dar
 import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
+import 'package:mobile_app/features/stats/presentation/screens/wins_screen.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_scaffold.dart';
 
 import '../../../helpers/fake_rewards_catalog.dart';
@@ -129,6 +130,24 @@ Future<_RecordingObserver> _pumpCard(
 PostClassScaffold _cta(WidgetTester tester) =>
     tester.widget<PostClassScaffold>(find.byType(PostClassScaffold));
 
+/// Runs a card's entrance out to the end. The stagger delays and count-up
+/// delays are plain timers, and `pumpAndSettle` only advances the clock while
+/// a frame is scheduled — so it can return with those still pending, which
+/// fails the test.
+Future<void> _drainEntrance(WidgetTester tester) async {
+  await tester.pump(const Duration(seconds: 4));
+  await tester.pumpAndSettle();
+}
+
+/// Sizes the surface like a phone. The app is Android/iOS only, and the wins
+/// card's trophy hero is taller than the default 800×600 test window — which
+/// is shorter than any device it ships on.
+void _phoneSurface(WidgetTester tester) {
+  tester.view.physicalSize = const Size(1170, 2532);
+  tester.view.devicePixelRatio = 3;
+  addTearDown(tester.view.reset);
+}
+
 void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -198,35 +217,36 @@ void main() {
     });
   });
 
-  group('the LAST card terminates cleanly', () {
-    testWidgets('an unreachable catalog makes POINTS the last card',
+  group('the flow tail moved: every gym shape now CONTINUES into wins', () {
+    testWidgets('an unreachable catalog sends points past rewards to wins',
         (tester) async {
       await _selectGym(rankEnabled: false, hasRewards: true);
       await primeRewardsGate([5000]);
       final nav = await _pumpCard(tester, const PointsScreen(), rank: _rank);
 
-      expect(_cta(tester).ctaLabel, 'Done');
+      expect(_cta(tester).ctaLabel, 'Continue');
       _cta(tester).onCtaPressed();
       await tester.pumpAndSettle();
 
-      expect(nav.pushed.last, AppRoutes.home);
+      expect(nav.pushed.last, AppRoutes.postClassWins);
+      expect(nav.pushed, isNot(contains(AppRoutes.postClassRewards)));
     });
 
-    testWidgets('the RANK card reads Done — it is always the last one',
+    testWidgets('the RANK card reads Continue — wins now follows it',
         (tester) async {
       await _selectGym(rankEnabled: true, hasRewards: true);
       final nav = await _pumpCard(tester, const RankScreen(), rank: _rank);
 
-      // It used to hardcode "Continue" while going home: the member was told
-      // there was another card and then dropped out of the flow.
-      expect(_cta(tester).ctaLabel, 'Done');
+      // It reads the flow rather than hardcoding a label, which is exactly why
+      // appending the wins card flipped it from "Done" without touching it.
+      expect(_cta(tester).ctaLabel, 'Continue');
       _cta(tester).onCtaPressed();
-      await tester.pumpAndSettle();
+      await _drainEntrance(tester);
 
-      expect(nav.pushed.last, AppRoutes.home);
+      expect(nav.pushed.last, AppRoutes.postClassWins);
     });
 
-    testWidgets('rewards is the last card at a rank-OFF gym: Done → home',
+    testWidgets('rewards continues into wins at a rank-OFF gym',
         (tester) async {
       await _selectGym(rankEnabled: false, hasRewards: true);
       final nav = await _pumpCard(
@@ -235,36 +255,35 @@ void main() {
         rank: _rank,
       );
 
-      // Not "Continue" into a rank screen that would flash an empty frame.
-      expect(_cta(tester).ctaLabel, 'Done');
+      expect(_cta(tester).ctaLabel, 'Continue');
       _cta(tester).onCtaPressed();
       await tester.pump();
 
-      expect(nav.pushed.last, AppRoutes.home);
+      expect(nav.pushed.last, AppRoutes.postClassWins);
+      // Still never into a rank screen that would flash an empty frame.
       expect(nav.pushed, isNot(contains(AppRoutes.postClassRank)));
     });
 
-    testWidgets('rewards is also the last card for an UNGRADED member',
-        (tester) async {
+    testWidgets('rewards also continues for an UNGRADED member', (tester) async {
       await _selectGym(rankEnabled: true, hasRewards: true);
       await _pumpCard(
         tester,
         RewardsCardScreen(repository: _PendingRewardsRepo()),
       );
 
-      expect(_cta(tester).ctaLabel, 'Done');
+      expect(_cta(tester).ctaLabel, 'Continue');
     });
 
-    testWidgets('at the emptiest gym, points is the last card: Done → home',
+    testWidgets('at the emptiest gym, points continues into wins',
         (tester) async {
       await _selectGym(rankEnabled: false, hasRewards: false);
       final nav = await _pumpCard(tester, const PointsScreen());
 
-      expect(_cta(tester).ctaLabel, 'Done');
+      expect(_cta(tester).ctaLabel, 'Continue');
       _cta(tester).onCtaPressed();
       await tester.pumpAndSettle();
 
-      expect(nav.pushed.last, AppRoutes.home);
+      expect(nav.pushed.last, AppRoutes.postClassWins);
     });
 
     testWidgets('streak still hands off to points everywhere', (tester) async {
@@ -276,6 +295,33 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(nav.pushed.last, AppRoutes.postClassPoints);
+    });
+  });
+
+  group('the WINS card closes the flow', () {
+    testWidgets('its CTA is the themed book-next-class label, not "Done"',
+        (tester) async {
+      _phoneSurface(tester);
+      await _selectGym(rankEnabled: true, hasRewards: true);
+      await _pumpCard(tester, const WinsScreen(), rank: _rank);
+
+      // The one documented exception to `celebrationCtaLabel`: the card exists
+      // to nudge the next booking, so it can't end on "Done".
+      expect(_cta(tester).ctaLabel, 'Book your next class');
+      expect(_cta(tester).ctaLabel, isNot('Done'));
+
+      await _drainEntrance(tester);
+    });
+
+    testWidgets('the CTA lands home, at the emptiest gym too', (tester) async {
+      _phoneSurface(tester);
+      await _selectGym(rankEnabled: false, hasRewards: false);
+      final nav = await _pumpCard(tester, const WinsScreen());
+
+      _cta(tester).onCtaPressed();
+      await _drainEntrance(tester);
+
+      expect(nav.pushed.last, AppRoutes.home);
     });
   });
 }
