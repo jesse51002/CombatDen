@@ -58,10 +58,11 @@ capture-coupled set:
   still renders via this old path.
 - `features/home/data/mock_gym.dart` + `features/stats/data/mock_stats.dart` —
   the two prototype mocks the harness still renders (topbar chrome, the
-  `StreakBody` / `WinsBody` demo stats).
-- `features/stats/presentation/widgets/wins/` (`wins_body` + `wins_tile` +
-  `wins_tile_row`) — the post-class wins widgets, dropped from the celebration
-  flow but still rendered by the harness. The wins **screen** + route are gone.
+  `StreakBody` / `WinsBody` demo stats). The `Mock*Stats` **carrier types** in
+  `mock_stats.dart` are NOT dormant — every celebration card is built from them
+  by `celebration_stats_builder.dart`; only the `mock*Stats` demo CONSTANTS are.
+  (`features/stats/presentation/widgets/wins/` is live again — the wins card is
+  back as the flow's last card; see *The post-class celebration*.)
 - `features/style_select/data/gyms_pager.dart` — the old VideoService gym-browser
   pager the harness pages to pick a gym/theme. The style-select **screen** +
   route are gone.
@@ -412,12 +413,35 @@ been graded yet, and that member still belongs on the rank-shaped page.
 `features/stats/data/celebration_flow.dart` owns the card ORDER, and it is the
 only place that decides which cards a member sees: `celebrationCardRoutes` =
 streak → points → (rewards, when `gymHasRewards` **and** `rewardsWorthShowing`)
-→ (rank, when `gymRankEnabled` **and** the member holds a rank). Each screen
-asks `nextCelebrationCard(current:, hasRank:, pointsBalance:)` for its successor
-and takes its label from `celebrationCtaLabel` — so **the last card shown always
-says "Done" and returns home, and never chains into a card that was composed
-out.** That includes the rank card: **no screen hardcodes a CTA label.** Add a
-card by adding it to that list, not by hardcoding a route in a screen's CTA.
+→ (rank, when `gymRankEnabled` **and** the member holds a rank) → **wins**. Each
+screen asks `nextCelebrationCard(current:, hasRank:, pointsBalance:)` for its
+successor and takes its label from `celebrationCtaLabel`, so **a card never
+chains into one that was composed out** — including the rank card. Add a card by
+adding it to that list, not by hardcoding a route in a screen's CTA.
+
+- **The WINS card is the flow's LAST card, and it is UNGATED.** Its three tiles
+  — classes this week, points earned, week streak — are universal, so unlike
+  rewards and rank there is no gym capability that could leave it empty and no
+  flag to compose it out. It closes every gym shape.
+- **It is the ONE screen that hardcodes its CTA, on purpose.** Every other card
+  reads `celebrationCtaLabel(next)`, which is why appending wins flipped the
+  former last card from "Done" to "Continue" without touching it. `WinsScreen`
+  instead reads the themed `CombatDenSlots.bookNextClassCta` slot (fallback
+  `'Book your next class'`, the same `ThemeText.value` call `SummaryScreen`
+  makes) and lands home: the card exists to nudge the next booking, and a card
+  whose whole job is that nudge cannot end on "Done". So in a normally-composed
+  flow "Done" is now reached only through the PR-3 deep-link seam, where a push
+  can land on a card this gym's flow skipped and that card must end the flow.
+- **Its tiles come from `buildWinsStats`, like every other card's data.**
+  Classes-this-week is the **length of `retention.current_week_attended_weekdays`**
+  — the same list the profile's week strip draws. The profile read already
+  carries it, so never fetch class history for that number. `iconName` is one of
+  exactly `'star'` / `'award'` / `'gift'`; `WinsTile`'s mapper knows no fourth
+  name and would render the help glyph.
+- **`WinsBody` gates the CTA like its four siblings** (`PostClassController`:
+  skip handler + `markDone`), but it has no intro to jump past — its ~1s
+  stagger cascade keeps running and the skip just releases the CTA early.
+  Without a controller (the capture harness) nothing changes.
 
 - **The rewards card has TWO independent gates, and both must pass.**
   `gymHasRewards` asks whether the gym runs rewards at all (a cached identity
@@ -635,8 +659,7 @@ them as mandatory:
   watermark (`celebration_watermark_<member_id>`) checked on app open/foreground.
   A null watermark seeds **silently** (no replay storm on first run / reinstall /
   member switch); it fires **once** for the newest unseen attendance and advances
-  only after the flow completes. The old "wins" card is removed from the flow (the
-  screen file is dormant). Which cards the flow then shows is composed per-gym —
+  only after the flow completes. Which cards the flow shows is composed per-gym —
   see *The post-class celebration is composed, not hardcoded*.
 - **Never show a surface for a feature the gym doesn't run.** A tab, a topbar
   tile, a celebration card or a hand-off into a screen that can only be empty

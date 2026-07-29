@@ -26,6 +26,7 @@ import 'package:mobile_app/features/stats/presentation/screens/points_screen.dar
 import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
+import 'package:mobile_app/features/stats/presentation/screens/wins_screen.dart';
 import 'package:mobile_app/features/videos/bloc/video_click_bloc.dart';
 import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
 import 'package:mobile_app/features/videos/presentation/screens/tag_videos_screen.dart';
@@ -56,6 +57,7 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.postClassPoints: (_) => const PointsScreen(),
   AppRoutes.postClassRewards: (_) => const RewardsCardScreen(),
   AppRoutes.postClassRank: (_) => const RankScreen(),
+  AppRoutes.postClassWins: (_) => const WinsScreen(),
 };
 
 Route<dynamic> _onGenerateRoute(RouteSettings settings) {
