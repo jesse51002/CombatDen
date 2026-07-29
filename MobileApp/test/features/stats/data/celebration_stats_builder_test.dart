@@ -5,11 +5,13 @@ import 'package:mobile_app/features/profile/data/models/billing_retention.dart';
 import 'package:mobile_app/features/profile/data/models/member_profile.dart';
 import 'package:mobile_app/features/stats/data/celebration_data.dart';
 import 'package:mobile_app/features/stats/data/celebration_stats_builder.dart';
+import 'package:mobile_app/features/stats/data/mock_stats.dart';
 
 MemberProfile _profile({
   int streak = 3,
   int points = 1250,
   BillingRank? rank,
+  List<int> weekdays = const [],
 }) =>
     MemberProfile(
       memberId: 'm1',
@@ -21,9 +23,15 @@ MemberProfile _profile({
         classStreakWeeks: streak,
         pointsBalance: points,
         videosWatched: 0,
+        currentWeekAttendedWeekdays: weekdays,
       ),
       rank: rank,
     );
+
+/// The tile carrying [label], so an assertion names what it is checking rather
+/// than an index that a reordering would silently repoint.
+MockWinTile _tile(MockWinsStats stats, String label) =>
+    stats.tiles.firstWhere((t) => t.label == label);
 
 void main() {
   group('buildStreakStats', () {
@@ -84,6 +92,81 @@ void main() {
           buildPointsStats(null, const CelebrationData(pointsWorth: 10));
       expect(stats.gained, 10);
       expect(stats.totalPoints, 0);
+    });
+  });
+
+  group('buildWinsStats', () {
+    test('derives all three tiles from live values', () {
+      final stats = buildWinsStats(
+        _profile(streak: 4, weekdays: [1, 3, 5]),
+        const CelebrationData(pointsWorth: 160),
+      );
+
+      expect(stats.tiles.length, 3);
+      // Classes this week is the LENGTH of the profile's own weekday list —
+      // the same list the profile's week strip draws. Fetching class history
+      // for a number the profile read already carries is the bug this guards.
+      expect(_tile(stats, 'Classes this week').value, '3');
+      expect(_tile(stats, 'Points').value, '+160');
+      expect(_tile(stats, 'Streak').value, '4 weeks');
+    });
+
+    test('keeps the demo icon association, and adds nothing new', () {
+      final stats = buildWinsStats(
+        _profile(),
+        const CelebrationData(pointsWorth: 10),
+      );
+      expect(_tile(stats, 'Streak').iconName, 'star');
+      expect(_tile(stats, 'Points').iconName, 'gift');
+      expect(_tile(stats, 'Classes this week').iconName, 'award');
+      // The widget's mapper knows exactly these three; a fourth name would
+      // silently render the help glyph.
+      expect(
+        stats.tiles.map((t) => t.iconName),
+        everyElement(isIn(['star', 'award', 'gift'])),
+      );
+    });
+
+    test('a one-week streak is singular', () {
+      final stats = buildWinsStats(
+        _profile(streak: 1),
+        const CelebrationData(pointsWorth: 0),
+      );
+      expect(_tile(stats, 'Streak').value, '1 week');
+    });
+
+    test('a broken streak is plural, not "0 week"', () {
+      final stats = buildWinsStats(
+        _profile(streak: 0),
+        const CelebrationData(pointsWorth: 0),
+      );
+      expect(_tile(stats, 'Streak').value, '0 weeks');
+    });
+
+    test('an empty week is zero classes, not a missing tile', () {
+      final stats = buildWinsStats(
+        _profile(weekdays: const []),
+        const CelebrationData(pointsWorth: 25),
+      );
+      expect(_tile(stats, 'Classes this week').value, '0');
+    });
+
+    test('a null profile degrades to zeros, keeping the class points', () {
+      final stats = buildWinsStats(null, const CelebrationData(pointsWorth: 75));
+      expect(_tile(stats, 'Classes this week').value, '0');
+      expect(_tile(stats, 'Streak').value, '0 weeks');
+      // The one value that does NOT come from the profile survives it.
+      expect(_tile(stats, 'Points').value, '+75');
+    });
+
+    test('carries the themed fallbacks the card renders under its slots', () {
+      final stats = buildWinsStats(
+        _profile(),
+        const CelebrationData(pointsWorth: 5),
+      );
+      expect(stats.title, isNotEmpty);
+      expect(stats.subtitle, isNotEmpty);
+      expect(stats.heroAsset, 'stat_wins_trophy.png');
     });
   });
 

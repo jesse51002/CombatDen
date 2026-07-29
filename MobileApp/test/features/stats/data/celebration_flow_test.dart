@@ -36,7 +36,7 @@ void main() {
   });
 
   group('celebrationCardRoutes composes only the cards that apply', () {
-    test('a gym with rewards and a ranked member gets all four', () {
+    test('a gym with rewards and a ranked member gets all five', () {
       expect(
         celebrationCardRoutes(
           hasRewards: true,
@@ -49,6 +49,7 @@ void main() {
           AppRoutes.postClassPoints,
           AppRoutes.postClassRewards,
           AppRoutes.postClassRank,
+          AppRoutes.postClassWins,
         ],
       );
     });
@@ -65,6 +66,7 @@ void main() {
           AppRoutes.postClassStreak,
           AppRoutes.postClassPoints,
           AppRoutes.postClassRank,
+          AppRoutes.postClassWins,
         ],
       );
     });
@@ -81,6 +83,7 @@ void main() {
           AppRoutes.postClassStreak,
           AppRoutes.postClassPoints,
           AppRoutes.postClassRank,
+          AppRoutes.postClassWins,
         ],
       );
     });
@@ -97,6 +100,7 @@ void main() {
           AppRoutes.postClassStreak,
           AppRoutes.postClassPoints,
           AppRoutes.postClassRewards,
+          AppRoutes.postClassWins,
         ],
       );
     });
@@ -113,11 +117,12 @@ void main() {
           AppRoutes.postClassStreak,
           AppRoutes.postClassPoints,
           AppRoutes.postClassRewards,
+          AppRoutes.postClassWins,
         ],
       );
     });
 
-    test('the bare gym is streak + points, and nothing else', () {
+    test('the bare gym is streak + points + wins, and nothing else', () {
       expect(
         celebrationCardRoutes(
           hasRewards: false,
@@ -125,8 +130,47 @@ void main() {
           rankEnabled: false,
           hasRank: false,
         ),
-        [AppRoutes.postClassStreak, AppRoutes.postClassPoints],
+        [
+          AppRoutes.postClassStreak,
+          AppRoutes.postClassPoints,
+          AppRoutes.postClassWins,
+        ],
       );
+    });
+  });
+
+  group('the wins card closes EVERY gym shape', () {
+    test('it is present and LAST for all four rank/rewards combinations', () {
+      for (final rankEnabled in [true, false]) {
+        for (final hasRewards in [true, false]) {
+          final routes = celebrationCardRoutes(
+            hasRewards: hasRewards,
+            rewardsWorthShowing: true,
+            rankEnabled: rankEnabled,
+            hasRank: rankEnabled,
+          );
+          final shape = 'rank=$rankEnabled rewards=$hasRewards';
+          expect(routes, contains(AppRoutes.postClassWins), reason: shape);
+          expect(routes.last, AppRoutes.postClassWins, reason: shape);
+          // Exactly once — the ungated `if`-less entry can't be duplicated by
+          // a gym flag the way a conditional card could.
+          expect(
+            routes.where((r) => r == AppRoutes.postClassWins).length,
+            1,
+            reason: shape,
+          );
+        }
+      }
+    });
+
+    test('an unreachable reward catalog still ends on wins', () {
+      final routes = celebrationCardRoutes(
+        hasRewards: true,
+        rewardsWorthShowing: false,
+        rankEnabled: false,
+        hasRank: false,
+      );
+      expect(routes.last, AppRoutes.postClassWins);
     });
   });
 
@@ -158,6 +202,14 @@ void main() {
         ),
         AppRoutes.postClassRank,
       );
+      expect(
+        nextCelebrationCard(
+          current: AppRoutes.postClassRank,
+          hasRank: true,
+          pointsBalance: 120,
+        ),
+        AppRoutes.postClassWins,
+      );
     });
 
     test('no rewards sends points STRAIGHT to rank', () async {
@@ -173,7 +225,9 @@ void main() {
       );
     });
 
-    test('the LAST card returns null so its CTA can end the flow', () async {
+    test('whichever card is second-to-last now hands off to WINS', () async {
+      // The tail moved: every card that used to end the flow now continues
+      // into the wins recap instead of saying "Done".
       await _selectGym();
       expect(
         nextCelebrationCard(
@@ -181,11 +235,10 @@ void main() {
           hasRank: true,
           pointsBalance: 120,
         ),
-        isNull,
+        AppRoutes.postClassWins,
       );
 
-      // Ranks off: rewards is now the last card — it must NOT hand off to the
-      // rank screen, which would paint a blank frame and bounce home.
+      // Ranks off: rewards is second-to-last.
       await _selectGym(rankEnabled: false);
       expect(
         nextCelebrationCard(
@@ -193,14 +246,36 @@ void main() {
           hasRank: true,
           pointsBalance: 120,
         ),
-        isNull,
+        AppRoutes.postClassWins,
       );
 
-      // The emptiest gym: points is the last card.
+      // The emptiest gym: points is second-to-last.
       await _selectGym(rankEnabled: false, hasRewards: false);
       expect(
         nextCelebrationCard(
           current: AppRoutes.postClassPoints,
+          hasRank: false,
+          pointsBalance: 120,
+        ),
+        AppRoutes.postClassWins,
+      );
+    });
+
+    test('WINS is the last card, so nothing follows it', () async {
+      await _selectGym();
+      expect(
+        nextCelebrationCard(
+          current: AppRoutes.postClassWins,
+          hasRank: true,
+          pointsBalance: 120,
+        ),
+        isNull,
+      );
+
+      await _selectGym(rankEnabled: false, hasRewards: false);
+      expect(
+        nextCelebrationCard(
+          current: AppRoutes.postClassWins,
           hasRank: false,
           pointsBalance: 120,
         ),
@@ -271,8 +346,7 @@ void main() {
       );
     });
 
-    test('an unreachable catalog makes POINTS the last card at a rank-off gym',
-        () async {
+    test('an unreachable catalog sends points past rewards to WINS', () async {
       await _selectGym(rankEnabled: false);
       await primeRewardsGate([1000]);
 
@@ -282,7 +356,7 @@ void main() {
           hasRank: true,
           pointsBalance: 10,
         ),
-        isNull,
+        AppRoutes.postClassWins,
       );
     });
 
