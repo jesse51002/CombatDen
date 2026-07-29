@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/themes/transitions/app_page_transitions.dart';
 
 class AppTheme {
   AppTheme._();
@@ -51,12 +50,6 @@ class AppTheme {
         weight: DesignConstants.iconWeight,
       ),
       dividerColor: DesignConstants.divider,
-      // Screen-to-screen motion, resolved from the tenant's
-      // `transition_style` slot. Installed unconditionally: the
-      // builders defer to the slot at the moment a route animates, and
-      // the shipped value hands the route straight back to the
-      // framework's own platform default.
-      pageTransitionsTheme: AppPageTransitions.theme(),
     );
   }
 }

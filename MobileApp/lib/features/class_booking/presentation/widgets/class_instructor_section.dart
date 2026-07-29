@@ -1,108 +1,82 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/class_booking/data/mock_class_detail.dart';
 import 'package:mobile_app/shared/widgets/subtitle_section.dart';
 
-/// How a layout arranges the instructor block.
+/// "Instructor" header + bio paragraph next to a circular headshot.
 ///
-/// The bio and the headshot are in every value; only where the
-/// headshot sits and how big it is changes.
-enum ClassInstructorLayout {
-  /// Bio left, headshot trailing at full size. Ships today.
-  avatarTrailing,
-
-  /// Headshot centred above the bio — for a narrow pane.
-  avatarTop,
-
-  /// A compact strip: small headshot leading, bio filling the rest.
-  row,
-}
-
-const double _kAvatarLg = 132;
-const double _kAvatarSm = 56;
-
-/// "Instructor" header + bio paragraph with a circular headshot.
-/// Mirrors the `InstructorWidget` group.
+/// Fed by the resolved instructor's real fields on the board occurrence
+/// (`resolved_instructor_name` / `_bio` / `_image_url`). Renders nothing when
+/// the occurrence has no instructor and no bio to show.
 class ClassInstructorSection extends StatelessWidget {
   const ClassInstructorSection({
     super.key,
-    required this.detail,
-    this.layout = ClassInstructorLayout.avatarTrailing,
+    required this.name,
+    required this.bio,
+    required this.imageUrl,
   });
 
-  final MockClassDetail detail;
-  final ClassInstructorLayout layout;
+  final String? name;
+  final String? bio;
+  final String? imageUrl;
 
   @override
   Widget build(BuildContext context) {
+    final bioText = bio?.trim();
+    final hasBio = bioText != null && bioText.isNotEmpty;
+    final hasImage = imageUrl != null && imageUrl!.isNotEmpty;
+    // Nothing to show without at least a bio or a photo — the bare name
+    // already appears in the meta section.
+    if (!hasBio && !hasImage) return const SizedBox.shrink();
     return SubtitleSection(
       title: 'Instructor',
       spacing: DesignConstants.spacingMedium,
-      child: switch (layout) {
-        ClassInstructorLayout.avatarTrailing => Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            Expanded(child: _Bio(detail: detail)),
-            _Avatar(detail: detail, size: _kAvatarLg),
-          ],
-        ),
-        ClassInstructorLayout.avatarTop => Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            _Avatar(detail: detail, size: _kAvatarLg),
-            _Bio(detail: detail),
-          ],
-        ),
-        ClassInstructorLayout.row => Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          spacing: DesignConstants.spacingMedium,
-          children: [
-            _Avatar(detail: detail, size: _kAvatarSm),
-            Expanded(child: _Bio(detail: detail)),
-          ],
-        ),
-      },
-    );
-  }
-}
-
-class _Bio extends StatelessWidget {
-  const _Bio({required this.detail});
-
-  final MockClassDetail detail;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(
-      detail.classData.instructorBio,
-      style: DesignConstants.pBig.copyWith(color: DesignConstants.text2nd),
-    );
-  }
-}
-
-class _Avatar extends StatelessWidget {
-  const _Avatar({required this.detail, required this.size});
-
-  final MockClassDetail detail;
-  final double size;
-
-  @override
-  Widget build(BuildContext context) {
-    return ClipOval(
-      child: Image(
-        image: CachedNetworkImageProvider(detail.classData.instructorImageUrl),
-        width: size,
-        height: size,
-        fit: BoxFit.cover,
-        errorBuilder: (_, _, _) => SizedBox(
-          width: size,
-          height: size,
-          child: ColoredBox(color: DesignConstants.card),
-        ),
+      child: _InstructorRow(
+        bio: hasBio ? bioText : null,
+        imageUrl: hasImage ? imageUrl : null,
       ),
+    );
+  }
+}
+
+class _InstructorRow extends StatelessWidget {
+  const _InstructorRow({required this.bio, required this.imageUrl});
+
+  final String? bio;
+  final String? imageUrl;
+
+  static const double _kPfpSize = 132;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      spacing: DesignConstants.spacingMedium,
+      children: [
+        if (bio != null)
+          Expanded(
+            child: Text(
+              bio!,
+              style: DesignConstants.pBig.copyWith(
+                color: DesignConstants.text2nd,
+              ),
+            ),
+          ),
+        if (imageUrl != null)
+          ClipOval(
+            child: Image(
+              image: CachedNetworkImageProvider(imageUrl!),
+              width: _kPfpSize,
+              height: _kPfpSize,
+              fit: BoxFit.cover,
+              // A headshot that fails to load collapses to nothing, exactly
+              // like an absent one — the same rule the creator avatar uses.
+              // A filled disc where a face should be reads as a broken
+              // profile, which is worse than the bio simply taking the width.
+              errorBuilder: (_, _, _) => const SizedBox.shrink(),
+            ),
+          ),
+      ],
     );
   }
 }

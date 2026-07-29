@@ -52,11 +52,18 @@ class SparkleHero extends StatefulWidget {
     required this.top,
     required this.accent,
     required this.bottom,
+    this.showSparkles = true,
   });
 
   final String top;
   final String accent;
   final String bottom;
+
+  /// Whether to scatter the sparkles. The sparkles are the EARNED part of the
+  /// hero — set false for a zero / not-yet state ("START YOUR STREAK"), where
+  /// confetti around a goal the member hasn't reached celebrates nothing. The
+  /// accent block's own fade + scale still plays either way.
+  final bool showSparkles;
 
   @override
   State<SparkleHero> createState() => _SparkleHeroState();
@@ -116,8 +123,9 @@ class _SparkleHeroState extends State<SparkleHero>
             alignment: Alignment.center,
             clipBehavior: Clip.none,
             children: [
-              for (var rank = 0; rank < _kSparkles.length; rank++)
-                _animatedSparkle(rank, primary),
+              if (widget.showSparkles)
+                for (var rank = 0; rank < _kSparkles.length; rank++)
+                  _animatedSparkle(rank, primary),
               _accentBlock(primary, eyebrow),
             ],
           );

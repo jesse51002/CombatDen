@@ -1,3 +1,7 @@
+# Environment config (secrets — .env.example is committed as the shape)
+.env.dev
+.env.prod
+
 # Miscellaneous
 *.class
 *.log

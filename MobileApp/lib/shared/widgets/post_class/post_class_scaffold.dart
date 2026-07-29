@@ -1,39 +1,20 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/formats/format_builder.dart';
-import 'package:mobile_app/core/formats/layout_formats.dart';
-import 'package:mobile_app/core/formats/theme_layout.dart';
-import 'package:mobile_app/shared/widgets/post_class/celebration_data.dart';
-import 'package:mobile_app/shared/widgets/post_class/layouts/celebration_card_reveal.dart';
-import 'package:mobile_app/shared/widgets/post_class/layouts/celebration_center_hero.dart';
-import 'package:mobile_app/shared/widgets/post_class/layouts/celebration_figure_top.dart';
-import 'package:mobile_app/shared/widgets/post_class/layouts/celebration_full_bleed.dart';
-import 'package:mobile_app/shared/widgets/post_class/layouts/celebration_split_band.dart';
+import 'package:material_symbols_icons/symbols.dart';
+import 'package:mobile_app/core/design_constants.dart';
+import 'package:mobile_app/shared/widgets/buttons/app_primary_button.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
 /// Scaffold for the post-class celebration cards (Streak, Wins, Points,
-/// Rewards, Rank). Provides a body area, an optional close (X) action, an
-/// optional header, and a full-width primary CTA.
+/// Rewards, Rank). Provides a fixed body area, an optional close (X) button
+/// in the upper-right, and a full-width primary CTA pinned to the bottom.
 ///
-/// The public API is unchanged — every screen passes the same arguments
-/// it always did. What is new is that the ARRANGEMENT of those four
-/// slots is resolved from the tenant's `celebration_format` slot and
-/// delegated to one of the layouts in `post_class/layouts/`, each of
-/// which composes the same parts from `post_class/parts/`.
-///
-/// One enum governs all five cards: the [body] differs per card, the
-/// arrangement around it does not. A layout may move the slots and
-/// change their prominence; it may not drop one, add one, or reach
-/// inside [body].
-///
-/// When a [controller] is supplied, the CTA is hidden (and its taps are
-/// ignored) while the controller reports `isAnimating == true`. Tapping
+/// When a [controller] is supplied, the CTA is hidden (and tap targets are
+/// disabled) while the controller reports `isAnimating == true`. Tapping
 /// anywhere on the body area during that window calls
 /// [PostClassController.requestSkip], which the body widget should turn
 /// into a jump-to-final-state. Once the body calls
-/// [PostClassController.markDone] the CTA fades back in. Every layout
-/// gets that contract by construction, because it lives in
-/// `CelebrationCta` and `CelebrationStage`.
+/// [PostClassController.markDone] the CTA fades back in.
 class PostClassScaffold extends StatelessWidget {
   const PostClassScaffold({
     super.key,
@@ -43,7 +24,6 @@ class PostClassScaffold extends StatelessWidget {
     this.header,
     this.onClose,
     this.controller,
-    this.formatOverride,
   });
 
   final Widget body;
@@ -53,38 +33,98 @@ class PostClassScaffold extends StatelessWidget {
   final VoidCallback? onClose;
   final PostClassController? controller;
 
-  /// Forces a layout instead of resolving it from the customization.
-  /// Used by the layout-invariant tests and the format preview; null in
-  /// normal app use.
-  final CelebrationFormat? formatOverride;
+  static const Duration _kCtaFade = Duration(milliseconds: 200);
 
   @override
   Widget build(BuildContext context) {
     return AppScreenScaffold(
-      // Each layout owns its own insets: `splitBand` and `fullBleed`
-      // need the canvas edge, and `centerHero` re-applies the standard
-      // screen padding so it renders exactly as it always has.
-      horizontalPadding: AppScreenHorizontalPadding.none,
-      child: FormatBuilder(builder: _build),
+      child: Stack(
+        children: [
+          Padding(
+            padding: EdgeInsets.symmetric(
+              vertical: DesignConstants.spacingBig,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: DesignConstants.spacingBig,
+              children: [
+                ?header,
+                Expanded(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => controller?.requestSkip(),
+                    child: Center(child: body),
+                  ),
+                ),
+                _AnimatedCta(
+                  controller: controller,
+                  fadeDuration: _kCtaFade,
+                  child: AppPrimaryButton(
+                    text: ctaLabel,
+                    onPressed: onCtaPressed,
+                    fullWidth: true,
+                    borderRadius: DesignConstants.radiusBig,
+                    textStyle: DesignConstants.h2,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onClose case final close?)
+            Positioned(
+              top: DesignConstants.spacingLarge,
+              right: DesignConstants.spacingLarge,
+              child: IconButton(
+                onPressed: close,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: Icon(
+                  Symbols.close_sharp,
+                  color: DesignConstants.text,
+                  weight: DesignConstants.iconWeight,
+                  size: DesignConstants.iconSizeXl,
+                ),
+              ),
+            ),
+        ],
+      ),
     );
   }
+}
 
-  Widget _build(BuildContext context) {
-    final data = CelebrationData(
-      body: body,
-      ctaLabel: ctaLabel,
-      onCtaPressed: onCtaPressed,
-      header: header,
-      onClose: onClose,
-      controller: controller,
+/// Wraps the CTA in a fade + IgnorePointer that follows the controller's
+/// `isAnimating`. With no controller the CTA is always visible.
+class _AnimatedCta extends StatelessWidget {
+  const _AnimatedCta({
+    required this.controller,
+    required this.fadeDuration,
+    required this.child,
+  });
+
+  final PostClassController? controller;
+  final Duration fadeDuration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = controller;
+    if (ctrl == null) {
+      return child;
+    }
+    return ListenableBuilder(
+      listenable: ctrl,
+      builder: (context, _) {
+        final hidden = ctrl.isAnimating;
+        return IgnorePointer(
+          ignoring: hidden,
+          child: AnimatedOpacity(
+            opacity: hidden ? 0 : 1,
+            duration: fadeDuration,
+            curve: Curves.easeOutQuart,
+            child: child,
+          ),
+        );
+      },
     );
-
-    return switch (formatOverride ?? ThemeLayout.celebration()) {
-      CelebrationFormat.centerHero => CelebrationCenterHero(data: data),
-      CelebrationFormat.figureTop => CelebrationFigureTop(data: data),
-      CelebrationFormat.cardReveal => CelebrationCardReveal(data: data),
-      CelebrationFormat.splitBand => CelebrationSplitBand(data: data),
-      CelebrationFormat.fullBleed => CelebrationFullBleed(data: data),
-    };
   }
 }

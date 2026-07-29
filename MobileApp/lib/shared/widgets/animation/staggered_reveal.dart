@@ -1,21 +1,12 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:mobile_app/shared/widgets/animation/capture_reveal_clock.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
-import 'package:mobile_app/shared/widgets/animation/reveal/reveal_frame.dart';
-import 'package:mobile_app/shared/widgets/animation/reveal/reveal_stage.dart';
 
-/// One-shot entrance that fires once, [delay] after mount. Used to
-/// cascade element reveals across the post-class celebration screens and
-/// the video-recommendation surfaces.
-///
-/// HOW it enters is the tenant's `reveal_style` — `fadeUp` by default,
-/// which is opacity in with an upward translate of [offset], exactly as
-/// it has always been. WHEN it enters is this widget's [delay] and
-/// nothing else, so a cascade keeps its order under every value.
-///
-/// [offset] is this call site's own displacement distance. `offset: 0`
-/// means "do not move me", and every value honours it — the wins trophy
-/// has to stay registered with the sparkle burst behind it.
-class StaggeredReveal extends StatelessWidget {
+/// One-shot fade + translateY entrance. Fires once on `initState` after
+/// [delay]. Used to cascade element reveals on the post-class celebration
+/// screens. Curve is ease-out-quart (the app's motion law: ease-out,
+/// no bounce, ≤300ms).
+class StaggeredReveal extends StatefulWidget {
   const StaggeredReveal({
     super.key,
     required this.child,
@@ -30,12 +21,68 @@ class StaggeredReveal extends StatelessWidget {
   final double offset;
 
   @override
+  State<StaggeredReveal> createState() => _StaggeredRevealState();
+}
+
+class _StaggeredRevealState extends State<StaggeredReveal>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: widget.duration,
+  );
+
+  late final Animation<double> _t = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOutQuart,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // When the capture clock is driving, the harness sets the progress; don't
+    // run the self-animation.
+    if (captureRevealClock.value != null) return;
+    if (widget.delay == Duration.zero) {
+      _ctrl.forward();
+    } else {
+      Future.delayed(widget.delay, () {
+        if (mounted) _ctrl.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Reveal(
-      delay: delay,
-      duration: duration,
-      geometry: RevealGeometry(translate: offset),
-      child: child,
+    return AnimatedBuilder(
+      animation: Listenable.merge([_t, captureRevealClock]),
+      builder: (context, child) {
+        final v = _captureValue() ?? _t.value;
+        return Opacity(
+          opacity: v,
+          child: Transform.translate(
+            offset: Offset(0, widget.offset * (1 - v)),
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
     );
+  }
+
+  /// Curved progress derived from the capture clock (minus this reveal's own
+  /// delay), or null when not capturing.
+  double? _captureValue() {
+    final clock = captureRevealClock.value;
+    if (clock == null) return null;
+    final raw = ((clock - widget.delay).inMicroseconds /
+            widget.duration.inMicroseconds)
+        .clamp(0.0, 1.0);
+    return Curves.easeOutQuart.transform(raw);
   }
 }

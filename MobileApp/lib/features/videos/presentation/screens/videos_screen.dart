@@ -1,98 +1,246 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/core/formats/layout_formats.dart';
-import 'package:mobile_app/core/selected_gym.dart';
-import 'package:mobile_app/features/home/data/mock_gym.dart';
-import 'package:mobile_app/features/videos/data/video.dart';
-import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
-import 'package:mobile_app/features/videos/presentation/layouts/videos_layout_data.dart';
+import 'package:mobile_app/core/network/api_client.dart';
+import 'package:mobile_app/core/refresh/app_refresh.dart';
+import 'package:mobile_app/core/refresh/refresh_signal.dart';
+import 'package:mobile_app/core/state/selected_member.dart';
+import 'package:mobile_app/core/utils/number_format.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_bloc.dart';
+import 'package:mobile_app/features/profile/bloc/member_profile_state.dart';
+import 'package:mobile_app/features/videos/bloc/videos_bloc.dart';
+import 'package:mobile_app/features/videos/bloc/videos_event.dart';
+import 'package:mobile_app/features/videos/bloc/videos_state.dart';
+import 'package:mobile_app/features/videos/data/models/gym_video_card.dart';
+import 'package:mobile_app/features/videos/data/models/video_genre.dart';
+import 'package:mobile_app/features/videos/data/repositories/member_videos_repository.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_category_tabs.dart';
+import 'package:mobile_app/features/videos/presentation/widgets/video_link_helpers.dart';
 import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_body.dart';
-import 'package:mobile_app/features/videos/presentation/widgets/videos_feed_status.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
+import 'package:mobile_app/shared/widgets/nav/nav_tabs.dart';
+import 'package:mobile_app/shared/widgets/refresh/app_refresh_view.dart';
+import 'package:mobile_app/shared/widgets/refresh/selected_member_scope.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';
 
-/// The top filters derive from the coarse `big_groups` the loaded feed
-/// actually carries: an `All` tab plus one per distinct group. `null` scope =
-/// the `All` filter.
-class VideosScreen extends StatefulWidget {
-  const VideosScreen({
-    super.key,
-    this.captureController,
-    this.feedOverride,
-    this.formatOverride,
-  });
+/// The videos tab: the member's personalized gym feed from the portal — a
+/// featured hero plus one carousel per genre present in the feed.
+///
+/// The tab row is genre NAVIGATION, not a filter: "All" is this screen, and a
+/// genre tab opens that genre's full list (`TagVideosScreen`), the same
+/// destination as the matching carousel's "View all".
+class VideosScreen extends StatelessWidget {
+  const VideosScreen({super.key, this.captureController});
 
   /// Injected ONLY by the offline capture harness (`tools/capture/`) to drive a
   /// deterministic scroll for the landing-page theme reel. Null in normal app
-  /// use, where the `CustomScrollView` owns its own implicit controller.
+  /// use, where the `SingleChildScrollView` owns its own implicit controller.
   final ScrollController? captureController;
-
-  /// Stands in for the repository fetch so the screen can be rendered
-  /// without a backend. Used by the layout-invariant tests and the
-  /// format preview; null in normal app use.
-  final Future<List<Video>>? feedOverride;
-
-  /// Forces a layout instead of resolving it from the customization.
-  /// Tests and the format preview only; null in normal app use.
-  final VideosFormat? formatOverride;
-
-  @override
-  State<VideosScreen> createState() => _VideosScreenState();
-}
-
-class _VideosScreenState extends State<VideosScreen> {
-  final VideoFeedRepository _repository = VideoFeedRepository.instance;
-  late final Future<List<Video>> _feed =
-      widget.feedOverride ?? _repository.feed();
-  String? _selectedScope;
-  bool _appliedInitialFilter = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Honor an initial filter passed by the caller (e.g. the rank page's
-    // "view all" opens straight to 'educational'). Applied once so later taps
-    // aren't overridden.
-    if (_appliedInitialFilter) return;
-    _appliedInitialFilter = true;
-    final arg = ModalRoute.of(context)?.settings.arguments;
-    if (arg is String) _selectedScope = arg;
-  }
-
-  void _onScopeSelected(String? scope) {
-    if (scope == _selectedScope) return;
-    setState(() => _selectedScope = scope);
-  }
-
-  // Real playback (opening the YouTube url) is a follow-up; no-op for now.
-  void _openVideo(Video video) => debugPrint('TODO: play ${video.url}');
-
-  void _openTag(String tag) => Navigator.of(context).pushNamed(
-    AppRoutes.videoTagList,
-    arguments: tag,
-  );
 
   @override
   Widget build(BuildContext context) {
-    return AppScreenScaffold(
-      horizontalPadding: AppScreenHorizontalPadding.none,
-      bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.videos),
-      child: CustomScrollView(
-        controller: widget.captureController,
-        slivers: [
-          const SliverToBoxAdapter(child: _Topbar()),
-          SliverPadding(
+    // Honor an initial category passed by a deep link (e.g. the profile's
+    // "videos to level up" → 'educational'). Resilient-parsed; a non-genre arg
+    // opens on "All".
+    final arg = ModalRoute.of(context)?.settings.arguments;
+    final initialGenre =
+        arg is String ? videoGenreOrNullFromJson(arg) : null;
+
+    return BlocProvider<VideosBloc>(
+      create: (_) => VideosBloc(
+        repository: MemberVideosRepository(apiClient: ApiClient()),
+      )..add(VideosLoadRequested(initialGenre: initialGenre)),
+      child: _VideosScaffold(captureController: captureController),
+    );
+  }
+}
+
+class _VideosScaffold extends StatelessWidget {
+  const _VideosScaffold({this.captureController});
+
+  final ScrollController? captureController;
+
+  /// The shared pull: identity + capabilities + branding, theme, the shared
+  /// profile, and the current tab's feed — all awaited.
+  Future<void> _refresh(BuildContext context) {
+    final bloc = context.read<VideosBloc>();
+    return AppRefresh.forScreen(
+      context,
+      screen: () => dispatchRefresh(bloc, VideosRefreshRequested.new),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SelectedMemberScope(
+      builder: (context) => AppScreenScaffold(
+        horizontalPadding: AppScreenHorizontalPadding.none,
+        bottomNav: AppBottomNavBar(
+          selected: AppBottomNavTab.videos,
+          tabs: gymNavTabs(),
+        ),
+        child: AppRefreshView(
+          onRefresh: () => _refresh(context),
+          child: SingleChildScrollView(
+            controller: captureController,
+            // A gym whose feed is still empty renders shorter than the
+            // viewport — that page must still accept the pull.
+            physics: const AlwaysScrollableScrollPhysics(),
             padding: EdgeInsets.only(bottom: DesignConstants.spacingBig),
-            sliver: _Feed(
-              feed: _feed,
-              selectedScope: _selectedScope,
-              onScopeSelected: _onScopeSelected,
-              onVideoTap: _openVideo,
-              onViewAll: _openTag,
-              formatOverride: widget.formatOverride,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: const [
+                _Topbar(),
+                _Body(),
+              ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The feed area below the topbar: the genre tab strip, then the scoped hero +
+/// carousels — with loading / empty / retryable-error states.
+class _Body extends StatelessWidget {
+  const _Body();
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocBuilder<VideosBloc, VideosState>(
+      builder: (context, state) {
+        switch (state.status) {
+          case VideosStatus.initial:
+          case VideosStatus.loading:
+            return const _FeedLoading();
+          case VideosStatus.error:
+            return _FeedError(
+              message: state.errorMessage ?? 'Couldn\'t load videos right now.',
+              onRetry: () => context
+                  .read<VideosBloc>()
+                  .add(const VideosLoadRequested()),
+            );
+          case VideosStatus.loaded:
+            if (state.videos.isEmpty && state.availableGenres.isEmpty) {
+              return const _FeedMessage(text: 'No videos yet.');
+            }
+            // A video plays on YouTube, outside the app — there is no in-app
+            // player.
+            return _LoadedFeed(
+              state: state,
+              onVideoTap: (card) => openVideoFor(context, card),
+            );
+        }
+      },
+    );
+  }
+}
+
+class _LoadedFeed extends StatelessWidget {
+  const _LoadedFeed({required this.state, required this.onVideoTap});
+
+  final VideosState state;
+  final ValueChanged<GymVideoCard> onVideoTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final genres = state.availableGenres;
+    final tabGenres = <VideoGenre?>[null, ...genres];
+    final labels = ['All', ...genres.map((g) => g.label)];
+    var selectedIndex = tabGenres.indexOf(state.selectedGenre);
+    if (selectedIndex < 0) selectedIndex = 0;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      spacing: DesignConstants.spacingBig,
+      children: [
+        VideoCategoryTabs(
+          tabs: labels,
+          selectedIndex: selectedIndex,
+          // A genre tab OPENS that genre's full list; it does not re-filter
+          // this screen. Filtering in place kept the hero-plus-carousel
+          // layout, so picking one genre showed a big featured video above a
+          // single carousel of the same genre — the hero and the "view all"
+          // carousel were then two routes to the same handful of videos.
+          // `TagVideosScreen` is already the right shape for one genre (a
+          // flat list), and is what each carousel's "View all" opens, so a
+          // tab and a "View all" now land in the same place.
+          onTabSelected: (index) {
+            final genre = tabGenres[index];
+            if (genre == null) {
+              context
+                  .read<VideosBloc>()
+                  .add(const VideosCategorySelected(null));
+              return;
+            }
+            Navigator.of(context).pushNamed(
+              AppRoutes.videoTagList,
+              arguments: genre,
+            );
+          },
+        ),
+        VideosFeedBody(videos: state.videos, onVideoTap: onVideoTap),
+      ],
+    );
+  }
+}
+
+class _FeedLoading extends StatelessWidget {
+  const _FeedLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _FeedMessage extends StatelessWidget {
+  const _FeedMessage({required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
+      child: Center(
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+        ),
+      ),
+    );
+  }
+}
+
+class _FeedError extends StatelessWidget {
+  const _FeedError({required this.message, required this.onRetry});
+
+  final String message;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
+      child: Column(
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
+          ),
+          TextButton(
+            onPressed: onRetry,
+            child: Text('Retry', style: DesignConstants.p),
           ),
         ],
       ),
@@ -100,72 +248,42 @@ class _VideosScreenState extends State<VideosScreen> {
   }
 }
 
-/// Resolves the feed request, then hands the loaded videos to whichever
-/// layout the tenant's `videos_format` selects. Loading, error and an
-/// empty gym stay here: they are the same in every layout, because a
-/// format arranges videos and there are none to arrange.
-class _Feed extends StatelessWidget {
-  const _Feed({
-    required this.feed,
-    required this.selectedScope,
-    required this.onScopeSelected,
-    required this.onVideoTap,
-    required this.onViewAll,
-    this.formatOverride,
-  });
+// Bundled fallback assets for the topbar's theme-driven logo / rank belt.
+const String _kDefaultLogoAsset = 'gym_logo_global_mma.png';
+const String _kDefaultRankBadgeAsset = 'icon_rank_belt.png';
 
-  final Future<List<Video>> feed;
-  final String? selectedScope;
-  final ValueChanged<String?> onScopeSelected;
-  final ValueChanged<Video> onVideoTap;
-  final ValueChanged<String> onViewAll;
-  final VideosFormat? formatOverride;
-
-  @override
-  Widget build(BuildContext context) {
-    return FutureBuilder<List<Video>>(
-      future: feed,
-      builder: (context, snapshot) {
-        final videos = snapshot.data ?? const <Video>[];
-        final status = switch (snapshot) {
-          _ when snapshot.connectionState != ConnectionState.done =>
-            VideosFeedStatusKind.loading,
-          _ when snapshot.hasError => VideosFeedStatusKind.error,
-          _ when videos.isEmpty => VideosFeedStatusKind.empty,
-          _ => null,
-        };
-        if (status != null) {
-          return SliverToBoxAdapter(child: VideosFeedStatus(kind: status));
-        }
-
-        return VideosFeedBody(
-          formatOverride: formatOverride,
-          data: VideosLayoutData.fromFeed(
-            videos: videos,
-            scope: selectedScope,
-            onScopeSelected: onScopeSelected,
-            onVideoTap: onVideoTap,
-            onViewAll: onViewAll,
-          ),
-        );
-      },
-    );
-  }
-}
-
+/// The videos tab's name-only topbar: gym name from the selected member, and
+/// streak / points read LIVE from the shared [MemberProfileBloc] — the same
+/// per-member chrome the home and rewards topbars render, never mock.
 class _Topbar extends StatelessWidget {
   const _Topbar();
 
   @override
   Widget build(BuildContext context) {
-    return AppTopbar(
-      mode: AppTopbarMode.nameOnly,
-      showBackButton: false,
-      gymName: selectedGym.displayName,
-      logoAsset: mockGymGlobalMma.logoAsset,
-      streakDays: mockGymGlobalMma.streakDays,
-      pointsLabel: mockGymGlobalMma.pointsLabel,
-      rankBadgeAsset: mockGymGlobalMma.rankBadgeAsset,
+    return BlocBuilder<MemberProfileBloc, MemberProfileState>(
+      builder: (context, state) {
+        final retention = state.profile?.retention;
+        return AppTopbar(
+          mode: AppTopbarMode.nameOnly,
+          showBackButton: false,
+          gymName: selectedMember.gymName ?? '',
+          memberName: selectedMember.fullName,
+          memberPhotoUrl: selectedMember.photoUrl,
+          memberFirstName: selectedMember.firstName,
+          memberLastName: selectedMember.lastName,
+          logoAsset: _kDefaultLogoAsset,
+          gymLogoUrl: selectedMember.gymLogoUrl,
+          streakDays: retention?.classStreakWeeks ?? 0,
+          pointsLabel:
+              retention != null ? formatCount(retention.pointsBalance) : '—',
+          rankBadgeAsset: _kDefaultRankBadgeAsset,
+          rankImageUrl: state.profile?.rank?.imageUrl,
+          showRank: selectedMember.gymRankEnabled,
+          pointsSpendable: selectedMember.gymHasRewards,
+          onTitleDoubleTap: () =>
+              Navigator.of(context).pushNamed(AppRoutes.memberSelect),
+        );
+      },
     );
   }
 }

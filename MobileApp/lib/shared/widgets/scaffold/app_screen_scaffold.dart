@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/core/formats/dev/format_panel.dart';
 
 /// Horizontal-padding variant for [AppScreenScaffold].
 enum AppScreenHorizontalPadding {
@@ -61,84 +59,15 @@ class AppScreenScaffold extends StatelessWidget {
 
     return Scaffold(
       backgroundColor: backgroundColor ?? DesignConstants.backgroundColor,
-      // The format picker. Opened ONLY by its own handle: both screen
-      // edges belong to Android's system back gesture, so an edge drag
-      // never reaches the app. Debug builds only — `kDebugMode` is a
-      // const, so the panel and its imports are tree-shaken out of a
-      // release build and cannot ship to a tenant.
-      endDrawer: kDebugMode ? const FormatPanel() : null,
-      endDrawerEnableOpenDragGesture: false,
-      // The handle lives INSIDE the Scaffold: it calls `Scaffold.of`,
-      // which only sees an ancestor Scaffold, so a sibling would find
-      // nothing and the control would silently do nothing.
-      body: Stack(
-        children: [
-          SafeArea(
-            top: !hasTopNav,
-            bottom: !hasBottomNav,
-            child: Column(
-              children: [
-                if (hasTopNav) topbar!,
-                Expanded(child: body),
-                if (hasBottomNav) bottomNav!,
-              ],
-            ),
-          ),
-          if (kDebugMode) const _FormatHandle(),
-        ],
-      ),
-    );
-  }
-}
-
-/// The dev-only grab handle for the format picker.
-///
-/// A deliberate on-screen control rather than a gesture: on Android 10+
-/// both screen edges are the system back gesture, so an edge drag never
-/// reaches the app, and long-press / double-tap are already spoken for
-/// by the schedule and the topbar. Low opacity and right-aligned so it
-/// stays out of a screenshot's way. Debug builds only.
-class _FormatHandle extends StatelessWidget {
-  const _FormatHandle();
-
-  @override
-  Widget build(BuildContext context) {
-    return Positioned(
-      right: 0,
-      top: 0,
-      bottom: 0,
-      child: Center(
-        child: Builder(
-          builder: (context) => Opacity(
-            opacity: 0.55,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => Scaffold.of(context).openEndDrawer(),
-              child: Container(
-                width: 26,
-                height: 64,
-                decoration: BoxDecoration(
-                  color: DesignConstants.primaryColor,
-                  borderRadius: BorderRadius.only(
-                    topLeft: Radius.circular(DesignConstants.radiusBig),
-                    bottomLeft: Radius.circular(DesignConstants.radiusBig),
-                  ),
-                ),
-                child: RotatedBox(
-                  quarterTurns: 3,
-                  child: Center(
-                    child: Text(
-                      'FMT',
-                      style: DesignConstants.pSmall.copyWith(
-                        color: DesignConstants.primaryButtonText,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
+      body: SafeArea(
+        top: !hasTopNav,
+        bottom: !hasBottomNav,
+        child: Column(
+          children: [
+            if (hasTopNav) topbar!,
+            Expanded(child: body),
+            if (hasBottomNav) bottomNav!,
+          ],
         ),
       ),
     );
