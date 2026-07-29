@@ -1,0 +1,136 @@
+/*
+ * Styles for ./WinsShowcase.tsx
+ * (ports CRM/lib/showcase/wins_showcase.dart).
+ *
+ * `--sc-*` for the design tokens (see ./ShowcaseThemeVars.tsx); `--wn-*` for
+ * this screen's own geometry and motion, which the component derives from the
+ * ported arithmetic and writes inline, so no size or timing is restated as a
+ * literal here.
+ */
+
+/*
+ * `Column(mainAxisSize: min, crossAxisAlignment: stretch, spacing: spacingBig)`.
+ *
+ * `stretch` inside a `Center` hands every child TIGHT cross constraints of the
+ * body's full width — so the column is the body's width and each child fills
+ * it, which is `width: 100%` here (see the component header on `_kHeroBoxWidth`).
+ *
+ * The `Padding(vertical: spacingBig) > Center` this used to sit in belongs to
+ * the ARRANGEMENT and now lives with it, in
+ * ./celebrations/CelebrationFrame.module.css's `centerHero`.
+ */
+.content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  width: 100%;
+}
+
+/*
+ * `SizedBox(height: _kHeroBoxHeight) > Stack(alignment: center)`. A Flutter
+ * `Stack` clips by default, and that default is what keeps the outermost
+ * sparkles inside the hero box.
+ */
+.hero {
+  position: relative;
+  flex: 0 0 auto;
+  height: var(--wn-hero-height);
+  overflow: hidden;
+}
+
+/* `Positioned.fill(child: SparkleBurst(...))`. */
+.sparkle {
+  position: absolute;
+  inset: 0;
+}
+
+/*
+ * `StaggeredReveal(offset: 0)` over the trophy — a pure fade with no slide,
+ * which is what the zero offset says, starting on the first frame.
+ */
+.trophy {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--wn-trophy-size);
+  height: var(--wn-trophy-size);
+  transform: translate(-50%, -50%);
+  animation: winsFadeIn var(--wn-reveal-ms) var(--wn-ease) both;
+}
+
+/* `Image(fit: BoxFit.contain)`. */
+.trophyImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* `Column(mainAxisSize: min, spacing: spacingMedium)`. */
+.headings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+}
+
+/* `StaggeredReveal(delay: headerDelay)` over a `big2` title. */
+.title {
+  margin: 0;
+  font: var(--sc-type-big2);
+  letter-spacing: var(--sc-type-big2-ls);
+  color: var(--sc-text);
+  text-align: center;
+  animation: winsReveal var(--wn-reveal-ms) var(--wn-ease) var(--wn-header-delay-ms) both;
+}
+
+/* `StaggeredReveal(delay: subtitleDelay)` over `pBig` at `text2nd`. */
+.subtitle {
+  margin: 0;
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+  text-align: center;
+  animation: winsReveal var(--wn-reveal-ms) var(--wn-ease) var(--wn-subtitle-delay-ms) both;
+}
+
+/* `StaggeredReveal`: opacity 0 -> 1 with a 12px slide up, ease-out-quart. */
+@keyframes winsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--wn-reveal-offset));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * The same reveal at `offset: 0`. It needs its own keyframe rather than a zero
+ * offset because the trophy is already centred by a transform, and a keyframe
+ * that animated `transform` would drop that centring.
+ */
+@keyframes winsFadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the recap renders finished. The component
+ * also declines to arm the loop interval, so nothing restarts.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .trophy,
+  .title,
+  .subtitle {
+    animation: none;
+  }
+}

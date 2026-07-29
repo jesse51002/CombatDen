@@ -1,0 +1,20 @@
+/*
+ * Styles for ./VideosShortsColumn.tsx (ports MobileApp/lib/features/videos/
+ * presentation/layouts/videos_shorts_column.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding) > Column(stretch, spacing:
+ * spacingBig)` — Dart's `_Column`, the poster run inside the screen gutter.
+ *
+ * One box where Dart has two: its outer column exists only to hold the pill
+ * strip outside the gutter, and the strip is a sibling here rather than a child.
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding-inline: var(--sc-screen-padding-x);
+}

@@ -1,0 +1,21 @@
+/*
+ * Styles for ./ProfileShowcase.tsx (ports MobileApp/lib/features/profile/
+ * presentation/screens/profile_screen.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ *
+ * THE FRAME ONLY. Every rule that arranges the body lives with the arrangement
+ * that uses it, in ./layouts/rankLayouts.module.css — which is what lets a new
+ * `rank_format` value land without touching the screen or its stylesheet.
+ */
+
+/*
+ * `SingleChildScrollView(padding: only(bottom: _kBottomScrollPadding))`.
+ *
+ * The 64 is the Dart's own const — the room the persistent bottom nav needs, so
+ * the last carousel can scroll clear of it rather than ending underneath it.
+ */
+.profile {
+  --pf-bottom-scroll-padding: 64px;
+
+  padding-bottom: var(--pf-bottom-scroll-padding);
+}

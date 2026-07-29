@@ -1,0 +1,40 @@
+/*
+ * Styles for ./VideosMosaic.tsx (ports MobileApp/lib/features/videos/
+ * presentation/layouts/videos_mosaic.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `_PinnedTabs` — `SliverPersistentHeader(pinned: true)` with a fixed 76 extent,
+ * holding a `Center(child: VideosScopeTabs)` on an opaque `backgroundColor`.
+ *
+ * `min-height` rather than `height`: Flutter's extent is a hard band the strip
+ * is centred in, and the CSS strip already carries its own vertical padding, so
+ * pinning the band's floor reproduces the geometry without double-counting it.
+ * The fill is not decoration — a transparent pinned band would let the grid
+ * scroll THROUGH the pills. `z-index` puts it over the tiles for the same
+ * reason.
+ */
+.pinned {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  min-height: 76px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: var(--sc-background);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding) > Column(stretch, spacing:
+ * spacingBig)`. The gutter is the arrangement's, not the sections': a grid
+ * whose tiles ran to the screen edge would lose the two-column read.
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding-inline: var(--sc-screen-padding-x);
+}

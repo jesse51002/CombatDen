@@ -1,0 +1,303 @@
+/*
+ * Styles for ./ShowcaseTopbar.tsx
+ * (ports CRM/lib/showcase/support/showcase_topbar.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ *
+ * THE SHIPPED ARRANGEMENT IS THE BASE RULE, EVERY OTHER ONE IS A MODIFIER.
+ * `AppShellFormat.stacked` renders with the bare `.topbar` / `.infoBar` /
+ * `.cell` / `.logo` classes and nothing else, so the markup six screens have
+ * always produced is byte-identical to what it was before the arrangements
+ * existed. Each modifier below (`.compact`, `.rail`, `.cluster`, `.markSm`, …)
+ * is only ever added by one of the other three, and every one is declared AFTER
+ * the base rule it overrides — same single-class specificity, so source order
+ * is what decides.
+ */
+
+/*
+ * `TopbarFrame` — `Container(padding: top spacingBig, bottom spacingLarge,
+ * left/right spacingMedium)` with a `text3rd` bottom hairline, holding a
+ * stretch Column with `spacing: spacingBig`.
+ */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  width: 100%;
+  padding: var(--sc-spacing-big) var(--sc-spacing-medium) var(--sc-spacing-large);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}
+
+/*
+ * `TopbarFrame.compact` — the single-row inset (`top: spacingLarge`,
+ * `bottom: spacingMedium`). Longhands on purpose: they have to beat the
+ * shorthand above without restating the horizontal inset.
+ */
+.compact {
+  padding-top: var(--sc-spacing-large);
+  padding-bottom: var(--sc-spacing-medium);
+}
+
+/* `TopbarFrame(rule: false)` — `markOnly` draws no separating hairline. */
+.noRule {
+  border-bottom: none;
+}
+
+/* `TopbarStatFirst` — `Column(spacing: spacingLarge)`. */
+.stackLarge {
+  gap: var(--sc-spacing-large);
+}
+
+/* `TopbarMarkOnly` — `Column(spacing: spacingMedium)`. */
+.stackMedium {
+  gap: var(--sc-spacing-medium);
+}
+
+/* `TopbarCompactRail` — `Row(crossAxisAlignment: center, spacing: spacingMedium)`. */
+.rail {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+}
+
+/* `_GymHeader` — `Column(mainAxisSize: min, spacing: spacingBig)`. */
+.gymHeader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-big);
+}
+
+/*
+ * `TopbarIdentity(axis: Axis.horizontal)` — `Row(min, center, spacing:
+ * spacingMedium)`. Positioned so the visually-hidden name in `markOnly` has a
+ * containing block that is guaranteed to be on screen; `.gymHeader` needs none
+ * because no arrangement hides the name in a vertical identity.
+ */
+.identityRow {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* `GymMarkSize.lg` (100) — `Image(width: 100, height: 100, fit: contain)`. */
+.logo {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+}
+
+/* `GymMarkSize.md` (56) — the mark-only topbar. */
+.markMd {
+  width: 56px;
+  height: 56px;
+}
+
+/* `GymMarkSize.sm` (28) — inline beside the name in a single-row topbar. */
+.markSm {
+  width: 28px;
+  height: 28px;
+}
+
+/* `GymMarkSize.xs` (20) — alongside promoted stats, identity secondary. */
+.markXs {
+  width: 20px;
+  height: 20px;
+}
+
+/* `_GymNameLabel` — `Row(min, center, spacing: spacingSmall)`. */
+.gymNameRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-small);
+}
+
+/*
+ * Dart's `Expanded(child: TopbarIdentity(...))` in `TopbarCompactRail`: the
+ * identity takes the leftover width and starts at the LEADING edge.
+ *
+ * DECLARED AFTER `.gymNameRow` ON PURPOSE. `TopbarIdentity` puts this class on
+ * the name row itself when the layout draws no mark (`nameOnly`, which is every
+ * screen but home), so the two rules land on the same element with the same
+ * single-class specificity — source order is the only thing that decides, and
+ * `.gymNameRow`'s `center` would otherwise win and leave the name floating in
+ * the middle of the rail. Moving this block up silently re-breaks that.
+ */
+.identityGrow {
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+/*
+ * Dart's `Flexible(child: name)` + `Text(maxLines: 1, overflow: ellipsis)`,
+ * scoped to the one arrangement that needs it. `compactRail` is the only layout
+ * where the name shares a row with the stats, so it is the only one where a
+ * long gym name would push them off screen; the stacked and statFirst names sit
+ * on their own line and are left exactly as they ship.
+ */
+.identityGrow .gymNameRow {
+  min-width: 0;
+}
+
+.identityGrow .gymName,
+.identityGrow .gymNameBig,
+.identityGrow .gymNameSmall {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * `GymNameLabel(visuallyHidden: true)` — Dart's
+ * `Semantics(label: gymName, child: SizedBox.shrink(child: OverflowBox(maxWidth: 0)))`.
+ *
+ * THE POINT OF THIS RULE IS WHAT IT IS NOT. `display: none`, `visibility:
+ * hidden`, `aria-hidden` and simply not rendering the element all remove the
+ * gym name from the ACCESSIBILITY tree, which would make `markOnly` a dropped
+ * affordance rather than a rearrangement. The clip technique removes it from
+ * the visual layout only: the text stays in the document, stays announced, and
+ * stays the switch-gym target. Do not "simplify" this to `display: none`.
+ */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.gymName {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+}
+
+.gymNameBig {
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-text);
+}
+
+/* `TopbarStatFirst`'s `nameStyle: DesignConstants.p` — identity is secondary. */
+.gymNameSmall {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+/* `Icon(expand_more, size: iconSizeSm, color: text)`. */
+.chevron {
+  flex: 0 0 auto;
+  width: var(--sc-icon-sm);
+  height: var(--sc-icon-sm);
+  color: var(--sc-text);
+}
+
+/* `InfoBarLayout.spread` — four `Expanded` cells, each 30px tall. */
+.infoBar {
+  display: flex;
+  align-items: center;
+}
+
+/*
+ * `InfoBarLayout.cluster` — `Row(mainAxisSize: min, spacing: spacingMedium)`
+ * riding the trailing end of a single-row topbar.
+ */
+.cluster {
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * `InfoBarLayout.inline` — `Row(mainAxisAlignment: center, spacing:
+ * spacingLarge)`. The Dart row sits in a `stretch` Column, so `mainAxisSize:
+ * min` is overruled by the tight width and `center` is what actually places the
+ * items; this centres them the same way.
+ */
+.inline {
+  justify-content: center;
+  gap: var(--sc-spacing-large);
+}
+
+.cell {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--sc-pill-height-md);
+}
+
+/*
+ * The `compact` half of every `InfoBar` item: 22 rather than 30 tall, and the
+ * cells hug instead of dividing the width. 22 is a literal in Dart too — it is
+ * a per-item extent, not a token (`pillHeightSm` is 24).
+ */
+.cellCompact {
+  flex: 0 0 auto;
+  height: 22px;
+}
+
+/* `_RankItem` — `Image(width: 39, height: 24, fit: contain)`. */
+.rankBelt {
+  width: 39px;
+  height: 24px;
+  object-fit: contain;
+}
+
+/* `_RankItem(compact: true)` — `Image(width: 28, height: 17)`. */
+.rankBeltCompact {
+  width: 28px;
+  height: 17px;
+}
+
+/* `_IconValueItem` — `Row(min, center, spacing: spacingSmall)`. */
+.iconValue {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-small);
+  height: 100%;
+}
+
+.iconValueText {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+}
+
+/* `compact ? DesignConstants.pSmall : DesignConstants.p`. */
+.iconValueTextCompact {
+  font: var(--sc-type-p-small);
+  letter-spacing: var(--sc-type-p-small-ls);
+}
+
+.iconValueImage {
+  object-fit: contain;
+}
+
+/* `_QrCodeItem` — `Image(height: 30, fit: contain)`; width follows the ratio. */
+.qrCode {
+  height: var(--sc-pill-height-md);
+  width: auto;
+  object-fit: contain;
+}
+
+/* `_QrCodeItem(compact: true)` — `Image(height: 22)`. */
+.qrCodeCompact {
+  height: 22px;
+}

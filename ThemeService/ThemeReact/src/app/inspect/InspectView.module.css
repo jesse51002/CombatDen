@@ -1,0 +1,308 @@
+/*
+ * Styles for ./InspectView.tsx — the specimen sheet.
+ *
+ * Structure comes from whitespace, hairlines and type, never from boxes: the
+ * CRM's De-Card Rule (../../../../CRM/DESIGN.md §4) holds here, and the
+ * page goes one step further by carrying no white surface at all. Every filled
+ * shape on this sheet is a colour or an asset the pipeline produced.
+ */
+
+.view {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: var(--adm-space-big) 48px;
+  align-items: start;
+  padding-top: var(--adm-space-big);
+}
+
+.railSlot {
+  min-width: 0;
+}
+
+.sheet {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ── Masthead ────────────────────────────────────────────────────────────── */
+
+.masthead {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+/*
+ * The sheet's ONE kicker. It names what the reader is looking at once, at the
+ * top, and no section below repeats the device.
+ */
+.kicker {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  /* Proportional tracking, so the caps stay open at any rendered size. */
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * Display scale, in the THEME's face. Capped at 76px — under the 6rem ceiling
+ * and, more usefully, small enough that a long generated name ("Ashtanga
+ * Shala Collective") still holds two lines at the narrow end of the measure.
+ */
+.designName {
+  margin: var(--adm-space-small) 0 0;
+  /* 44px floor, not 40: below a 688px viewport the vw term is inert, so the
+     floor IS the mobile size and the contract above promises 44–76px. 44 still
+     holds "Ashtanga Shala Collective" on two lines in a 350px measure. */
+  font-size: clamp(44px, 6.4vw, 76px);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  color: var(--adm-ink);
+  text-wrap: balance;
+}
+
+.identity {
+  margin: 0 0 var(--adm-space-large);
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The claim, as a sentence rather than a stat block: the figures are the
+ * argument, and a row of big numbers with small labels would be the template
+ * this page exists to avoid.
+ */
+.inventory {
+  max-width: 72ch;
+  margin: var(--adm-space-medium) 0 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+.inventory b {
+  font-weight: 600;
+  color: var(--adm-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Sections ────────────────────────────────────────────────────────────── */
+
+/*
+ * More space above a heading than below it: 64px of air, the rule, then 40px
+ * to the title, then the head's own 32px to its content.
+ */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-big);
+  margin-top: 64px;
+  padding-top: 40px;
+  border-top: 1px solid var(--adm-line);
+}
+
+/*
+ * Role entries separate with the SOFT hairline, so the section rule above
+ * still reads as the stronger break. One rhythm, two weights.
+ */
+.roles {
+  display: flex;
+  flex-direction: column;
+}
+
+.roles > * + * {
+  margin-top: 48px;
+  padding-top: 48px;
+  border-top: 1px solid var(--adm-line-soft);
+}
+
+.typeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 48px var(--adm-space-big);
+}
+
+/* ── Written copy ────────────────────────────────────────────────────────── */
+
+.strings {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Placement on the left, the string on the right at the size it is read. The
+ * metadata column is fixed so five strings of very different lengths still
+ * start on one vertical.
+ */
+.string {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) minmax(0, 1fr);
+  gap: var(--adm-space-large) var(--adm-space-big);
+  align-items: baseline;
+  padding-block: var(--adm-space-large);
+}
+
+.strings > * + * {
+  border-top: 1px solid var(--adm-line-soft);
+}
+
+.stringMeta {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-tiny);
+  min-width: 0;
+}
+
+.stringSlot {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-ink);
+}
+
+.stringWhere {
+  margin: 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  line-height: 1.5;
+  color: var(--adm-text-2nd);
+}
+
+.stringValue {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--adm-ink);
+  text-wrap: balance;
+}
+
+.stringMissing {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  color: var(--adm-text-2nd);
+}
+
+/* ── Asset plates ────────────────────────────────────────────────────────── */
+
+.iconGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--adm-space-large);
+}
+
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--adm-space-large);
+}
+
+.imageGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--adm-space-large);
+}
+
+/* ── Colophon ────────────────────────────────────────────────────────────── */
+
+.colophon {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  margin-top: 64px;
+  padding-top: var(--adm-space-big);
+  border-top: 1px solid var(--adm-line);
+}
+
+.colophonId {
+  margin: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-ink);
+}
+
+.colophonNote {
+  max-width: 68ch;
+  margin: 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+/* ── Empty ───────────────────────────────────────────────────────────────── */
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  max-width: 60ch;
+  padding-block: 96px;
+}
+
+.emptyTitle {
+  margin: 0;
+  font-size: var(--adm-h1-size);
+  font-weight: var(--adm-h1-weight);
+  letter-spacing: var(--adm-h1-tracking);
+  color: var(--adm-ink);
+}
+
+.emptyNote {
+  margin: 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.65;
+  color: var(--adm-text-2nd);
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 1023px) {
+  .view {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The section heads carry the same titles and tallies inline. */
+  .railSlot {
+    display: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .section {
+    margin-top: 48px;
+    padding-top: var(--adm-space-big);
+  }
+
+  .roles > * + * {
+    margin-top: var(--adm-space-big);
+    padding-top: var(--adm-space-big);
+  }
+
+  .typeGrid {
+    gap: var(--adm-space-big);
+  }
+
+  /* The placement note stacks above the string it describes. */
+  .string {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--adm-space-medium);
+  }
+
+  .colophon {
+    margin-top: 48px;
+  }
+}

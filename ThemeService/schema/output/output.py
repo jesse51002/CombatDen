@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from schema.output.color_palette import ColorPalette
 from schema.output.font_set import FontSet
+from schema.output.format_set import FormatSet
 from schema.output.icon_set import IconSet
 from schema.output.image_set import ImageSet
 from schema.output.run_cost import RunCost
@@ -33,12 +34,15 @@ class Output(BaseModel):
     ``category`` is this run's classification bucket — one of the values
     the app declares under ``categories`` in its ``app.yaml`` (the code
     is app-agnostic: it supports "classification", the class values are
-    the app's own). The style picker REQUIRES it (an uncategorised run
-    is never listed by ``GET /apps/{id}/styles``), but the field is
-    ``None``-able here so runs that predate it — and runs of apps with
-    no classification concept — still validate. Today the value is
-    stamped into the artifact; the pipeline classification step that
-    will set it at production time is a README TODO.
+    the app's own). It is produced by the pipeline's classification node
+    (``src/modules/categories/``) and validated against that declared
+    vocabulary before the ``Writer`` dumps it. The style picker REQUIRES
+    it (an uncategorised run is never listed by
+    ``GET /apps/{id}/styles``), but the field is ``None``-able here so
+    runs that predate it — and runs of apps with no classification
+    concept — still validate. It is a bare string on the wire, not a
+    group: a classification is one value, and every consumer (the styles
+    API, both client runtimes, the FastApi backend) reads it that way.
 
     ``cost`` is optional, like ``ImageOutput.complexity``: every fresh run
     sets it, but older or externally-produced ``output.yaml`` files
@@ -52,7 +56,12 @@ class Output(BaseModel):
     path (use the bundled default string) is one branch, not two.
     ``icon_set`` follows the same shape — every fresh run sets it, older
     files predate it and default to an empty ``IconSet()`` (no icon
-    overrides; the app falls back to its bundled icons).
+    overrides; the app falls back to its bundled icons). ``format_set``
+    does the same — older files predate it and default to an empty
+    ``FormatSet()``, which is also the honest answer when the app declared
+    no format slots; the client then renders the arrangement it ships.
+    It is a *group*, not a scalar like ``category``, because it holds one
+    resolved item per declared format slot.
 
     ``extra="ignore"`` (not the package-wide ``forbid``) is a deliberate
     exception, matching ``ImageOutput`` / ``ColorPalette`` / ``ImageSet``:
@@ -70,6 +79,7 @@ class Output(BaseModel):
     font_set: FontSet = Field(default_factory=lambda: FontSet(fonts={}))
     text_set: TextSet = Field(default_factory=TextSet)
     icon_set: IconSet = Field(default_factory=IconSet)
+    format_set: FormatSet = Field(default_factory=FormatSet)
     cost: RunCost | None = None
 
     @field_validator("app")

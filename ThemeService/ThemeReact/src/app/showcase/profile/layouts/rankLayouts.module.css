@@ -1,0 +1,133 @@
+/*
+ * Styles for the five arrangements in this folder (they port
+ * MobileApp/lib/features/profile/presentation/layouts/rank_*.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ *
+ * One stylesheet rather than five: each arrangement is a handful of columns and
+ * rows over the SAME components, so the shared stack / gutter / divider rules
+ * are declared once and the per-arrangement rules sit under a comment naming
+ * their file. What differs between arrangements is which of these a layout
+ * uses, which is the whole idea.
+ */
+
+/* `Column(mainAxisSize: min, stretch, spacing: spacingBig)` — every layout's root. */
+.page {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+}
+
+/* An inner `Column(stretch, spacing: spacingMedium | spacingLarge)`. */
+.stackMedium,
+.stackLarge {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.stackMedium {
+  gap: var(--sc-spacing-medium);
+}
+
+.stackLarge {
+  gap: var(--sc-spacing-large);
+}
+
+/* `Padding(horizontal: paddingBig)` / `(horizontal: screenHorizontalPadding)`. */
+.gutterBig {
+  padding-inline: var(--sc-padding-big);
+}
+
+.gutterScreen {
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/*
+ * `SectionDivider` — `Container(height: dividerThickness, color: text3rd)`,
+ * full-bleed on purpose: it is the one element on this page that runs edge to
+ * edge, which is what separates the blocks without a card around each.
+ */
+.divider {
+  flex: 0 0 auto;
+  height: var(--sc-divider-thickness);
+  background: var(--sc-text-3rd);
+}
+
+/* ---- beltHero ---------------------------------------------------------- */
+
+/*
+ * `Stack(alignment: Alignment.topCenter)` — the streak statement over the belt
+ * band. A single-cell grid is the CSS `Stack`: both children share the cell, so
+ * the box is the taller of the two exactly as Flutter's stack sizes to its
+ * largest child, and `start` / `center` is `Alignment.topCenter`.
+ */
+/*
+ * `align-items: start` is `Alignment.topCenter`'s vertical half. The horizontal
+ * half is deliberately NOT `justify-items: center`: that would shrink each item
+ * to `fit-content`, and the band's children are all absolutely positioned, so it
+ * would collapse to zero width and the belt art would vanish. Items stretch (a
+ * Flutter stack's own loose-but-full-width constraint) and the overlay centres
+ * the hero itself.
+ */
+.beltStack {
+  display: grid;
+  grid-template-areas: 'stack';
+  align-items: start;
+}
+
+/* Both children share the one cell. */
+.beltStack > * {
+  grid-area: stack;
+}
+
+/*
+ * The hero's own cell.
+ *
+ * IT HAS TO BE A REAL ELEMENT: the part markers are `display: contents`
+ * (../rankLayoutData.module.css) and therefore generate no box, so a marker is
+ * not a grid item — the rule above would land on the marker while its child
+ * auto-placed into a second row, and the overlay would silently become a stack
+ * of two blocks instead of one.
+ */
+.beltStackOverlay {
+  display: flex;
+  justify-content: center;
+}
+
+/* `Row(center, spacing: spacingLarge)` — the inline badge beside the next-rank words. */
+.beltHeroNext {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+}
+
+/* `Expanded > Column(mainAxisSize: min, start, spacing: spacingSmall)`. */
+.beltHeroNextWords {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-small);
+}
+
+/* ---- statTiles --------------------------------------------------------- */
+
+/*
+ * `_TileRow` — two equal cells sharing a row of the board.
+ *
+ * NOT `stretch`: the board sits in a scroll view, where the row's height is
+ * unbounded. Each tile fixes its own height instead, and the pair reads as a
+ * pair because that height is the same.
+ */
+.tileRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+}
+
+.tileRow > * {
+  flex: 1 1 0;
+  min-width: 0;
+}

@@ -1,0 +1,36 @@
+/*
+ * Styles for ./ClassReserveFooter.tsx
+ * (ports MobileApp/.../widgets/class_reserve_footer.dart).
+ */
+
+/* `Column(crossAxisAlignment: stretch)` — the rule and the action. */
+.footer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.action {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+/* `EdgeInsets.all(paddingBig)`. */
+.pinned {
+  padding: var(--sc-padding-big);
+}
+
+/* `symmetric(horizontal: paddingBig, vertical: spacingLarge)`. */
+.sheetTop {
+  padding: var(--sc-spacing-large) var(--sc-padding-big);
+}
+
+/*
+ * `symmetric(vertical: spacingLarge)` — no side padding, because the content
+ * column this sits inside already supplies it.
+ */
+.inline {
+  padding: var(--sc-spacing-large) 0;
+}

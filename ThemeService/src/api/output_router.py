@@ -87,7 +87,12 @@ async def list_styles(
     response_model=OutputResponse,
     summary="Get a run's resolved customization",
     responses={
-        200: {"description": "The run's output (colours + image URLs)"},
+        200: {
+            "description": (
+                "The run's output: its category, the flat image/font/icon "
+                "maps, and the colour, image, font and text groups"
+            )
+        },
         404: {"description": "No such app/run"},
         422: {"description": "Run exists but its output.yaml is stale"},
     },

@@ -1,0 +1,113 @@
+/*
+ * The CSS-variable face of the two app-chrome token modules.
+ *
+ *   --gw-*   mirrors ../tokens/gw.ts          (LandingPage/hifi/ds.jsx)
+ *   --adm-*  mirrors ../tokens/adminTokens.ts (CRM design_constants.dart, LIGHT)
+ *
+ * The TypeScript modules are the source of truth — the ported GWNav/GWButton
+ * read them directly, because those two keep their inline `style={{}}` objects
+ * verbatim so a future diff against the landing page still lines up. Everything
+ * else in this app is a CSS Module and reads the variables below.
+ *
+ * The duplication is guarded, not trusted: `../__tests__/tokens.test.ts` parses
+ * this file and asserts every value here still equals the module's.
+ *
+ * The showcase island's `--sc-*` namespace is a THIRD system and is never
+ * declared here (eslint.config.js Gates 2a/2b).
+ */
+
+:root {
+  color-scheme: light;
+
+  /* ── GW — the landing page's tokens (ds.jsx). ───────────────────────── */
+  --gw-bg: #f3f5f8;
+  --gw-bg-alt: #eef1f6;
+  --gw-surface: #ffffff;
+  --gw-ink: #16181d;
+  --gw-ink-soft: #565b66;
+  --gw-ink-faint: #878d99;
+  --gw-line: rgba(20, 22, 30, 0.09);
+  --gw-line-soft: rgba(20, 22, 30, 0.06);
+  --gw-accent: #2a67bd;
+  --gw-accent-dark: #1f5099;
+  --gw-accent-soft: #e8f0fb;
+  --gw-accent-glow: rgba(42, 103, 189, 0.18);
+  --gw-sans: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  --gw-mono: 'Geist Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --gw-max-w: 1180px;
+
+  /* ── ADM — the CRM's LIGHT DesignConstants (design_constants.dart). ─── */
+  --adm-ground: #f3f5f8;
+  --adm-surface: #ffffff;
+  --adm-card: var(--adm-surface);
+  --adm-ink: #16181d;
+  --adm-text-2nd: #565b66;
+  --adm-text-3rd: #878d99;
+  --adm-line: rgba(20, 22, 30, 0.09);
+  --adm-line-soft: rgba(20, 22, 30, 0.06);
+  --adm-divider: var(--adm-line);
+  --adm-sapphire: #2a67bd;
+  --adm-accent-dark: #1f5099;
+  --adm-on-accent: #ffffff;
+
+  --adm-card-shadow:
+    0 1px 2px rgba(20, 22, 40, 0.05), 0 18px 30px -10px rgba(20, 22, 50, 0.12);
+  --adm-button-shadow:
+    0 1px 2px rgba(15, 45, 95, 0.32), 0 8px 22px -6px rgba(30, 80, 160, 0.5);
+  --adm-control-shadow: 0 1px 2px rgba(20, 22, 40, 0.05);
+  --adm-primary-gradient: linear-gradient(180deg, var(--adm-sapphire), var(--adm-accent-dark));
+
+  --adm-device-body: #16181d;
+  --adm-device-shadow: rgba(22, 24, 29, 0.25);
+
+  --adm-radius-big: 12px;
+  --adm-radius-small: 8px;
+  --adm-radius-card: 20px;
+
+  --adm-padding-big: 32px;
+  --adm-padding-small: 16px;
+
+  --adm-space-big: 32px;
+  --adm-space-large: 16px;
+  --adm-space-medium: 8px;
+  --adm-space-small: 4px;
+  --adm-space-tiny: 2px;
+
+  --adm-button-border: 2px;
+  --adm-button-border-size: 3px;
+
+  --adm-icon-big: 32px;
+  --adm-icon-large: 24px;
+  --adm-icon-medium: 20px;
+  --adm-icon-small: 18px;
+  --adm-icon-tiny: 16px;
+
+  --adm-reward-card-title-height: 42px;
+  --adm-spinner-size-large: 32px;
+
+  --adm-nav-height: 68px;
+  --adm-nav-max-width: 1180px;
+
+  /* Geist, with the CRM's tabular figures. */
+  --adm-font: 'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+
+  --adm-h1-size: 24px;
+  --adm-h1-weight: 700;
+  --adm-h1-tracking: -0.6px;
+  --adm-h2-size: 16px;
+  --adm-h2-weight: 600;
+  --adm-h2-tracking: -0.2px;
+  --adm-h3-size: 13px;
+  --adm-h3-weight: 600;
+  --adm-h3-tracking: 0px;
+  --adm-p-size: 12px;
+  --adm-p-weight: 400;
+  --adm-p-tracking: 0.03px;
+  --adm-p-big-size: 16px;
+  --adm-p-big-weight: 400;
+  --adm-p-big-tracking: 0.03px;
+  --adm-p-small-size: 11px;
+  --adm-p-small-weight: 400;
+  --adm-p-small-tracking: 0.03px;
+  --adm-p-small-bold-weight: 700;
+}

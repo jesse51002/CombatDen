@@ -6,8 +6,8 @@ membership/billing backend, and one shared Supabase database underneath all of i
 
 This repo is a **monorepo of 7 independent systems**. The graph below is the **high-level map** —
 the systems and how they wire into each other. For the full picture (every system opened up to its
-inner nodes, ThemeService's creation vs read-API split, the VideoService worker's pipeline,
-skills/scripts), see **[`architecture.mermaid`](architecture.mermaid)**.
+inner nodes, ThemeService's creation vs read-API vs local-studio split, the VideoService worker's
+pipeline, skills/scripts), see **[`architecture.mermaid`](architecture.mermaid)**.
 
 ---
 
@@ -18,8 +18,9 @@ flowchart TB
   MobileApp["📱 MobileApp<br/>Flutter member app (live client)"]
   CRM["🖥️ CRM<br/>gym admin web (full CRM)"]
   LandingPage["🌐 LandingPage<br/>marketing site"]
+  ThemeReact["🎨 ThemeReact<br/>web app: browse · inspect · studio<br/>(not deployed)"]
 
-  ThemeService["🎨 ThemeService<br/>AI theme generator + read API"]
+  ThemeService["🎨 ThemeService<br/>AI theme generator + read API<br/>+ local studio (dev-only, never deployed)"]
   VideoService["🎬 VideoService<br/>video worker: cleanup → finalize → one drained step (scan → enrich → scrape) + RAG<br/>+ gym-config YAML tooling · no read API"]
   FastApiBackend["⚙️ FastApiBackend<br/>CRM / billing + video content API<br/>(spec agent · RAG recs · growth analytics sweep; not deployed)"]
 
@@ -39,6 +40,7 @@ flowchart TB
   MobileApp -->|"Supabase Auth (login)"| Database
   MobileApp -->|"branding (theme_flutter)"| ThemeService
   CRM -->|"theme catalog + live preview"| ThemeService
+  ThemeReact -->|"theme catalog + live preview + local studio (dev-only run launch/progress)"| ThemeService
   CRM -->|"authd API (incl. video + theme content)"| FastApiBackend
   CRM -->|"Supabase Auth (login)"| Database
   LandingPage -->|"links"| CRM
@@ -67,11 +69,12 @@ flowchart TB
   classDef data fill:#fff2e0,stroke:#c9781f,color:#4a2c08;
   classDef ext fill:#ffd9a8,stroke:#d2691e,color:#4a2c08;
   classDef tool fill:#fdf6d8,stroke:#caab2f,color:#4a3d08;
-  class MobileApp,CRM,LandingPage client;
+  class MobileApp,CRM,LandingPage,ThemeReact client;
   class ThemeService,VideoService,FastApiBackend service;
   class Database data;
   class Deploy tool;
   class Stripe,LiteLLM,Gemini,Apify,YouTube,GoogleFonts,Recraft,CDN,LLMProvider ext;
+  style ThemeReact stroke-dasharray:4 3;
   style FastApiBackend stroke-dasharray:4 3;
   style Deploy stroke-dasharray:4 3;
 ```
@@ -83,7 +86,7 @@ flowchart TB
 - **Dashed box border = built but not yet deployed.** The CRM has been **restored to a full gym-admin CRM** — Supabase-auth login, members list + member detail, gym setup, and the Stripe billing surface are built natively and wired to the FastApiBackend over an authenticated `dio` client; its ThemeService read stays live. The **FastApiBackend** that backs it is built (members/gyms/classes/ranks/rewards + memberships/plans/discounts/payments/webhooks + the merged `videos` + `presets` domains + the `uploads` image-proxy domain + the `reports` CSV/zip-export domain) but has **no prod host yet** (`api.combatden.net` pending). The **rewards system is now productionized**: attendance auto-award, manual admin adjust, a member-initiated pending → staff approve/reject flow (rejection refunds points), staff-initiated redemption, and image uploads for the reward catalog and member photos via the `uploads` domain. Billing's failed-payment / dunning / refund edge handling is now covered by the Stripe webhooks + a twice-daily reconciler sweep (a few optimizations still deferred). **VideoService** now runs the video content as a background worker whose tick is **decoupled DB-backed steps, not a per-gym pipeline**: every tick runs cleanup (drop strike-maxed videos) + finalize (complete/fail `running` runs purely from their feed rows) for free, then drains **ONE heavy step, first-with-work** — scan (a global multimodal verdict sweep) → enrich (a global, gym-agnostic RAG-building sweep) → scrape (the only quota-bound, run-opening, per-gym step — it alone still derives its due gym from timestamps already in the schema, no job queue) — that owns the shared `video_*` pool and builds the per-video RAG layer (a pre-populated `video_rag` template sidecar seeds most of it on `make sync-gyms`, so a freshly-imported preset feed serves instantly); every client reads video content via FastApiBackend — VideoService **no longer serves a read API**, and MobileApp is now a **live client of the FastApiBackend member portal** (`/api/v1/member`, Supabase-authenticated), reading its videos there too — never a direct VideoService reader. The dashed **`deploy/`** node is the combined always-on image (FastApiBackend API + the VideoService worker) — the production target, not yet live.
 - **Solid arrow = a live runtime dependency** (HTTP, DB read/write, third-party API). **Dashed arrow = build-time or operational** — e.g. LandingPage capturing screenshots/feed assets at build time.
 - **Every arrow connects siblings** — at this level, system → system or system → external service.
-- **Want the inner workings?** `architecture.mermaid` opens every box up: the creation vs read-API split for ThemeService, the VideoService worker's pipeline, and the skills/scripts that operate each engine. Render it with the `mermaid-creation` skill (`npx @mermaid-js/mermaid-cli -i architecture.mermaid -o architecture.svg`).
+- **Want the inner workings?** `architecture.mermaid` opens every box up: the creation vs read-API vs local-studio split for ThemeService, the VideoService worker's pipeline, and the skills/scripts that operate each engine. Render it with the `mermaid-creation` skill (`npx @mermaid-js/mermaid-cli -i architecture.mermaid -o architecture.svg`).
 
 ---
 
@@ -99,7 +102,7 @@ flowchart TB
 
 **🎬 VideoService** — owns the gym-video content as a self-scheduling **background worker** (`src/worker`, `make worker`) plus the gym-config YAML tooling — it **serves no read API**. Each tick runs three DB-backed steps under one lock hold: **cleanup** (delete videos at the failure-strike ceiling) and **finalize** (complete/fail every `running` run purely from its feed rows — 90% terminal completes, a zero-row or 24h-stuck run fails) run every tick for free; then **ONE heavy step, first-with-work, is drained fully** — **scan** (a global multimodal keep/drop sweep judging each gym's pending candidates against its LATEST spec) → **enrich** (a global, gym-agnostic sweep that gives every un-enriched video ONE multimodal classify+summarize+embed pass, building the `video_rag` layer) → **scrape** (the only quota-bound, run-opening step — it alone still derives its due gym from timestamps already in the schema, no job queue: a fresh `admin_update` spec version or a 7-day periodic refresh, tier-sorted, capped per-gym and system-wide over a rolling 24h; **YouTube Data API v3**, free within quota — manual feed curation does NOT open a scrape; it mints a `feed_update` spec version the **scan** step re-judges the gym's existing auto feed against in place, ~1h later, zero downtime). A one-time `make enrich-templates` run pre-populates a `video_rag` sidecar for the shared template pool so a freshly-imported preset feed serves instantly instead of waiting for the worker. Gym-config **authoring** stays operator-driven (`gym_maker` + `make sync-gyms`). Every client reads the worker's output through the FastApiBackend `videos` domain — the worker and the backend never call each other, the database is the handoff. In-depth worker flow: `VideoService/worker.mermaid`.
 
-**🎨 ThemeService** — the AI theme generator, also **two separate halves**. The **CREATION generator** (the `brand-brief` skill authors `customization.yaml`; the async-DAG orchestrator runs the color/font/image/icon/text/lottie modules; the `writer` emits `output.yaml`; the uploader pushes assets to the CDN — all operated by the `edit_theme` skill and the `regen`/`regen_image`/`edit_customization`/`expand`/`remove_bg`/`sync_assets`/`fetch_icon_sets` scripts) talks to Google Fonts, Recraft, OpenAI/LiteLLM, and AWS S3 + CloudFront. The **READ API** at `theme.combatden.net` (`/apps/{id}/styles`, plus the shared `ThemeFlutter` client package the apps import) only serves the produced `output.yaml`. Handoff is the artifact, not a call.
+**🎨 ThemeService** — the AI theme generator, now **three separate surfaces**. The **CREATION generator** (the `brand-brief` skill authors `customization.yaml`; the async-DAG orchestrator runs the color/font/image/icon/text/lottie modules; the `writer` emits `output.yaml`; the uploader pushes assets to the CDN — all operated by the `edit_theme` skill and the `regen`/`regen_image`/`edit_customization`/`expand`/`remove_bg`/`sync_assets`/`fetch_icon_sets` scripts) talks to Google Fonts, Recraft, OpenAI/LiteLLM, and AWS S3 + CloudFront. The **READ API** at `theme.combatden.net` (`/apps/{id}/styles`, plus two client SDKs over it — the Dart `ThemeFlutter` package the Flutter apps import, and the `ThemeReact` npm package + standalone web theme browser) only serves the produced `output.yaml`. Handoff is the artifact, not a call. The **STUDIO** (`make studio`, local-only, `127.0.0.1:8002`, never deployed) is the third surface: it writes a brief, launches a pipeline run in-process (calling the same orchestrator/writer as the CLI, with a `ProgressSink` passed in), and streams that run's progress over Server-Sent Events, including per-image bytes mid-run — which the deployed read API structurally cannot serve, since it only ever loads a finished run's `output.yaml`. It is what the ThemeReact app's studio-client view drives, and it deliberately never merges into the read API, so the deployed container keeps booting without any provider API keys.
 
 **🗄️ Database** — The shared **Supabase Postgres** that everything converges on. Holds `supabase/schemas/*.sql` (tables), `access_rules/*.sql` (RLS), and Python enum mirrors in `python_data/schema/`. Table domains: member, gym, rank/reward, membership + billing (Stripe-gated), class scheduling, and the `video_*` tables. *Consumed by:* FastApiBackend and VideoService directly; Supabase Auth also backs CRM login.
 
@@ -111,7 +114,7 @@ flowchart TB
 - **MobileApp is a live member-portal client.** It authenticates with Supabase (GoTrue), then calls FastApiBackend's `/api/v1/member/...` routes through the same authenticated `dio` `ApiClient` pattern (Supabase-JWT interceptor, 401-refresh, 403 ≠ sign-out). Its whole data surface — profile/rank/points/streak, the schedule board + reservations, rewards, and the video feed/rec — is that member portal; it reads videos through the backend, never VideoService directly. Branding re-themes to the selected member's gym design via the shared `theme_flutter` package. Same local-`:8000` caveat as the CRM until the backend deploys.
 - **One shared database is the hub.** FastApiBackend and VideoService both read/write the same Supabase Postgres. They stay consistent by importing enum mirrors from `Database/python_data/schema/` and honoring the backend's Pydantic schemas as the request/response contract.
 - **The video worker's output is decoupled from its readers by the shared tables.** ThemeService-CREATION writes `output.yaml` (+ CDN assets) that ThemeService-API serves; the VideoService **worker** writes the `video_*` / `gym_video_*` / `video_rag` tables that the FastApiBackend `videos` domain reads (feed + RAG recs) to serve every client — VideoService itself serves no read API. The FastApiBackend never triggers the worker directly — there is no enqueue and no manual-run route; the worker derives its own work from timestamps the FastApiBackend's writes leave behind (an `admin_update` spec version drives a scrape; a `feed_update` version minted from manual feed curation drives an in-place scan re-scan) — no direct call crosses the two.
-- **One shared Flutter package is the theming backbone.** `ThemeService/ThemeFlutter` is imported by **both** MobileApp and CRM (`../ThemeService/ThemeFlutter`) — it fetches and caches each tenant's branding and resolves colors/fonts/images at runtime.
+- **One shared package per client platform is the theming backbone.** `ThemeService/ThemeFlutter` is imported by **both** MobileApp and CRM (`../ThemeService/ThemeFlutter`); `ThemeService/ThemeReact` is its React mirror for the web. Each fetches and caches a tenant's branding and resolves colors/fonts/images at runtime from the same read API.
 - **VideoService points at ThemeService for branding.** Each gym's YAML stores a ThemeService `design_id`, so the curated feed and the visual theme line up per gym.
 - **LandingPage is downstream of the apps at build time.** Its phone screenshots come from MobileApp and its feed thumbnails from VideoService — captured and baked in, not fetched live — and it links to the CRM theme browser.
 - **Stripe drives billing.** FastApiBackend processes payments and ingests Stripe webhooks, syncing membership/billing state into the Stripe-gated (service-role-only) tables.
@@ -145,7 +148,7 @@ Full deploy/runbook detail (DNS, ECR push, App Runner env vars, CDN provisioning
 | `LandingPage/` | Marketing site (React via CDN) | `LandingPage/CLAUDE.md` |
 | `FastApiBackend/` | Membership + billing REST API (not yet deployed) | `FastApiBackend/CLAUDE.md` |
 | `VideoService/` | Video worker + gym-config YAML tooling (no read API) | `VideoService/CLAUDE.md`, `VideoService/README.md` |
-| `ThemeService/` | AI theme generator + read API + `ThemeFlutter` pkg | `ThemeService/CLAUDE.md`, `ThemeService/README.md` |
+| `ThemeService/` | AI theme generator + read API + local studio + `ThemeFlutter` / `ThemeReact` client pkgs | `ThemeService/CLAUDE.md`, `ThemeService/README.md` |
 | `Database/` | Supabase schema, RLS, enums | `Database/CLAUDE.md` |
 | `deploy/` | Combined FastApiBackend + VideoService-worker image (always-on target) | `deploy/CLAUDE.md` |
 | `architecture.mermaid` | Full detailed system graph (inner nodes) | rendered via the `mermaid-creation` skill |

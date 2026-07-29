@@ -128,7 +128,11 @@ class OklchColor(CssColor):
     - ``alpha``: optional, 0–1. ``None`` means fully opaque.
     """
 
-    l: float = Field(ge=0.0, le=1.0)
+    # `l` is the CSS channel name, and these field names ARE the wire contract
+    # (they serialize straight into `output.yaml`). Renaming to satisfy the
+    # ambiguous-name lint would break every produced artifact, so it is
+    # silenced here rather than left permanently red.
+    l: float = Field(ge=0.0, le=1.0)  # noqa: E741
     c: float = Field(ge=0.0, le=0.5)
     h: float = Field(ge=0.0, le=360.0)
     alpha: float | None = Field(default=None, ge=0.0, le=1.0)
@@ -195,7 +199,8 @@ class HslColor(CssColor):
 
     h: float = Field(ge=0.0, le=360.0)
     s: float = Field(ge=0.0, le=100.0)
-    l: float = Field(ge=0.0, le=100.0)
+    # The CSS channel name, as above.
+    l: float = Field(ge=0.0, le=100.0)  # noqa: E741
     alpha: float | None = Field(default=None, ge=0.0, le=1.0)
 
     def to_aide(self) -> Color:
@@ -319,6 +324,45 @@ class AbsolutePath(RootModel[str]):
         if not v.startswith("/"):
             raise ValueError(
                 f"AbsolutePath must start with '/'; got {v!r}"
+            )
+        return v
+
+    def __str__(self) -> str:
+        return self.root
+
+
+# A single path segment may not be empty/blank, may not carry a separator,
+# and may not be a relative-directory token — any of which would let a
+# caller-supplied name escape the directory it is meant to name.
+_ILLEGAL_SEGMENT_TOKENS = ("/", "\\", "..")
+_RELATIVE_DIR_TOKENS = (".", "..")
+
+
+class PathSegment(RootModel[str]):
+    """Exactly ONE safe filesystem path segment, from user input.
+
+    The shared rule behind every caller-named file or directory this
+    package creates: a run folder under ``<out_root>/<app_id>/`` (the CLI's
+    ``--run-name``, the studio's launch) and a saved brief's filename stem.
+    Each of those is a name a human hands us that then becomes a path, so
+    each needs the same check in the same place rather than three
+    near-identical guards.
+
+    Rejected: empty or blank, anything containing ``/``, ``\\`` or ``..``,
+    and the bare ``.`` (which names the *parent* directory, not a child).
+    """
+
+    @field_validator("root")
+    @classmethod
+    def _is_one_safe_segment(cls, v: str) -> str:
+        if (
+            not v.strip()
+            or v in _RELATIVE_DIR_TOKENS
+            or any(token in v for token in _ILLEGAL_SEGMENT_TOKENS)
+        ):
+            raise ValueError(
+                f"{v!r} must be a single non-blank folder segment with no "
+                "'/', '\\', or '..' (and not '.')"
             )
         return v
 

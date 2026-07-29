@@ -1,0 +1,83 @@
+/*
+ * Styles for ./VideoCarouselCard.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/gym_video_carousel_card.dart + `VideoCardSize`).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ *
+ * `VideoCardSize.md` IS THE BASE RULE, not a modifier: it is Dart's own default
+ * value and the card the shipped horizontal rows render, so `.card` /
+ * `.thumbFrame` below are the 258x145 card verbatim and the other three sizes
+ * are overrides on top. Writing it the other way round would have changed the
+ * class list on the one shape ./__tests__/videosFormats.test.tsx pins byte for
+ * byte against the arrangement that ships.
+ */
+
+/*
+ * `SizedBox(width: _kCardWidth) > Container(color: card, borderRadius:
+ * radiusSmall, clipBehavior: Clip.hardEdge) > Column(stretch, spacing:
+ * spacingLarge)`.
+ *
+ * `flex: 0 0 auto` is what keeps the 258 fixed inside the carousel's flex row —
+ * without it the cards would share the row's width and shrink as the feed grows.
+ */
+.card {
+  flex: 0 0 auto;
+  width: 258px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+}
+
+/*
+ * `lg` / `tile` / `tall` — the width-filling sizes. Dart expresses this by
+ * simply NOT wrapping the card in a `SizedBox`; the CSS equivalent has to undo
+ * the fixed width the base rule sets.
+ */
+.fill {
+  width: 100%;
+}
+
+/* `SizedBox(height: _kThumbHeight)` over the cover image. */
+.thumbFrame {
+  flex: 0 0 auto;
+  height: 145px;
+  background: var(--sc-card);
+  overflow: hidden;
+}
+
+/*
+ * `AspectRatio(aspectRatio: 16 / 9)`.
+ *
+ * 16:9, ALWAYS — the Dart's own comment, and it is load-bearing: YouTube serves
+ * thumbnails at a fixed aspect, so a card that re-proportions the artwork
+ * either crops the subject or letterboxes it. A size may make the CARD taller
+ * (`tall` does, by riding a caption band over the image); the image itself is
+ * not a free variable.
+ */
+.thumbRatio {
+  height: auto;
+  aspect-ratio: 16 / 9;
+}
+
+/*
+ * `_Captioned` — `Stack[thumbnail, Positioned(bottom: the caption band)]`. The
+ * card surface sits BEHIND the artwork, not just around it: a thumbnail that is
+ * still loading (or gone) has to leave a card, not a hole in the column.
+ */
+.tall {
+  position: relative;
+  gap: 0;
+}
+
+/* `Positioned(left: 0, right: 0, bottom: 0) > ColoredBox(popup) > Padding(spacingMedium)`. */
+.caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: var(--sc-spacing-medium);
+  background: var(--sc-popup);
+}

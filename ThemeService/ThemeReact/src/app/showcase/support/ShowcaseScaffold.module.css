@@ -1,0 +1,78 @@
+/*
+ * Styles for ./ShowcaseScaffold.tsx
+ * (ports CRM/lib/showcase/support/showcase_scaffold.dart).
+ *
+ * Reads ONLY `--sc-*` — the member app's token values, written onto the phone
+ * screen root by ../ShowcaseThemeVars.tsx. Never `--gw-*` / `--adm-*`: those
+ * are the surrounding admin chrome and carry different values behind the same
+ * names (eslint.config.js Gates 2a/2b).
+ */
+
+.scaffold {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  /* `Scaffold(backgroundColor: ShowcaseTokens.backgroundColor)`. */
+  background: var(--sc-background);
+  color: var(--sc-text);
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  /* The phone screen clips. Individual bodies opt into scrolling below. */
+  overflow: hidden;
+}
+
+/* `SafeArea(top: true)` — the room the dynamic island needs. */
+.safeTop {
+  flex: 0 0 auto;
+  height: var(--phone-status-inset, 0px);
+}
+
+/*
+ * `Expanded(child: body)`. `min-height: 0` is what lets a flex child actually
+ * shrink below its content height; without it the row would push the bottom
+ * nav off the screen instead of clipping.
+ */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/*
+ * `bodyScroll` — the app-shaped screens' `SingleChildScrollView`.
+ *
+ * `overflow-x: hidden` is written EXPLICITLY rather than left at `visible`: a
+ * `visible` sibling of a scrolling axis computes to `auto`, so omitting it
+ * would hand the body a horizontal scrollbar it never uses and let a 1px
+ * rounding error scroll the whole screen sideways. Spelling it out is the
+ * difference between a clip and a second scroller.
+ *
+ * The scrollbar is hidden because a desktop track drawn down the inside of a
+ * phone mock is the one detail that gives away that this is not a device; iOS
+ * paints an overlay bar that occupies no layout, which is what this matches.
+ * `overscroll-behavior: contain` keeps a flick at the end of the feed from
+ * chaining out into the surrounding admin page.
+ */
+.bodyScroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.bodyScroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* `ShowcasePadding.standard` — `screenHorizontalPadding`. */
+.padStandard {
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/* `ShowcasePadding.big` — `paddingBig`. */
+.padBig {
+  padding-inline: var(--sc-padding-big);
+}

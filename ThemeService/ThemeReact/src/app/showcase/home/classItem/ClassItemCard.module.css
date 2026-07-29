@@ -1,0 +1,54 @@
+/*
+ * Styles for ./ClassItemCard.tsx
+ * (ports .../class_item/layouts/class_item_card.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(clipBehavior: antiAlias, decoration: BoxDecoration(color: card,
+ * borderRadius: radiusSmall), child: Column(stretch))`.
+ *
+ * `height: 100%` is what Dart gets from `IntrinsicHeight` + `Expanded` on the
+ * paired row: both cards in a grid row run to the taller one's height, so the
+ * two surfaces read as one band instead of two ragged blocks.
+ */
+.card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+/*
+ * `ClassItemThumb(aspectRatio: 4 / 3)` — NO radius of its own; the card clips
+ * it (`Clip.antiAlias`).
+ */
+.photo {
+  flex: 0 0 auto;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  background: var(--sc-card);
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* `Padding(all: spacingMedium)`. */
+.body {
+  padding: var(--sc-spacing-medium);
+}
+
+/* `ClassItemMeta(tight: true)` — the `spacingSmall` gap. */
+.info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-small);
+}

@@ -1,0 +1,34 @@
+/*
+ * Styles for ./ClassSectionStack.tsx
+ * (ports MobileApp/.../layouts/parts/class_section_stack.dart).
+ */
+
+/* `Column(crossAxisAlignment: start, spacing: spacingBig)`. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  min-width: 0;
+}
+
+/*
+ * `EdgeInsets.fromLTRB(screenHorizontalPadding, spacingBig,
+ * screenHorizontalPadding, spacingBig)` — the screen's body inset.
+ */
+.padded {
+  padding: var(--sc-spacing-big) var(--sc-screen-padding-x);
+}
+
+/*
+ * Each entry carries its own leading rule, so the `spacing: spacingBig` gap
+ * falls either side of the divider exactly as the Dart's interleaved child list
+ * does.
+ */
+.item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  min-width: 0;
+}

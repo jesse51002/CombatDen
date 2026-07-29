@@ -1,0 +1,36 @@
+/*
+ * Styles for ./AppOutlineButton.tsx
+ * (ports CRM/lib/shared/widgets/app_outline_button.dart).
+ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--adm-space-small);
+  padding: var(--adm-space-medium) var(--adm-padding-small);
+  border: var(--adm-button-border) solid var(--adm-ink);
+  border-radius: var(--adm-radius-big);
+  background: none;
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: var(--adm-h3-tracking);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.button:hover:not(:disabled) {
+  /* Material's `OutlinedButton` hover overlay, in the light palette's terms. */
+  background: rgba(20, 22, 30, 0.04);
+}
+
+.button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fullWidth {
+  width: 100%;
+}

@@ -1,0 +1,86 @@
+/* Styles for ./Spectrum.tsx — the masthead's full-measure derived-colour band. */
+
+.spectrum {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+}
+
+.bands {
+  display: flex;
+  overflow: hidden;
+  height: 104px;
+  /*
+   * A hairline, not a shadow: a theme whose ground is a pale off-white would
+   * otherwise dissolve into this page's own near-white ground with no edge.
+   * Every specimen surface on this page carries the same rule for that reason.
+   */
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-big);
+}
+
+/*
+ * Hard-edged and gapless. A gap between bands would read as a swatch row —
+ * separate samples — where the point is a single continuous instrument built
+ * out of one theme's computed values.
+ */
+.band {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/*
+ * The one authored moment on the page: the band assembles left to right, once,
+ * on the artifact's arrival. `backwards` fill holds the collapsed state during
+ * the delay only, so a client that never runs the animation still paints every
+ * band — an entrance may not be load-bearing for visibility.
+ */
+.band {
+  transform-origin: bottom;
+  /* `EASE_OUT_QUART` (../../lib/motion/curves.ts) — the app's motion law. */
+  animation: bandRise 520ms cubic-bezier(0.165, 0.84, 0.44, 1) backwards;
+  animation-delay: calc(var(--band-index) * 14ms);
+}
+
+@keyframes bandRise {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+.ticks {
+  display: flex;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Each tick spans its role's own run of bands (flex-grow set inline from the
+ * run length), so the label sits under the colours it names rather than under a
+ * quarter of the bar that happens to be nearby.
+ */
+.tick {
+  min-width: 0;
+  padding-right: var(--adm-space-medium);
+  overflow: hidden;
+  border-top: 1px solid var(--adm-line);
+  padding-top: var(--adm-space-small);
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  color: var(--adm-text-2nd);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .bands {
+    height: 72px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .band {
+    animation: none;
+  }
+}

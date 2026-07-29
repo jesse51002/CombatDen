@@ -1,0 +1,28 @@
+/*
+ * Styles for ./SubtitleSection.tsx
+ * (ports MobileApp/lib/shared/widgets/subtitle_section.dart).
+ *
+ * `--sc-*` only — the member app's token values. See ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: start, spacing: spacingLarge)`. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  min-width: 0;
+}
+
+/* The `spacing: spacingMedium` every class section passes. */
+.spacingMedium {
+  gap: var(--sc-spacing-medium);
+}
+
+/* `Text(title, style: DesignConstants.h2)`. */
+.title {
+  margin: 0;
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text);
+}

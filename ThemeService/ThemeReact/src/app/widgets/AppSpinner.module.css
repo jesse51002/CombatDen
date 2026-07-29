@@ -1,0 +1,88 @@
+/*
+ * Styles for ./AppSpinner.tsx (ports CRM/lib/shared/widgets/app_spinner.dart
+ * + sweep_painter.dart). The keyframes below are the sampled `_SweepPainter`
+ * curves — see the component's header comment for the derivation.
+ *
+ * Sample table (t → head - tail = sweep, (t + tail) = turns):
+ *   t=0     sweep .06   turns 0
+ *   t=.25   sweep .19   turns .25
+ *   t=.5    sweep .61   turns .69
+ *   t=.75   sweep .20   turns 1.55
+ *   t=1     sweep .06   turns 2
+ * The static -90deg puts the arc's start at 12 o'clock, matching the painter's
+ * `startAngle - pi/2` (an SVG circle's path starts at 3 o'clock).
+ */
+
+.spinner {
+  display: block;
+  flex: none;
+  /* `_period` — one calm revolution-plus per cycle. */
+  --sweep-period: 1400ms;
+  --sweep-arc: var(--adm-sapphire);
+  --sweep-arc-deep: var(--adm-accent-dark);
+  --sweep-track: var(--adm-divider);
+}
+
+.onAccent {
+  --sweep-arc: var(--adm-on-accent);
+  --sweep-arc-deep: var(--adm-on-accent);
+  --sweep-track: rgba(255, 255, 255, 0.3);
+}
+
+.track {
+  stroke: var(--sweep-track);
+}
+
+.stopTail {
+  stop-color: var(--sweep-arc);
+  stop-opacity: 0;
+}
+
+.stopBody {
+  stop-color: var(--sweep-arc);
+}
+
+.stopHead {
+  stop-color: var(--sweep-arc-deep);
+}
+
+.arc {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: sweep var(--sweep-period) linear infinite;
+}
+
+@keyframes sweep {
+  0% {
+    transform: rotate(-90deg);
+    stroke-dasharray: 0.06 1;
+  }
+  25% {
+    transform: rotate(0deg);
+    stroke-dasharray: 0.19 1;
+  }
+  50% {
+    transform: rotate(158.4deg);
+    stroke-dasharray: 0.61 1;
+  }
+  75% {
+    transform: rotate(468deg);
+    stroke-dasharray: 0.2 1;
+  }
+  100% {
+    transform: rotate(630deg);
+    stroke-dasharray: 0.06 1;
+  }
+}
+
+/*
+ * `_staticPhase = 0.5` — the peak-breath frame, a full deliberate gradient
+ * arc, with no animation running.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .arc {
+    animation: none;
+    transform: rotate(158.4deg);
+    stroke-dasharray: 0.61 1;
+  }
+}

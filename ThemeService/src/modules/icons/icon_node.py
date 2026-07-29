@@ -20,6 +20,8 @@ copy / generation and their fail-soft handling live in the services.
 
 from __future__ import annotations
 
+import logging
+
 from schema import IconSet
 from schema.output.icon_attribution import IconAttribution
 from schema.output.icon_output import IconOutput
@@ -36,6 +38,9 @@ from src.shared.interfaces.icon_set_catalog import (
 )
 from src.shared.interfaces.image_generator import ImageGenerator
 from src.shared.interfaces.llm_client import LLMClient
+
+
+logger = logging.getLogger(__name__)
 
 
 def _matched(icons: dict[str, IconOutput]) -> dict[str, IconOutput]:
@@ -82,13 +87,9 @@ class IconNode(Node):
         Nothing dirty ⇒ the seed icons are returned, no LLM call."""
         dirty = self.dirty()
         self.regenerated = dirty
-        chosen = await self._reuse_or_select(self.seed)
         if not dirty:
-            icons: dict[str, IconOutput] = dict(self.seed)  # type: ignore[arg-type]
-            return IconSet(
-                icons=icons,
-                attribution=self._attribution(chosen, _matched(icons)),
-            )
+            return await self._seeded_unchanged()
+        chosen = await self._reuse_or_select(self.seed)
         matched, unmatched = await self._matching.match(
             self._run_ctx,
             chosen,
@@ -103,6 +104,40 @@ class IconNode(Node):
         merged = {**self.seed, **self._stamp({**matched, **generated})}
         return IconSet(
             icons=merged, attribution=self._attribution(chosen, _matched(merged))
+        )
+
+    async def _seeded_unchanged(self) -> IconSet:
+        """The nothing-to-do answer: the seed's icons, verbatim.
+
+        This path must not be able to FAIL and must not SPEND, and it used
+        to do both. A failed node is replaced upstream by an empty group, so
+        a no-work node that raises does not merely do nothing — it DELETES
+        every icon the run already had, and the Writer then persists the
+        hole. That is what an empty ``ICON_SETS_DIR`` (a fresh worktree: the
+        catalog is gitignored) did to a fully-seeded reopen, because
+        ``_reuse_or_select`` ran before the not-dirty check and, on a
+        catalog miss, fell through to a *paid* fresh selection.
+
+        So the catalog is consulted here directly and only to recompute the
+        run-wide attribution — a footnote beside the icons themselves. A
+        catalog that cannot answer costs the footnote and nothing else, and
+        fresh selection is never reachable from a node with no work to do.
+        """
+        icons: dict[str, IconOutput] = dict(self.seed)  # type: ignore[arg-type]
+        set_id = next((out.icon_set for out in icons.values()), None)
+        entry = (
+            await self._catalog.lookup(set_id) if set_id is not None else None
+        )
+        if entry is None:
+            logger.warning(
+                "icon set %r is not in the catalog; keeping the %d seeded "
+                "icon(s) and dropping only the attribution",
+                set_id,
+                len(icons),
+            )
+            return IconSet(icons=icons, attribution=None)
+        return IconSet(
+            icons=icons, attribution=self._attribution(entry, _matched(icons))
         )
 
     def _stamp(self, icons: dict[str, IconOutput]) -> dict[str, IconOutput]:

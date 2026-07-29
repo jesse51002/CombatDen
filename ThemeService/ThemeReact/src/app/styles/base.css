@@ -1,0 +1,77 @@
+/*
+ * Page-level base styles for the standalone theme browser.
+ *
+ * The equivalent of the CRM's `MaterialApp` theme wiring: the ground colour,
+ * the Geist body font (its stylesheet is injected by `loadFontFamily` from
+ * theme-react — see ../App.tsx), the CRM's tabular figures, and the handful of
+ * element resets a Flutter app never needs to write down.
+ *
+ * Reads only the variables declared in ./tokens.css.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--adm-ground);
+  color: var(--adm-ink);
+  font-family: var(--adm-font);
+  font-size: var(--adm-p-size);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* The library scrolls the page, so the frosted nav needs a stable gutter. */
+html {
+  scrollbar-gutter: stable;
+}
+
+/*
+ * SCROLL ANCHORING OFF — this is load-bearing, not a nicety.
+ *
+ * The library's title collapses out of the flow as you scroll (see
+ * ../browser/LibraryView.tsx). Chrome's scroll anchoring reacts to that height
+ * change by compensating the scroll offset, which pushes the offset straight
+ * back across the collapse threshold: expanding at the top instantly re-scrolls
+ * to ~60px and re-collapses. That is the exact flicker the Dart widget's
+ * two-threshold hysteresis exists to prevent, reintroduced by a mechanism
+ * Flutter does not have (there, the collapsing chrome sits OUTSIDE the
+ * scrollable, so its size can never move the scroll offset). Turning anchoring
+ * off restores that independence.
+ */
+body {
+  overflow-anchor: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+:focus-visible {
+  outline: 2px solid var(--adm-sapphire);
+  outline-offset: 2px;
+}

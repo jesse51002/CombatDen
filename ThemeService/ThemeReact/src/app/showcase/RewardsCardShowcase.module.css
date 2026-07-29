@@ -1,0 +1,229 @@
+/*
+ * Styles for ./RewardsCardShowcase.tsx
+ * (ports CRM/lib/showcase/rewards_card_showcase.dart).
+ *
+ * `--sc-*` for the design tokens (see ./ShowcaseThemeVars.tsx); `--rw-*` for
+ * this screen's own geometry and motion, written inline by the component from
+ * the ported constants and delay arithmetic.
+ *
+ * THE GIFTBOX INTRO HAS NO MOTION HERE. Its transforms and opacities are
+ * written per frame by the driver in the component, because the box's 3D spin
+ * and fourteen radial stars share one clock (see ./rewardsCelebration.ts). What
+ * the classes below give it is only the box each element sits in.
+ */
+
+/*
+ * The `Padding(vertical: spacingBig) > Center` that wrapped BOTH views belongs
+ * to the ARRANGEMENT and now lives with it, in
+ * ./celebrations/CelebrationFrame.module.css's `centerHero`. `--rw-*` therefore
+ * arrives on each view's own root below rather than on a screen box.
+ */
+
+/* --- The giftbox intro ---------------------------------------------------- */
+
+/* `SizedBox.expand > Stack(alignment: center)`. */
+.stage {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+
+/*
+ * `Opacity > Transform(alignment: center, perspective + rotateY + scale)`.
+ * The driver writes the whole transform; this only centres the box and fixes
+ * its size.
+ */
+.giftbox {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--rw-box-size);
+  height: var(--rw-box-size);
+  will-change: transform, opacity;
+}
+
+/*
+ * One burst star: `Transform.translate > Opacity > Transform.scale`. Its size
+ * is the seed's own, written inline — the burst does NOT scale with the box,
+ * because Dart hands `seed.size` to the `Image` raw.
+ */
+.burstStar {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  will-change: transform, opacity;
+}
+
+/* `Image(fit: BoxFit.contain)`. */
+.giftboxImg,
+.burstStarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+/* --- The carousel layout -------------------------------------------------- */
+
+/*
+ * `Column(mainAxisSize: min, crossAxisAlignment: stretch, spacing: spacingBig)`
+ * inside the `Center`, so it sits vertically centred at its natural height.
+ */
+.carouselLayout {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  width: 100%;
+}
+
+/* `Column(min, spacing: spacingMedium)` — the title pair. */
+.headings {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+}
+
+/* `StaggeredReveal > Text(big2)`. */
+.title {
+  margin: 0;
+  font: var(--sc-type-big2);
+  letter-spacing: var(--sc-type-big2-ls);
+  color: var(--sc-text);
+  text-align: center;
+  animation: rewardsReveal var(--rw-reveal-ms) var(--rw-ease) both;
+}
+
+/* `StaggeredReveal(delay: subtitleDelay) > Text(pBig @ text3rd)`. */
+.subtitle {
+  margin: 0;
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-3rd);
+  text-align: center;
+  animation: rewardsReveal var(--rw-reveal-ms) var(--rw-ease) var(--rw-subtitle-delay-ms) both;
+}
+
+/*
+ * `StaggeredReveal(delay: carouselDelay, offset: 0)` — a pure fade, no slide.
+ * `overflow: visible` matters: the cover flow's circles are wider than one page
+ * slot and that overlap IS the effect.
+ */
+.carouselSlot {
+  overflow: visible;
+  animation: rewardsFade var(--rw-reveal-ms) var(--rw-ease) var(--rw-carousel-delay-ms) both;
+}
+
+/* `AnimatedSwitcher`'s child — `Column(min, spacing: spacingMedium)`. */
+.featured {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * The switch itself. Only present once a page has actually changed, because
+ * `AnimatedSwitcher` adds its FIRST child without animating it in.
+ */
+.featuredSwitch {
+  animation: rewardsFade var(--rw-switch-ms) var(--rw-ease) both;
+}
+
+/* `Text(featured.name, style: h1)`. */
+.featuredName {
+  margin: 0;
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-text);
+  text-align: center;
+}
+
+/* `Text(featured.discountLabel, style: h1Regular @ text3rd)`. */
+.featuredDiscount {
+  margin: 0;
+  font: var(--sc-type-h1-regular);
+  letter-spacing: var(--sc-type-h1-regular-ls);
+  color: var(--sc-text-3rd);
+  text-align: center;
+}
+
+/*
+ * `_PulsePoints > Text('… pts', style: h1 @ primary)`. The pulse re-fires with
+ * the caption's key remount, which is what gives one pulse per advance.
+ */
+.featuredPoints {
+  margin: 0;
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-primary);
+  text-align: center;
+  animation: pointsPulse var(--rw-pulse-ms) both;
+}
+
+/* `StaggeredReveal`: opacity 0 -> 1 with a 12px slide up, ease-out-quart. */
+@keyframes rewardsReveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--rw-reveal-offset));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `StaggeredReveal(offset: 0)`, and `AnimatedSwitcher`'s `FadeTransition`. */
+@keyframes rewardsFade {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * `_PulsePointsState`: `bell = v < 0.5 ? 2v : 2(1 - v)`, then
+ * `scale = 1 + 0.06 * easeOutQuart(bell)`.
+ *
+ * The bell's two halves are the two intervals below. The rise is ease-out-quart
+ * between fixed endpoints, which an interval expresses directly; the fall is
+ * `easeOutQuart(1 - p)`, which is the curve's TIME-MIRROR and NOT the same as
+ * playing it backwards — `--rw-pulse-decay-ease` is that mirror, derived in
+ * ./rewardsCelebration.ts. Together they reproduce the Dart's per-frame value
+ * exactly, with no JS.
+ */
+@keyframes pointsPulse {
+  0% {
+    transform: scale(1);
+    animation-timing-function: var(--rw-ease);
+  }
+
+  50% {
+    transform: scale(var(--rw-pulse-peak));
+    animation-timing-function: var(--rw-pulse-decay-ease);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the carousel renders settled. The
+ * component also skips the giftbox intro entirely and never arms the loop or
+ * advance timers.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .title,
+  .subtitle,
+  .carouselSlot,
+  .featuredSwitch,
+  .featuredPoints {
+    animation: none;
+  }
+}

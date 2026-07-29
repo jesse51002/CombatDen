@@ -1,0 +1,52 @@
+/*
+ * Styles for ./HomeDayPager.tsx
+ * (ports MobileApp/.../layouts/home_day_pager.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* The same content column the four vertical formats use. */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: 64px;
+}
+
+/*
+ * `PageView.builder(controller: _pageController)` — one day per page.
+ *
+ * `overflow-y: hidden` IS LOAD-BEARING, and not as a clip. When one axis is a
+ * scroller and the other is left `visible`, the visible one COMPUTES to `auto`
+ * (see ../../../CLAUDE.md), so omitting it would turn this strip into a second,
+ * nested VERTICAL scroller — a box whose own height is its content's, scrolling
+ * inside the page's scroller. Written explicitly it clips nothing (the box is
+ * exactly as tall as the tallest page) and the day's classes stay on the
+ * scaffold's one vertical axis, which is the whole reason this needs no
+ * `NestedScrollView`.
+ *
+ * The scrollbar is hidden for the reason every showcase scroller hides one: a
+ * desktop track drawn inside a phone mock gives away that this is not a device.
+ */
+.pager {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pager::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * One page. `flex: 0 0 100%` is `PageView`'s viewportFraction of 1 — a page is
+ * exactly the pager's width, so a swipe lands on a day rather than between two.
+ */
+.page {
+  flex: 0 0 100%;
+  min-width: 100%;
+  scroll-snap-align: start;
+}

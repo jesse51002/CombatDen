@@ -1,0 +1,60 @@
+/*
+ * Styles for ./RewardsPosterDeck.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/layouts/rewards_poster_deck.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Expanded(child: SingleChildScrollView(scrollDirection: horizontal,
+ * physics: PageScrollPhysics) > Row(stretch))`.
+ *
+ * `overflow-y: hidden` is written EXPLICITLY rather than left at `visible`: a
+ * `visible` sibling of a scrolling axis COMPUTES to `auto`, so omitting it
+ * would hand the deck a vertical scrollbar it never uses (see ../../../CLAUDE.md).
+ *
+ * The scrollbar is hidden for the same reason the scaffold hides its own — a
+ * desktop track drawn inside a phone mock is the one detail that gives away
+ * that this is not a device — and `overscroll-behavior` keeps a flick at either
+ * end of the deck from chaining out into the surrounding admin page.
+ */
+.deck {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.deck::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * `SizedBox(width: constraints.maxWidth)` — one poster per viewport, and
+ * `scroll-snap-align: start` is `PageScrollPhysics`: a flick settles on a page
+ * boundary rather than wherever momentum ran out.
+ *
+ * The horizontal padding is the PAGE's own gutter (the Dart's own comment), so
+ * two adjacent posters are separated by two gutters and a snapped page still
+ * sits inset from the phone's edge.
+ */
+.page {
+  flex: 0 0 100%;
+  scroll-snap-align: start;
+  display: flex;
+  align-items: stretch;
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/* The poster fills the page; `min-width: 0` keeps a long title from widening it. */
+.page > * {
+  flex: 1 1 auto;
+  min-width: 0;
+}

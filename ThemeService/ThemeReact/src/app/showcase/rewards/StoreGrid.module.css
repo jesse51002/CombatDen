@@ -1,0 +1,33 @@
+/*
+ * Styles for ./StoreGrid.tsx
+ * (ports CRM/lib/showcase/rewards/store_grid.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding) >
+ * Row(crossAxisAlignment: start, spacing: spacingLarge)`.
+ */
+.grid {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sc-spacing-large);
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/*
+ * `Expanded(child: Column(min, stretch, spacing: spacingLarge))`.
+ *
+ * `min-width: 0` is what makes `flex: 1 1 0` behave like Flutter's `Expanded`:
+ * without it a flex item refuses to shrink below its content's intrinsic width,
+ * and a long reward title would push the two columns out of balance.
+ */
+.column {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}

@@ -6,8 +6,10 @@ display_name: CombatDen
 # mirrors ParentGymType in the FastApi backend / the CRM's showcase
 # groups). A run whose category is missing or outside this set is skipped
 # by GET /apps/{id}/styles. The category itself lives per-run in
-# output.yaml (stamped today; a pipeline classification step is the
-# README TODO).
+# output.yaml, produced by the pipeline's classification node — it builds
+# its response schema from this very list, so a value outside it can't be
+# written. `expand` backfills an unclassified run; `regen --slot category`
+# re-files a mis-classified one.
 categories:
   - Fighting
   - Yoga
@@ -312,3 +314,770 @@ icons:
       videos" at ~24px (e.g. a play triangle, a film/clapper, a media tile —
       brand's choice). Functional navigation, never celebratory; must stay
       legible and obvious at small size in both active and inactive states.
+
+# The switchable FORMATS of the member app. Two families, one list:
+# LAYOUT (one slot per major screen, plus the shell that frames every
+# screen) and MOTION (one global personality plus five per-surface
+# overrides). Each slot carries its OWN closed vocabulary — the pipeline
+# picks exactly one value per slot from the brand brief, in one batched
+# call, so the whole app reads as one decision rather than thirteen.
+#
+# THE VALUES ARE THE WIRE. Every value below is a Dart enum value name
+# from `../MobileApp/lib/core/formats/layout_formats.dart` or its sibling
+# `motion_formats.dart`, because that is exactly what the app's `fromWire`
+# parses (case-insensitive, whitespace-trimmed, literal otherwise). A typo
+# here fails nowhere: it silently resolves to what the app ships and reads
+# forever as "the classifier chose the default".
+#
+# A slot the pipeline never resolved is simply absent from the run's
+# `format_set`, and the app renders what it ships today (the first value
+# of each enum, which is also its parse fallback). So an unpicked, stale
+# or failed format is a non-event, never a broken screen.
+#
+# THE INVARIANT BOTH FAMILIES HOLD: a format changes ARRANGEMENT AND
+# TIMING ONLY, never WHAT EXISTS. A layout may move an element and change
+# its prominence; it may not merge or split a screen, add or drop
+# functionality, or reach data the shipped screen did not already have.
+# Motion is a TOKEN, not a layout — it touches timing and entrance only,
+# never which elements exist or where they sit.
+#
+# Each value's description is the only thing the model reads to choose, so
+# each one describes the arrangement and stops there: what dominates it,
+# what is demoted, where things sit relative to each other, and — for the
+# motion slots — what moves, in what direction, and how fast, with real
+# proportions and real timings wherever they matter. Which brand belongs in
+# which arrangement is the classifier's own judgement and is deliberately
+# NOT written here: fit language in the vocabulary gets pattern-matched and
+# obeyed rather than reasoned about, and collapses the spread of picks.
+formats:
+  # ---------------------------------------------------------------------
+  # LAYOUT — one slot per major screen, plus the shell.
+  # ---------------------------------------------------------------------
+  - id: app_shell_format
+    description: >-
+      The chrome that frames every screen: the top bar's brand identity
+      (mark + gym name) and the stats row (rank, streak, points, QR),
+      plus the bottom navigation. Factored out of the per-screen slots
+      because it belongs to none of them and composes with every body —
+      whatever is chosen here is what the member sees on Home, Rank,
+      Rewards and Videos alike, constantly.
+    values:
+      - value: stacked
+        description: >-
+          The mark takes a 100px square at the top of Home with the gym
+          name centred beneath it at 24px bold, and 32px of air separates
+          that block from the stats. Under them the rank, streak, points
+          and QR spread across four equal full-width columns, each value
+          at 12px with room around it. The bar is padded 32px from the top
+          of the screen, 16px at the bottom, and closed by a 1px rule. On
+          every screen other than Home the mark drops out and the name
+          renders at 16px. The bottom navigation is a 64px bar sitting
+          flush against the bottom edge, one labelled icon per tab, with a
+          1px rule along its top.
+      - value: compactRail
+        description: >-
+          Mark, gym name and all four stats share one horizontal row: a
+          28px mark leading, the name beside it at 16px set to ellipsize
+          rather than wrap, and rank, streak, points and QR clustered
+          tight at the trailing edge at 11px with 16px icons. The bar is
+          padded 16px from the top and 8px at the bottom — half the height
+          of the stacked arrangement — so the screen's content starts
+          higher on every tab, and a 1px rule closes it. The stats no
+          longer span the width; they take only the room they need on the
+          right. The bottom navigation is the same flush 64px labelled
+          bar.
+      - value: statFirst
+        description: >-
+          The stats row (rank, streak, points, QR) sits above the brand
+          identity rather than below it, so it is the first thing on every
+          screen: four equal columns running the full width with their
+          values at 12px. Identity drops beneath it to a 20px mark and a
+          12px regular-weight name on one line, 16px under the stats. The
+          frame is the same 32px top padding and 1px closing rule as the
+          stacked arrangement — only the order and the scale of the
+          identity change. The gym's name no longer has a line of its own.
+          The bottom navigation is the flush 64px labelled bar.
+      - value: markOnly
+        description: >-
+          Only the 56px mark is shown, centred, on every screen including
+          Home; the gym name occupies zero width (it stays in the tree as
+          the switch-gym target and for screen readers). The four stats
+          run inline in a centred row 8px beneath it at 11px, taking only
+          the width they need rather than spreading. No rule closes the
+          bar — this is the one arrangement without one. The bottom
+          navigation becomes a 56px floating pill inset 32px from each
+          side edge and lifted 8px off the bottom, fully rounded with a
+          1px border, carrying 24px icons and no visible labels.
+  - id: home_format
+    description: >-
+      The class schedule — the screen the app opens on. It lists the gym's
+      upcoming classes by day; this slot decides how those days and
+      classes are arranged.
+    values:
+      - value: agendaList
+        description: >-
+          A 50px date rail pins to the top of the scroll — 365 day pills
+          with the selected one underlined — and stays there while the
+          header above it scrolls away. Beneath it the days stack
+          vertically, each opening with an uppercase day label and 32px of
+          air. Every class is a full-width row with its title, time,
+          instructor and attendee count on the left and a 122x73
+          thumbnail on the right, closed by a 2px rule. No text is
+          clamped, so a long class name wraps instead of truncating. The
+          whole week is one continuous vertical scroll with the rail as a
+          shortcut into any day.
+      - value: dayPager
+        description: >-
+          The date rail pins and becomes the control: tapping a day
+          animates a horizontal pager to that page over 350ms, and swiping
+          the page moves the rail back. Each of the 365 days is its own
+          page with its own vertical scroll, so exactly one day exists on
+          screen at a time. Classes become wide media cards — a
+          full-width 16:9 image with 16px rounded corners on top, then the
+          title, time, instructor and attendees stacked 16px beneath it,
+          with no dividing rule between one card and the next. The header
+          above the rail scrolls away.
+      - value: timeSpine
+        description: >-
+          The time leaves the class text and becomes a 66px left gutter
+          carrying the start time over the duration, with a 1px vertical
+          rule running the full height of every row beside it, so
+          consecutive classes read as one continuous line down the page.
+          The thumbnail shrinks to a 44x44 square held at the top of its
+          row, and the class text sits between the rule and the thumbnail
+          with its own time removed since the gutter already carries it.
+          No horizontal rule separates rows. Above it, the same pinned
+          50px date rail with underlined day pills over a header that
+          scrolls away.
+      - value: nextUpHero
+        description: >-
+          The upcoming-sessions card loses its 16px side gutters and runs
+          edge to edge as a 290px hero at the top of the page. The date
+          rail below it is a segmented control with the selected day as a
+          filled chip, and it is the one arrangement where the rail does
+          not pin — it scrolls away with everything else. The schedule
+          under it goes dense: each class is a 44x44 square thumbnail
+          leading a tight text block with 4px of vertical padding,
+          separated by 1px hairlines rather than 2px rules. What is
+          booked sits at the top of the screen; the rest of the programme
+          is below it.
+      - value: boardGrid
+        description: >-
+          Each day opens with its uppercase label band and then lays its
+          classes out two across rather than one under the other. Every
+          cell is a raised card on the card surface with 16px rounded
+          corners: a 4:3 image filling the top, then the title, time,
+          instructor and attendees in an 8px-padded block beneath. Cells
+          sit 16px apart in both directions inside a 16px screen gutter,
+          and the two cards of a row share a height. Because two classes
+          sit side by side, a row has no top-to-bottom reading order of
+          its own. The 50px date rail pins above it with underlined day
+          pills.
+  - id: videos_format
+    description: >-
+      The video feed — the technique / level-up library, browsed by tag.
+      This slot decides how the tags and their videos are laid out.
+    values:
+      - value: carouselRows
+        description: >-
+          A horizontal strip of tag pills sits at the top, then one
+          featured video as a 32px-rounded card with a 16:9 image, a 55px
+          creator avatar and a full-width Play button under it. Beneath
+          that each tag becomes a horizontally scrolling row of 258px-wide
+          cards, each with a 145px-tall image, a 35px avatar and a title
+          clamped to one line. Section titles sit left with a view-all
+          link on the same line. Nothing pins — pill strip, hero and every
+          row scroll away together — and the only sideways movement is
+          inside each tag's own row.
+      - value: editorialStack
+        description: >-
+          Nothing scrolls sideways. The featured video loses its rounded
+          corners and bleeds to both screen edges as a full-width 16:9
+          cover. Below it each tag is a vertical section: its title alone
+          on a line, then two full-width 16:9 cards stacked 16px apart
+          with their titles, avatars and view counts underneath, then a
+          full-width view-all row closing the section. Every card spans
+          the screen's width between 16px gutters, so a section is two
+          images, a title line and a closing row. The tag pills stay a
+          plain unpinned strip at the top.
+      - value: mosaic
+        description: >-
+          The tag pills pin at the top inside a 76px band and stay on
+          screen for the whole page. Under them the featured video keeps
+          its 32px-rounded card, and each tag becomes a two-column grid of
+          16:9 tiles spaced 16px in both directions, with the last cell of
+          every grid a view-all tile cut to the same shape as a video.
+          Section titles sit inline with a 1px rule running from the end
+          of the text to the right edge. Card meta shrinks to fit the
+          narrower cell — the creator avatar drops from 35px to 28px.
+      - value: shortsColumn
+        description: >-
+          One column of full-width cards, each a 16:9 image on a
+          16px-rounded card surface with an opaque caption band riding its
+          bottom edge — the avatar, title and view count sit ON the image
+          rather than under it. Each tag's name rides a second opaque band
+          across the TOP of that tag's first card instead of standing
+          above the section, so the page runs as one uninterrupted column
+          of images with no title line breaking it. Remaining cards follow
+          plain, 16px apart. The tag pills stay an unpinned strip at the
+          top and nothing scrolls sideways.
+      - value: tagRail
+        description: >-
+          The tag filter leaves the top of the screen and becomes a
+          112px-wide column down the left, its pills stacked vertically
+          inside a 240px band that pins and holds position while the page
+          scrolls past it. Content runs beside it in the remaining width:
+          the featured card, then each tag as a stacked section of
+          full-width 16:9 cards closed by a view-all row. The content
+          column is narrower than in every other arrangement by the width
+          of the rail and its gutters. Nothing scrolls sideways.
+  - id: rank_format
+    description: >-
+      Rank and progress — the member's current earned tier, their streak,
+      their rating graph and their distance to the next rank. The screen
+      where earned status is displayed back to them.
+    values:
+      - value: sparkleStack
+        description: >-
+          The streak hero opens the screen at full size, then the current
+          rank: a 77x50 belt centred over its name, a 196.5px-tall rating
+          plot inline inside 16px gutters, and a centred row of timeframe
+          pills. A 1px divider, then next rank as a row with its title and
+          distance on the left and a 100px ring-wrapped badge trailing on
+          the right. Another divider, then the level-up video carousel.
+          Everything scrolls together including the topbar; nothing holds
+          a fixed position.
+      - value: beltHero
+        description: >-
+          The current rank becomes a 220px full-width band of belt artwork
+          with a scrim darkening downward into the page and the rank names
+          set at its bottom-left, and the streak statement is laid
+          directly over that band rather than occupying a section of its
+          own. Immediately beneath it, next-rank progress is a 6px bar
+          running edge to edge, then a row pairing a 56px badge with the
+          next rank's name — so where the member is and what is next are
+          one glance apart. The rating plot drops below a divider onto a
+          small raised card at 196.5px, alongside the timeframe pills.
+          Level-up videos close the screen.
+      - value: statTiles
+        description: >-
+          The streak hero opens at full size, then a board of tiles: two
+          176px-tall cards side by side — the current rank with a 60x39
+          belt centred over its name, and the timeframe control as a 2x2
+          pill grid — over a third full-width 176px tile holding next rank
+          as a 64px ring badge with its label centred underneath. Every
+          tile is a rounded card surface with 8px of internal padding,
+          8px apart. Below the board the rating plot runs the full device
+          width at 248px tall with no side gutters — the tallest and only
+          edge-to-edge plot of the five. Level-up videos close the screen.
+      - value: progressFirst
+        description: >-
+          Next-rank progress leads the screen: a 232x232 arc drawn at a
+          10px stroke with a 120px rank badge centred inside it and the
+          next rank's title and distance centred beneath. The streak
+          follows at full size, then the current rank compresses to a
+          left-aligned 77x50 belt beside its name — one row. Below a
+          divider the timeframe control becomes four equal segments
+          sharing a single row and the rating plot sits inline at
+          196.5px, the last thing before the video carousel. The arc is
+          the largest single element on the screen.
+      - value: splitRank
+        description: >-
+          The screen divides into where the member IS and what comes NEXT.
+          The upper block is the current rank — a left-aligned 77x50 belt
+          beside its name — with the streak 16px beneath it. On the seam
+          between the halves sits a collapsible plot: a header row
+          carrying inline timeframe options and a chevron toggle, over a
+          110px strip, the shortest of the three plot heights, which folds
+          away to nothing when collapsed. The lower block is next rank,
+          left-aligned: a 72px badge beside its name, then an 8px
+          full-width rounded progress bar, then the distance label. One
+          divider, then level-up videos.
+  - id: rewards_format
+    description: >-
+      The points store — the catalogue of rewards a member spends earned
+      points on. This slot decides how the rewards and their prices are
+      presented.
+    values:
+      - value: cardGrid
+        description: >-
+          The topbar, tab strip and points headline scroll away with the
+          content into a two-column grid of image-top cards. Each card is
+          a 32px-rounded surface: a 3:2 photograph on top with the price
+          tag chipped into its top-right corner, then a 16px-padded block
+          holding a two-line title on a reserved 42px slot, the points
+          cost, and a full-width redeem button. The two columns are
+          independent, so a card's height is not forced to match its
+          neighbour's. 16px screen gutters, 16px between cards in both
+          directions.
+      - value: listRows
+        description: >-
+          Every reward takes a full-width row on the page background
+          rather than a card: a 76x76 square thumbnail leading, the title
+          on one line with the price chip and points cost inline beside
+          the cost, and the redeem button at the trailing edge. Rows carry
+          16px of vertical padding and are separated by 1px hairlines,
+          with no rounded surface, no reserved two-line title slot, and no
+          price tag on the image. The title gets the whole width between
+          thumbnail and button. Topbar, underlined tabs and points
+          headline scroll away above it.
+      - value: posterDeck
+        description: >-
+          The topbar, segmented tabs and points headline do not scroll —
+          they hold the top of the screen while everything below them is
+          one horizontally snapping deck. Each reward is a
+          full-screen-width page inside a 16px gutter: a 32px-rounded card
+          whose image stretches to fill all the height the deck has left,
+          then a two-line title, the points cost set at heading size in
+          the brand colour, and a full-width redeem button carried on the
+          card itself. One reward is on screen at a time and the deck
+          snaps page to page; the page never scrolls vertically.
+      - value: priceLadder
+        description: >-
+          The points headline pins above the content so the balance stays
+          on screen while the rewards scroll under it. Rewards sort
+          cheapest first and fall into three labelled bands measured
+          against that balance — READY TO REDEEM for anything already
+          affordable, ALMOST THERE up to twice the balance, KEEP EARNING
+          beyond it — and a band with nothing in it is omitted entirely.
+          Band labels are small wide-tracked capitals, the affordable one
+          in the accent colour. Under each label sit three tiles per row:
+          a square image with its price chip, a one-line 12px title, an
+          11px cost and a compact redeem button, 8px apart, with 32px
+          between bands.
+      - value: storefrontHero
+        description: >-
+          The first reward in the catalogue is promoted to a 16:9
+          full-bleed panel above everything else — no rounded card
+          surface, just the photograph with a scrim rising from its bottom
+          edge carrying the title at 24px, the points cost, and a
+          full-width redeem button. The points headline drops below it,
+          and the remaining rewards fall into the same two-column grid of
+          3:2 image-top cards used elsewhere. The promoted reward is taken
+          OUT of the grid rather than repeated, so every reward appears
+          exactly once. The tabs above the hero are segmented rather than
+          underlined.
+  - id: class_format
+    description: >-
+      Class detail and booking — the screen a member lands on from the
+      schedule, holding the class image, its meta (time, instructor,
+      location) and the action that commits them to attend.
+    values:
+      - value: bannerStack
+        description: >-
+          A 248px full-width photograph sits under the topbar, then the
+          class meta and three divided sections — details, instructor,
+          location — run down one scroll 32px apart with a 1px rule
+          between each. All four blocks are present in that one scroll;
+          nothing sits behind a tap. The reserve button lives outside the
+          scroll entirely, pinned to the bottom of the screen inside 32px
+          of padding with a divider above it, so it holds position however
+          far down the page the member is.
+      - value: overlayHero
+        description: >-
+          The photograph becomes a 4:5 portrait hero carrying both the
+          topbar and the class meta on it: a 180px fade at the top holds
+          the topbar over the image, and a second fade rising from the
+          bottom holds the title, time and location against it. Beneath
+          the hero the instructor section comes first, before the
+          description, with location last — three divided sections instead
+          of four. The reserve button is pinned at the bottom of the
+          screen inside 32px of padding, exactly as in the banner
+          arrangement.
+      - value: detailSheet
+        description: >-
+          The photograph is a fixed backdrop filling the whole screen with
+          the topbar over a 180px fade at its top, and the content rises
+          over it as a sheet with 32px top corners and a 44x4 grab handle.
+          The sheet rests with its top at 44% of the screen's height and
+          drags up to 10%, snapping over 220ms. The reserve button sits at
+          the TOP of the sheet, directly under the handle and above the
+          divider, rather than at the bottom of the screen or the end of
+          the content; the sections scroll beneath it. The backdrop never
+          moves — only the sheet does.
+      - value: sectionTabs
+        description: >-
+          The banner shrinks to 160px, and it, the class meta and the tab
+          bar all hold their place — none of them scroll. Under them three
+          equal tabs (Details, Instructor, Location) share one swipeable
+          pane with a 2px underline marking the active one, so one section
+          is on screen and the other two are behind a tap or a swipe.
+          Only the active pane scrolls. The instructor tab centres a 132px
+          headshot above the bio; the location tab runs a full-width map.
+          The reserve button is pinned below the pane inside 32px of
+          padding.
+      - value: specBrief
+        description: >-
+          There is no banner. The photograph becomes a 96x96 rounded
+          thumbnail sitting inline beside the class title, and the
+          specifics become a table: a fixed 96px label column against its
+          values for location, date, time and attendance, 4px between
+          rows. The instructor compresses to a 56px avatar beside its bio
+          and the location to a 116px-wide map beside the address. The
+          reserve button is not pinned — it sits at the end of the content
+          with 16px above and below, reached by scrolling. Nothing on this
+          screen holds a fixed position.
+  - id: celebration_format
+    description: >-
+      The post-class celebration cards — the five-card payoff a member
+      walks through after finishing a session (streak, wins, points,
+      rewards, rank). One slot for all five: the body content differs per
+      card, the arrangement around it does not.
+    values:
+      - value: centerHero
+        description: >-
+          The header sits on top, the card's body is centred in the space
+          left over, and the full-width action holds the bottom — three
+          rows with 32px between them and 32px above and below. The whole
+          column is inset 16px from both side edges and nothing bleeds
+          past them. The close is a bare 32px glyph floating in the
+          screen's top-right corner, 16px from each edge. The body sits at
+          the exact vertical centre of the space between header and
+          action, with equal air above and below it.
+      - value: figureTop
+        description: >-
+          The frame opens tighter — 16px of top padding and 16px between
+          rows instead of 32 — and the body settles against the TOP of its
+          space rather than the centre, so the earned figure sits high on
+          the screen and the leftover room falls below it. The action
+          keeps the same full-width resting place at the bottom of the
+          column. The close sits in the screen's top-right corner on a
+          round filled chip rather than as a bare glyph. Side edges stay
+          inset 16px, as in the centred arrangement.
+      - value: cardReveal
+        description: >-
+          The whole celebration rides one raised surface: a 32px-cornered
+          card filled in the card colour, inset only 8px from each side
+          edge — wider than the header and the action above and below it,
+          which keep the standard 16px inset. The body is centred inside
+          the card with 8px of horizontal and 16px of vertical padding,
+          and the surface is drawn rather than clipped, so an illustration
+          can break past its rounded corners. The close moves off the
+          screen and into the card's own top-right corner. The action sits
+          alone on bare canvas beneath the card, not on it.
+      - value: splitBand
+        description: >-
+          The celebration is contained in a band that runs flush to the
+          top edge and both side edges, rounded 32px on its bottom two
+          corners only and filled in the card colour. The header and body
+          sit inside it with 16px of padding all round, the body centred.
+          The action is outside the band entirely, alone on the page
+          background 32px below it and inset 16px from the sides. The
+          close sits in the band's own top-right corner, which is also the
+          screen's. The band gives the figure its own surface with a
+          visible seam where it ends and the canvas begins.
+      - value: fullBleed
+        description: >-
+          No frame: the stage runs from the very top edge of the screen
+          down to a 112px zone reserved for the action, inset only 16px at
+          the sides, so the illustration gets the whole canvas instead of
+          a row in a column. The chrome floats over it — a 144px scrim
+          fading up from the bottom edge carries the action, the header
+          sits at top-left with its right edge pulled in to 64px to clear
+          the close, and the close is a plated chip at top-right. It is
+          the one arrangement where header, close and action are
+          positioned over the artwork rather than reserving space beside
+          it.
+
+  # ---------------------------------------------------------------------
+  # MOTION — one global personality plus five per-surface overrides.
+  #
+  # Wired in the app and consumed by the celebration stack, the loaders,
+  # the page-transition theme and the count-up figures. Motion is a TOKEN,
+  # not a layout: every value here touches TIMING AND ENTRANCE ONLY, never
+  # which elements exist or where they sit, so no motion value can break
+  # any arrangement chosen above.
+  #
+  # The app's motion law is ease-out only — no bounce, no elastic, no
+  # overshoot past a settled size — so energy comes from stagger density
+  # and never from a spring. A value may be quiet; it may not be absent,
+  # and it may not be too fast to be seen.
+  # ---------------------------------------------------------------------
+  - id: motion_personality
+    description: >-
+      The global motion intensity dial: one personality resolves the WHOLE
+      timing set — element duration and curve, the stagger between
+      consecutive reveals and between badge cascades, count-up length, the
+      sparkle window, and the decorative particle count — and every
+      surface inherits from it unless one of the slots below overrides it.
+      NOTE: nothing reads this slot yet. The five motion slots below are
+      each consumed by real screens; this one is declared so the value is
+      waiting when the global dial is wired, and picking it changes
+      nothing in the app today.
+    values:
+      - value: standard
+        description: >-
+          260ms elements on ease-out-quart, 90ms between consecutive
+          reveals and 70ms between badges in a cascade, a 1.4-second
+          count-up, a 620ms sparkle window and twelve decorative
+          particles. It has the longest unclamped element duration of the
+          four and the second-widest stagger. Every figure sits mid-range
+          against the other three: no timing here is the fastest or the
+          slowest value in its own row, and the curve is neither the
+          shallowest nor the steepest.
+      - value: calm
+        description: >-
+          220ms elements on ease-out-sine — SHORTER than standard's 260ms,
+          not longer — with only 40ms between consecutive reveals and 32ms
+          between badges, the tightest stagger of the four, so a stack
+          arrives almost as one rather than cascading down. The count-up
+          runs 900ms, the shortest here, and the sparkle window 520ms. NO
+          decorative particles are drawn at all: the particle count is
+          zero, the only value where the sparkle surfaces render nothing.
+          The curve is the shallowest of the four, so elements coast into
+          place rather than snapping.
+      - value: hype
+        description: >-
+          200ms elements on ease-out-expo — the shortest duration and the
+          steepest curve of the four — with a 55ms stagger between reveals
+          and twenty decorative particles, the largest particle count
+          here. The count-up runs 1.1 seconds. Elements arrive close on
+          each other's heels and decelerate hard at the end; nothing
+          bounces or overshoots its settled size, because the density of
+          arrivals is where the energy comes from rather than a spring.
+      - value: cinematic
+        description: >-
+          Authored at 420ms and clamped to the app's 300ms element
+          ceiling, on the deepest curve of the four (ease-out-quint), with
+          a 140ms stagger between reveals — three and a half times calm's,
+          and the widest here — so elements arrive one at a time rather
+          than together. The count-up runs a full two seconds and the
+          sparkle window 900ms, both the longest of the four. Eight
+          decorative particles are drawn, fewer than standard's twelve or
+          hype's twenty.
+  - id: celebration_intro
+    description: >-
+      The one-shot that plays before a post-class card settles — the
+      streak, rank, points, rewards and wins cards all run it. The card
+      supplies its hero mark, its particle mark and its settled content;
+      this slot supplies the timing and the entrance and nothing else, so
+      whichever value is active the same settled content arrives. Every
+      value plays something: a celebration card always animates, so "no
+      intro" is not offerable.
+    values:
+      - value: orbit
+        description: >-
+          Eight marks expand out from the centre as a ring over 600ms and
+          collapse back to nothing over 500ms, spinning the whole time —
+          1.6 full turns across the run. Only once the ring is gone does
+          the hero mark pop up into the space it left, over 400ms; it
+          holds facing the member for 800ms, then shrinks to 70% and
+          leaves over 250ms. Nothing overlaps: build, reveal, hold, settle,
+          in that order, 3050ms end to end — the longest of the four. The
+          ring is built from the brand's own point token.
+      - value: burst
+        description: >-
+          Twelve marks fade in and draw INWARD around the hero over 700ms,
+          tightening from about a third of the stage radius to a tenth,
+          then fire outward to the full radius in a single 620ms throw and
+          fade where they land. Nothing rotates and nothing makes a return
+          trip — one run-up, one release. The hero arrives during the
+          gather rather than after it, holds 500ms, and leaves in 260ms.
+          The marks sit at uneven radii rather than evenly spaced on a
+          circle, so the scatter is irregular. 2380ms end to end.
+      - value: rise
+        description: >-
+          The hero climbs from half a stage below into place over 1200ms,
+          decelerating the whole way, with a vertical motion blur behind
+          it that starts as a 16px smear and sharpens to nothing as it
+          lands. Its opacity takes 520ms to fill, so it is still
+          travelling when it becomes solid. No particles are drawn at all.
+          It holds 700ms and leaves in 260ms, 2460ms end to end. One
+          element moves, in one direction, and nothing else on the stage
+          does anything.
+      - value: flipCount
+        description: >-
+          The hero turns in on its vertical axis from edge-on to facing
+          the member — a quarter turn over 1200ms under a slight
+          perspective, so the near edge widens as it comes round — then
+          holds facing forward for 700ms and leaves over 300ms. Nothing
+          else moves: no particles, no travel, no ring. Its opacity takes
+          520ms to fill and is complete long before the turn is. 2500ms
+          end to end, and only when it finishes does the settled card
+          appear and its figure begin counting.
+  - id: reveal_style
+    description: >-
+      The per-element entrance used across the celebration stack: how each
+      stat, tile, caption and figure arrives once its card has settled.
+      Every value is a genuine entrance — an element that never animates
+      in is not a treatment a brand gets to pick — and every value runs
+      long enough to be read, since an entrance under about a quarter of a
+      second stops being a transition and becomes a cut.
+    values:
+      - value: fadeUp
+        description: >-
+          Opacity comes up from zero on ease-out-quart while the element
+          travels its last 12px upward into place, over 260ms, with no
+          held beat in front of it. Nothing scales and nothing moves
+          sideways. The travel is short against the length of the fade, so
+          the element is near its final position for most of the run and
+          what changes late is brightness rather than location. It is the
+          only value that combines a fade with a translate.
+      - value: scalePop
+        description: >-
+          Every element fades in from half its size and grows to exactly
+          its settled size over 260ms on ease-out-quart — the growth IS
+          the entrance, and nothing translates, so the element expands in
+          place around its own centre rather than arriving from a
+          direction. It never passes its final size, so there is no
+          overshoot to settle back from. Same duration and same curve as
+          fadeUp; what differs is that the element's size changes and its
+          position does not.
+      - value: slideIn
+        description: >-
+          After a 60ms held beat the element travels 28px in from the
+          leading edge over 280ms. Its opacity is full by 35% of the run —
+          about 98ms in — and holds there for the remaining two thirds, so
+          what the eye follows is the travel rather than a fade. It is the
+          longest travel distance of the four and the only value that
+          moves horizontally. Leading resolves against the reading
+          direction, so an RTL locale gets the mirror image for free.
+      - value: maskWipe
+        description: >-
+          Nothing is transformed at all — no scale, no translate, no
+          opacity ramp. The element is uncovered by a clip sweeping along
+          its own long axis (left to right for anything wider than it is
+          tall, top to bottom otherwise) over 300ms, the app's full
+          element ceiling, after the longest held beat of the four at
+          90ms. Because nothing moves, text renders at exactly its final
+          size and position for every frame it is visible and stays
+          pin-sharp. The sweep runs on ease-out-sine where the other three
+          use quart.
+  - id: loader_style
+    description: >-
+      The waiting state — what a member looks at while something is being
+      fetched. Every value fills the same 104x52 box whatever its shape,
+      and every value loops until the fetch resolves.
+    values:
+      - value: dots
+        description: >-
+          Three 24px brand-coloured dots sit evenly across the box, each
+          lifting on a half-sine a third of a cycle behind the last, so
+          the lift travels across the row and back over a 1100ms loop.
+          Each dot rests flat on the baseline for half of its
+          own phase, so at any moment at least one dot is down. Peak lift
+          is 28px, slightly more than a dot's own height. Nothing scales
+          and nothing fades — vertical position is the only channel that
+          moves.
+      - value: pulseRing
+        description: >-
+          Two rings expand from 18% of the full radius out to the edge of
+          the box on ease-out-quart, half a cycle apart on a 1300ms loop,
+          so a ring is always on screen including at the moment of mount.
+          Each fades up over its first 156ms and then decays steadily as
+          it grows, reaching zero exactly as it arrives at full size, and
+          neither ring ever passes that settled radius. The centre of the
+          box stays empty — all the motion happens at the expanding edge.
+      - value: barSweep
+        description: >-
+          A bar 38% of the track's length sweeps to the far end and back
+          over 1200ms on a half-cosine, arriving at each end with zero
+          velocity and reversing without a cut, so the loop closes on
+          itself instead of jumping back to the start. The bar's length is
+          fixed for the whole cycle — it never grows or shrinks, only
+          travels. A static track sits behind it at 16% of the box's
+          height, visible for the whole wait.
+      - value: logoBreathe
+        description: >-
+          The gym's own mark scales between 94% and 100% of its settled
+          size on a 2400ms half-cosine, pausing imperceptibly at each end
+          of the breath. It never grows past its true size, so the mark is
+          never distorted or cropped. At 2400ms its cycle is twice the
+          length of the next slowest value here. It is the only waiting
+          state drawn from the tenant's own identity rather than an
+          abstract shape, so what a member watches while waiting is the
+          logo itself.
+  - id: transition_style
+    description: >-
+      Screen-to-screen motion: how an arriving route animates in and how
+      the one it covers behaves. It lives in the app's page-transition
+      theme, so it can only change how a route animates — it never sees
+      which route was pushed and never touches the back stack.
+    # DELIBERATE OMISSION: the app's `TransitionStyle` enum carries a
+    # FIFTH value, `none` (an instant cut), which is NOT offered here and
+    # must not be added. It stays in the enum so it can still be set by
+    # hand, but no tenant should ever be automatically assigned "no
+    # animation between screens" — that is an explicit product call, not
+    # an oversight. Do not "fix" this list by syncing it back to the enum.
+    values:
+      - value: platformDefault
+        description: >-
+          Whatever the platform's own page transition already is, read
+          live from the framework rather than copied — and on a platform
+          the framework has no entry for, its zoom transition. The app
+          moves between screens the same way the rest of the phone does,
+          and if the OS changes what that means, this follows. It is the
+          only value with no authored duration, distance or curve of its
+          own.
+      - value: fade
+        description: >-
+          A cross-dissolve with no travel at all: the arriving screen
+          fades up from zero over 300ms on ease-out while the screen it
+          replaces stays fully painted underneath — unmoved, unscaled and
+          undimmed — for the whole transition. Only one of the two screens
+          animates. Nothing slides or recedes, so the move has no
+          direction to it.
+      - value: sharedAxis
+        description: >-
+          A paired slide plus fade over 320ms: the arriving screen travels
+          in a quarter of the screen's width from the leading edge while
+          the one it replaces travels a further quarter-width in the SAME
+          direction and fades out completely. Both screens move, both on
+          ease-out-cubic, and both change opacity. Because they travel
+          together rather than one sliding over a stationary other, the
+          pair moves along a single axis.
+      - value: cardStack
+        description: >-
+          The arriving screen rises 18% of the screen's height from below
+          over 360ms, reaching full opacity by 126ms — well before it
+          lands. The screen it covers scales down to 94% and stays there,
+          undimmed and untinted, so it remains legible as itself behind
+          the arriving one rather than becoming a grey plate. At 360ms it
+          is the longest of the authored transitions, and the only one
+          where the covered screen changes size.
+  - id: count_up_style
+    description: >-
+      How an earned figure arrives — the points total, the streak count,
+      the session tallies on the post-class cards. It changes how the
+      number reaches its value and nothing else: the same figure, in the
+      same box, is what is left at rest under every value.
+    values:
+      - value: odometer
+        description: >-
+          A slot-counter reel: one vertical strip per digit position, each
+          listing every integer that digit will pass through, clipped to a
+          one-digit window. It starts moving the instant it mounts — no
+          opening hold — and runs 1400ms on ease-out-expo, so the spin is
+          fast at the front and the final digits take most of the run to
+          land. The ones column travels furthest and settles last while
+          the leading digits stop early. It is the only value where the
+          digits themselves travel rather than being swapped in place.
+      - value: ticker
+        description: >-
+          No per-digit motion at all: after a 224ms hold on its opening
+          value, the whole number re-renders through its intermediate
+          values on ease-out-quad for the rest of the 1400ms. Each digit
+          position is a single glyph that changes, not a strip that
+          travels, so every intermediate figure is rendered sharp rather
+          than blurred through. The curve is the gentlest of the counting
+          values, so the number climbs at a fairly even rate before easing
+          into its last few.
+      - value: sweepArc
+        description: >-
+          An arc sweeps left to right in a shallow bowl behind the number
+          — its depth about a tenth of the figure's height — while the
+          figure holds on its opening value for the first 280ms. The arc
+          completes its sweep at 770ms, roughly halfway through the 1400ms
+          run, then fades out from 1050ms so it has cleared before the
+          number lands. The figure rolls up on ease-out-quad after its
+          hold, re-rendering whole rather than reeling per digit. The two
+          settle together and the arc leaves nothing behind it.
+      - value: instant
+        description: >-
+          The figure is at its final value on the first frame: no roll, no
+          opening hold, no run-up, and no arc behind it. The entrance is
+          not removed — the number still arrives with everything around
+          it, because that entrance belongs to the reveal slot rather than
+          to this one; only the counting is gone. It is the one value
+          exempt from the timing floors the other three clear, because
+          there is no count that could be too fast to read.

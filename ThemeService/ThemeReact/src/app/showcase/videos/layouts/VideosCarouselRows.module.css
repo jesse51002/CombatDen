@@ -1,0 +1,18 @@
+/*
+ * Styles for ./VideosCarouselRows.tsx (ports MobileApp/lib/features/videos/
+ * presentation/layouts/videos_carousel_rows.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingBig)`. */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+}
+
+/* `Padding(horizontal: screenHorizontalPadding)` around the hero. */
+.heroInset {
+  padding-inline: var(--sc-screen-padding-x);
+}

@@ -1,0 +1,26 @@
+/*
+ * Styles for ./ShowcasePrimaryButton.tsx
+ * (ports CRM/lib/showcase/support/showcase_primary_button.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* `Row(mainAxisSize: min, spacing: spacingSmall)` around an optional icon. */
+  gap: var(--sc-spacing-small);
+  /* `padding: symmetric(horizontal: paddingSmall, vertical: spacingMedium)`. */
+  padding: var(--sc-spacing-medium) var(--sc-padding-small);
+  border: none;
+  border-radius: var(--sc-radius-small);
+  background: var(--sc-primary);
+  /* The theme's own `regular_text` derivation of `primary`. */
+  color: var(--sc-primary-button-text);
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  /* `elevation: 0`. */
+  box-shadow: none;
+  cursor: pointer;
+}

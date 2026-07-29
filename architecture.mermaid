@@ -4,11 +4,11 @@ flowchart TB
   CRM["🖥️ <b>CRM</b> — gym admin web (full CRM)<br/>login · Supabase auth<br/>api_client (dio + auth interceptor) · BLoC repositories → FastApiBackend<br/>members list · member detail (billing) · gym setup (Stripe Connect)<br/>members video tab (FastApiBackend videos domain)<br/>live theme preview + showcase (ThemeService — read-only)<br/>theme-browser target · schedule board · shared widgets / deploy<br/>kiosk mode: front-desk iPad check-in lane + self-serve solo/group signup"]
   LandingPage["🌐 <b>LandingPage</b> — React-via-CDN site<br/>hero carousel · feed demo · loyalty loop<br/>pricing table · hifi/ copy + ds · S3 deploy"]
 
-  %% ---------- THEME SERVICE: creation vs api (separate) ----------
+  %% ---------- THEME SERVICE: creation vs api vs studio (separate) ----------
   subgraph TS_create["🎨 ThemeService · CREATION (generator)"]
     direction TB
     TSc_brief["brand-brief skill →<br/>customization.yaml"]
-    TSc_orch["CLI / orchestrator<br/>(async DAG)"]
+    TSc_orch["CLI / orchestrator<br/>(async DAG · optional progress sink)"]
     TSc_mods["modules<br/>color · font · image<br/>icon · text · lottie"]
     TSc_writer["writer → output.yaml"]
     TSc_up["asset uploader"]
@@ -21,8 +21,17 @@ flowchart TB
   subgraph TS_api["🎨 ThemeService · READ API"]
     direction TB
     TSa_api["read API<br/>/apps/{id}/styles"]
-    TSa_pkg["ThemeFlutter pkg<br/>(client SDK)"]
+    TSa_pkg["ThemeFlutter pkg<br/>(Dart client SDK)"]
+    TSa_react["ThemeReact pkg + browser<br/>browse · artifact inspector · studio client<br/>(web client SDK · theme-react)"]
     TSa_pkg -. "reads" .-> TSa_api
+    TSa_react -. "reads" .-> TSa_api
+  end
+  subgraph TS_studio["🎨 ThemeService · STUDIO (local launch, 127.0.0.1:8002)"]
+    direction TB
+    TSs_routers["routers<br/>runs (launch · SSE stream · poll · image bytes)<br/>briefs (commit)"]
+    TSs_svc["services<br/>RunLauncher · RunRegistry (ProgressSink · single-run gate)<br/>RunReader · BriefService"]
+    TSs_state["state<br/>.studio/runs/*.jsonl (append-only)<br/>.studio/briefs/*.yaml"]
+    TSs_routers --> TSs_svc --> TSs_state
   end
 
   %% ---------- VIDEO SERVICE: creation vs api (separate) ----------
@@ -71,6 +80,8 @@ flowchart TB
   LandingPage -.->|"build-time screenshots"| MobileApp
   LandingPage -.->|"build-time feed thumbnails (baked)"| VS_create
   TS_create -.->|"output.yaml"| TS_api
+  TS_studio -->|"launches Pipeline.run(sink) → Writer.write(); reads final_images/ mid-run (in-process)"| TS_create
+  TS_api -->|"ThemeReact studio client (local dev only): POST /briefs, /runs + SSE /runs/{id}/events + image bytes"| TS_studio
   VS_create -.->|"design_id + celebration img"| TS_create
   TS_create --> GoogleFonts
   TS_create --> Recraft
@@ -95,6 +106,7 @@ flowchart TB
   class Stripe,LiteLLM,Gemini,Apify,YouTube,GoogleFonts,Recraft,CDN,LLMProvider ext;
   style TS_create fill:#dff0e6,stroke:#2f8f53;
   style TS_api fill:#eafff2,stroke:#2f8f53;
+  style TS_studio fill:#dff0e6,stroke:#2f8f53;
   style VS_create fill:#dff0e6,stroke:#2f8f53;
   style TS_scripts fill:#fdf6d8,stroke:#caab2f;
   style FastApiBackend fill:#e6f7ec,stroke:#2f8f53,stroke-dasharray:4 3;

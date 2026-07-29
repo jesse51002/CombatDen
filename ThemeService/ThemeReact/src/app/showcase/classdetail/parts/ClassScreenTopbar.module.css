@@ -1,0 +1,43 @@
+/*
+ * Styles for ./ClassScreenTopbar.tsx
+ * (ports MobileApp/.../layouts/parts/class_screen_topbar.dart).
+ */
+
+/*
+ * The leading control beside the shared bar — `AppTopbar`'s own shape. A ROW
+ * rather than a positioning context on purpose: `ShowcaseTopbar` resolves four
+ * `app_shell_format` arrangements of differing height and alignment, so an
+ * absolutely-placed chevron would be misaligned in three of them and would sit
+ * on the gym name in the ones that left-align it. See the .tsx header.
+ */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+}
+
+/* `TopbarBackButton` — centred against whatever height the bar resolves to. */
+.back {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* `EdgeInsets.all(spacingMedium)`, vertical dropped: the row centres it. */
+  padding-inline: var(--sc-spacing-medium);
+  border: none;
+  background: none;
+  color: var(--sc-text);
+  cursor: pointer;
+}
+
+/* `size: iconSize2xl` (36). */
+.backIcon {
+  width: var(--sc-icon-2xl);
+  height: var(--sc-icon-2xl);
+}
+
+/* The bar takes the rest of the row. */
+.bar {
+  flex: 1 1 auto;
+  min-width: 0;
+}

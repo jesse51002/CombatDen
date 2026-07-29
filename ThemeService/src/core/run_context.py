@@ -20,9 +20,11 @@ from src.core.util import load_yaml
 logger = logging.getLogger(__name__)
 
 RUN_ID_FORMAT = "%Y%m%dT%H%M%SZ"
-# The output root every run dir lives under (``<root>/<app_id>/<run_id>``).
-# A safety rail for the destructive full-run overwrite: the pipeline refuses
-# to clear a run dir that does not sit under a directory of this name.
+# Conventional name of the output root every run dir lives under
+# (``<root>/<app_id>/<run_id>``). A naming convention and the CLI's default
+# root — NOT a safety rail: the destructive full-run overwrite validates the
+# run dir against ``RunContext.out_root`` (path identity), never against this
+# name. See ``Pipeline._overwrite_existing``.
 OUTPUT_ROOT_DIRNAME = "apps"
 # Dev/intermediate artifacts (raw generations, cutouts) live here…
 IMAGES_DIRNAME = "images"
@@ -47,6 +49,7 @@ class RunContext:
     cust: Customization
     app_id: str
     run_id: str
+    out_root: Path
     run_dir: Path
     image_dir: Path
     final_image_dir: Path
@@ -70,6 +73,13 @@ class RunContext:
         are then harmless no-ops) — this is how ``expand`` reopens a saved
         run to seed its done nodes and generate only what's missing.
 
+        ``out_root`` is kept as its own attribute because it is the identity
+        the destructive full-run overwrite validates against: the output root
+        *this process was configured with*. Nothing else can be trusted for
+        that — ``run_dir`` is a symlink in every git worktree, so its resolved
+        location is somewhere else entirely (see
+        ``Pipeline._overwrite_existing``).
+
         ``overwrite_specs`` is the run's single steering object (the
         reopen-time ``--spec`` plus any per-module knobs). It lives here so
         nothing has to hand-thread it through the executor → registry → node
@@ -81,6 +91,7 @@ class RunContext:
         self.cust = cust
         self.overwrite_specs = overwrite_specs or OverwriteSpecs()
         self.app_id = app.id
+        self.out_root = out_root
         self.run_id = (
             run_id
             if run_id is not None

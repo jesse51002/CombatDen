@@ -1,0 +1,32 @@
+/*
+ * Styles for ./AppPrimaryButton.tsx
+ * (ports CRM/lib/shared/widgets/app_primary_button.dart).
+ */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--adm-space-small);
+  padding: var(--adm-space-medium) var(--adm-padding-small);
+  border: none;
+  border-radius: var(--adm-radius-big);
+  background: var(--adm-primary-gradient);
+  box-shadow: var(--adm-button-shadow);
+  color: var(--adm-on-accent);
+  font-family: var(--adm-font);
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: var(--adm-h3-tracking);
+  cursor: pointer;
+}
+
+.button:disabled {
+  /* `Opacity(opacity: enabled ? 1.0 : 0.5)` on the Dart widget. */
+  opacity: 0.5;
+  cursor: default;
+}
+
+.fullWidth {
+  width: 100%;
+}

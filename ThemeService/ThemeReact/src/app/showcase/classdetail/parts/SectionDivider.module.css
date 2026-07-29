@@ -1,0 +1,12 @@
+/*
+ * Styles for ./SectionDivider.tsx
+ * (ports MobileApp/lib/shared/widgets/dividers/section_divider.dart).
+ */
+
+/* `Container(height: dividerThickness, color: text3rd)`. */
+.divider {
+  flex: 0 0 auto;
+  width: 100%;
+  height: var(--sc-divider-thickness);
+  background: var(--sc-text-3rd);
+}

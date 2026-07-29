@@ -1,0 +1,67 @@
+/*
+ * Styles for ./ClassSheetSurface.tsx
+ * (ports MobileApp/.../layouts/parts/class_sheet_surface.dart).
+ */
+
+/*
+ * `ClipRRect(vertical top: radiusBig) > ColoredBox(background) > Column`.
+ * `min-height: 0` lets the scrolling body shrink inside the sheet.
+ */
+.sheet {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: var(--sc-radius-big) var(--sc-radius-big) 0 0;
+  background: var(--sc-background);
+}
+
+/*
+ * The drag target — `HitTestBehavior.opaque` around the handle, with
+ * `EdgeInsets.symmetric(vertical: spacingMedium)`. `touch-action: none` is what
+ * stops the browser claiming the vertical gesture for a scroll before the
+ * pointer handler sees it, which is the web's equivalent of Flutter's gesture
+ * arena resolving in the detector's favour.
+ */
+.handleTarget {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--sc-spacing-medium) 0;
+  cursor: grab;
+  touch-action: none;
+}
+
+/* `Container(44 x 4, color: divider, radiusCircle)`. */
+.handle {
+  width: 44px;
+  height: 4px;
+  border-radius: var(--sc-radius-circle);
+  background: var(--sc-divider);
+}
+
+/*
+ * `Expanded(child: SingleChildScrollView(...))`.
+ *
+ * `overflow-x: hidden` is spelled out rather than left at `visible`: a
+ * `visible` sibling of a scrolling axis computes to `auto`, which would hand
+ * the sheet a horizontal scrollbar it never uses (../../../CLAUDE.md). The
+ * scrollbar is hidden for the same reason the scaffold hides its own — a
+ * desktop track down the inside of a phone mock gives away the mock.
+ */
+.body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.body::-webkit-scrollbar {
+  display: none;
+}

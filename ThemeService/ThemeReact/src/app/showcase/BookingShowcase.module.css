@@ -1,0 +1,125 @@
+/*
+ * Styles for ./BookingShowcase.tsx
+ * (ports CRM/lib/showcase/booking_showcase.dart).
+ *
+ * `--sc-*` for the design tokens (see ./ShowcaseThemeVars.tsx); `--bk-*` for
+ * this screen's motion values, which the component derives from the ported
+ * arithmetic and writes inline, so no timing is restated as a literal here.
+ */
+
+/* `Column(crossAxisAlignment: stretch)` filling the scaffold body. */
+.screen {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+}
+
+/* `Expanded(child: _BookedContent)` — `Column(center, spacing: spacingBig)`. */
+.content {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-big);
+}
+
+/*
+ * `Flexible(ConstrainedBox(maxHeight: 420))` wrapping a `ScaleReveal`. The cap
+ * itself arrives inline, from the component's own const.
+ */
+.celebration {
+  flex: 0 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  animation: scaleReveal var(--bk-image-scale-ms) var(--bk-ease) both;
+}
+
+/* `Image(fit: BoxFit.contain)`. */
+.celebrationImg {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
+/* `StaggeredReveal(delay: 720)` over a `big2` caption. */
+.headline {
+  margin: 0;
+  flex: 0 0 auto;
+  font: var(--sc-type-big2);
+  letter-spacing: var(--sc-type-big2-ls);
+  color: var(--sc-text);
+  text-align: center;
+  animation: staggeredReveal var(--bk-reveal-ms) var(--bk-ease) var(--bk-reveal-delay-ms) both;
+}
+
+/*
+ * `Padding(bottom: spacingBig)` over `IgnorePointer(AnimatedOpacity(...))`.
+ *
+ * `pointer-events: none` stands in for the `IgnorePointer`. Dart re-enables the
+ * button once the fade lands; here it stays off, because every tap in the
+ * showcase is a no-op and a cursor that promises otherwise is the worse lie.
+ */
+.ctaRow {
+  flex: 0 0 auto;
+  padding-bottom: var(--sc-spacing-big);
+  pointer-events: none;
+  animation: fadeIn var(--bk-cta-fade-ms) var(--bk-ease) var(--bk-cta-delay-ms) both;
+}
+
+/* `ScaleReveal`: opacity 0 -> 1, scale `startScale` -> 1, ease-out-quart. */
+@keyframes scaleReveal {
+  from {
+    opacity: 0;
+    transform: scale(var(--bk-start-scale));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `StaggeredReveal`: opacity 0 -> 1 with a 12px slide up, ease-out-quart. */
+@keyframes staggeredReveal {
+  from {
+    opacity: 0;
+    transform: translateY(var(--bk-reveal-offset));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* `AnimatedOpacity` on the CTA. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the screen renders its finished state.
+ * The component also declines to arm the loop timer, so nothing restarts.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .celebration,
+  .headline,
+  .ctaRow {
+    animation: none;
+  }
+}
