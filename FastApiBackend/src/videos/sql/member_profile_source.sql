@@ -1,7 +1,6 @@
 -- The member facts the LLM profile-summary prompt is built from, in one
--- round-trip. Clicked-video data will be EMPTY until a caller records clicks
--- (member_activities 'video_clicked'); the prompt degrades to classes + rank +
--- disciplines when there are no clicks.
+-- round-trip. The prompt degrades to classes + rank + disciplines when the
+-- member has no clicks yet (member_activities 'video_clicked').
 --   gym_id            the member's OWN gym (also re-checked by the caller).
 --   rank_name         the member's current rank name (NULL when unranked).
 --   disciplines       the gym's discipline list from its latest video spec
@@ -9,9 +8,13 @@
 --   attended_classes  up to :class_limit most-attended class names in the
 --                     trailing :window_days window, most-frequent first (JSONB).
 --   clicked_videos    up to :click_limit most-recently-clicked videos'
---                     {title, summary} the member opened from their recs
---                     (member_activities 'video_clicked' -> video (+ video_rag
---                     summary)), newest first (JSONB array of objects).
+--                     {title, summary}, newest first (JSONB array of objects).
+--                     BOTH click writers land here and are read identically --
+--                     the rec the app served (VideoRecClickService, one row per
+--                     served rec) and a video the member picked out of the feed
+--                     (VideoClickService, one row per open, never deduped). The
+--                     join reads activity_info ->> 'video_id' only, so the NULL
+--                     rec_id a feed click carries is irrelevant to it.
 SELECT
     m.gym_id,
     r.name AS rank_name,

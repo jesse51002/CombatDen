@@ -141,6 +141,49 @@ class RanksReads(RanksBase):
         total = sum(item.count for item in counts)
         return RankSubRankCountsResponse(total_count=total, counts=counts)
 
+    async def next_leaf_image_url(
+        self,
+        gym_id: UUID,
+        rank_id: UUID | None,
+        sub_index: int | None,
+    ) -> str | None:
+        """The belt image of the leaf ABOVE a member's current leaf.
+
+        Reuses the domain's one leaf-advance rule (``RanksBase._next_leaf``
+        over the ``main_rank_num_order`` ladder + the gym's EFFECTIVE
+        sub-rank count) rather than deriving "next rank" a second time, and
+        resolves the image through the domain's one image rule
+        (``RanksBase._leaf_image_url`` — the leaf's override, else the main
+        rank's ``image_url``).
+
+        Args:
+            gym_id: The member's gym.
+            rank_id: The member's current main rank (``None`` = unranked,
+                whose next leaf is the ladder's lowest).
+            sub_index: The member's current sub-position, or ``None``.
+
+        Returns:
+            The next leaf's belt image URL, or ``None`` when there is no
+            next leaf (the member is at the highest rank, or the gym has no
+            ladder) or that leaf carries no image.
+        """
+        async with self._db_pool.session() as session:
+            sub_rank_type = await self._gym_sub_rank_type(session, gym_id)
+            ladder = await self._list_ranks_in_session(session, gym_id)
+
+        try:
+            rank, leaf_index = self._next_leaf(
+                ladder,
+                rank_id,
+                sub_index,
+                sub_rank_type,
+            )
+        except ValueError:
+            # No next leaf: top of the ladder, or no ranks configured.
+            return None
+
+        return self._leaf_image_url(rank, leaf_index)
+
     @staticmethod
     def _ready_row(
         row: dict,

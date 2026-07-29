@@ -265,6 +265,7 @@ class _PhonePreview extends StatelessWidget {
       onPrev: onPrev,
       onNext: onNext,
       onSelect: onSelectSlide,
+      onBackToLibrary: onBackToLibrary,
       onEditBranding: onEditBranding,
     );
     return LayoutBuilder(

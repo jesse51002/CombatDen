@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/app_routes.dart';
 import 'package:mobile_app/core/selected_gym.dart';
-import 'package:mobile_app/features/home/presentation/widgets/home_body/home_booked_body.dart';
-import 'package:mobile_app/features/home/presentation/widgets/home_body/home_not_booked_body.dart';
+import 'package:mobile_app/features/home/presentation/widgets/home_body/home_body.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 
@@ -47,7 +46,10 @@ class _HomeScreenState extends State<HomeScreen> {
       bottomNav: const AppBottomNavBar(selected: AppBottomNavTab.home),
       child: PageView(
         controller: _pageController,
-        children: const [HomeNotBookedBody(), HomeBookedBody()],
+        children: const [
+          HomeBody(booked: false),
+          HomeBody(booked: true),
+        ],
       ),
     );
   }

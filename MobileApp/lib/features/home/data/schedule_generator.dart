@@ -13,6 +13,11 @@ const _classTimes = <String>[
 ];
 const _kClassDurationMinutes = 55;
 
+/// How many days the schedule covers. The date rail renders one tab per
+/// day, and the formats that page or window the schedule (rather than
+/// scrolling it forever) bound themselves by the same number.
+const int kScheduleDayCount = 365;
+
 const _weekdayAbbr = <String>[
   '',
   'Mon',

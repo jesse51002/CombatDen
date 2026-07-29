@@ -134,8 +134,9 @@ stage (`search` / `transcript` / `enrich` / `embed` / `scan`), each stamped with
 `run_id` (TEXT, no FK), `gym_id`, `model` (NULL where not applicable), and
 `cost_usd` (the row's USD total; `breakdown` still carries the component detail
 map). `search` is **free** (the YouTube Data API within quota — its breakdown
-carries the quota units), and `transcript` carries the lazy Apify transcript
-spend. The legacy flat `cost_log.yaml` is only read once, by the
+carries the run's total quota units, `search.list` plus the scrape's
+`channels.list` creator-avatar pass, with the avatar share broken out beside
+them), and `transcript` carries the lazy Apify transcript spend. The legacy flat `cost_log.yaml` is only read once, by the
 `scripts.import_yaml` importer, to seed the DB at cutover.
 
 ## The skill
@@ -175,7 +176,7 @@ scrape step in particular picks up a gym on its own once a spec save / feed
 curation / weekly floor makes that gym due.
 
 Env in `.env`: `DATABASE_URL` (the scripts + worker), plus `YOUTUBE_API_KEY`
-(worker discovery + metadata) and `APIFY_TOKEN` (worker transcript fetches, at
+(worker discovery + metadata + creator avatars) and `APIFY_TOKEN` (worker transcript fetches, at
 enrich), and the model keys (`GEMINI_API_KEY` for enrich/scan, `OPENAI_API_KEY`
 for embeddings).
 

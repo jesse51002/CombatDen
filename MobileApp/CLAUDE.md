@@ -55,9 +55,19 @@ HTTP API). Architecture, mirroring the customization engine:
 
 Top filters are derived from the distinct `big_groups` present in the loaded
 feed (an `All` tab plus one per group, labels auto-formatted), and filter the
-home feed **in place**; sub-groups are per-`tag` carousels. Tapping a video is a
+home feed **in place**; sub-groups are per-`tag` sections. Tapping a video is a
 `debugPrint` no-op (real YouTube playback needs `url_launcher`, a deliberate
 follow-up). Mock video data and the old detail screen were deleted.
+
+**How that feed is arranged is the tenant's `videos_format`** (see *Layout and
+motion formats* below). `VideosScreen` derives one `VideosLayoutData` payload —
+tabs, hero, sections, callbacks — and `widgets/videos_feed_body.dart` switches
+on `ThemeLayout.videos()` to one of the five layouts in
+`presentation/layouts/`, each of which arranges that identical payload and
+**must** render every element in it. The screen's scroll is a `CustomScrollView`
+and each layout returns a sliver, so a format can pin its filter (`mosaic`) or
+its rail (`tagRail`). `test/videos_invariants_test.dart` is the gate that proves
+no layout adds or drops an element.
 
 **The home schedule is a live/mock hybrid.**
 `lib/features/home/data/schedule_generator.dart` builds the day's classes from
@@ -377,12 +387,230 @@ landing page: `capture_main.dart` (the theme-reel scroll), `capture_booking_main
 `capture_frame.dart`. NOT shipping code — its only app-side hooks are opt-in and
 inert in normal use (all null / false / clock-unset): `captureController` on
 `VideosScreen`; `classData` on `ClassScreen`; `captureContentOnly` on
-`ClassBookedScreen`; and the global `captureRevealClock`
+`ClassBookedScreen`; `value` on `LoadingDots`, which pins the loader to one
+phase of its cycle; and the global `captureRevealClock`
 (`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
 reveal + post-class celebration animations deterministically — read by
-`ScaleReveal`, `StaggeredReveal`, `CountUpText`, `LoadingDots`, the points/streak
-intro controllers (`_PointSphere`/`_StreakOrbit`), and the streak badge pulse.
-See `tools/capture/README.md`.
+`ScaleReveal`, `StaggeredReveal`, `CountUpText`, the shared celebration intro
+stage (`shared/widgets/post_class/intro/`), the points intro controller
+(`_PointSphere`), and the streak badge pulse. See `tools/capture/README.md`.
+
+There is deliberately **no prose spec for the formats.** One existed while they
+were being designed and it drifted wrong in about fifteen places within a day —
+values that were removed, an animation direction stated backwards, a
+decomposition that turned out to be unbuildable. The enums and their
+`test/*_invariants_test.dart` gates ARE the contract: the gates assert what a
+value may and may not change, and they fail when it is broken, which a document
+cannot. Read `lib/core/formats/` and the gates. Do not reintroduce a parallel
+description of them.
+
+## Layout formats
+
+A **layout format** is one complete, reviewed arrangement of a screen, selected
+per tenant. The rules:
+
+- The enums live in `lib/core/formats/layout_formats.dart`, one per screen, and
+  the **first value is what ships today** and is the parse fallback.
+- A screen resolves its own value through `ThemeLayout.<screen>()`
+  (`lib/core/formats/theme_layout.dart`), which reads the tenant's slot
+  (declared in `lib/core/app_slots.dart`) behind the dev picker and a
+  `--dart-define`. Wrap the switch in a `FormatBuilder` so the in-app picker
+  swaps it live without remounting the screen.
+- `lib/core/formats/format_catalog.dart` lists every format and carries the
+  `implemented` flag the dev picker shows — flip it when a screen is wired.
+- **A format changes ARRANGEMENT ONLY.** No element is added, none removed, no
+  variant reaches data the shipped screen did not already have. This is not a
+  convention, it is enforced: every screen with a format has an invariants test
+  (`test/<screen>_invariants_test.dart`, one per screen, always run) that pumps
+  EVERY value at real phone size and asserts the full element set — and that any
+  single-commit-point action, e.g. the class screen's one reserve CTA, is still
+  there exactly once. Add to that test in the same change as a new value, and
+  MUTATION-TEST it: break an element, confirm the gate fails, restore it. A gate
+  that cannot fail is worthless.
+- Per-screen layouts live in `features/<feature>/presentation/layouts/`, one
+  file per value, composing a shared payload (`*_layout_data.dart`) and the
+  shared `parts/` — with the section widgets in `presentation/widgets/` gaining
+  **presentation** props (treatment / position enums) but never new data props.
+  The shell's version of the same shape is `shared/widgets/topbar/layouts/`.
+- Each screen also has a golden preview (`test/*_preview_test.dart`, tagged
+  `golden`) rendering every value to `test/goldens/` for side-by-side review.
+  Regenerate with
+  `flutter test --tags golden --update-goldens --run-skipped`.
+
+## Motion formats
+
+A **motion format** is the same idea one level down: the enums live in
+`lib/core/formats/motion_formats.dart` and a surface resolves its value
+through `ThemeMotion.<slot>()`, which reads the same shared chain as
+`ThemeLayout` (see *Format resolution* below). The difference is the
+invariant:
+
+- **A motion format changes TIMING AND ENTRANCE ONLY.** It may not change
+  which elements exist, what the surface is fed, **where the settled
+  content sits**, or the app's motion law. **No value may overshoot** —
+  ease-out only, no bounce, no elastic, no anticipation ("back") curve.
+  Energy comes from stagger density. Note that a range check alone does
+  NOT catch a bounce: gate **monotonicity** too, since a bounce is a
+  reversal that still ends at 1.0.
+- **Every value must be an entrance, and a legible one.** There is no
+  "no animation" value on any motion enum — an element or card that
+  never animates in is not a treatment a tenant gets to pick. Values do
+  NOT have to be the same length (`burst` should be punchier than
+  `orbit`); the rule is a floor, never a band. A value whose motion is
+  inherently quick pays for legibility with a lead-in — a held beat, or
+  better a run-up that builds — rather than by being abrupt.
+- **The floor is per surface**, because a card and a single element are
+  read differently:
+  - `celebration_intro`: at least **1500ms** total, and nothing above
+    half opacity in the first **350ms**. A composed moment is run-up +
+    event + settle, which cannot fit under ~1.5s without collapsing
+    into a flash.
+  - `reveal_style`: each value's own run clears
+    `kRevealLegibilityFloor` (**240ms**,
+    `shared/widgets/animation/reveal/reveal_frame.dart`) and stays
+    inside `MotionSpec.elementDurationCeiling` (300ms). Under a quarter
+    second an entrance stops reading as a transition and reads as a cut.
+  - `count_up_style`: at least **900ms** total and **600ms** of visibly
+    changing figure. A saccade onto a moving target plus numeral
+    recognition costs ~250-400ms, and reading the settled figure another
+    ~250ms, so a shorter count is over before it is seen.
+  - `loader_style`: cycle at least **800ms** — set below the shipped
+    1100ms deliberately, so the floor constrains future values instead
+    of restating today's. A loader takes NO lead-in: a waiting state
+    that shows nothing for a beat reads as a freeze.
+- The **shipped value of each enum keeps its exact timing**, lead-in
+  included (i.e. usually none). It is the parse fallback, so padding it
+  would change what every unbranded build already ships.
+- `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
+  holds it: `celebration_intro_frame.dart` is the pure per-instant model
+  (`CelebrationIntroFrame`) plus one value's whole contract
+  (`CelebrationIntroSpec` — total, hand-off, particle field, frame
+  function); one file per value declares a spec; `celebration_intro_figure.dart`
+  is the only widget that paints one; and `celebration_intro_stage.dart`
+  holds the `FormatBuilder`-wrapped switch **and** the whole
+  `PostClassController` contract (CTA inert while playing, tap-to-skip,
+  exactly one `markDone`, capture-clock driving). A card supplies its
+  hero mark, its particle mark, and its settled content — it never
+  implements an intro.
+- `reveal_style` is wired, and it is the one slot every screen feels:
+  `lib/shared/widgets/animation/reveal/` holds it, in the same shape as
+  the intro. `reveal_frame.dart` is the pure per-instant model
+  (`RevealFrame` — opacity, rise, slide, scale, clip, every default the
+  SETTLED state) plus `RevealGeometry` (the call site's own `offset` /
+  `startScale`) and one value's whole contract (`RevealSpec` — lead-in,
+  legibility floor, frame function); one file per value declares a spec;
+  `reveal_figure.dart` + `reveal_wipe_clipper.dart` are the only things
+  that paint one; and `reveal_stage.dart` holds the
+  `FormatBuilder`-wrapped switch and the whole runner contract (delay +
+  lead-in, self-run vs capture clock, a wrapper chain fixed for the
+  entrance so a stateful child is never re-parented mid-reveal).
+  `StaggeredReveal` and `ScaleReveal` keep their exact public APIs and
+  are now thin faces on that engine — they differ only in the geometry
+  they bring, which is why `fadeUp` reproduces BOTH shipped entrances
+  frame for frame. A call site owns WHEN (its `delay`, and therefore the
+  stagger order); the value owns only HOW. `offset: 0` means "do not
+  move me" and every value honours it.
+- Because the values are pure `double t -> frame` functions, the gate can
+  assert the motion law numerically rather than by eye:
+  `test/celebration_intro_invariants_test.dart` samples every value's
+  frames for overshoot, scans the module for banned curves, and pumps
+  every value (× every celebration layout) at real phone size.
+  `test/reveal_style_invariants_test.dart` is the same gate for reveals,
+  and it checks monotonicity as well as range — a bounce is a REVERSAL,
+  which a range check alone waves through — plus that every value lands
+  on the exact pixels an un-revealed element occupies, that the stagger a
+  call site authored is never reordered, and that an unknown wire value
+  (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
+  as the layout gates — add to it in the same change as a new value, and
+  mutation-test it.
+- **The intro owns the stage until it is done.** The figure and the
+  settled content are never both mounted: the card settles when the
+  intro finishes, not before. `flipCount` used to reveal the card
+  mid-turn so the count-up overlapped the flip; on a device that read as
+  the card giving up on its own animation and jumping ahead, and the
+  overlap path was also the only thing that could displace the settled
+  card (it dropped the stat ~190pt under `figureTop`). There is
+  deliberately no "hand off early" knob to reintroduce it with.
+- **Only the streak card is on the shared stage.** The points card keeps
+  its own `_PointSphere`, because the shipped `orbit` value is the streak
+  ring: routing points through it would replace the shipped points intro
+  for every tenant, which the "first value renders exactly what ships
+  today" guarantee forbids.
+<<<<<<< HEAD
+- **`loader_style` is wired, and it governs every waiting state.**
+  `lib/shared/widgets/animation/loader/` holds it, same split as the
+  intro: `loader_frame.dart` is the pure per-instant model (`LoaderMark`
+  / `LoaderFrame`) plus one value's whole contract (`LoaderSpec` —
+  shape, cycle, mark count, frame function); one file per value declares
+  a spec; the `loader_*_field.dart` widgets are the only things that
+  paint one, always inside the same `LoaderBox` (the shipped dots'
+  footprint); and `loading_dots.dart` holds the `FormatBuilder`-wrapped
+  switch plus the repeating controller. Every surface that waits renders
+  `LoadingDots` — the videos feed, the home schedule, the rewards grid,
+  the tag list, the recommendation flow and the booking confirmation —
+  so there is one waiting state to brand, not six. (The name is the
+  shipped value's; `tools/capture/` imports it.) The one spinner
+  deliberately left alone is the gym-browser's pagination footer, an
+  inline "fetching more" affordance rather than a screen's waiting
+  state. `test/loader_style_invariants_test.dart` is the gate: every
+  value renders one indicator in the same box, moves, never settles,
+  closes its loop, honours a pinned `value` for capture, disposes its
+  controller, and never overshoots — plus a floor on cycle length, since
+  a repeat too quick to read is a fault light, not a loader.
+
+## Format resolution
+
+Layout and motion share ONE precedence chain, in
+`lib/core/formats/format_resolver.dart`. Highest first: a widget's
+`formatOverride` argument (tests, preview sheets) → `FormatStore` (the
+in-app dev picker) → `FormatOverrides` (`--dart-define`) → the tenant's
+customization slot → the value that ships. `ThemeLayout`, `ThemeMotion`
+and the dev picker all read through it; **never re-implement the chain**
+— three hand-written copies is exactly how the picker came to draw a
+value the app was not using.
+
+**A theme carries its own format slots, so loading one releases every
+pin** (`FormatStore.bindTo`, wired once in `main.dart` against
+`ThemeRuntime.changes`). The theme sets the formats; a pin overrides it
+until the next load, and "Reset" means back to the theme, not back to
+the shipped default. Every pin is released, not just the slots the
+incoming theme mentions.
+
+An unrecognised wire value resolves to the enum's first value
+(`parseFormat`'s `orElse`), so a retired value like `celebration_intro:
+none` degrades to `orbit` instead of breaking a screen. That is
+load-bearing, not incidental, and the gate asserts it.
+
+`CombatDenSlots.expectedLayouts` / `expectedMotion` are documentation
+only — they are deliberately NOT passed to `ThemeRuntime.initialize`,
+because an absent format slot is a supported state (the tenant has not
+opted in) and warning on it would fire on every unbranded build.
+=======
+- `transition_style` is wired, and its seam is the **theme**, not the
+  navigator: `lib/shared/themes/transitions/` holds one
+  `PageTransitionsBuilder` per authored value plus `app_page_transitions.dart`,
+  whose `PageTransitionsTheme` `AppTheme.forCanvas()` installs on
+  `MaterialApp.theme`. Sitting there means the enum can only decide how a
+  route animates — it never sees which route was pushed and cannot touch
+  the back stack. Resolution is **deferred**: one delegating builder per
+  `TargetPlatform` reads `ThemeMotion.transition()` at the moment a route
+  animates, so the dev picker is live on the next navigation with no
+  rebuild (a `FormatBuilder` would be wrong here — there is no build-time
+  switch, and rebuilding the theme re-keys the tree). The shipped
+  `platformDefault` hands the route straight back to Flutter's own
+  `const PageTransitionsTheme()` for that platform, read from the
+  framework rather than copied, so it stays a no-op if the framework's
+  default moves. Two extra rules apply to a transition because it answers
+  a tap: **no lead-in** (delay reads as input lag, never as drama) and a
+  **legibility floor** (`TransitionMotion.legibilityFloor`, 200ms) that
+  every authored value must clear — values may differ in length, but a
+  movement too short to perceive is a flicker, not a transition.
+  `platformDefault` and `none` sit outside the floor on purpose.
+  `test/transition_style_invariants_test.dart` is the gate: it samples
+  the rendered geometry numerically for overshoot and lead-in, proves
+  push/pop/replace still behave, and proves `platformDefault` is
+  frame-for-frame identical to the theme the app carried before.
+>>>>>>> worktree-agent-a76fe566f85428698
 
 ## Development Commands
 

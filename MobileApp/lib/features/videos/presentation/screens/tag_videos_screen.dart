@@ -6,6 +6,7 @@ import 'package:mobile_app/features/videos/data/video.dart';
 import 'package:mobile_app/features/videos/data/video_feed_repository.dart';
 import 'package:mobile_app/features/videos/data/video_helpers.dart';
 import 'package:mobile_app/features/videos/data/video_selectors.dart';
+import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/video_recc_card/video_recc_card.dart';
@@ -47,7 +48,7 @@ class _TagList extends StatelessWidget {
       future: VideoFeedRepository.instance.tagFeed(tag),
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: LoadingDots());
         }
         final videos = sortByRelevance(snapshot.data ?? const <Video>[]);
         if (snapshot.hasError || videos.isEmpty) {

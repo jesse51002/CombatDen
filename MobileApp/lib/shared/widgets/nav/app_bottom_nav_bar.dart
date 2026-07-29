@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:mobile_app/core/app_slots.dart';
-import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
+import 'package:mobile_app/core/formats/format_builder.dart';
+import 'package:mobile_app/core/formats/layout_formats.dart';
+import 'package:mobile_app/core/formats/theme_layout.dart';
 import 'package:mobile_app/shared/widgets/nav/app_nav_item.dart';
+import 'package:mobile_app/shared/widgets/nav/layouts/nav_floating_pill.dart';
+import 'package:mobile_app/shared/widgets/nav/layouts/nav_four_up.dart';
 
 enum AppBottomNavTab { home, rank, reward, videos }
 
@@ -16,51 +20,48 @@ String _routeFor(AppBottomNavTab tab) {
   };
 }
 
-const double _kBottomNavRowHeight = 64;
-
+/// The persistent bottom navigation.
+///
+/// Tab order is fixed across every shell layout — it is muscle memory,
+/// not composition — and all four destinations are always present. The
+/// tenant's `app_shell_format` chooses only how the bar is drawn.
 class AppBottomNavBar extends StatelessWidget {
   const AppBottomNavBar({
     super.key,
     required this.selected,
     this.onTabSelected,
+    this.formatOverride,
   });
 
   final AppBottomNavTab selected;
   final ValueChanged<AppBottomNavTab>? onTabSelected;
 
+  /// Forces a layout instead of resolving it from the customization.
+  /// Used by the layout-invariant tests and the format preview.
+  final AppShellFormat? formatOverride;
+
   @override
   Widget build(BuildContext context) {
-    final bottomInset = MediaQuery.of(context).padding.bottom;
-    return Container(
-      decoration: BoxDecoration(
-        color: DesignConstants.backgroundColor,
-        border: Border(
-          top: BorderSide(
-            color: DesignConstants.text3rd,
-            width: DesignConstants.dividerThickness,
-          ),
+    return FormatBuilder(builder: _build);
+  }
+
+  Widget _build(BuildContext context) {
+    final format = formatOverride ?? ThemeLayout.shell();
+    final pill = format == AppShellFormat.markOnly;
+
+    final items = [
+      for (final tab in AppBottomNavTab.values)
+        AppNavItem(
+          icon: _iconFor(tab),
+          iconSlot: _iconSlotFor(tab),
+          label: _labelFor(tab),
+          isActive: tab == selected,
+          showLabel: !pill,
+          onTap: () => _handleTap(context, tab),
         ),
-      ),
-      padding: EdgeInsets.only(bottom: bottomInset),
-      child: SizedBox(
-        height: _kBottomNavRowHeight,
-        child: Row(
-          children: AppBottomNavTab.values
-              .map(
-                (tab) => Expanded(
-                  child: AppNavItem(
-                    icon: _iconFor(tab),
-                    iconSlot: _iconSlotFor(tab),
-                    label: _labelFor(tab),
-                    isActive: tab == selected,
-                    onTap: () => _handleTap(context, tab),
-                  ),
-                ),
-              )
-              .toList(growable: false),
-        ),
-      ),
-    );
+    ];
+
+    return pill ? NavFloatingPill(items: items) : NavFourUp(items: items);
   }
 
   void _handleTap(BuildContext context, AppBottomNavTab tab) {

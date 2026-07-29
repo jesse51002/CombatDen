@@ -19,15 +19,21 @@ class GymSetupWelcomeContinued extends GymSetupEvent {
 }
 
 /// Submit gym name (step 1).
+///
+/// [address] is the OPTIONAL street address typed on the same step —
+/// null when the owner left the field blank (they can set it later in
+/// Settings). Gym name stays the only required field here.
 class GymSetupGymNameSubmitted extends GymSetupEvent {
   final String gymName;
+  final String? address;
 
   const GymSetupGymNameSubmitted({
     required this.gymName,
+    this.address,
   });
 
   @override
-  List<Object?> get props => [gymName];
+  List<Object?> get props => [gymName, address];
 }
 
 /// Submit owner name (final wizard step).

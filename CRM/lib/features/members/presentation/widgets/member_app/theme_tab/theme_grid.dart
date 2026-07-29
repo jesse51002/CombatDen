@@ -4,9 +4,11 @@ import 'package:scrollable_positioned_list/scrollable_positioned_list.dart';
 import 'package:crm/core/constants/design_constants.dart';
 import 'package:crm/core/state/selected_gym.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_card.dart';
+import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_preview_state.dart';
 import 'package:crm/features/members/presentation/widgets/member_app/theme_tab/theme_search_bar.dart';
 import 'package:crm/shared/widgets/app_outline_button.dart';
 import 'package:crm/shared/widgets/app_spinner.dart';
+import 'package:crm/shared/widgets/info_row.dart';
 import 'package:crm/shared/widgets/section_card.dart';
 import 'package:theme_flutter/customization_runtime.dart';
 import 'package:theme_flutter/data/styles_pager.dart';
@@ -87,32 +89,49 @@ class _ThemeGridState extends State<ThemeGrid> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      spacing: DesignConstants.spacingLarge,
-      children: [
-        Text('App Theme', style: DesignConstants.h2),
-        ThemeSearchBar(onChanged: _pager.setQuery),
-        AppOutlineButton(
-          text: '← Back to library',
-          fullWidth: true,
-          onPressed: widget.onBackToLibrary,
-        ),
-        Expanded(
-          child: ListenableBuilder(
-            listenable: _pager,
-            builder: (context, _) =>
-                _ThemeListView(pager: _pager, itemScroll: _itemScroll),
+    // Watches the gym so the zero-state line appears/disappears the moment a
+    // theme is saved (it drops out of the children list entirely, so no empty
+    // column gap is left behind).
+    return ListenableBuilder(
+      listenable: selectedGym,
+      builder: (context, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        spacing: DesignConstants.spacingLarge,
+        children: [
+          Text('App Theme', style: DesignConstants.h2),
+          ThemeSearchBar(onChanged: _pager.setQuery),
+          // Zero-state: with no theme ever saved, NO card carries the saved
+          // treatment, so the list alone can't say what members see. Say it.
+          // Admin-only — the public browser has no gym to save to.
+          if (selectedGym.gymId != null &&
+              selectedGym.savedThemeDesignId == null)
+            InfoRow(
+              label: 'Members see',
+              value: 'No app theme set yet',
+              textStyle: DesignConstants.pSmall,
+            ),
+          AppOutlineButton(
+            text: '← Back to library',
+            fullWidth: true,
+            onPressed: widget.onBackToLibrary,
           ),
-        ),
-      ],
+          Expanded(
+            child: ListenableBuilder(
+              listenable: _pager,
+              builder: (context, _) =>
+                  _ThemeListView(pager: _pager, itemScroll: _itemScroll),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 /// The scrollable theme list itself, plus its loading / empty / error
-/// states. Wraps in `ListenableBuilder(ThemeRuntime.changes)`
-/// so the active-card border flips when the live theme switches.
+/// states. Wraps in `ListenableBuilder` over BOTH `ThemeRuntime.changes` and
+/// `selectedGym`, so the quiet previewing marker follows the live theme AND a
+/// save repaints the list onto the newly-saved card.
 class _ThemeListView extends StatelessWidget {
   const _ThemeListView({required this.pager, required this.itemScroll});
 
@@ -138,9 +157,13 @@ class _ThemeListView extends StatelessWidget {
       );
     }
     return ListenableBuilder(
-      listenable: ThemeRuntime.changes,
+      listenable: Listenable.merge([ThemeRuntime.changes, selectedGym]),
       builder: (context, _) {
-        final active = ThemeRuntime.activeDesignId;
+        // Two DIFFERENT ids: the design members actually see, and the one the
+        // phone happens to be showing. Never collapse them — the checkmark
+        // belongs to the saved one only.
+        final saved = selectedGym.savedThemeDesignId;
+        final previewing = previewedDesignId();
         return ScrollablePositionedList.separated(
           itemScrollController: itemScroll,
           itemCount: pager.items.length,
@@ -152,7 +175,11 @@ class _ThemeListView extends StatelessWidget {
           ),
           itemBuilder: (context, i) {
             final style = pager.items[i];
-            return ThemeCard(style: style, isActive: style.id == active);
+            return ThemeCard(
+              style: style,
+              isSaved: saved != null && style.id == saved,
+              isPreviewing: previewing != null && style.id == previewing,
+            );
           },
         );
       },

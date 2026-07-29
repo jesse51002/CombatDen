@@ -9,14 +9,19 @@ import 'package:crm/features/settings/bloc/settings_state.dart';
 import 'package:crm/features/settings/data/repositories/settings_repository.dart';
 
 /// Saves the chosen CRM theme to the caller's `gym_employees` row, and the
-/// gym's timezone and profile (name + logo) to the gym row.
+/// gym's timezone and profile (name + address + logo) to the gym row.
 ///
 /// The theme is applied **optimistically** to [themeController] (so the app
 /// re-skins the instant a pill is tapped) and reverted if the backend save
 /// fails — the same shape as the member-detail billing actions, kept tiny.
 /// The timezone and Gym profile saves are **not** optimistic: the backend
 /// commits first, then [selectedGym] updates and the matching saved-count
-/// bumps for the success SnackBar.
+/// bumps for the success confirmation (a SnackBar for the timezone, the
+/// section's own inline "Saved" status for the Gym profile, which auto-saves
+/// and would make a SnackBar per commit noisy).
+///
+/// The Gym profile handler runs **sequentially** (see the transformer in the
+/// constructor) because it is driven by auto-save, not a button.
 class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
   final SettingsRepository _repository;
 
@@ -25,7 +30,16 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
         super(const SettingsState()) {
     on<SettingsThemeModeChanged>(_onThemeModeChanged);
     on<SettingsTimezoneChanged>(_onTimezoneChanged);
-    on<GymProfileSaveRequested>(_onGymProfileSave);
+    // SEQUENTIAL, not the bloc default (concurrent): the Gym profile
+    // auto-saves on every field blur and on every logo pick, so two commits
+    // can be a keystroke apart (blur the name, immediately blur the
+    // address). `asyncExpand` queues each save behind the one in flight, so
+    // the second never races the first and always sees the committed
+    // `selectedGym` values its no-op guard compares against.
+    on<GymProfileSaveRequested>(
+      _onGymProfileSave,
+      transformer: (events, mapper) => events.asyncExpand(mapper),
+    );
     on<SettingsErrorCleared>(
       (event, emit) => emit(state.copyWith(clearError: true)),
     );
@@ -99,6 +113,7 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
     if (gymId == null) return;
     // No-op guard: skip the round trip when nothing actually changed.
     if (event.gymName == selectedGym.gymName &&
+        event.address == selectedGym.address &&
         event.logoUrl == selectedGym.logoUrl) {
       return;
     }
@@ -110,9 +125,11 @@ class SettingsBloc extends Bloc<SettingsEvent, SettingsState> {
       await _repository.updateGymProfile(
         gymId: gymId,
         gymName: event.gymName,
+        address: event.address,
         logoUrl: event.logoUrl,
       );
       selectedGym.updateGymName(event.gymName);
+      selectedGym.updateAddress(event.address);
       selectedGym.updateLogoUrl(event.logoUrl);
       emit(
         state.copyWith(

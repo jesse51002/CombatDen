@@ -3,16 +3,22 @@
 Two calls compose one query's fetch: ``search.list`` surfaces the video ids +
 snippet for a query (100 quota units), then ``videos.list`` batches those ids for
 ``statistics`` (view/like counts) and ``contentDetails.duration`` (1 unit per
-call, ids batched ≤50). A search item's snippet has no channel avatar, so that
-field is left empty (the avatar backfill was a read-path concern, since removed).
+call, ids batched ≤50). Neither snippet carries the creator's avatar, so a THIRD
+call resolves it per channel: ``channels.list`` batches ≤50 channel ids for
+``snippet.thumbnails`` — also 1 unit per call regardless of batch size, which is
+what makes covering a whole scrape's creators cost ~12 units against the ~2,500
+the same run spends on search.
 
 Uses ``httpx`` (async) rather than the sync ``google-api-python-client`` so the
 whole call overlaps under the scrape semaphore — the worker's no-blocking-I/O
 rule. The API is free within the daily quota (10,000 units/day by default; a
 quota increase is a free Google Cloud request). A quota-exhausted (HTTP 403) or
-any other HTTP error raises, and the scraper drops just that query.
+any other HTTP error raises: the scraper drops just that query, and the avatar
+resolver drops just that batch (an unresolved avatar stays empty — the member UI
+omits it, so a degraded avatar pass is invisible rather than broken).
 
-See: developers.google.com/youtube/v3/docs/search/list + /videos/list
+See: developers.google.com/youtube/v3/docs/search/list + /videos/list +
+/channels/list
 """
 
 from __future__ import annotations
@@ -27,7 +33,9 @@ logger = logging.getLogger(__name__)
 
 SEARCH_URL = "https://www.googleapis.com/youtube/v3/search"
 VIDEOS_URL = "https://www.googleapis.com/youtube/v3/videos"
-# The API caps a single search / videos page (and a videos.list id batch) at 50.
+CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels"
+# The API caps a single search / videos page (and a videos.list / channels.list id
+# batch) at 50.
 MAX_PAGE_SIZE = 50
 
 
@@ -72,6 +80,28 @@ class WorkerYouTubeClient:
                 VIDEOS_URL,
                 {
                     "part": "snippet,statistics,contentDetails",
+                    "id": ",".join(batch),
+                    "maxResults": MAX_PAGE_SIZE,
+                    "key": self._api_key,
+                },
+            )
+            items.extend(data.get("items", []))
+        return items
+
+    async def list_channels(self, channel_ids: list[str]) -> list[dict]:
+        """``channels.list`` for the given ids (batched ≤50) → each channel's
+        ``snippet`` (whose ``thumbnails`` map holds the creator avatar).
+
+        1 quota unit per batch CALL, not per id — so batching is what makes the
+        avatar pass essentially free. Mirrors ``list_videos``: same ≤50 chunking,
+        same raise-to-the-caller failure posture."""
+        items: list[dict] = []
+        for start in range(0, len(channel_ids), MAX_PAGE_SIZE):
+            batch = channel_ids[start : start + MAX_PAGE_SIZE]
+            data = await self._get(
+                CHANNELS_URL,
+                {
+                    "part": "snippet",
                     "id": ",".join(batch),
                     "maxResults": MAX_PAGE_SIZE,
                     "key": self._api_key,

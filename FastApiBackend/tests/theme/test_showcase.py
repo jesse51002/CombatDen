@@ -301,3 +301,42 @@ async def test_showcase_rewards_returns_created_card(
         assert card.points_cost == 1234
     finally:
         await showcase_rows.cleanup()
+
+
+async def test_load_theme_design_id_returns_the_gym_value(
+    db_pool: DirectDatabasePool,
+) -> None:
+    """The showcase read exposes the gym's saved ThemeService design id.
+
+    Set on the seeded gym, read back, then restored to its prior value so the
+    seeded row is left untouched.
+    """
+    service = ThemeShowcaseService(db_pool)
+    marker = f"ZZ-design-{uuid4().hex[:8]}"
+    async with db_pool.session() as session:
+        prior = (
+            await session.execute(
+                text("SELECT theme_design_id FROM gyms WHERE gym_id = :g"),
+                {"g": str(GYM_ID)},
+            )
+        ).scalar_one()
+    try:
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE gyms SET theme_design_id = :d WHERE gym_id = :g"
+                ),
+                {"d": marker, "g": str(GYM_ID)},
+            )
+            await session.commit()
+
+        assert await service.load_theme_design_id(GYM_ID) == marker
+    finally:
+        async with db_pool.session() as session:
+            await session.execute(
+                text(
+                    "UPDATE gyms SET theme_design_id = :d WHERE gym_id = :g"
+                ),
+                {"d": prior, "g": str(GYM_ID)},
+            )
+            await session.commit()

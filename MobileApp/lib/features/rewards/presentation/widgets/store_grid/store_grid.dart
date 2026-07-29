@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/rewards/data/reward.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_card.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_redeem_dialog.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/reward_card/reward_store_card.dart';
 
 /// Two-column points-store layout. Items zig-zag down (even indices in
 /// the left column, odd in the right) so neighboring rows visually align.
@@ -46,21 +45,7 @@ class _StoreColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: DesignConstants.spacingLarge,
       children: [
-        for (final item in items)
-          RewardCard(
-            imageUrl: item.imageUrl,
-            title: item.title,
-            priceLabel: item.priceLabel,
-            pointsCost: item.pointsCost,
-            buttonText: 'Redeem',
-            onPressed: () => RewardRedeemDialog.show(
-              context,
-              imageUrl: item.imageUrl,
-              title: item.title,
-              priceLabel: item.priceLabel,
-              pointsCost: item.pointsCost,
-            ),
-          ),
+        for (final item in items) RewardStoreCard(reward: item),
       ],
     );
   }

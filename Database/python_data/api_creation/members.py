@@ -47,7 +47,7 @@ import uuid
 from api_client import GymApiClient
 from api_creation.upsert import diff_update, find_member
 from concurrency import run_concurrent
-from constants import AUTH_MEMBERS_PER_GYM, SEED_WORKERS
+from constants import AUTH_MEMBERS_PER_GYM, SEED_WORKERS, TEST_MEMBER_EMAIL
 from generators import auth
 from generators.members import MemberPlan
 from supabase import Client
@@ -113,12 +113,22 @@ def _create_one(
     """
     # Give the first few members a real auth login (idempotent by email).
     # There is no user_id to backfill — the auth user's email already matches
-    # this member's email, which IS the access link.
-    if idx < AUTH_MEMBERS_PER_GYM and member.auth_user_id is None:
+    # this member's email, which IS the access link. The known test member
+    # (TEST_MEMBER_EMAIL) always gets one regardless of position — three rows
+    # share that email, so repeats hit create_user's already-exists path.
+    if (
+        idx < AUTH_MEMBERS_PER_GYM or member.email == TEST_MEMBER_EMAIL
+    ) and member.auth_user_id is None:
         user = auth.create_user(client, member.email)
         member.auth_user_id = uuid.UUID(user["id"])
 
-    existing = find_member(client, gym_id, member.email)
+    existing = find_member(
+        client,
+        gym_id,
+        member.email,
+        first_name=member.first_name,
+        last_name=member.last_name,
+    )
     if existing is not None:
         member.member_id = uuid.UUID(existing["member_id"])
 

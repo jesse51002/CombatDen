@@ -118,6 +118,39 @@ class StreakService:
             days[iso_dow - 1] = True
         return days
 
+    @staticmethod
+    def sunday_first_attended_indices(
+        current_week_days: list[bool],
+    ) -> list[int]:
+        """Re-index a Monday-first strip as SUNDAY-FIRST attended indices.
+
+        ``StreakResult.current_week_days`` is a length-7 Monday-first boolean
+        strip (0 = Monday .. 6 = Sunday) — this service's own convention. The
+        member app's ``StreakWeekStrip`` renders Sunday through Saturday and
+        its ``completedWeekdayIndices()`` helper speaks Sunday-first indices
+        (0 = Sunday .. 6 = Saturday), so the profile payload has to hand over
+        that origin or the client marks the wrong badge.
+
+        This conversion lives here, on the service that OWNS the strip, so
+        there is exactly one place that knows both origins. The WEEK is
+        unchanged — still the gym-local Monday-start week the streak count is
+        measured over, so the strip and ``class_streak_weeks`` always describe
+        the same seven days.
+
+        Args:
+            current_week_days: The Monday-first boolean strip.
+
+        Returns:
+            Ascending Sunday-first indices of the attended days (empty when
+            none). A short/oversized input is tolerated — only the seven
+            Monday-first positions are read.
+        """
+        return sorted(
+            (index + 1) % 7
+            for index, attended in enumerate(current_week_days[:7])
+            if attended
+        )
+
     def _current_week_monday(self, timezone: str) -> date:
         today = gym_today(timezone)
         return today - timedelta(days=today.weekday())

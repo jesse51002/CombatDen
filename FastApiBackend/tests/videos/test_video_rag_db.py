@@ -222,6 +222,9 @@ def _always_pass_auth() -> MagicMock:
     }
     auth.verify_gym_admin_or_owner = AsyncMock(return_value=None)
     auth.verify_gym_employee_for_member = AsyncMock(return_value=None)
+    # The member-portal feed-click route is gated by verify_member_self; the
+    # gate itself is unit-tested in tests/member_portal, so here it passes.
+    auth.verify_member_self = AsyncMock(return_value=None)
     return auth
 
 
@@ -295,6 +298,72 @@ async def test_rec_click_stamps_and_logs(
                 text("DELETE FROM member_activities WHERE member_id = :m"),
                 {"m": str(member_id)},
             )
+        await _delete_rag_seed(db_pool, member_id, video_id)
+
+
+async def test_feed_click_logs_a_row_every_time(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
+) -> None:
+    """A FEED click logs a ``video_clicked`` activity — and a SECOND click on
+    the SAME video logs a SECOND row.
+
+    This is the append-only guarantee, and it is the opposite of the rec click
+    (which stamps ``clicked_at`` and is idempotent). A re-watch is real taste
+    signal, so nothing here dedupes; the assertion exists because a future
+    reader will be tempted to "fix" that.
+
+    The logged row also has to be shaped like the rec click's, or the
+    taste-profile read would see only one of the two writers: ``video_id`` in
+    ``activity_info``, ``rec_id`` NULL (nothing recommended this open).
+    """
+    member_id = await _insert_member(db_pool, rag_gym)
+    video_id = "ragvid_0007"
+    await _seed_served_rag_video(db_pool, rag_gym, video_id)
+    url = (
+        f"/api/v1/member/gyms/{rag_gym}/members/{member_id}"
+        f"/videos/{video_id}/click"
+    )
+    try:
+        first = await rag_client.post(url, headers=_AUTH_HEADERS)
+        assert first.status_code == 200, first.text
+        assert first.json() == {"video_id": video_id}
+        assert await _video_click_activity_count(db_pool, member_id) == 1
+
+        second = await rag_client.post(url, headers=_AUTH_HEADERS)
+        assert second.status_code == 200, second.text
+        assert await _video_click_activity_count(db_pool, member_id) == 2
+
+        # Same activity_info shape as the rec writer, minus the rec.
+        info = await _video_click_activity_info(db_pool, member_id)
+        assert [i["video_id"] for i in info] == [video_id, video_id]
+        assert [i["rec_id"] for i in info] == [None, None]
+    finally:
+        # member_activities has no cascade FK — clear it before the member.
+        async with db_pool.session() as session, session.begin():
+            await session.execute(
+                text("DELETE FROM member_activities WHERE member_id = :m"),
+                {"m": str(member_id)},
+            )
+        await _delete_rag_seed(db_pool, member_id, video_id)
+
+
+async def test_feed_click_404s_a_video_the_gym_does_not_serve(
+    rag_client: AsyncClient, db_pool: DirectDatabasePool, rag_gym: UUID
+) -> None:
+    """An id outside the gym's served feed is a 404 and logs NOTHING — the
+    route must never write an activity for an attacker-supplied video id."""
+    member_id = await _insert_member(db_pool, rag_gym)
+    video_id = "ragvid_0008"
+    await _seed_served_rag_video(db_pool, rag_gym, video_id)
+    try:
+        resp = await rag_client.post(
+            f"/api/v1/member/gyms/{rag_gym}/members/{member_id}"
+            "/videos/notinthisfeed/click",
+            headers=_AUTH_HEADERS,
+        )
+        assert resp.status_code == 404
+        assert await _video_click_activity_count(db_pool, member_id) == 0
+    finally:
         await _delete_rag_seed(db_pool, member_id, video_id)
 
 
@@ -669,6 +738,31 @@ async def _clicked_at_set(db_pool: DirectDatabasePool, rec_id: UUID) -> bool:
             .fetchone()
         )
     return row is not None and row["clicked_at"] is not None
+
+
+async def _video_click_activity_info(
+    db_pool: DirectDatabasePool, member_id: UUID
+) -> list[dict]:
+    """The member's ``video_clicked`` activity payloads, oldest first."""
+    async with db_pool.session() as session:
+        rows = (
+            (
+                await session.execute(
+                    text(
+                        "SELECT activity_info ->> 'video_id' AS video_id, "
+                        "activity_info ->> 'rec_id' AS rec_id "
+                        "FROM member_activities "
+                        "WHERE member_id = :m "
+                        "AND activity_type = 'video_clicked' "
+                        "ORDER BY time"
+                    ),
+                    {"m": str(member_id)},
+                )
+            )
+            .mappings()
+            .all()
+        )
+    return [dict(r) for r in rows]
 
 
 async def _video_click_activity_count(

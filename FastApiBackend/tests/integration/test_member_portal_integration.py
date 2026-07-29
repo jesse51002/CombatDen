@@ -28,7 +28,7 @@ seeded.
 """
 
 from collections.abc import AsyncGenerator
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID, uuid4
 
 import pytest
@@ -312,3 +312,146 @@ async def test_member_redeems_their_own_reward_as_pending(
         }
     finally:
         client.close()
+
+
+async def test_member_reads_own_gym_theme_and_rank_progress_series(
+    gym_id: str,
+    created,
+    admin_client,
+    db_pool,
+) -> None:
+    """A member reads their OWN gym's theme (with ``theme_design_id``), is 403
+    on ANOTHER gym's theme, and reads a rank-progress series that RESETS at a
+    ``rank_changed`` and CAPS at ``classes_needed``.
+
+    Runs entirely on a throwaway gym (its own rank, member, activities, and a
+    known ``theme_design_id``) so nothing seeded is touched — the seeded gym is
+    used only as the 'another gym' the member must be refused on. Its own
+    try/finally removes exactly what it inserts (activities → member → rank →
+    gym); the auth login is tracked on the ``created`` registry.
+    """
+    email = _unique_email()
+    design_id = f"ZZ-design-{uuid4().hex[:8]}"
+    # sub-rank-less rank on a default ('none') gym → classes_needed is the
+    # full major threshold, so the cap is deterministic.
+    classes_needed = 2
+
+    async with db_pool.session() as session:
+        my_gym = UUID(
+            str(
+                (
+                    await session.execute(
+                        text(
+                            "INSERT INTO gyms (gym_name, theme_design_id) "
+                            "VALUES (:name, :design) RETURNING gym_id"
+                        ),
+                        {
+                            "name": f"ZZ Portal Theme Gym {uuid4().hex[:8]}",
+                            "design": design_id,
+                        },
+                    )
+                ).mappings().fetchone()["gym_id"]
+            )
+        )
+        rank_id = UUID(
+            str(
+                (
+                    await session.execute(
+                        text(
+                            "INSERT INTO gym_ranks (gym_id, "
+                            "main_rank_num_order, name, classes_to_next_major) "
+                            "VALUES (:g, 0, 'ZZ White', :n) RETURNING rank_id"
+                        ),
+                        {"g": str(my_gym), "n": classes_needed},
+                    )
+                ).mappings().fetchone()["rank_id"]
+            )
+        )
+        member_id = UUID(
+            str(
+                (
+                    await session.execute(
+                        text(
+                            "INSERT INTO members (gym_id, first_name, "
+                            "last_name, email, current_rank_id) VALUES "
+                            "(:g, 'ZZ', 'Ranked', :e, :r) RETURNING member_id"
+                        ),
+                        {"g": str(my_gym), "e": email, "r": str(rank_id)},
+                    )
+                ).mappings().fetchone()["member_id"]
+            )
+        )
+        # 3 classes (the 3rd caps at classes_needed), a promotion (reset to 0),
+        # then 2 more classes — increasing timestamps so the walk is ordered.
+        base = datetime(2026, 6, 1, 12, 0, tzinfo=UTC)
+        events = [
+            ("class_attended", base),
+            ("class_attended", base + timedelta(days=1)),
+            ("class_attended", base + timedelta(days=2)),
+            ("rank_changed", base + timedelta(days=3)),
+            ("class_attended", base + timedelta(days=4)),
+            ("class_attended", base + timedelta(days=5)),
+        ]
+        for activity_type, ts in events:
+            await session.execute(
+                text(
+                    "INSERT INTO member_activities (member_id, gym_id, "
+                    "activity_type, time) VALUES (:m, :g, "
+                    "CAST(:t AS member_activity_type), :ts)"
+                ),
+                {
+                    "m": str(member_id),
+                    "g": str(my_gym),
+                    "t": activity_type,
+                    "ts": ts,
+                },
+            )
+        await session.commit()
+
+    user_id = admin_client.create_user(
+        email, SEEDED_OWNER_PASSWORD, email_confirm=True
+    )
+    created.track_auth_user(user_id)
+
+    client = authed_client(sign_in_as(email, SEEDED_OWNER_PASSWORD))
+    try:
+        # 1. Their OWN gym's theme reads — with the saved design id.
+        resp = client.get(f"/api/v1/gyms/{my_gym}/showcase")
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["theme_design_id"] == design_id
+
+        # 2. ANOTHER gym's theme (the seeded gym) — 403, not an employee OR
+        #    member of it.
+        assert (
+            client.get(f"/api/v1/gyms/{gym_id}/showcase").status_code == 403
+        )
+
+        # 3. Rank-progress resets at the rank_changed and caps at
+        #    classes_needed: [1, 2, 2(cap), 0(reset), 1, 2].
+        resp = client.get(
+            f"{_portal(str(my_gym), str(member_id))}/rank-progress"
+        )
+        assert resp.status_code == 200, resp.text
+        points = resp.json()["points"]
+        assert [p["classes_into_rank"] for p in points] == [1, 2, 2, 0, 1, 2]
+        assert {p["classes_needed"] for p in points} == {classes_needed}
+    finally:
+        client.close()
+        async with db_pool.session() as session:
+            await session.execute(
+                text("DELETE FROM member_activities WHERE gym_id = :g"),
+                {"g": str(my_gym)},
+            )
+            await session.execute(
+                text("DELETE FROM members WHERE gym_id = :g"),
+                {"g": str(my_gym)},
+            )
+            await session.execute(
+                text("DELETE FROM gym_ranks WHERE gym_id = :g"),
+                {"g": str(my_gym)},
+            )
+            await session.execute(
+                text("DELETE FROM gyms WHERE gym_id = :g"),
+                {"g": str(my_gym)},
+            )
+            await session.commit()

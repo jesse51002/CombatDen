@@ -1,82 +1,53 @@
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/videos/data/video.dart';
-import 'package:mobile_app/features/videos/data/video_helpers.dart';
-import 'package:mobile_app/features/videos/data/video_selectors.dart';
-import 'package:mobile_app/features/videos/presentation/widgets/featured_video_card.dart';
-import 'package:mobile_app/features/videos/presentation/widgets/video_carousel_section.dart';
+import 'package:mobile_app/core/formats/format_builder.dart';
+import 'package:mobile_app/core/formats/layout_formats.dart';
+import 'package:mobile_app/core/formats/theme_layout.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_carousel_rows.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_editorial_stack.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_layout_data.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_mosaic.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_shorts_column.dart';
+import 'package:mobile_app/features/videos/presentation/layouts/videos_tag_rail.dart';
 
-/// The vertically-stacked feed below the topbar / tabs on `VideosScreen`,
-/// derived live from the loaded [videos] and the active [scope]: a featured
-/// hero, then one carousel per tag.
+/// The feed area below the topbar on `VideosScreen`: the top-filter
+/// pills, the featured hero, and one section per tag.
+///
+/// Resolves the tenant's `videos_format` slot and delegates to one of
+/// the layouts in `presentation/layouts/`, each of which arranges the
+/// SAME [VideosLayoutData]. A layout may move these and change their
+/// prominence. It may not drop one, add one, or reach past the payload
+/// for data of its own — `test/videos_invariants_test.dart` is the
+/// gate that proves it.
+///
+/// Returns a **sliver**: the screen owns one scroll for topbar and
+/// feed together, and a format that pins its filter (or its rail) needs
+/// to say so in the same sliver list.
 class VideosFeedBody extends StatelessWidget {
   const VideosFeedBody({
     super.key,
-    required this.videos,
-    required this.scope,
-    required this.onVideoTap,
+    required this.data,
+    this.formatOverride,
   });
 
-  final List<Video> videos;
-  final String? scope;
-  final ValueChanged<Video> onVideoTap;
+  final VideosLayoutData data;
+
+  /// Forces a layout instead of resolving it from the customization.
+  /// Used by the layout-invariant tests and the format preview; null in
+  /// normal app use.
+  final VideosFormat? formatOverride;
 
   @override
   Widget build(BuildContext context) {
-    final featured = featuredVideo(videos, scope);
-    final sections = tagSections(videos, scope);
-
-    if (featured == null && sections.isEmpty) {
-      return Padding(
-        padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
-        child: Center(
-          child: Text(
-            'Nothing here yet.',
-            style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
-          ),
-        ),
-      );
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      spacing: DesignConstants.spacingBig,
-      children: [
-        if (featured != null)
-          _PaddedSection(
-            child: FeaturedVideoCard(
-              video: featured,
-              onTap: () => onVideoTap(featured),
-            ),
-          ),
-        for (final section in sections)
-          VideoCarouselSection(
-            title: displayLabel(section.tag),
-            videos: section.videos,
-            onViewAllTap: () => Navigator.of(context).pushNamed(
-              AppRoutes.videoTagList,
-              arguments: section.tag,
-            ),
-            onVideoTap: onVideoTap,
-          ),
-      ],
-    );
+    return FormatBuilder(builder: _build);
   }
-}
 
-class _PaddedSection extends StatelessWidget {
-  const _PaddedSection({required this.child});
-
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: DesignConstants.screenHorizontalPadding,
-      ),
-      child: child,
-    );
+  Widget _build(BuildContext context) {
+    return switch (formatOverride ?? ThemeLayout.videos()) {
+      VideosFormat.carouselRows => VideosCarouselRows(data: data),
+      VideosFormat.editorialStack => VideosEditorialStack(data: data),
+      VideosFormat.mosaic => VideosMosaic(data: data),
+      VideosFormat.shortsColumn => VideosShortsColumn(data: data),
+      VideosFormat.tagRail => VideosTagRail(data: data),
+    };
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import 'package:theme_flutter/data/models/color_mode.dart';
 import 'package:theme_flutter/data/models/customization_color.dart';
+import 'package:theme_flutter/data/models/customization_format.dart';
 
 /// A loaded, resolved customization. App-agnostic: colours,
 /// images, fonts and texts are typed-value maps keyed by slot id
@@ -51,6 +52,11 @@ class ThemeConfig extends Equatable {
   /// slots fall back to the call site's `Symbols.*_sharp`.
   final Map<String, String> icons;
 
+  /// Slot -> the arrangement the generator chose, with its rationale
+  /// (e.g. `home_format` -> `nextUpHero`). Wire section `format_set`.
+  /// Absent slots leave the app on the arrangement it ships.
+  final Map<String, ThemeFormatValue> formats;
+
   const ThemeConfig({
     required this.app,
     required this.displayName,
@@ -62,6 +68,7 @@ class ThemeConfig extends Equatable {
     required this.fonts,
     required this.texts,
     required this.icons,
+    this.formats = const {},
   });
 
   factory ThemeConfig.fromJson(Map<String, dynamic> json) {
@@ -71,10 +78,12 @@ class ThemeConfig extends Equatable {
     // section is `{}` (handled by the helper parsers).
     final colorSet = json['color_set'];
     final textSet = json['text_set'];
+    final formatSet = json['format_set'];
     final colorsRaw = colorSet is Map ? colorSet['colors'] : null;
     final paletteRaw = colorSet is Map ? colorSet['palette'] : null;
     final modeRaw = colorSet is Map ? colorSet['mode'] : null;
     final textsRaw = textSet is Map ? textSet['texts'] : null;
+    final formatsRaw = formatSet is Map ? formatSet['formats'] : null;
     return ThemeConfig(
       app: (json['app'] as String?) ?? '',
       displayName: (json['display_name'] as String?) ?? '',
@@ -86,6 +95,7 @@ class ThemeConfig extends Equatable {
       fonts: _parseStringMap(json['fonts']),
       texts: _parseTexts(textsRaw),
       icons: _parseStringMap(json['icons']),
+      formats: _parseMap(formatsRaw, ThemeFormatValue.fromJson),
     );
   }
 
@@ -107,6 +117,11 @@ class ThemeConfig extends Equatable {
       },
     },
     'icons': Map<String, String>.from(icons),
+    'format_set': {
+      'formats': {
+        for (final e in formats.entries) e.key: e.value.toJson(),
+      },
+    },
   };
 
   static Map<String, T> _parseMap<T>(
@@ -175,5 +190,6 @@ class ThemeConfig extends Equatable {
     fonts,
     texts,
     icons,
+    formats,
   ];
 }

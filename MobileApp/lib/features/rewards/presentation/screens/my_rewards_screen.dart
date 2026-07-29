@@ -8,7 +8,7 @@ import 'package:mobile_app/features/rewards/data/mock_my_rewards.dart';
 import 'package:mobile_app/features/rewards/data/reward.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_grid/rewards_grid.dart';
 import 'package:mobile_app/features/rewards/presentation/widgets/rewards_load_status.dart';
-import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs.dart';
+import 'package:mobile_app/features/rewards/presentation/widgets/rewards_tabs/rewards_tabs.dart';
 import 'package:mobile_app/shared/widgets/nav/app_bottom_nav_bar.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
 import 'package:mobile_app/shared/widgets/topbar/app_topbar.dart';

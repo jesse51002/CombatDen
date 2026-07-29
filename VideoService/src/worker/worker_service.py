@@ -170,10 +170,14 @@ class WorkerService:
         spec = await self._spec.load(gym_id)
         run_id = await self._start_run(gym_id)
         quota_units = 0
+        avatar_quota_units = 0
+        channels_resolved = 0
         embed_usd = 0.0
         try:
             scrape = await self._scraper.scrape(spec)
             quota_units = scrape.youtube_quota_units
+            avatar_quota_units = scrape.avatar_quota_units
+            channels_resolved = scrape.channels_resolved
             funnel = await self._funnel.select(spec)
             embed_usd = funnel.embed_usd
             await self._scraper.write_feed(spec, run_id, funnel.candidate_ids)
@@ -187,6 +191,8 @@ class WorkerService:
                 run_id,
                 youtube_quota_units=quota_units,
                 embed_usd=embed_usd,
+                avatar_quota_units=avatar_quota_units,
+                channels_resolved=channels_resolved,
             )
 
     async def _heartbeat(self, token: UUID, abort: asyncio.Event) -> None:

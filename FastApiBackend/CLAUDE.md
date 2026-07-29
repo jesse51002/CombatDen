@@ -747,6 +747,13 @@ how-to-work-here facts belong here:
   `CAST(:x AS T)` never `:x::t` (`update_rank` builds a dynamic SET of
   per-column casts). The `gyms → ranks_members` edge: `GymsService.update_gym`
   reconciles members on a `sub_rank_type` change (mirrored by `from_preset`).
+  The `members → ranks_reads` edge: `MembersBillingDetailService` is injected
+  with `ranks_reads` and calls `next_leaf_image_url(gym_id, rank_id,
+  sub_index)` to fill `BillingRank.next_rank_image_url` — the belt art of the
+  NEXT leaf, for the member app's next-rank badge. It reuses the domain's one
+  leaf-advance rule (`RanksBase._next_leaf`) and the same override-over-main
+  image precedence as the current leaf; `None` at the top of the ladder, and
+  no query at all for an unranked member.
 - **Reads.** `GET /ready-to-promote`, `GET /{rank_id}/members`, and
   `GET /{rank_id}/sub-rank-counts` — the two `/{rank_id}/...` reads **derive
   the gym from the rank** (`get_rank` first → 404 if missing → verify the
@@ -761,8 +768,8 @@ how-to-work-here facts belong here:
 - Use Supabase RLS (Row Level Security) for authorization at the database level
 - **Identity is verified email, not an auth-user id.** A gym is accessed by a person whose Supabase JWT `email` claim (lowercased) matches a `gym_employees` row's `email` at that row's `employee_type` (`chk_principal_has_email` requires an email on every login role — owner/admin/front_desk; only a `trainer` row may stay email-less instructor DATA). Stored emails are lowercase, so the lowercased claim is an exact match. An `archived_at` row is soft-archived and grants NO access.
 - **Trainers CAN log in now — access is role-set-gated per route, not a blanket owner/admin cut.** `src/shared/auth.py` exports role-set constants — `OWNER_ONLY`, `OWNER_ADMIN`, `STAFF` (owner/admin/front_desk), `ALL_EMPLOYEES` (all four) — and the core check `Auth.verify_roles(gym_id, user_payload, allowed)` (plus `get_employee_id`, `verify_staff_principal`, `verify_gym_employee_for_member`, `get_employee_id_for_member`, all taking an explicit role-set param — REQUIRED, no default, on the two member-scoped ones) admits the caller only when their non-archived `gym_employees` row's `employee_type` is in `allowed` **and** a CONFIRMED `auth.users` account exists for that email. Every route documents exactly which roles it admits — a route gating a trainer-visible read passes `ALL_EMPLOYEES`; gym-config writes and money-moving ops stay `OWNER_ADMIN` / `STAFF`; owner-only actions (Stripe Connect onboarding) use `verify_gym_owner` (`OWNER_ONLY`). `verify_gym_admin_or_owner` is the thin `OWNER_ADMIN` wrapper mirroring the DB's `is_gym_admin_or_owner` RLS function. **The full 4-role capability matrix and enforcement chain live in the `employees-guide` skill** (the source of truth; this section is the how-to-work-here summary).
-- **Go-live read gates (front desk + trainer):** a handful of reads widened for the four-role model. `GET /api/v1/tasks/ongoing` + `GET /api/v1/tasks/{task_id}` are `STAFF` (front desk must see in-task state so its single-membership reprice never races a running bulk job). `PUT /api/v1/member_memberships/price` — reprice ONE membership to its plan's CURRENT ACTIVE price (a correction, **not** a custom amount) — is `STAFF`; plan-wide `reprice-plan` stays `OWNER_ADMIN`. `GET /api/v1/employees/{gym_id}` (the LIST only) is `STAFF` so front desk can fill the schedule's instructor picker; employees create/update/archive stay `OWNER_ADMIN` (the Employees TAB is CRM-route-gated to owner/admin). `GET /api/v1/gyms/{gym_id}/showcase` is `ALL_EMPLOYEES` — every role READs its gym's theme/showcase — while the theme WRITE `PUT /gyms/{id}/theme` stays `OWNER_ADMIN`.
-- **Verified means VERIFIED — every identity query requires a confirmed auth account, pinned to the caller's OWN account.** A matching `gym_employees` row is not enough: each identity-resolving query in `src/shared/sql/` (`auth_resolve_employee.sql`, `auth_staff_principal.sql`, `auth_verified_account.sql`, `auth_member_self.sql`, plus `src/gyms/sql/gyms_list_for_user.sql` and `src/member_portal/sql/member_portal_list_members.sql`) carries a scalar `EXISTS` over `auth.users` on `lower(u.email) = <the row's email>` **AND** `u.email_confirmed_at IS NOT NULL`. That `EXISTS` is **also pinned to the caller's own account** — `AND u.id = CAST(:caller_id AS UUID)`, where `caller_id` is the JWT `sub` read via the new `Auth.require_sub(user_payload)` — so it proves the CALLER's OWN account is confirmed, not merely that SOME confirmed account holds that email. This closes an SSO edge: `auth.users` is unique on email only `WHERE is_sso_user = false`, so without the `sub` pin an unconfirmed password signup on an address that also has a confirmed SSO row could borrow that row's verification; the email equality stays as defense in depth. Always `EXISTS`, **never a JOIN** — the same email-uniqueness caveat means a join can fan out and duplicate the row. (`auth_member_gym_id.sql` is exempt — a pure member→gym lookup with no `EXISTS`, whose caller runs the pinned employee check next.) Reading `auth.users` needs the direct pool, so **`Auth` is constructed with `db_pool`** (`auth = providers.Singleton(Auth, db_pool=db_pool)`), not a PostgREST client; it is a Singleton shared across concurrent requests, so it holds NO request-scoped state and opens a session per query. `tests/shared/test_auth_roles.py` has a drift guard that reads those `.sql` files off disk and fails if the predicate disappears.
+- **Go-live read gates (front desk + trainer):** a handful of reads widened for the four-role model. `GET /api/v1/tasks/ongoing` + `GET /api/v1/tasks/{task_id}` are `STAFF` (front desk must see in-task state so its single-membership reprice never races a running bulk job). `PUT /api/v1/member_memberships/price` — reprice ONE membership to its plan's CURRENT ACTIVE price (a correction, **not** a custom amount) — is `STAFF`; plan-wide `reprice-plan` stays `OWNER_ADMIN`. `GET /api/v1/employees/{gym_id}` (the LIST only) is `STAFF` so front desk can fill the schedule's instructor picker; employees create/update/archive stay `OWNER_ADMIN` (the Employees TAB is CRM-route-gated to owner/admin). `GET /api/v1/gyms/{gym_id}/showcase` is gated by `Auth.verify_gym_member_or_employee` (its own `src/shared/sql/auth_gym_member_or_employee.sql` + drift-guarded predicate) — every EMPLOYEE role AND any MEMBER of the gym READs its theme/showcase (it also now returns the gym's saved `theme_design_id` so a member's app can re-theme). This is a gym-LEVEL branding read that deliberately lives OUTSIDE the member-scoped-surface separation rule: a member reaches it directly with only a `gym_id` (no `member_id`, no `verify_member_self`), because the showcase is gym branding, not member data. The theme WRITE `PUT /gyms/{id}/theme` stays `OWNER_ADMIN`.
+- **Verified means VERIFIED — every identity query requires a confirmed auth account, pinned to the caller's OWN account.** A matching `gym_employees` row is not enough: each identity-resolving query in `src/shared/sql/` (`auth_resolve_employee.sql`, `auth_staff_principal.sql`, `auth_verified_account.sql`, `auth_member_self.sql`, `auth_gym_member_or_employee.sql`, plus `src/gyms/sql/gyms_list_for_user.sql` and `src/member_portal/sql/member_portal_list_members.sql`) carries a scalar `EXISTS` over `auth.users` on `lower(u.email) = <the row's email>` **AND** `u.email_confirmed_at IS NOT NULL`. That `EXISTS` is **also pinned to the caller's own account** — `AND u.id = CAST(:caller_id AS UUID)`, where `caller_id` is the JWT `sub` read via the new `Auth.require_sub(user_payload)` — so it proves the CALLER's OWN account is confirmed, not merely that SOME confirmed account holds that email. This closes an SSO edge: `auth.users` is unique on email only `WHERE is_sso_user = false`, so without the `sub` pin an unconfirmed password signup on an address that also has a confirmed SSO row could borrow that row's verification; the email equality stays as defense in depth. Always `EXISTS`, **never a JOIN** — the same email-uniqueness caveat means a join can fan out and duplicate the row. (`auth_member_gym_id.sql` is exempt — a pure member→gym lookup with no `EXISTS`, whose caller runs the pinned employee check next.) Reading `auth.users` needs the direct pool, so **`Auth` is constructed with `db_pool`** (`auth = providers.Singleton(Auth, db_pool=db_pool)`), not a PostgREST client; it is a Singleton shared across concurrent requests, so it holds NO request-scoped state and opens a session per query. `tests/shared/test_auth_roles.py` has a drift guard that reads those `.sql` files off disk and fails if the predicate disappears.
 - **`Auth.verify_verified_account(user_payload) -> str`** is the standalone primitive for a route whose caller has no `gym_employees` row yet (gym create) — 401 on no email claim, 403 on an unconfirmed account, else the lowercased email.
 - **`Auth.verify_member_self(member_id, user_payload, *, gym_id=None)`** is the ONE member-facing gate: the caller's verified email must equal the `members` row's email, the auth account must be confirmed, and — when `gym_id` is passed — the member must belong to that gym. Pass `gym_id` on every gym-scoped route: without it one email reaches a same-named member at an unrelated gym. 404 unknown member, 403 otherwise. **Its only callers live in `src/member_portal/` (the member-facing surface — see that section); no CRM route uses it.**
 - **Every member-scoped CRM route is STAFF-ONLY.** There is no "or the member themselves" branch anywhere in the backend — `verify_gym_employee_for_member` / `get_employee_id_for_member` gate all of them, and their role-set parameter is **required** (no default), so a call site can never silently inherit `OWNER_ADMIN`. On the check-in routes `is_member` / `ignore_warnings` are staff-selected MODES (kiosk gate vs. staff gate), not claims about who is calling. **A member reaches their own data only through the parallel `/api/v1/member/...` routes, never by a branch inside a staff route** — the two surfaces stay separate on purpose, which is what keeps a member from ever selecting a gate mode.
@@ -934,12 +941,12 @@ VideoService CLAUDE.md). DI provider: `video_feed_refine_runner` (Singleton, inj
 
 **`VideosService` (`videos_service.py`) is a PURE-DELEGATING domain FACADE** — composes `VideoFeedService`,
 `VideoSpecService`, `VideoSpecAuthoring`, `VideoFeedRefiner`,
-`VideoRecsService`, and `VideoRecClickService`; every method is a one-liner to a concern
+`VideoRecsService`, `VideoRecClickService`, and `VideoClickService`; every method is a one-liner to a concern
 (no business logic in the facade, and no business logic in the router either). Exposes: `load_latest_spec`,
 `load_gym_spec` (the legacy `GymVideoSpecView` — pure delegation to
 `VideoSpecService.load_latest_gym_view`, which owns the `disciplines`→`gym_type` projection),
 `save_accepted_spec` (→ authoring.commit), `refine_from_feed`,
-`get_video_rec`, `record_rec_click`, plus all feed operations
+`get_video_rec`, `record_rec_click`, `record_video_click`, plus all feed operations
 (`load_feed_preview` — the windowed per-genre "All" preview, `load_pool_videos` — used by the presets
 template preview, `load_feed_page` — which takes the optional `member_id`,
 `load_owner_videos`, owner add/remove/keep). The conversational agent uses it for
@@ -963,7 +970,8 @@ listing is the only read that shows an un-enriched owner video). The `video_run.
 (the VideoService worker sets it; the backend has no worker-control surface — the worker derives its
 own due gym from timestamps already in the schema, so there is nothing to enqueue and no status route).
 
-**RAG read surface — single rotating-category rec + optional personalized feed + rec-click.**
+**RAG read surface — single rotating-category rec + optional personalized feed + BOTH click writers
+(the idempotent rec click and the append-only feed click).**
 
 The per-member RAG profile is **ONE LLM-written summary + ONE embedding stored on the `members` row**
 (`video_profile_summary` / `video_profile_embedding` / `video_profile_embedding_model` /
@@ -1025,6 +1033,23 @@ first (the feed's guarded read is `verify_and_load_embedding`).
   + `rec_id`); on the first click it fires `MemberVideoProfileRefreshRunner.start`. A repeat click is
   idempotent (`clicked=false`, no re-stamp/re-log/re-fire); an unknown rec for this member+gym raises
   `RecNotFoundError` → 404.
+- **`VideoClickService`** (`video_click_service.py`) — `record_click(gym_id, member_id, video_id)`:
+  the FEED counterpart, for every open the member chose themselves (the hero, a genre carousel, a
+  genre list, the profile's level-up carousel). Without it the taste profile would learn only from
+  what the system already recommended and discard every self-chosen video. It **APPENDS** a
+  `video_clicked` activity through the SAME shared insert (`rec_id` bound NULL — nothing recommended
+  the open), then fires the same `MemberVideoProfileRefreshRunner.start`. Two rules define it, and
+  both are deliberate:
+  - **Append-only — NO dedup, no idempotency key.** A repeat open logs a second row, because a
+    re-watch is real signal. This is the exact opposite of the rec click and must not be "fixed";
+    `tests/videos/test_video_rag_db.py::test_feed_click_logs_a_row_every_time` locks it.
+  - **The video id is caller-supplied, so it is GUARDED** against the served feed first
+    (`video_click_feed_check.sql`, which injects the shared
+    `videos_feed_candidate_source.sql` as its `candidate_source`, so the guard can never drift from
+    the feed the member was shown). Anything else raises `VideoNotInFeedError` → 404, never a logged
+    activity. Firing the refresh per tap is NOT too hot: the runner coalesces per member and
+    `refresh_if_due` no-ops inside `video_profile_refresh_cooldown_days`, so a burst of taps costs at
+    most one paid build per cooldown window.
 - **`MemberVideoProfileRefreshRunner`** (`member_video_profile_refresh_runner.py`) — fire-and-forget,
   **per-member-coalesced** runner (a `ClassVar` task set + done-callback + `drain()` in the `main.py`
   lifespan, plus `ClassVar` in-flight + dirty **member** sets — the same coalescing shape as
@@ -1044,6 +1069,8 @@ never a separate abstraction (there is no mood-bucket map). Member activity writ
 (`MemberVideoRec` (`rec_id` / `category: VideoGenre` / `video: GymVideoCard`) and `VideoRecClickResponse`
 — there is no `RecCandidate` wrapper; the card already carries its `video_id`); the profile summary
 schema is `schema/member_profile_schema.py` (`MemberProfileSummary`, char-capped). SQL:
+`schema/video_click_schema.py` (`MemberVideoClickResponse` — just the echoed
+`video_id`; a feed click has no rec row to report on). SQL:
 `sql/member_profile_load.sql` / `member_profile_source.sql` / `member_profile_update.sql`,
 `videos_load_feed_page.sql` (THE unified feed + rec read), `videos_load_owner_videos.sql` (the ungated
 owner listing), `videos_load_feed_preview.sql` (the windowed per-genre "All" preview),
@@ -1051,7 +1078,9 @@ owner listing), `videos_load_feed_preview.sql` (the windowed per-genre "All" pre
 source, injected as the `candidate_source` template variable via `load_sql` into BOTH
 `videos_load_feed_page.sql` and `videos_load_feed_preview.sql`, so the serve predicate lives in one place),
 `video_recs_served_count.sql`, `video_recs_record_insert.sql` (`RETURNING rec_id`),
-`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`.
+`video_rec_click_update.sql` / `video_rec_load.sql` / `member_activity_video_click_insert.sql`
+(SHARED by both click writers, so their rows are identical to the taste-profile read) /
+`video_click_feed_check.sql` (the served-feed guard on the video-scoped click).
 
 The agent wrapper lives in `service/video_agent/`:
 
@@ -1131,7 +1160,7 @@ separate `gym_video_query` table was dropped when versioned spec shipped).
 (defined before `video_feed_service`, which reads the embedding), `video_feed_service`
 (defined before `video_recs_service`, which delegates the rec candidate query to it),
 `member_video_profile_refresh_runner`, `video_recs_service`,
-`video_rec_click_service`, `video_agent_service`, `videos_service`.
+`video_rec_click_service`, `video_click_service`, `video_agent_service`, `videos_service`.
 
 **DI providers (presets domain):** `presets_service`, `presets_template_service`.
 
@@ -1175,17 +1204,26 @@ member-self branch had:
    evaluated by (the exact hole the deleted self-branch had).
 
 **Handlers are thin — every route delegates to the SAME service the CRM uses,** so the member surface
-can't drift from the staff surface. Only two reads have no existing owner, and they live in
+can't drift from the staff surface. Only THREE reads have no existing owner, and they live in
 `service/member_portal_service.py` (`MemberPortalService`, a single standalone service, flat at
 `service/`): `list_members_for_email` (`sql/member_portal_list_members.sql` — the entry point; it
-carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query) and
-`get_profile` (a pure field PROJECTION of `MembersBillingDetailService.get_member_billing_detail` down
-to the member-appropriate `MemberPortalProfile` — no number is re-derived).
+carries the confirmed-`auth.users` `EXISTS` itself, like every identity-resolving query, plus the
+three GYM CAPABILITY flags below), `get_profile` (a field PROJECTION of
+`MembersBillingDetailService.get_member_billing_detail` down to the member-appropriate
+`MemberPortalProfile` — no number is re-derived — plus the one block the CRM detail does
+not carry, `latest_promotion`, see below), and `get_rank_progress`
+(the profile graph's data — `sql/member_portal_rank_progress.sql` walked in Python: one point per
+`member_activities` event, `rank_changed` resets the counter to 0 and `class_attended` increments it
+capped at `classes_needed`, the member's CURRENT per-step threshold derived with the SAME
+`effective_sub_count` + `ceil(classes_to_next_major / …)` math as `MembersBillingDetailService._build_rank`,
+so the graph and the rank card can't disagree; empty series when the member has no rank or ranks are
+disabled).
 
 | Route (prefix `/api/v1/member`) | Gate | Delegates to |
 |---|---|---|
-| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` |
+| `GET /members` | `verify_verified_account` (no `member_id` exists yet) | `MemberPortalService.list_members_for_email` (+ the gym's three capability flags) |
 | `GET /gyms/{gid}/members/{mid}` | `verify_member_self(mid, gym_id=gid)` | `MemberPortalService.get_profile` |
+| `GET …/rank-progress` | same | `MemberPortalService.get_rank_progress` |
 | `GET …/streak` | same | `StreakService` |
 | `GET …/class-history` | same | `CheckinHistoryService` |
 | `GET …/classes` | same | `ClassesScheduleReaderService.list_effective_instances` |
@@ -1197,6 +1235,103 @@ to the member-appropriate `MemberPortalProfile` — no number is re-derived).
 | `GET …/videos` | same | `VideosService.load_feed_page`, `rejected=False` hardwired, `member_id` bound to the path member |
 | `GET …/video-rec` | same | `VideosService.get_video_rec` |
 | `POST …/video-rec/{rec_id}/click` | same | `VideosService.record_rec_click` |
+| `POST …/videos/{video_id}/click` | same | `VideosService.record_video_click` (append-only) |
+
+**The identity read carries the gym's THREE CAPABILITY flags, and it carries them because of WHEN it
+is fetched.** `MemberPortalIdentity` gained `gym_rank_enabled` / `gym_has_rewards` / `gym_has_videos`
+alongside the existing `gym_name` / `gym_logo_url` / `gym_address` block. The app decides which
+BOTTOM NAV TABS exist from them, so they must be right at first paint and survive offline — identity
+is fetched once at boot and cached, while the profile read arrives later. They are per-GYM, so a
+family spanning gyms legitimately gets a different tab set per row.
+
+- `gym_rank_enabled` is the stored `gyms.is_rank_enabled` toggle (previously read only inside
+  `member_portal_rank_progress.sql`, never exposed).
+- **`gym_has_rewards` / `gym_has_videos` are DERIVED FROM DATA — there is no toggle for either**
+  (founder decision: the question is only whether the gym HAS any). Each **mirrors the exact
+  predicate of the member-facing read behind its tab**, so a flag can never disagree with the screen:
+  `gym_has_rewards` = one `gym_rewards` row with `is_active = TRUE` (`list_rewards.sql` as the member
+  route calls it, `include_inactive` hardwired FALSE); `gym_has_videos` = one row the SERVED feed
+  would return, i.e. the enriched-`INNER JOIN video_rag`-AND-accepted, owner-section-or-latest-
+  COMPLETED-run predicate of `src/videos/sql/videos_feed_candidate_source.sql`.
+- That served predicate is **copied, not injected** — the shared file binds ONE `gym_id` while the
+  identity read correlates per gym — so `tests/member_portal/test_member_portal_capabilities_db.py`
+  carries a **drift guard** that reads both `.sql` files off disk. Change the shared candidate source
+  and you must change the mirror in the same commit.
+- Shape: both are `EXISTS`, never `COUNT` (a boolean only needs the first row), and they live in a
+  `gym_capabilities AS MATERIALIZED` CTE over the DISTINCT matching gyms. `MATERIALIZED` is
+  load-bearing — inlined, the planner may pull the subquery into the join and re-run the whole feed
+  predicate once per MEMBER row.
+
+**The profile's retention block carries THIS WEEK's attended weekdays.**
+`BillingRetention.current_week_attended_weekdays` is a list of **SUNDAY-FIRST** weekday indices
+(0 = Sunday … 6 = Saturday), ascending, empty when the member hasn't trained this week. It exists so a
+rank-disabled gym can make the streak the profile's centrepiece without a second call to fetch and
+re-derive the whole class history for seven dots.
+
+- **One source, not a parallel definition.** `MembersBillingDetailService` now calls
+  `StreakService.get_streak_details` (not `get_streak`), so the strip and `class_streak_weeks` come
+  from the same session and the same gym-local Monday anchor and can never contradict each other on
+  screen. The re-indexing lives on `StreakService.sunday_first_attended_indices` — the service that
+  owns the strip is the one place that knows both origins. No new `.sql`: it reuses
+  `src/checkin/sql/current_week_days.sql`.
+- **Two origins, deliberately.** The WEEK is the streak's gym-local **Monday-start** week (so both
+  numbers describe the same seven days); the INDEX is **Sunday-first**, matching the member app's
+  `StreakWeekStrip` (Sunday→Saturday) and its `completedWeekdayIndices()` helper. Consequently a
+  Sunday only ever lights up as the LAST day of the current streak week, rendered in the strip's
+  first cell. `StreakResponse.current_week_days` on `GET …/streak` is UNCHANGED — still Monday-first
+  booleans; don't "align" the two, they are different contracts.
+- It rides `BillingRetention`, which the CRM member-detail response shares, so the staff surface gets
+  the field too (additive; one extra cheap indexed query on that read).
+
+**The profile also carries `latest_promotion` — the member app's promotion animation.** The app plays
+an old-belt → new-belt animation ONCE per new promotion, driven by its OWN local watermark (the same
+seed-silently-on-null pattern as its celebration watermark), so the backend's whole job is to answer
+"has the member just moved UP, and what did BOTH belts look like". `MemberPortalPromotion`
+carries `activity_id` (**the watermark key** — an opaque immutable id, not a timestamp, which two rows
+can share and which is fragile to precision across the wire), `promoted_at` (display only), and
+`old_rank_name` / `new_rank_name` / `old_image_url` / `new_image_url` — every field nullable.
+
+- **It hosts on the PROFILE, and it is member-portal-PRIVATE.** The celebration screen already loads
+  the profile, so a dedicated route would buy nothing; and unlike the week strip it does NOT ride
+  `BillingRetention` — `MembersBillingDetailService` and the CRM member-detail card are untouched.
+  `MemberPortalService.get_latest_promotion` is one extra indexed read
+  (`sql/member_portal_latest_promotion.sql`), scoped by `member_id` alone, which is already gym-safe
+  (`member_activities` carries the composite FK `(member_id, gym_id)`).
+- **ONLY A REAL PROMOTION SURFACES, and the filter is READ-SIDE ONLY.** `rank_changed` is logged for
+  every rank change — staff corrections, demotions and unassignments included — so the newest one is
+  not automatically something to celebrate. The read returns the newest change only when the new leaf
+  ranks **strictly above** the old one, comparing the leaf pair *(main rank ladder position,
+  sub-index)* left to right: a higher `gym_ranks.main_rank_num_order` wins outright (that column IS
+  the ladder — see `list_ranks.sql`, `RanksBase._next_leaf`, `backfill_lowest_rank.sql`), else a
+  higher `sub_index` within the same main rank (a stripe). Everything else yields **no row**, which
+  serializes as the same `null` a never-promoted member gets, so the app just stays quiet: a
+  demotion, a lateral/no-op correction, an unassignment (no TO leaf at all), a leaf whose rank has
+  since been DELETED from the ladder (position unknowable ⇒ unprovable), and a **legacy 4-key row**
+  whose main rank did not change (no sub-indices ⇒ a stripe promotion and a stripe demotion are
+  indistinguishable). Legacy rows that DID change main rank are still fully provable from their rank
+  ids and do surface. A **first assignment** (`old_rank_id` NULL — the lowest-rank backfill, or staff
+  giving a rank-less member their first belt) has no FROM leaf to be above and DOES surface, as an
+  arrival the app renders without a from-side. Only the **newest** change is ever considered — a
+  promotion later corrected downward stays buried rather than re-celebrating a belt the member no
+  longer holds. **Do not "fix" the writer**: `src/ranks/sql/insert_rank_activity.sql` must keep
+  logging every change (it is the audit trail AND the `rank_changed` progress anchor); celebration is
+  decided here, on the read.
+- **Everything the app RENDERS comes out of the activity's own SNAPSHOT, never a live `gym_ranks`
+  join.** `image_url` / `sub_rank_image_overrides` are user-writable, so a live lookup would let a gym
+  re-uploading belt art retroactively rewrite what a past promotion looked like. The write side is
+  `src/ranks/sql/insert_rank_activity.sql` (see the `ranks-guide` skill for the eight-key payload and
+  the one `RanksBase._leaf_image_url` rule that resolves each URL). `gym_ranks` IS joined now, for
+  exactly one thing the payload does not carry — `main_rank_num_order`, the ladder position the
+  promotion test compares — and for nothing that reaches the wire. The tradeoff is that re-ordering
+  the ladder can change whether an OLD change still reads as a promotion; that beats comparing
+  against a ladder that no longer exists.
+- **It DEGRADES, it never fails.** A row written before the payload carried images has no such key, and
+  `->>` yields NULL exactly as it does for a JSON null — the client falls back to its themed belt.
+  Nothing is backfilled. `null` for a member who has never had a rank change, and the identical `null`
+  when the newest change was not a promotion.
+- **Decoupled from any class, deliberately.** Promotions are staff-driven from the ready-to-promote
+  board, minutes to days after a class and often in bulk, so there is no honest way to attribute one to
+  a specific attendance — nothing here joins attendance, and the copy reads "You've been promoted".
 
 **Same-gym is guarded on the DEBIT, in every redeem statement.** Both `redeem_reward.sql` and
 `redeem_reward_override.sql` carry `AND (SELECT gym_id FROM locked_reward) = (SELECT gym_id FROM
