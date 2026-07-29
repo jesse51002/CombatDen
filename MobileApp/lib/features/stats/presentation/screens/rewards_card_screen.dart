@@ -105,6 +105,7 @@ class _RewardsCardScreenState extends State<RewardsCardScreen> {
         final balance = state.profile?.retention.pointsBalance;
         final next = nextCelebrationCard(
           current: AppRoutes.postClassRewards,
+          data: data,
           hasRank: state.profile?.rank != null,
           pointsBalance: balance,
         );

@@ -45,6 +45,7 @@ class _PointsScreenState extends State<PointsScreen> {
           builder: (context, _) {
             final next = nextCelebrationCard(
               current: AppRoutes.postClassPoints,
+              data: data,
               hasRank: state.profile?.rank != null,
               pointsBalance: state.profile?.retention.pointsBalance,
             );

@@ -5,13 +5,14 @@ import 'package:mobile_app/features/profile/data/models/billing_personal_info.da
 import 'package:mobile_app/features/profile/data/models/billing_rank.dart';
 import 'package:mobile_app/features/profile/data/models/billing_retention.dart';
 import 'package:mobile_app/features/profile/data/models/billing_reward_card.dart';
+import 'package:mobile_app/features/profile/data/models/member_promotion.dart';
 import 'package:mobile_app/features/profile/data/models/pending_redemption_card.dart';
 
 part 'member_profile.g.dart';
 
 /// The member's own profile — the app's shared source for the topbar's
-/// streak / points, plus the rank block, membership cards, and reward
-/// redemptions later features read.
+/// streak / points, plus the rank block, membership cards, reward
+/// redemptions, and the member's latest promotion.
 ///
 /// Mirrors `MemberPortalProfile` in
 /// `FastApiBackend/src/member_portal/schema/member_portal_schema.py`
@@ -28,6 +29,13 @@ class MemberProfile {
   final BillingPersonalInfo personalInfo;
   final BillingRetention retention;
   final BillingRank? rank;
+
+  /// The member's most recent rank change, when it was a promotion — what the
+  /// app-open promotion card animates. It rides this payload rather than a
+  /// route of its own because the app already loads the profile on the screen
+  /// that celebrates. Null for a member who has never been promoted.
+  final MemberPromotion? latestPromotion;
+
   @JsonKey(defaultValue: <BillingMembershipInfo>[])
   final List<BillingMembershipInfo> memberships;
   @JsonKey(defaultValue: <BillingRewardCard>[])
@@ -44,6 +52,7 @@ class MemberProfile {
     required this.retention,
     this.photoUrl,
     this.rank,
+    this.latestPromotion,
     this.memberships = const [],
     this.recentlyRedeemedRewards = const [],
     this.pendingRedemptions = const [],

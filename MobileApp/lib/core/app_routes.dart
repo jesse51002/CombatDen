@@ -30,6 +30,11 @@ class AppRoutes {
   static const String pointsStore = '/rewards/store';
   static const String summary = '/rewards/summary';
 
+  // Belt promotion — card 0 of the app-open celebration flow. A SIBLING of the
+  // `postClass*` family, not a member of it: a promotion is staff-driven and
+  // has nothing to do with a class.
+  static const String promotion = '/promotion';
+
   // Post-class celebration flow
   static const String postClassStreak = '/post-class/streak';
   static const String postClassPoints = '/post-class/points';

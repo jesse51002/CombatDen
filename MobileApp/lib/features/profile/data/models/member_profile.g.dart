@@ -22,6 +22,11 @@ MemberProfile _$MemberProfileFromJson(Map<String, dynamic> json) =>
       rank: json['rank'] == null
           ? null
           : BillingRank.fromJson(json['rank'] as Map<String, dynamic>),
+      latestPromotion: json['latest_promotion'] == null
+          ? null
+          : MemberPromotion.fromJson(
+              json['latest_promotion'] as Map<String, dynamic>,
+            ),
       memberships:
           (json['memberships'] as List<dynamic>?)
               ?.map(

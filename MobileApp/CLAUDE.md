@@ -62,7 +62,7 @@ capture-coupled set:
   `mock_stats.dart` are NOT dormant — every celebration card is built from them
   by `celebration_stats_builder.dart`; only the `mock*Stats` demo CONSTANTS are.
   (`features/stats/presentation/widgets/wins/` is live again — the wins card is
-  back as the flow's last card; see *The post-class celebration*.)
+  back as the flow's last card; see *The APP-OPEN celebration flow*.)
 - `features/style_select/data/gyms_pager.dart` — the old VideoService gym-browser
   pager the harness pages to pick a gym/theme. The style-select **screen** +
   route are gone.
@@ -272,10 +272,22 @@ note is deleted.
   five topbar wrappers (home / profile / rewards / videos / class-detail) pass
   `rankImageUrl: state.profile?.rank?.imageUrl` from the shared
   `MemberProfileBloc`; the param is optional, so a bar built without a profile
-  (the class-detail `live: false` path) simply keeps the themed belt. Same idiom
-  as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile and
-  `RankBody._Belt` on the post-class rank card — **every belt in the app resolves
-  the member's own art first; don't invent a fifth rule.** **A failed load falls
+  (the class-detail `live: false` path) simply keeps the themed belt. **That
+  ladder is ONE shared widget now** — `RankBeltImage`
+  (`shared/widgets/rank/rank_belt_image.dart`): member art →
+  themed `slot` (default `CombatDenSlots.rankBelt`) → the bundled `asset`,
+  taken both when the URL is absent and when it fails to load, with a
+  blank/whitespace URL treated as ABSENT. It carries **no width/height** — the
+  celebration cards size it frame-by-frame as it flies, so every fixed-size
+  site boxes it itself. `RankHeader` on the profile (77×50, bundled floor
+  `profile_rank_belt_gold.png`), `RankBody` on the post-class rank card and
+  both sides of `PromotionBody` use it. Two sites still carry their own copy of
+  the same ladder — `InfoBar._Belt` here, and `NextRankBadge._Belt`, which
+  takes the different `CombatDenSlots.nextRankBeltImage` slot (what the
+  `slot` parameter exists for). Both BEHAVE identically to the shared widget;
+  folding them in is a separate change. **Every belt in the app resolves the
+  member's own art first; use the shared widget, don't invent a fifth
+  rule.** **A failed load falls
   back, it does NOT collapse — but that rule is
   about ARTWORK, at a rank-ENABLED gym.** Where the gym runs a ladder the belt
   is permanent topbar chrome, so the network `Image`'s `errorBuilder` returns
@@ -408,16 +420,72 @@ been graded yet, and that member still belongs on the rank-shaped page.
   `ProfileStreakWeek` and the facts slot each carry a narrow `buildWhen`. No
   idle or looping motion.
 
-## The post-class celebration is composed, not hardcoded
+## The APP-OPEN celebration flow is composed, not hardcoded
 
 `features/stats/data/celebration_flow.dart` owns the card ORDER, and it is the
-only place that decides which cards a member sees: `celebrationCardRoutes` =
-streak → points → (rewards, when `gymHasRewards` **and** `rewardsWorthShowing`)
-→ (rank, when `gymRankEnabled` **and** the member holds a rank) → **wins**. Each
-screen asks `nextCelebrationCard(current:, hasRank:, pointsBalance:)` for its
-successor and takes its label from `celebrationCtaLabel`, so **a card never
-chains into one that was composed out** — including the rank card. Add a card by
-adding it to that list, not by hardcoding a route in a screen's CTA.
+only place that decides which cards a member sees. Two independent things can
+be pending on one app open, and `celebrationCardRoutes` composes both:
+
+```
+(promotion, when gymRankEnabled AND promoted)
+→ if classAttended: streak → points → (rewards) → (rank) → wins
+```
+
+Each screen asks `nextCelebrationCard(current:, data:, hasRank:,
+pointsBalance:)` for its successor and takes its label from
+`celebrationCtaLabel`, so **a card never chains into one that was composed
+out**. Add a card by adding it to that list, not by hardcoding a route in a
+screen's CTA. (The `postClass*` route and file NAMES stay — they are the route
+contract, not copy, the same law that keeps `AppBottomNavTab.rank` named `rank`
+while it is labelled "Profile".)
+
+- **The PROMOTION is card 0, and it is not a post-class card.** Staff promote
+  from the ready-to-promote board minutes to days after a class and often in
+  bulk, so there is no honest way to attribute a promotion to an attendance —
+  nothing on `PromotionScreen` references a class, a date or an attendance, and
+  the copy reads "You've been promoted", never "that class promoted you". It
+  goes FIRST because it is the reason to open the app, because the `✕` is live
+  on every card (so the biggest news must not be the reward for tapping through
+  three others), and — decisively — because a belt card sitting immediately
+  after "you attended a class" would re-create by adjacency the very
+  class-caused-it reading the backend refused to encode.
+- **A promotion SUPPRESSES the post-class rank card** (`if (rankEnabled &&
+  hasRank && !promoted)`). It would restate the belt the promotion screen just
+  spent 2.6s delivering, and its own copy is `{N} more classes until promotion`
+  over a `classesSinceRank` the promotion has just reset to 0 — "you have the
+  furthest still to go", thirty seconds after being told they arrived. **One
+  belt moment per app open**, composed out at the source.
+- **`classAttended` gates the four class cards as ONE group.** Without it a
+  promotion-only flow would chain into a streak card showing a stale week and a
+  points card showing **`+0 points`** (`CelebrationData.empty().pointsWorth` is
+  0), which is a false statement about a class the member did not just attend.
+  The wins recap is inside the group for the same reason: its tiles recap a
+  class and its CTA is "book your next class". `classAttended` needs no new
+  field — it is `data.occurredAt != null`, already null on
+  `CelebrationData.empty()` and on a PR-3 deep link.
+- **`CelebrationData` carries the promotion decision** (`final bool promoted`,
+  default false). It is decided ONCE by `CelebrationDetector` against the
+  promotion watermark and threaded screen-to-screen; no card re-decides it,
+  which is what keeps the rank card composed out for the WHOLE flow rather than
+  only on the screen that asked. A card entered with no argument falls back to
+  `CelebrationData.empty()` → no promotion, no class → an empty list → the CTA
+  reads "Done" and returns home. Correct for every card, deep-linked ones
+  included.
+- **`AppRoutes.promotion` (`/promotion`) is a SIBLING of the `postClass*`
+  family, not a member of it.** `PromotionScreen` keeps its own self-skip
+  backstop (no promotion / no name / ranks off → post-frame home, guarded by an
+  `_endScheduled` flag) for the PR-3 deep link, exactly like `RankScreen`.
+- **The promotion is captured on the screen's FIRST build and never re-read.**
+  A silent refresh landing mid-animation must not swap the belts under the
+  member — the screen-level half of "an entrance never re-fires on a silent
+  refresh"; `PromotionBody`'s `initState`-driven controller is the other half.
+- **`PromotionBody` derives EVERY value from one `AnimationController`** —
+  dissolve, swell, name exit, belt flight, block cross-fade — so a skip
+  (`_ctrl.value = 1`) paints the final frame in full. Nothing on it is a
+  self-driving child (a `ScaleReveal` / `CountUpText` runs its own timer that no
+  jump can fast-forward). `SparkleBurst` is the one self-driven thing and it is
+  SUPPRESSED on a skip rather than skipped. The design spec is
+  `design/PROMOTION_ANIMATION_SPEC.md`.
 
 - **The WINS card is the flow's LAST card, and it is UNGATED.** Its three tiles
   — classes this week, points earned, week streak — are universal, so unlike
@@ -481,9 +549,13 @@ adding it to that list, not by hardcoding a route in a screen's CTA.
   `celebration_stats_builder.dart` fills them from the live `MemberProfile`, and
   anything the builder drops silently reverts a card to the theme's stand-in. The
   rank card's belt therefore carries `rankImageUrl` (`rank.image_url`) beside
-  the bundled `beltAsset` and resolves through `RankBody._Belt` — the same
-  member-art-first rule as the topbar and the profile. When adding a field to a
-  card, carry the live image URL with it.
+  the bundled `beltAsset` and resolves through the shared `RankBeltImage` — the
+  same member-art-first rule as the topbar and the profile. When adding a field
+  to a card, carry the live image URL with it. The promotion card is the one
+  exception to "the member's own art": its two sides are the promotion's
+  SNAPSHOT URLs (`old_image_url` / `new_image_url`, frozen at the moment of the
+  change precisely so new belt art cannot rewrite an old promotion), through
+  the same ladder.
 - **A reward photo is framed 3:2, everywhere it appears.** The celebration
   carousel's slide (`rewards_carousel.dart`) and the store's `RewardImageHero`
   use the same ratio and the same `radiusBig` corner, so one uploaded photo is
@@ -515,25 +587,35 @@ adding it to that list, not by hardcoding a route in a screen's CTA.
 - `RewardsCardScreen` takes an optional `repository` — the same test seam as
   `VideoReccScreen`, so no test hits a live backend.
 
-### The two notification destinations have a DEBUG-ONLY trigger
+### The three notification destinations have a DEBUG-ONLY trigger
 
-Both screens a push will land a member on are unreachable by hand in the
+Every screen a push will land a member on is unreachable by hand in the
 running app — the celebration only fires off a fresh staff check-in (and burns
-the watermark doing it), and `SummaryScreen` ("Drill of the Day") is never
+the watermark doing it), a real promotion burns ITS watermark on first sight so
+nobody can look at it twice, and `SummaryScreen` ("Drill of the Day") is never
 shown automatically. So the identity sheet carries a **Developer** section
 (`IdentitySheetDevSection`, the whole section wrapped in `if (kDebugMode)` so
 it is compiled out of release builds) with one row for each.
 
 - **"Post-class celebration"** calls `CelebrationDetector.fireNow` — the same
-  data path as `maybeFire` (class-history head → newest attended row →
-  payload) but it ignores the watermark and **never advances it**, so a
+  data path as `maybeFire`'s class leg (class-history head → newest attended
+  row → payload) but it ignores the watermark and **never advances it**, so a
   preview can't consume the real celebration. With nothing attended yet (or a
   failed fetch) it opens on a representative fallback payload rather than
   doing nothing. The card CHAIN is not special-cased: `celebration_flow.dart`
   still composes it from the gym's real flags, so the preview is exactly what
   this gym's members get.
+- **"Belt promotion"** pushes `AppRoutes.promotion` with
+  `const CelebrationData(promoted: true)`; the promotion watermark is never
+  touched. The screen renders the member's real `latest_promotion` when there
+  is one. When there isn't, and **only under `kDebugMode`**, it synthesises the
+  FIRST-ASSIGNMENT state from their own `profile.rank` (new side = their real
+  current rank name + image, old side null). With no rank at all it falls
+  through to the self-skip. A dev trigger that silently does nothing on a fresh
+  member is useless; one that fabricates a fake belt is a lie — this is the
+  honest middle.
 - **"Drill of the Day"** just pushes `AppRoutes.summary`.
-- Both **dismiss the sheet FIRST**, then push onto the `NavigatorState`
+- All three **dismiss the sheet FIRST**, then push onto the `NavigatorState`
   captured before the pop — the same host/shell navigator `_signOut` pops.
 - It previews what a member SEES on those screens. Delivery, the 24h timing
   and cold-start deep-link routing are the FCM work, not this.
@@ -655,12 +737,50 @@ way to undo it, which is backwards.
 These came from an adversarial review of running the app as a real member; treat
 them as mandatory:
 
-- **Celebration watermark.** The post-class celebration fires from a per-member
-  watermark (`celebration_watermark_<member_id>`) checked on app open/foreground.
-  A null watermark seeds **silently** (no replay storm on first run / reinstall /
-  member switch); it fires **once** for the newest unseen attendance and advances
-  only after the flow completes. Which cards the flow shows is composed per-gym —
-  see *The post-class celebration is composed, not hardcoded*.
+- **TWO watermarks, one hook.** `CelebrationDetector.maybeFire(navigator,
+  profile)` decides both legs on app open / foreground, and each has its own
+  per-member `shared_preferences` key. A null watermark seeds **silently** on
+  both (no replay storm on first run / reinstall / member switch, and a second
+  device does the same on its first open); both advance BEFORE the flow is
+  shown, so a celebration fires exactly once and never replays even if the app
+  is killed mid-flow. Which cards the flow shows is composed per-gym — see *The
+  APP-OPEN celebration flow is composed, not hardcoded*.
+  - **Celebration watermark** (`celebration_watermark_<member_id>`,
+    `celebration_rules.dart`) — the newest attended `occurred_at`, compared
+    with `isAfter`, because an attendance instant genuinely is its own
+    ordering key.
+  - **Promotion watermark** (`promotion_watermark_<member_id>`,
+    `promotion_rules.dart`) — the promotion's `activity_id`, compared by
+    **EQUALITY, never ordering**. The backend is explicit that `activity_id` is
+    an opaque immutable id and that a timestamp would be a weaker key (two rows
+    can share an instant; clock/precision differences across the wire make
+    equality fragile). It is safe to be unordered because the server only ever
+    surfaces the NEWEST genuine promotion, so a different id is by construction
+    a newer one. `promoted_at` is display-and-ordering only and this screen does
+    not display it. Do not "fix" this into a comparison.
+  - **The two legs are INDEPENDENT.** The promotion rides `latest_promotion` on
+    the profile the app already loaded and makes **no network call**, so the
+    class-history read has its own inner `try`/`catch` — a class-history
+    failure must not swallow a promotion that needed no network at all. A
+    promotion fires on the next app open whether or not a class was attended.
+  - **A promotion row with nothing to say is MARKED and not shown** (a null
+    `new_rank_name`). Marking rather than skipping is what guarantees an
+    unrenderable row can never be reconsidered on a later open.
+  - **At a gym with ranks OFF the promotion watermark is left ALONE** — there
+    is no rank surface, so there is nothing to have been seen. Stated
+    deliberately: if the gym turns ranks back on, the member's most recent
+    promotion is celebrated once at that point, which is the app introducing
+    them to the ladder they are now on.
+- **The check is ARMED by the app-open hook and CONSUMED by the first loaded
+  profile.** `AppLifecycleRefresh` sets `_armed` in its post-frame callback and
+  on every `resumed`, and a `BlocListener<MemberProfileBloc>` spends it on the
+  next `loaded` state with a non-null profile. It cannot re-fire on a
+  mid-session pull-to-refresh, so nothing takes over the screen while the
+  member is mid-booking — the once-per-mount law enforced at the push, not just
+  inside a widget. The watermarks are the backstop, not the mechanism. One
+  benign consequence: a foreground whose refresh returns a byte-identical
+  profile emits nothing (`Equatable`), so the arm simply clears on the next
+  real emission — correct, since an identical profile carries no new promotion.
 - **Never show a surface for a feature the gym doesn't run.** A tab, a topbar
   tile, a celebration card or a hand-off into a screen that can only be empty
   is worse than no entry point at all: the member gets there by a route with no
@@ -1141,7 +1261,8 @@ Scoped / significant dependencies:
 - `flutter_dotenv` — loads `.env.dev` / `.env.prod` at startup for `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `API_BASE_URL` (see *Configuration*).
 - `json_annotation` / `json_serializable` / `build_runner` — code-gen for API response models (`*.g.dart`).
 - `mobile_scanner` — the QR check-in camera scanner (`features/qr_checkin/`). Only there.
-- `shared_preferences` — persists the `SelectedMember` identity + the celebration watermark.
+- `shared_preferences` — persists the `SelectedMember` identity + the celebration
+  and promotion watermarks.
 - `google_fonts` — Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
 - `url_launcher` — hands a URI to the OS. Two call sites, each behind its own
   helper file (a URI builder + a launcher returning bool, so no `BuildContext`
