@@ -17,7 +17,6 @@ class AppNavItem extends StatelessWidget {
     this.isActive = false,
     this.onTap,
     this.isPrimary = false,
-    this.showLabel = true,
   });
 
   /// `Symbols.*_sharp` fallback drawn when [iconSlot] has no override.
@@ -29,10 +28,6 @@ class AppNavItem extends StatelessWidget {
   final bool isActive;
   final VoidCallback? onTap;
   final bool isPrimary;
-
-  /// When false the label is not laid out, but it is still built and
-  /// still announced, so an icon-only nav keeps its accessible name.
-  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -59,16 +54,13 @@ class AppNavItem extends StatelessWidget {
                 color: textColor,
                 size: DesignConstants.iconSizeMd,
               ),
-              if (showLabel)
-                Text(
-                  label,
-                  style: DesignConstants.h3.copyWith(color: textColor),
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                )
-              else
-                Semantics(label: label, child: const SizedBox.shrink()),
+              Text(
+                label,
+                style: DesignConstants.h3.copyWith(color: textColor),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
             ],
           ),
         ),

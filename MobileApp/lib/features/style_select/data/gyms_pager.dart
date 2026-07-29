@@ -15,7 +15,7 @@ const String _kThemeServiceBaseUrl = String.fromEnvironment(
 );
 
 /// Accumulates a paged + searchable view of the VideoService **gym browser**
-/// (`GET /presets/templates`), mapping each gym to a [ThemeStyle] the existing
+/// (`GET /gyms`), mapping each gym to a [ThemeStyle] the existing
 /// style picker renders — `id` is the gym's **theme** (so tapping it loads that
 /// theme), the card art is the gym's celebration image. Gyms are the entry
 /// point; the theme lives on the gym.

@@ -1,128 +1,50 @@
-import 'package:flutter/widgets.dart';
-import 'package:mobile_app/core/formats/format_builder.dart';
-import 'package:mobile_app/core/formats/motion_formats.dart';
-import 'package:mobile_app/core/formats/theme_motion.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_bar_sweep.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_box.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_dots.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_figure.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_frame.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_logo_breathe.dart';
-import 'package:mobile_app/shared/widgets/animation/loader/loader_pulse_ring.dart';
+import 'dart:math' as math;
 
-/// The app's ONE waiting state, drawn in the tenant's `loader_style`.
-///
-/// Every surface that waits on something shows this widget, so a tenant
-/// picks a loader once and the whole app waits the same way. The value
-/// supplies the tempo and the figure and nothing else: whichever one is
-/// active, the loader fills the same box, says nothing, and never
-/// settles — a loader that stopped would be a bug, not a format.
-///
-/// [dotSize], [spacing] and [bounceHeight] are the shipped dots'
-/// geometry and, through it, the box EVERY value fills:
-/// `3·dotSize + 2·spacing` wide by `dotSize + bounceHeight` tall.
-class LoadingDots extends StatelessWidget {
+import 'package:flutter/material.dart';
+import 'package:mobile_app/core/design_constants.dart';
+
+/// Three brand-colored dots bouncing in a continuous wave — the Airbnb /
+/// Linear / Vercel "..." loader. Each dot is offset by 1/3 of a cycle, so
+/// the wave reads as a single ripple traveling left-to-right and back.
+/// Loops indefinitely; the parent decides when to swap it out.
+class LoadingDots extends StatefulWidget {
   const LoadingDots({
     super.key,
     this.dotSize = 24,
     this.spacing = 16,
     this.bounceHeight = 28,
+    this.cycleDuration = const Duration(milliseconds: 1100),
     this.value,
   });
 
   final double dotSize;
   final double spacing;
   final double bounceHeight;
+  final Duration cycleDuration;
 
-  /// When null (the default, used everywhere in the app) the loader runs
-  /// itself on a repeating controller. When set (0..1) the cycle is
-  /// rendered at exactly that phase and NOTHING self-animates — the
-  /// capture harness (`tools/capture/`) drives this per frame so the
-  /// exported clip plays at true speed.
+  /// When null (the default, used everywhere in the app) the dots animate
+  /// themselves on a repeating controller. When set (0..1), the wave is rendered
+  /// at exactly that phase instead — the capture harness (`tools/capture/`)
+  /// drives this per frame so the exported clip plays at true speed.
   final double? value;
 
   @override
-  Widget build(BuildContext context) {
-    // The box is the shipped dots' own footprint, derived from its spec
-    // rather than restated, so the two can never drift apart.
-    final dots = kDotsLoader.markCount;
-    final box = LoaderBox(
-      size: Size(
-        dots * dotSize + (dots - 1) * spacing,
-        dotSize + bounceHeight,
-      ),
-      markExtent: dotSize,
-      liftSpan: bounceHeight,
-    );
-    // Local rebuild, so the dev picker swaps the loader in place. Keyed
-    // on the value so a swap restarts the cycle on the new tempo rather
-    // than leaving a half-run controller on the old one.
-    return FormatBuilder(
-      builder: (context) {
-        final spec = loaderSpec(ThemeMotion.loader());
-        return _LoaderRunner(
-          key: ValueKey(spec.value),
-          spec: spec,
-          box: box,
-          value: value,
-        );
-      },
-    );
-  }
+  State<LoadingDots> createState() => _LoadingDotsState();
 }
 
-/// The value -> implementation switch. One entry per value, no default:
-/// adding a value is a compile error until it has a spec.
-LoaderSpec loaderSpec(LoaderStyle value) => switch (value) {
-  LoaderStyle.dots => kDotsLoader,
-  LoaderStyle.pulseRing => kPulseRingLoader,
-  LoaderStyle.barSweep => kBarSweepLoader,
-  LoaderStyle.logoBreathe => kLogoBreatheLoader,
-};
-
-class _LoaderRunner extends StatefulWidget {
-  const _LoaderRunner({
-    super.key,
-    required this.spec,
-    required this.box,
-    required this.value,
-  });
-
-  final LoaderSpec spec;
-  final LoaderBox box;
-  final double? value;
-
-  @override
-  State<_LoaderRunner> createState() => _LoaderRunnerState();
-}
-
-class _LoaderRunnerState extends State<_LoaderRunner>
+class _LoadingDotsState extends State<LoadingDots>
     with SingleTickerProviderStateMixin {
+  static const int _kDotCount = 3;
+
   late final AnimationController _ctrl = AnimationController(
     vsync: this,
-    duration: widget.spec.cycle,
+    duration: widget.cycleDuration,
   );
 
   @override
   void initState() {
     super.initState();
-    // Indefinite by definition: it repeats until the parent takes it
-    // away. When a phase is pinned the caller owns it, so nothing runs.
     if (widget.value == null) _ctrl.repeat();
-  }
-
-  @override
-  void didUpdateWidget(covariant _LoaderRunner old) {
-    super.didUpdateWidget(old);
-    // A caller that starts or stops pinning the phase mid-life gets what
-    // it asked for, rather than a controller left running underneath a
-    // pinned frame.
-    if ((widget.value == null) == (old.value == null)) return;
-    if (widget.value == null) {
-      _ctrl.repeat();
-    } else {
-      _ctrl.stop();
-    }
   }
 
   @override
@@ -133,16 +55,47 @@ class _LoaderRunnerState extends State<_LoaderRunner>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _ctrl,
-      builder: (context, _) {
-        final t = widget.value ?? _ctrl.value;
-        return LoaderFigure(
-          spec: widget.spec,
-          frame: widget.spec.frameAt(t),
-          box: widget.box,
-        );
-      },
+    final brand = DesignConstants.primaryColor;
+    final width = _kDotCount * widget.dotSize +
+        (_kDotCount - 1) * widget.spacing;
+    final height = widget.dotSize + widget.bounceHeight;
+    return SizedBox(
+      width: width,
+      height: height,
+      child: AnimatedBuilder(
+        animation: _ctrl,
+        builder: (context, _) {
+          final v = widget.value ?? _ctrl.value;
+          return Stack(
+            children: [
+              for (int i = 0; i < _kDotCount; i++) _dot(i, brand, v),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _dot(int index, Color color, double cycleValue) {
+    final phase = (cycleValue + index / _kDotCount) % 1.0;
+    // Half-sine bounce: 0 at rest → 1 at peak → 0 at rest.
+    final wave = math.max(0.0, math.sin(phase * 2 * math.pi));
+    final left = index * (widget.dotSize + widget.spacing);
+    final dy = -wave * widget.bounceHeight;
+    return Positioned(
+      left: left,
+      bottom: 0,
+      child: Transform.translate(
+        offset: Offset(0, dy),
+        child: Container(
+          width: widget.dotSize,
+          height: widget.dotSize,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+          ),
+        ),
+      ),
     );
   }
 }

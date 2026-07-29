@@ -1,36 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/core/app_routes.dart';
-import 'package:mobile_app/core/formats/format_builder.dart';
-import 'package:mobile_app/core/formats/layout_formats.dart';
-import 'package:mobile_app/core/formats/theme_layout.dart';
-import 'package:mobile_app/shared/widgets/topbar/layouts/topbar_compact_rail.dart';
-import 'package:mobile_app/shared/widgets/topbar/layouts/topbar_mark_only.dart';
-import 'package:mobile_app/shared/widgets/topbar/layouts/topbar_stacked.dart';
-import 'package:mobile_app/shared/widgets/topbar/layouts/topbar_stat_first.dart';
-import 'package:mobile_app/shared/widgets/topbar/topbar_data.dart';
+import 'package:mobile_app/shared/widgets/topbar/info_bar.dart';
+import 'package:mobile_app/shared/widgets/topbar/topbar_header_section.dart';
 
-/// Per-screen prominence hint for the gym identity.
+/// Visual mode for [AppTopbar], matching the two variants in the
+/// `topbar` master component.
 ///
-/// * [bigLogo] — large square gym logo above the gym name. Home only.
-/// * [nameOnly] — just the gym name + chevron. Every other screen.
+/// * [bigLogo] — large square gym logo above the gym name. Used on the home
+///   screen.
+/// * [nameOnly] — just the centered gym name. Used on every other screen that
+///   shows the topbar.
 ///
-/// This stays a SCREEN-level choice and is unchanged. The tenant-level
-/// choice is `AppShellFormat`, which decides how the whole shell is
-/// arranged; each layout honours this hint in its own way.
+/// Both variants carry the member's avatar in the trailing flank.
 enum AppTopbarMode { bigLogo, nameOnly }
 
-/// Shared page topbar.
-///
-/// The public API is unchanged — every screen passes the same nine
-/// arguments it always did. What is new is that the arrangement is
-/// resolved from the tenant's `app_shell_format` slot and delegated to
-/// one of the layouts in `topbar/layouts/`, each of which composes the
-/// same parts from `topbar/parts/`.
-///
-/// Every layout receives the identical [TopbarData] and must render
-/// every element in it: mark, name, switch chevron, rank badge, streak,
-/// points, and the QR action. A layout may move them and change their
-/// prominence. It may not drop one or add one.
+/// Shared page topbar used across the app. Mirrors the `topbar`
+/// component variants exactly: [AppTopbarMode.bigLogo] /
+/// [AppTopbarMode.nameOnly] crossed with an optional [showBackButton].
 class AppTopbar extends StatelessWidget {
   const AppTopbar({
     super.key,
@@ -38,53 +25,113 @@ class AppTopbar extends StatelessWidget {
     required this.showBackButton,
     required this.gymName,
     required this.logoAsset,
+    this.gymLogoUrl,
     required this.streakDays,
     required this.pointsLabel,
     required this.rankBadgeAsset,
+    this.rankImageUrl,
+    this.showRank = true,
+    this.pointsSpendable = true,
+    this.memberName,
+    this.memberPhotoUrl,
+    this.memberFirstName,
+    this.memberLastName,
     this.onTitleTap,
     this.onTitleDoubleTap,
-    this.formatOverride,
+    this.onQrTap,
   });
 
   final AppTopbarMode mode;
   final bool showBackButton;
   final String gymName;
   final String logoAsset;
+
+  /// The gym's own uploaded logo (`gyms.logo_url`), preferred over the
+  /// theme's mark in the [AppTopbarMode.bigLogo] variant.
+  final String? gymLogoUrl;
   final int streakDays;
   final String pointsLabel;
   final String rankBadgeAsset;
+
+  /// The member's OWN rank art (`MemberProfile.rank?.imageUrl`), threaded to
+  /// the [InfoBar]'s belt. Every wrapper passes it from the shared
+  /// `MemberProfileBloc`; null (no profile loaded yet, ranks off, or a rank
+  /// with no image) leaves the themed/bundled belt in place.
+  final String? rankImageUrl;
+
+  /// Whether the gym runs a rank ladder (`selectedMember.gymRankEnabled`).
+  /// False collapses the [InfoBar]'s belt tile on every topbar.
+  final bool showRank;
+
+  /// Whether the gym has rewards (`selectedMember.gymHasRewards`). False makes
+  /// the [InfoBar]'s points tile a read-out instead of a link into the store.
+  final bool pointsSpendable;
+
+  /// The selected member's display name — the accessibility label on the
+  /// trailing identity avatar. The avatar renders either way.
+  final String? memberName;
+
+  /// The selected member's photo + name parts, driving the trailing identity
+  /// avatar (photo, else initials, else a person glyph).
+  final String? memberPhotoUrl;
+  final String? memberFirstName;
+  final String? memberLastName;
   final VoidCallback? onTitleTap;
   final VoidCallback? onTitleDoubleTap;
 
-  /// Forces a layout instead of resolving it from the customization.
-  /// Used by the layout-invariant tests and the format preview; null in
-  /// normal app use.
-  final AppShellFormat? formatOverride;
+  /// Optional QR-tile tap handler, threaded to the [InfoBar]. Only the home
+  /// topbar wires it (to open the check-in scanner); every other topbar leaves
+  /// it null, so its QR tile stays a static icon.
+  final VoidCallback? onQrTap;
 
   @override
   Widget build(BuildContext context) {
-    return FormatBuilder(builder: _build);
-  }
-
-  Widget _build(BuildContext context) {
-    final data = TopbarData(
-      mode: mode,
-      showBackButton: showBackButton,
-      gymName: gymName,
-      logoAsset: logoAsset,
-      streakDays: streakDays,
-      pointsLabel: pointsLabel,
-      rankBadgeAsset: rankBadgeAsset,
-      onTitleTap: () => _handleTitleTap(context),
-      onTitleDoubleTap: onTitleDoubleTap,
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: BorderSide(
+            color: DesignConstants.text3rd,
+            width: DesignConstants.dividerThickness,
+          ),
+        ),
+      ),
+      padding: EdgeInsets.only(
+        top: DesignConstants.spacingBig,
+        bottom: DesignConstants.spacingLarge,
+        left: DesignConstants.spacingMedium,
+        right: DesignConstants.spacingMedium,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        spacing: DesignConstants.spacingBig,
+        children: [
+          TopbarHeaderSection(
+            mode: mode,
+            showBackButton: showBackButton,
+            gymName: gymName,
+            logoAsset: logoAsset,
+            gymLogoUrl: gymLogoUrl,
+            memberName: memberName,
+            memberPhotoUrl: memberPhotoUrl,
+            memberFirstName: memberFirstName,
+            memberLastName: memberLastName,
+            onTitleTap: () => _handleTitleTap(context),
+            onTitleDoubleTap: onTitleDoubleTap,
+          ),
+          InfoBar(
+            rankBadgeAsset: rankBadgeAsset,
+            rankImageUrl: rankImageUrl,
+            showRank: showRank,
+            pointsSpendable: pointsSpendable,
+            streakDays: streakDays,
+            pointsLabel: pointsLabel,
+            onQrTap: onQrTap,
+          ),
+        ],
+      ),
     );
-
-    return switch (formatOverride ?? ThemeLayout.shell()) {
-      AppShellFormat.stacked => TopbarStacked(data: data),
-      AppShellFormat.compactRail => TopbarCompactRail(data: data),
-      AppShellFormat.statFirst => TopbarStatFirst(data: data),
-      AppShellFormat.markOnly => TopbarMarkOnly(data: data),
-    };
   }
 
   void _handleTitleTap(BuildContext context) {
@@ -92,9 +139,6 @@ class AppTopbar extends StatelessWidget {
       onTitleTap!();
       return;
     }
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      AppRoutes.home,
-      (r) => false,
-    );
+    Navigator.of(context).pushNamed(AppRoutes.memberSelect);
   }
 }

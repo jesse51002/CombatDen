@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:mobile_app/features/class_booking/presentation/screens/class_booked_screen.dart';
 import 'package:mobile_app/features/class_booking/presentation/screens/class_screen.dart';
-import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
+import 'package:mobile_app/features/home/data/models/class_occurrence.dart';
 import 'package:mobile_app/features/videos/presentation/screens/video_recc_screen.dart';
 import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 import 'package:mobile_app/shared/widgets/scaffold/app_screen_scaffold.dart';
@@ -45,7 +45,7 @@ class BookingStage extends StatelessWidget {
 
   final GlobalKey boundaryKey;
   final BookingPhase phase;
-  final MockClass? classData;
+  final ClassOccurrence? classData;
   final ScrollController classController;
   final GlobalKey imageKey;
   final GlobalKey reserveKey;
@@ -78,7 +78,7 @@ class BookingStage extends StatelessWidget {
         return Stack(
           children: [
             ClassScreen(
-              classData: classData,
+              occurrence: classData,
               captureController: classController,
               imageKey: imageKey,
               reserveKey: reserveKey,

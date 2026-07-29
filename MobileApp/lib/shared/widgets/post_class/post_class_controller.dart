@@ -24,13 +24,7 @@ class PostClassController extends ChangeNotifier {
     _skipHandler = handler;
   }
 
-  /// Releases the skip handler. Pass the handler back to release only
-  /// your own: when one intro replaces another in place (the dev picker
-  /// swapping `celebration_intro`), the replacement registers before the
-  /// outgoing one is disposed, so a blind clear would strand the new
-  /// intro with no way to be skipped.
-  void clearSkipHandler([VoidCallback? handler]) {
-    if (handler != null && handler != _skipHandler) return;
+  void clearSkipHandler() {
     _skipHandler = null;
   }
 

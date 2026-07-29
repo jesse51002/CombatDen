@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/shared/widgets/animation/loading_dots.dart';
 
 /// Centered loading spinner / message shown in place of the day list while
 /// the class cards load (or when none are available).
@@ -16,7 +15,7 @@ class ScheduleStatus extends StatelessWidget {
       padding: EdgeInsets.symmetric(vertical: DesignConstants.spacingBig),
       child: Center(
         child: loading
-            ? const LoadingDots()
+            ? const CircularProgressIndicator()
             : Text(
                 message ?? '',
                 textAlign: TextAlign.center,

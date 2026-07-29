@@ -1,31 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
-import 'package:mobile_app/features/home/data/mock_class_schedule.dart';
-import 'package:mobile_app/features/home/presentation/widgets/class_schedule/class_item/class_item_layout.dart';
-import 'package:mobile_app/features/home/presentation/widgets/class_schedule/day_group/day_group_grid.dart';
-import 'package:mobile_app/features/home/presentation/widgets/class_schedule/day_group/day_group_list.dart';
+import 'package:mobile_app/features/home/data/models/schedule_day.dart';
+import 'package:mobile_app/features/home/presentation/widgets/class_schedule/class_list_item.dart';
 
-/// One day of the schedule: its date band, then that day's classes.
-///
-/// Every home format renders these — the band and the classes are the
-/// day, not a variant. [grid] and [itemLayout] pick how the classes are
-/// arranged beneath the band.
+/// One day's block on the schedule board: the day heading plus its
+/// occurrences — or a quiet empty-day state when the gym has no classes that
+/// day.
 class DayClassGroup extends StatelessWidget {
   const DayClassGroup({
     super.key,
     required this.day,
-    this.showBookings = true,
-    this.itemLayout = ClassItemLayout.textLeftThumbRight,
-    this.grid = false,
+    required this.bookedKeys,
   });
 
-  final MockDay day;
-  final bool showBookings;
-  final ClassItemLayout itemLayout;
+  final ScheduleDay day;
 
-  /// Two-up cards instead of a stack. [itemLayout] is ignored — the grid
-  /// owns its cell treatment.
-  final bool grid;
+  /// Slot keys the member has reserved — an occurrence renders its booked
+  /// confirmation when its key is in here.
+  final Set<String> bookedKeys;
 
   @override
   Widget build(BuildContext context) {
@@ -44,15 +36,33 @@ class DayClassGroup extends StatelessWidget {
               style: DesignConstants.h2Bold,
             ),
           ),
-          if (grid)
-            DayGroupGrid(day: day, showBookings: showBookings)
+          if (day.occurrences.isEmpty)
+            const _EmptyDay()
           else
-            DayGroupList(
-              day: day,
-              showBookings: showBookings,
-              itemLayout: itemLayout,
+            ...day.occurrences.map(
+              (o) => ClassListItem(
+                occurrence: o,
+                booked: bookedKeys.contains(o.slotKey),
+              ),
             ),
         ],
+      ),
+    );
+  }
+}
+
+class _EmptyDay extends StatelessWidget {
+  const _EmptyDay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: DesignConstants.screenHorizontalPadding,
+      ),
+      child: Text(
+        'No classes scheduled.',
+        style: DesignConstants.p.copyWith(color: DesignConstants.text2nd),
       ),
     );
   }

@@ -2,82 +2,764 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working in this repository.
 
-## Project Status: Visual-Only Prototype
+## What this app is
 
-**Read this first.** This app is a **visual prototype** for demos and design iteration during the pre-build sales / MVP phase.
+This is the CombatDen **member-facing mobile app** — the Flutter client a gym's
+members hold in their pocket. It is **live software**: real Supabase auth, real
+FastApiBackend member-portal data over `dio`, Bloc state management, a
+per-member identity resolved at boot, and per-gym theme hydration. When the app
+went live the **look and design of the existing screens did not change** — real
+member data went live *under* them.
 
-- **Mostly no backend.** No Supabase, no auth. The live exceptions all do real **read-only** HTTP via `dio` + disk-cached `cached_network_image`: (a) the **customization engine** (the shared `theme_flutter` package, `../ThemeService/ThemeFlutter`, fetches the tenant's branding), and (b) the **VideoService-backed content** (`../VideoService/`) — the **videos feature** (`lib/features/videos/`, the feed), the **gym detail** read that supplies classes + rewards (`lib/features/gym/`; classes consumed by `lib/features/class_booking/` + the home schedule; rewards consumed by the rewards feature's Points Store / My Rewards `lib/features/rewards/` and the post-class stats **Rewards card** `lib/features/stats/`, which renders the live rewards with a bundled-asset fallback), and the **gym-browser / style picker** (`lib/features/style_select/`). All of these read the active gym **by id** — see *Videos feature is live* below. Don't add HTTP anywhere else without asking.
-- **No state management framework.** No BLoC, no providers, no Riverpod, no Redux. Use `StatelessWidget` everywhere; `StatefulWidget` only when a screen genuinely needs local UI state (e.g. tab index, scroll controller). The live features fetch via `FutureBuilder` + a cached repository, not a state framework.
-- **No real data, except the live features above.** Every other list, card, and detail screen is fed by hardcoded mock data co-located with the feature.
-- **No persistence.** Buttons can be no-ops or `print` for now.
+- **Native Flutter app** (Android + iOS). Not a web target. The QR check-in
+  scanner needs camera permission (`CAMERA` / `NSCameraUsageDescription`); the
+  manifest also declares `INTERNET`.
+- **White-label / templated.** One codebase reskinned per tenant at runtime (see
+  *Theming System*). At boot the app themes to the bundled default, then — once a
+  member is selected — re-hydrates to that member's gym branding.
+- **Feature-first architecture** (see *Project Structure*): each feature owns its
+  `bloc/`, `data/` (models + repositories), and `presentation/` (screens +
+  widgets).
+- **The backend is the member portal.** Every live call goes to FastApiBackend's
+  `/api/v1/member/...` surface — the contract source is
+  `../FastApiBackend/src/member_portal/` (see *Repository pattern + ApiClient*).
+  Those routes are gated by `verify_member_self`: a member reads only their own
+  data. **By backend design the app can NEVER** write its own attendance /
+  check-in, sign waivers, manage billing / cards / cancellation, or edit its
+  email — those are staff-only in the CRM. Don't try to build them here; the
+  routes don't exist.
 
-The whole point is to make screens that **look right** so the design can be evaluated, screenshotted for sales, and iterated on quickly.
+**Theme/design rules are not relaxed for any reason.** See *Theming System*.
 
-**Theme/design rules are NOT relaxed because this is a prototype.** See *Theming System* below.
+**Impeccable before UI/visual changes.** Before any non-trivial UI/visual change
+here, run the `impeccable` design pass first — ideally in a dedicated Opus
+subagent so it can focus. A small, unambiguous tweak (a copy fix, a single-token
+correction, wiring an already-designed component) can be done directly; anything
+with visual ambiguity or non-trivial size goes through `impeccable`. See the
+codebase-root `CLAUDE.md` for the full rule.
 
-## Videos feature is live
+## A few superseded files are kept DORMANT for the capture harness — don't flag them as dead code
 
-The videos feature (`lib/features/videos/`) is **real**, not mock. It reads the
-active tenant's feed from the **VideoService** (`../VideoService/`, a read-only
-HTTP API). Architecture, mirroring the customization engine:
+Going live retired the old visual-prototype scaffolding. Most of it was removed;
+what REMAINS dormant on disk is kept alive **only because the dev-only
+landing-page capture harness (`tools/capture/`) still imports it** — the harness
+needs its own update before these can go (see the capture warning under
+*Project Structure*). So the *Always delete dead code* law below is **suspended
+for this specific capture-coupled set only** — do not flag these as violations
+or delete them until the capture harness is reworked or retired. The dormant,
+capture-coupled set:
 
-- **`core/video_service_config.dart`** — `kVideoBaseUrl`, the VideoService base
-  URL (defaults to `localhost:8002`, overridable with
-  `--dart-define=VIDEO_BASE_URL`), shared by the video + class-card features.
-  Content is fetched **by gym id**: the app reads the gym's whole detail once
-  (`GET /gyms/{gymId}` → spec + classes + rewards, held in memory) and the
-  paginated feed from `GET /gyms/{gymId}/videos` (+ `/videos/preview`). The gym
-  is the active selection (`selectedGym.gymId`); a theme is **branding-only**,
-  and the old theme-keyed content endpoints
-  (`/apps/{appId}/themes/{designId}/...`) were **removed**. There is no app-side
-  theme→feed table.
-- **`data/video.dart`** — the `Video` model (matches the API's `VideoCard`). The
-  fine-grained `tags` and the server-derived coarse `bigGroups` both come down on
-  each video as plain `List<String>`, taken verbatim from the API. The app owns
-  **no** tag/group enum or vocabulary — the server owns it, the client just
-  renders whatever strings arrive (auto-formatted via `displayLabel`). This is
-  deliberate: there is no closed enum to keep in sync with VideoService.
-- **`data/video_api_client.dart`** — `dio` client, gym-id-keyed
-  (`selectedGym.gymId`). Two reads: `fetchPreview()` →
-  `GET /gyms/{gymId}/videos/preview` (the home feed in ONE request — each genre
-  sampled individually, top 10, server-side, so no carousel is starved by
-  pagination), and `fetchTag(tag)` → `GET /gyms/{gymId}/videos?video_type=…`
-  (one genre's full list for a carousel's "view all"). 30s timeouts.
-- **`data/video_feed_repository.dart`** — `VideoFeedRepository.instance`, a lazy
-  app-wide singleton. `feed()` is the per-genre **home preview** cached per gym;
-  `tagFeed(tag)` is one genre's full list cached per (gym, tag). Switching gym
-  switches the feed with it. (No `get_it`; the customization locator is
-  package-internal.)
-- **`data/video_selectors.dart`** — pure derivations: top-filter scoping via
-  `bigGroups`, one carousel per `tag`, featured = most-viewed, and the picks for
-  the recommendation surfaces. There is no client-side tag→big-group map: the
-  coarse grouping comes straight from each video's server-sent `big_groups`.
+- The **VideoService-era read path**: `core/selected_gym.dart` +
+  `core/video_service_config.dart`, `features/gym/data/gym_api_client.dart` /
+  `gym_detail.dart` / `gym_repository.dart`, and
+  `features/videos/data/video_api_client.dart` / `video.dart` /
+  `video_feed_repository.dart` / `video_helpers.dart` / `video_selectors.dart`.
+  The app reads everything through the member portal now; the capture harness
+  still renders via this old path.
+- `features/home/data/mock_gym.dart` + `features/stats/data/mock_stats.dart` —
+  the two prototype mocks the harness still renders (topbar chrome, the
+  `StreakBody` / `WinsBody` demo stats).
+- `features/stats/presentation/widgets/wins/` (`wins_body` + `wins_tile` +
+  `wins_tile_row`) — the post-class wins widgets, dropped from the celebration
+  flow but still rendered by the harness. The wins **screen** + route are gone.
+- `features/style_select/data/gyms_pager.dart` — the old VideoService gym-browser
+  pager the harness pages to pick a gym/theme. The style-select **screen** +
+  route are gone.
 
-Top filters are derived from the distinct `big_groups` present in the loaded
-feed (an `All` tab plus one per group, labels auto-formatted), and filter the
-home feed **in place**; sub-groups are per-`tag` sections. Tapping a video is a
-`debugPrint` no-op (real YouTube playback needs `url_launcher`, a deliberate
-follow-up). Mock video data and the old detail screen were deleted.
+Once the capture harness is reworked or retired, this set goes with it and this
+note is deleted.
 
-**How that feed is arranged is the tenant's `videos_format`** (see *Layout and
-motion formats* below). `VideosScreen` derives one `VideosLayoutData` payload —
-tabs, hero, sections, callbacks — and `widgets/videos_feed_body.dart` switches
-on `ThemeLayout.videos()` to one of the five layouts in
-`presentation/layouts/`, each of which arranges that identical payload and
-**must** render every element in it. The screen's scroll is a `CustomScrollView`
-and each layout returns a sliver, so a format can pin its filter (`mosaic`) or
-its rail (`tagRail`). `test/videos_invariants_test.dart` is the gate that proves
-no layout adds or drops an element.
+## State-management model
 
-**The home schedule is a live/mock hybrid.**
-`lib/features/home/data/schedule_generator.dart` builds the day's classes from
-the selected gym's **live** classes (from the `GET /gyms/{gymId}` detail), then
-drapes demo-only texture over them: real calendar day labels via `DateTime.now()`,
-fixed time slots the classes rotate through, and seeded attending/booked flags.
-This is intentional — generated demo texture computed on top of live feed data
-(seeded `Random`, real dates) is **not** a "no real data" violation. "Every
-other screen is hardcoded mock" applies to the screens that are *not* on a live
-carve-out.
+- **Screen → Bloc → Repository → ApiClient → backend. Never skip a layer.** Every
+  live feature is a `flutter_bloc` + `equatable` vertical: widgets dispatch events
+  and read state via `BlocBuilder` / `BlocListener` / `BlocConsumer`; a repository
+  sits behind the bloc and is never called directly from a widget; the repository
+  wraps `ApiClient`. This is the standard for all feature work.
+- **Bloc state is ONE Equatable class + status enums + `copyWith` (the default
+  for new features).** A single immutable state class carries a `status` enum
+  (`initial` / `loading` / `loaded` / `error`, plus per-action **monotonic success
+  tokens** where a mutation needs a visible confirmation), rather than a class
+  union of separate state types. `MemberProfileBloc`, `HomeBloc`, `RewardsBloc`,
+  etc. all follow this shape.
+  - **`LoginBloc` is the one class-union exception** — it was ported faithfully
+    from the CRM's `LoginBloc` (state subclasses: `LoginInitial` /
+    `LoginAuthenticated` / `LoginUnauthenticated` / `LoginLoading` /
+    `LoginAwaitingEmailConfirmation` / `LoginError`). Both styles therefore exist
+    in the tree; **single-class-state is the default for anything new** — only
+    the auth vertical keeps the union because it's a straight CRM port.
+- **DI is manual constructor injection — there is NO `get_it` in app code.**
+  Repositories and blocs are constructed inline at their `RepositoryProvider` /
+  `BlocProvider` `create:` sites (`MemberProfileRepository(apiClient: ApiClient())`,
+  etc.). `get_it` is only a *transitive* dependency of `theme_flutter` (its
+  internal locator); nothing in `lib/` uses it. Do not introduce a service locator.
+- **One shared profile source.** `MemberProfileBloc` (`features/profile/bloc/`) is
+  provided **once** above the app shell's nested navigator (in `app_shell.dart`),
+  so the topbar streak/points, the rank block, and every feature that needs
+  retention data read the **same** profile. Refetch it (silent
+  `MemberProfileRefreshRequested`) on reserve/cancel, redeem, the celebration, app
+  foreground, a pull-to-refresh on any tab (the shared `AppRefresh` owns that
+  leg — a screen must not dispatch it a second time), and a member switch. Never
+  spin up a second profile fetch.
+- **Everything resets on a member switch.** `app_shell.dart` re-keys its whole
+  subtree on `ThemeRuntime.activeDesignId` + `selectedMember.memberId`, so
+  switching profiles re-inflates a fresh `MemberProfileBloc` and a fresh Home,
+  resetting every feature bloc.
+
+## Repository pattern + ApiClient (the member-portal backend path)
+
+- **All backend calls go through `ApiClient`** (`lib/core/network/api_client.dart`,
+  ported from the CRM). It wraps a single configured `dio` instance with a 30s
+  timeout and an `_AuthInterceptor` that:
+  - attaches the **Supabase JWT** (`currentSession.accessToken`, read fresh) as a
+    Bearer token on **every** request;
+  - on a **401**, refreshes the Supabase session under a bounded **10s** timeout
+    and retries the request **once**; if the refresh returns no token, times out,
+    or throws, it calls the static `ApiClient.onUnauthorized` (wired in
+    `main.dart` to sign out), dropping the app back to the login screen. The
+    refresh timeout is essential — gotrue treats a host-unreachable refresh as
+    *retryable* and would otherwise hang the request (and the boot-time identity
+    fetch) forever.
+  - **A 403 is NOT a session problem** — it maps to `ForbiddenException` (a
+    friendlier "your role may have changed" message) and **never** signs the user
+    out. The 401 refresh/retry path is untouched by it.
+  - Timeouts / connection errors map to `NetworkException`; other error bodies to
+    `ServerException` (carrying the FastAPI `detail` string when present).
+- **The base URL is rewritten for the Android emulator.** `ApiClient` resolves
+  `API_BASE_URL` through `EnvironmentConfig.url(...)`
+  (`lib/core/config/environment.dart`), which rewrites a `localhost` / `127.0.0.1`
+  host to `10.0.2.2` on Android only (the emulator can't see the host's loopback);
+  a real domain and web/iOS/desktop are untouched.
+- **Repositories wrap `ApiClient`.** Each feature's `data/repositories/` exposes
+  domain methods (`getMyMembers`, `getProfile`, `getSchedule`, `reserve`,
+  `listRewards`, …), takes an `ApiClient` in its constructor, converts JSON to
+  models, and throws the typed exceptions. Blocs depend on repositories, never on
+  `ApiClient` directly.
+- **Read the Pydantic schema before calling any endpoint.** The authoritative
+  request/response contract for the member surface lives in
+  `../FastApiBackend/src/member_portal/schema/member_portal_schema.py` (and the
+  domain schemas it reuses — classes, rewards, billing, videos). Match the path,
+  method, and every field listed under `required`; the model `fromJson` must track
+  the response shape exactly. When the contract changes, update the model in the
+  same change. (`../Database/openapi.json` is an optional gitignored local dump —
+  never committed, never expected to exist.)
+
+## Models & code generation
+
+- **Models are `json_serializable` with `snake` field renaming.** Each model
+  declares `@JsonSerializable(fieldRename: FieldRename.snake)` (add
+  `createToJson: false` for read-only response models) and a generated `*.g.dart`
+  part committed alongside it. Regenerate with
+  `dart run build_runner build --delete-conflicting-outputs`; never hand-edit a
+  `*.g.dart`.
+- **Every model's doc comment names the Pydantic schema it mirrors** — e.g.
+  `MemberIdentity` says it mirrors `MemberPortalIdentity` in
+  `member_portal_schema.py`. Keep that pointer accurate; it's how the next reader
+  finds the contract.
+- **Resilient enum parsing.** Any enum parsed from JSON must have a safe fallback
+  in its `fromJson` — `firstWhere(..., orElse: () => <default>)`. Status-like
+  enums get an `unknown` variant; view-like enums fall back to a sensible default.
+  Every `switch` on such an enum must handle the fallback.
+- **Backend string display.** The API hands us lowercase strings (`'active'`,
+  `'recurring'`) — capitalize them at the render layer before display.
+- **DateTime.** Render occurrence times **gym-local, verbatim** as the backend
+  sends them; sign-up / cancel echo the occurrence's ORIGINAL slot
+  (`class_id, occurrence_date, occurrence_time`) — a cancel passes them as query
+  params on the `DELETE`.
+
+## Authentication & identity
+
+- **Supabase is auth ONLY (GoTrue).** The mobile client holds no DB privileges —
+  Supabase gives us the session/JWT and nothing else; all data is the
+  FastApiBackend member portal. `main.dart` boots Supabase best-effort
+  (`SupabaseConfig.initialize`, logged-and-degraded on failure), initializes
+  `ThemeRuntime` on the bundled default, wires `ApiClient.onUnauthorized`, and
+  mounts the `AuthGate` under the one app-lifetime `LoginBloc`.
+- **`AuthGate` → `MemberGate` → `AppShell`** (`features/login/presentation/`):
+  - `AuthGate` routes on `LoginBloc` state — a boot splash on `LoginInitial`, the
+    login/register/verify flow while unauthenticated, and the `MemberGate` once
+    authenticated. `LoginBloc` detects an **external session** (persisted session
+    on boot, the email-confirmation link landing, a token refresh) and flips the
+    app authenticated; it also carries a dev **auto-login** (`DEV_AUTOLOGIN_EMAIL`
+    / `DEV_AUTOLOGIN_PASSWORD` dart-defines) for QA.
+  - `MemberGate` resolves the member **identity** once per session and runs the
+    **revalidation ladder**, then mounts `AppShell` (a nested `Navigator` over the
+    shared route table, with the app-wide `MemberProfileBloc` provided above it
+    and `AppLifecycleRefresh` hosting the app-open celebration check).
+- **`SelectedMember` is the app-wide identity** (`lib/core/state/selected_member.dart`)
+  — a plain global `ChangeNotifier` (mirroring the CRM's `SelectedGym`), **not** a
+  state framework, persisted via `shared_preferences`. One verified email
+  legitimately matches **several** member rows (a family shares an inbox), so the
+  member is chosen explicitly and never derived from the JWT; the chosen
+  `memberId` + `gymId` scope every gym-scoped member call.
+- **The identity read also carries the gym's CAPABILITY FLAGS, and they shape
+  the app's chrome.** `MemberIdentity` / `SelectedMember` carry
+  `gymRankEnabled`, `gymHasRewards` and `gymHasVideos` (from
+  `MemberPortalIdentity`) alongside `gymName` / `gymLogoUrl` / `gymAddress`.
+  They ride the IDENTITY read on purpose: the shell — which bottom-nav tabs
+  exist, whether the rank UI renders at all, which post-class cards are shown —
+  is composed **before** any feature fetch, so nothing paints and then
+  vanishes. All three are **persisted with the cached identity and default to
+  `true` when absent** (an older payload, or a disk cache written by an older
+  build): hiding a real feature is worse than showing an empty one. `reset()`
+  returns them to `true`, so a signed-out app never carries the last gym's
+  shape into the next member's boot. A **pull-to-refresh on any tab re-reads
+  them** (and the branding beside them) through `SelectedMember.refreshIdentity`
+  — see *Refresh, no polling* — so a staff-side toggle lands without a
+  relaunch. What each one gates:
+  - `gymRankEnabled` — the Profile tab's whole rank block (see *The Profile tab
+    has two shapes*), the `InfoBar` belt tile, the post-class rank card, the
+    `RankProgressBloc` fetch, and the "and rank" clause in `SignOutDialog`.
+  - `gymHasRewards` — the Rewards nav tab, the `InfoBar` points tile's LINK
+    into the store (the number itself stays — see *The topbar's info bar*), and
+    the post-class rewards card.
+  - `gymHasVideos` — the Videos nav tab and the post-booking video
+    recommendation.
+- **The boot revalidation ladder** (`features/member_select/logic/`, a pure
+  function over the fresh `GET /api/v1/member/members` list): a persisted member
+  still in the list **restores** silently; otherwise **1 row auto-selects**, **2+
+  show the picker** ("Who's training?"), and **0 shows the no-membership state**
+  (a designed screen — signup is open, so an unknown email is reachable). The
+  identity fetch (`MemberGate._fetchMyMembers`) retries a TRANSPORT failure
+  (`NetworkException` / `TimeoutException`) up to 2 extra times (~400ms then
+  ~1200ms backoff) before giving up, staying on the branded splash the whole
+  time — a cold-start wifi radio often kills the very first socket instantly,
+  nowhere near the 30s per-attempt timeout, which is why the manual Retry
+  button always worked; this automates that. A server-reachable error (a bad
+  payload, a 500) is never retried. Only once every attempt fails does an
+  **offline** boot read-degraded from the cached `SelectedMember` (+ an
+  offline banner + retry), or show the offline screen when nothing is cached.
+- **The topbar is the identity surface — as an avatar in the trailing flank.**
+  The topbar's grammar is a **centred brand block between single-glyph
+  controls** (the back chevron on the leading edge), so identity is a glyph
+  too: `TopbarIdentityAvatar`
+  (`shared/widgets/topbar/topbar_identity_avatar.dart`) renders the member's
+  avatar at `iconSizeXl` with a hairline `divider` ring in a 48pt tap target,
+  aligned `centerRight` in `nameOnly` mode and `topRight` in `bigLogo` (so it
+  doesn't float against the 100pt logo). **No chevron on it** — an avatar is
+  already the learned tap target. The gym title stays **pure, uninterrupted
+  brand**: no second line, no glyph inside it. Every topbar wrapper passes
+  `memberName` / `memberPhotoUrl` / `memberFirstName` / `memberLastName` from
+  `selectedMember`; a missing name or photo falls back to initials and then to
+  the person glyph, so the avatar **never disappears** (sign-out lives behind
+  it). Tapping it opens the **identity sheet** (below); the gym title's own tap
+  (`AppRoutes.memberSelect` → `SwitchProfileScreen`) and `onTitleDoubleTap`
+  stay wired as the secondary path.
+- **The topbar's info bar renders only the tiles the gym has.** Under the
+  header, `InfoBar` (`shared/widgets/topbar/info_bar.dart`) renders rank /
+  streak / points / QR, but the tile SET is per-gym and all five topbar
+  wrappers pass the flags from `selectedMember`:
+  - `showRank: gymRankEnabled` — false **collapses the belt tile entirely**. A
+    gym that runs no ladder has no belt, and the themed fallback would put one
+    on every screen.
+  - `pointsSpendable: gymHasRewards` — false leaves the points NUMBER (it is
+    real earned attendance, and the celebration awards it either way) but drops
+    its tap. Points are only spendable on rewards, so at a gym with none the
+    tile would be a second, un-hidden doorway into the store the Rewards tab
+    was just hidden for. A non-interactive tile is already the bar's norm — the
+    QR tile is one on four of the five topbars.
+  - **The layout rule is the bottom nav's, verbatim**: `LayoutBuilder` + a
+    centred `Row` of fixed `maxWidth / 4` cells. At four tiles this is
+    pixel-identical to the old `Expanded` split; at three it leaves a symmetric
+    half-cell gutter instead of stretching three tiles across the phone.
+    Never go back to `Expanded` — it makes a short row look accidental.
+- **The belt tile resolves the member's REAL belt.** Its image resolves in this
+  order: the member's own rank art
+  (`MemberProfile.rank?.imageUrl` — already the sub-rank override over the main
+  rank's image, resolved server-side) via `CachedNetworkImageProvider`, then the
+  themed `CombatDenSlots.rankBelt` slot, then the bundled `rankBadgeAsset`. All
+  five topbar wrappers (home / profile / rewards / videos / class-detail) pass
+  `rankImageUrl: state.profile?.rank?.imageUrl` from the shared
+  `MemberProfileBloc`; the param is optional, so a bar built without a profile
+  (the class-detail `live: false` path) simply keeps the themed belt. Same idiom
+  as `RankHeader._Belt` / `NextRankBadge._Belt` on the profile and
+  `RankBody._Belt` on the post-class rank card — **every belt in the app resolves
+  the member's own art first; don't invent a fifth rule.** **A failed load falls
+  back, it does NOT collapse — but that rule is
+  about ARTWORK, at a rank-ENABLED gym.** Where the gym runs a ladder the belt
+  is permanent topbar chrome, so the network `Image`'s `errorBuilder` returns
+  the themed belt (an empty gap in the info bar would read as broken); that is
+  the deliberate exception to the omit-on-missing rule the creator avatar and
+  the picker's gym-logo tile follow — those are optional adornments, this is
+  chrome. It says nothing about a gym with **ranks off**: there the whole tile
+  is composed out by `showRank` before `_Belt` is ever built. Missing art
+  falls back; a missing FEATURE collapses.
+- **The identity sheet is the account surface** (`features/member_select/
+  presentation/widgets/identity_sheet.dart`, the app's first modal bottom sheet
+  — every sheet goes through `shared/widgets/sheets/app_bottom_sheet.dart`,
+  which borrows `SignOutDialog`'s surface tokens). One surface answers all
+  three account questions: the **current member** (avatar + name + gym line +
+  the signed-in Supabase email, because one email legitimately maps to several
+  profiles), the **other profiles** as `MemberRow`s under a "Switch profile"
+  subtitle (the current member excluded; with exactly one profile the section
+  and its divider are omitted entirely — never an empty list or a disabled
+  row), and **sign out**. The sheet opens INSTANTLY off the cached
+  `selectedMember` — only the list area loads (placeholder blocks, not a
+  spinner), and a failed re-fetch replaces **only** that area with a retry, so
+  the header, the email and sign-out stay usable offline. In DEBUG builds only
+  it also carries a **Developer** section — see *The two notification
+  destinations have a DEBUG-ONLY trigger*.
+- **The picker row identifies the gym, not just the person**
+  (`features/member_select/presentation/widgets/member_row.dart`): the member's
+  avatar + name over a gym line of logo tile + gym name. The same row is the
+  switch row inside the identity sheet. Both halves are shared, single
+  implementations — `shared/widgets/member_avatar.dart` (`MemberAvatar`, sized
+  by the caller: 48 in a row, `iconSizeXl` in the topbar; photo → initials on
+  `primaryCard` → person glyph) and `shared/widgets/gym_line.dart` (`GymLine`).
+  **Never fork a second avatar or gym line** — the identity mark has to read as
+  the same object everywhere. A null/empty/failing `gym_logo_url` **omits the
+  tile entirely** — no placeholder square (identical placeholders on every row
+  add noise and disambiguate nothing).
+- **One in-app switch path.** `applyMemberSelection(...)`
+  (`features/member_select/logic/apply_member_selection.dart`) is the ONE
+  in-app switch: select → `GymThemeHydration().applyForGym` → reset to a fresh
+  home. Both `SwitchProfileScreen._onSelected` and the identity sheet call it,
+  so they can never drift. It takes the `NavigatorState` (captured BEFORE the
+  first await) rather than a `BuildContext`, because `AppShell` re-keys on the
+  new member id and the caller is often already gone. `MemberGate.
+  _selectAndHydrate` is the boot-time counterpart and must stay field-for-field
+  identical: every field on `MemberIdentity` goes through both, or an in-app
+  switch silently drops data a boot-time selection keeps. That now includes
+  `gymAddress` (class-detail "Open in Maps") **and the three capability flags**
+  — miss one there and a member who switches profiles gets the previous gym's
+  nav tabs and rank UI.
+- **Sign-out lives in the identity sheet, and NOWHERE else.** The profile /
+  rank screen is the **retention** surface (rank, streak, progress) — an
+  account-exit action has no business sitting beside a member's streak, so it
+  belongs on the account surface behind the avatar. In the sheet it is a single
+  full-width **row**, not a button: no fill, no border, **no red**, the only
+  unfilled uncarded item, isolated below a divider at the extreme bottom —
+  subordinate by isolation and position rather than alarm colour. The sequence
+  is **dismiss the sheet FIRST**, then the shared `SignOutDialog` (bound to the
+  HOST context, with the `LoginBloc` captured before the await); red appears
+  only on that confirmation. Confirming dispatches `LoginSignOutRequested`,
+  unmounting `MemberGate`, which resets `SelectedMember` and the theme to
+  default so a re-login never shows the previous member's brand. Don't
+  duplicate that teardown at the call site.
+
+## The bottom nav is per-gym
+
+`AppBottomNavBar` (`shared/widgets/nav/app_bottom_nav_bar.dart`) takes a
+`List<AppBottomNavTab> tabs`, and **every screen that renders it passes
+`gymNavTabs()`** (`shared/widgets/nav/nav_tabs.dart`) — home, profile, my
+rewards, points store, videos, tag videos. A screen that forgets falls back to
+the full four, which is how a tab for a feature the gym doesn't have gets back
+on screen; when you add a screen with a nav, pass the filtered set.
+
+- **Home and Profile are structural** — every gym has a schedule and every
+  member has a streak. Rewards appears only when `gymHasRewards`, Videos only
+  when `gymHasVideos`. Order is the enum's declaration order, so a tab never
+  moves position between two gyms that both have it.
+- **The `rank` tab is LABELLED "Profile".** The `AppBottomNavTab.rank` enum
+  value, the `AppRoutes.profile` route and the `CombatDenSlots.navRank` icon
+  slot keep their names — they are the theme/route contract, not the label.
+  Don't rename them to chase the copy.
+- **The layout rule: a cell is ALWAYS `constraints.maxWidth / 4`, and the row
+  is centred** (`LayoutBuilder` + `Row(mainAxisAlignment: center)` + fixed-width
+  cells; `_kBottomNavRowHeight` 64 unchanged, the `InkWell` still fills its
+  cell). At four tabs this is pixel-identical to the old `Expanded` split; at
+  three it gives a symmetric gutter; at two a centred pair with the same icon,
+  label and tap geometry. **Never let `Expanded` stretch a short tab set** — a
+  24pt icon marooned in half a phone reads as broken. `InfoBar` uses the same
+  rule for the same reason.
+
+## The Profile tab has two shapes
+
+`ProfileScreen` branches on **`selectedMember.gymRankEnabled`**, not on
+`rank == null` — a rank-enabled gym can legitimately hold a member who hasn't
+been graded yet, and that member still belongs on the rank-shaped page.
+
+- **Rank enabled** — unchanged: topbar + `ProfileStreakHero` + the rank block
+  (`RankSummarySection` / `NextRankSection`, still additionally conditional on
+  `rank != null`) over `LevelUpVideosSection`. The screen-scoped
+  `RankProgressBloc` is built here.
+- **Rank off** — `RanklessProfileBody`
+  (`features/profile/presentation/widgets/rankless/`): the hero becomes the
+  page. `CustomScrollView` = topbar sliver + `SliverFillRemaining(hasScrollBody:
+  false)`, so the hero + week strip + facts sit as one **vertically-centred**
+  block in the room the rank block vacated, and the page grows past the
+  viewport only once the level-up carousel renders. **No `RankProgressBloc` is
+  built and no fetch is fired** — the backend answers `points: []` for a
+  rank-off gym, and that is a round trip feeding a spinner nobody sees.
+  - `ProfileStreakWeek` feeds `StreakWeekStrip` / `StreakDayBadge` (reused
+    verbatim) from **`retention.current_week_attended_weekdays`**, which the
+    profile read already carries — never fetch class history for the strip.
+    Indices are **Sunday-first (0 = Sun … 6 = Sat)** while the WEEK itself is
+    Monday-anchored to match `class_streak_weeks`, so a Sunday is the last day
+    of the streak week but is drawn in the FIRST cell. That is deliberate;
+    don't "fix" it. `streakWeekDays()` (`features/stats/data/`) is the ONE
+    builder behind both this strip and the celebration card's.
+  - `StreakFacts` closes the block: classes this week + the last class's
+    weekday, `h2` value over a `p`/`text2nd` label.
+  - **Zero streak** — the emptiest state. The hero branches to
+    `START YOUR / STREAK / BOOK A CLASS` with `SparkleHero(showSparkles:
+    false)` (the sparkles are the earned part), the strip still draws seven
+    open days so the goal has a shape, and the facts give way to a full-width
+    `Book a class` button. This branch is opt-in via
+    `ProfileStreakHero(allowZeroState: true)` — the rank-enabled page keeps the
+    count hero verbatim.
+- **Motion budget for the rank-less page**: the hero's 620ms sparkle scatter,
+  `StreakWeekStrip`'s 70ms-per-badge cascade, `_PulseOnLand` on completed
+  badges, and ONE `StaggeredReveal` on the facts. The celebration card's
+  `_StreakOrbit` (~3s gate) and its 1400ms `CountUpText` are deliberately NOT
+  carried over. The entrance plays **once per mount**, completes in ≤900ms, and
+  must never re-fire on a silent refresh — which is why `ProfileStreakHero`,
+  `ProfileStreakWeek` and the facts slot each carry a narrow `buildWhen`. No
+  idle or looping motion.
+
+## The post-class celebration is composed, not hardcoded
+
+`features/stats/data/celebration_flow.dart` owns the card ORDER, and it is the
+only place that decides which cards a member sees: `celebrationCardRoutes` =
+streak → points → (rewards, when `gymHasRewards` **and** `rewardsWorthShowing`)
+→ (rank, when `gymRankEnabled` **and** the member holds a rank). Each screen
+asks `nextCelebrationCard(current:, hasRank:, pointsBalance:)` for its successor
+and takes its label from `celebrationCtaLabel` — so **the last card shown always
+says "Done" and returns home, and never chains into a card that was composed
+out.** That includes the rank card: **no screen hardcodes a CTA label.** Add a
+card by adding it to that list, not by hardcoding a route in a screen's CTA.
+
+- **The rewards card has TWO independent gates, and both must pass.**
+  `gymHasRewards` asks whether the gym runs rewards at all (a cached identity
+  flag, synchronous); `rewardsWorthShowing` asks whether THIS member can reach
+  one — `rewardsCardWorthShowing` in `celebration_rewards_gate.dart`: they can
+  redeem something, or they are within 10% of the CHEAPEST reward. It is an
+  integer comparison (`balance * 10 >= cheapest * 9`) so the boundary can't turn
+  on float rounding, and "can afford something" collapses into the same
+  comparison. A card that can only say "you can't have any of this" is worse
+  than no card.
+- **The catalog is primed at flow-push time, and the card reuses it.**
+  `CelebrationRewardsGate` (a `ChangeNotifier` singleton) is `reset()` then
+  `prime()`d inside `CelebrationDetector` immediately before BOTH pushes
+  (`maybeFire` and the DEBUG `fireNow`), so the answer is one full card ahead of
+  the points card that needs it. It holds only the CATALOG, never a decided
+  boolean — the balance is read fresh off `MemberProfileBloc` at decision time,
+  so the gate can't hold a stale one. `RewardsCardScreen` then renders the
+  primed catalog instead of fetching again, which removes both a second round
+  trip and its load state.
+- **Undecided → SHOW, and it can never flicker.** A prime still in flight or
+  failed leaves the gate null, which reads as show (the default-to-show law).
+  That is only safe because **`RewardsCardScreen` never self-skips** — once
+  pushed it renders, always. The worst case is a card the member could have been
+  spared, never one that appears and vanishes. `PointsScreen` (the one card
+  whose successor is the async answer) wraps its `nextCelebrationCard` call in a
+  `ListenableBuilder` on the gate so a late arrival re-derives its CTA; the
+  other three don't need it.
+- `RankScreen` keeps its own self-skip (`buildRankStats() == null` → post-frame
+  home) as the **deep-link backstop** for PR 3's after-class push, and
+  `AppRoutes.postClassRank` stays registered. That asymmetry with the rewards
+  card is deliberate: `RankScreen` can render literally nothing, the rewards
+  card can always render the catalog or the bundled fallback. The composition is
+  what stops the normal flow ever landing there, so the preceding card's
+  "Continue" can't bounce off a blank `ColoredBox`.
+- **The cards show the GYM's own art, not the theme's.** The `Mock*Stats`
+  carrier types are the prototype's shape, not its data —
+  `celebration_stats_builder.dart` fills them from the live `MemberProfile`, and
+  anything the builder drops silently reverts a card to the theme's stand-in. The
+  rank card's belt therefore carries `rankImageUrl` (`rank.image_url`) beside
+  the bundled `beltAsset` and resolves through `RankBody._Belt` — the same
+  member-art-first rule as the topbar and the profile. When adding a field to a
+  card, carry the live image URL with it.
+- **A reward photo is framed 3:2, everywhere it appears.** The celebration
+  carousel's slide (`rewards_carousel.dart`) and the store's `RewardImageHero`
+  use the same ratio and the same `radiusBig` corner, so one uploaded photo is
+  cropped identically on both surfaces. Reward art is gym-uploaded and
+  rectangular — never re-frame it square or circular.
+- **On the celebration card the FRAME is the progress meter.** The slide's ring
+  is closed and `accent` when the member can redeem it, and a partial `text`
+  stroke over a hairline `divider` track (`balance / cost`, from top-centre
+  clockwise) when they can't — the same tokens, start point and direction as
+  `NextRankBadge`'s `_ProgressArcPainter`, which is the app's existing
+  "progress toward a thing" language. **Colour is never the only signal**:
+  ring closure, the `RewardReadyTag` and the caption wording each carry the
+  distinction alone, because `accent` is a per-tenant slot that may land close
+  to `text` at some gym. One place decides all of it —
+  `buildRewardsCardView` in `features/stats/data/rewards_card_view.dart`; no
+  widget re-derives a state, and the card's title, subtitle and opening slide
+  are derived there too rather than read from `mockRewardsStats`.
+- **A balance we do not have is UNKNOWN, never zero.** A null `pointsBalance`
+  (profile loading, or errored with no last-good value) and a bundled fallback
+  slide (`RewardSlide.isLive == false`, whose costs are DEMO numbers) both
+  render the unknown state — a closed `text` ring and a plain `{cost} pts`.
+  Showing `0 / 2,200 points` to a member who may hold 3,000 would be a false
+  statement, and the unknown state is exactly what the card shipped before
+  affordability existed, so the degraded path is already proven.
+- **There is no videos CARD in this flow.** The app's one video card is the
+  post-BOOKING recommendation (`ClassBookedScreen` → `AppRoutes.videoRecc`),
+  which applies the same rule locally: with `gymHasVideos` false the booked
+  screen is the last card and pops home rather than opening an empty rec.
+- `RewardsCardScreen` takes an optional `repository` — the same test seam as
+  `VideoReccScreen`, so no test hits a live backend.
+
+### The two notification destinations have a DEBUG-ONLY trigger
+
+Both screens a push will land a member on are unreachable by hand in the
+running app — the celebration only fires off a fresh staff check-in (and burns
+the watermark doing it), and `SummaryScreen` ("Drill of the Day") is never
+shown automatically. So the identity sheet carries a **Developer** section
+(`IdentitySheetDevSection`, the whole section wrapped in `if (kDebugMode)` so
+it is compiled out of release builds) with one row for each.
+
+- **"Post-class celebration"** calls `CelebrationDetector.fireNow` — the same
+  data path as `maybeFire` (class-history head → newest attended row →
+  payload) but it ignores the watermark and **never advances it**, so a
+  preview can't consume the real celebration. With nothing attended yet (or a
+  failed fetch) it opens on a representative fallback payload rather than
+  doing nothing. The card CHAIN is not special-cased: `celebration_flow.dart`
+  still composes it from the gym's real flags, so the preview is exactly what
+  this gym's members get.
+- **"Drill of the Day"** just pushes `AppRoutes.summary`.
+- Both **dismiss the sheet FIRST**, then push onto the `NavigatorState`
+  captured before the pop — the same host/shell navigator `_signOut` pops.
+- It previews what a member SEES on those screens. Delivery, the 24h timing
+  and cold-start deep-link routing are the FCM work, not this.
+
+## Theme hydration
+
+Branding is resolved in two stages. At boot the app themes to the bundled default
+(`AppConfig.designId`, the boot/fallback preset — no member is selected yet). Once
+a member is chosen, `GymThemeHydration` (`features/gym/theme_hydration.dart`)
+fetches `GET /api/v1/gyms/{gym_id}/showcase`, reads its `theme_design_id`, and
+calls `ThemeRuntime.selectDesign(designId)` — the engine fetches the design by id,
+adopts it, disk-caches it, and fires `ThemeRuntime.changes` so the app re-themes
+live. A null/empty id or any failure (offline, unresolvable design) leaves the
+current/bundled theme in place — logged, never thrown, so hydration can never
+block boot. `GymThemeHydration.reset()` re-selects the bundled default on
+sign-out. (The showcase read is gated backend-side by
+`verify_gym_member_or_employee` — any member of the gym may read its branding; see
+the `employees-guide` skill.)
+
+## Error handling
+
+Typed exceptions live in `lib/core/errors/exceptions.dart`:
+- **`NetworkException`** — timeout / connection failure (the gate treats this as
+  offline).
+- **`ServerException`** — a backend error response; carries `statusCode`, the
+  FastAPI `detail` string (when `detail` is a plain string), the raw decoded
+  `data` (for a structured `detail`), and the `code` getter below.
+- **`ForbiddenException`** — a `403`, a subtype of `ServerException` so existing
+  `on ServerException` handlers still catch it; catch it first to show the
+  role-specific message. **Never signs the user out** (that's the 401 path).
+
+Repositories **throw + describe**; blocs **log + handle** and surface a
+user-friendly message. Every bloc-backed screen renders explicit loading / loaded
+/ error states with a retry path.
+
+### Branch on the backend's `code`, NEVER on its message text
+
+Where a backend domain publishes a machine-readable error `code`, it rides the
+wire as a **sibling** of `detail`, never nested inside it:
+
+```json
+{"detail": "Class is not active", "code": "class_inactive"}
+```
+
+`ServerException.code` reads it (`data['code']` when it is a non-empty String,
+else null) — **one place, never re-parsed at a call site**. The backend is
+explicit that the exception TYPE is the single source of truth for both the
+HTTP status and the code, and that `detail` is prose that may be reworded
+freely (`../FastApiBackend/src/checkin/checkin_exceptions.py`). So a client that
+sniffs the message (`detail.contains('full')`) turns a backend copy edit into a
+silent behaviour change. Codes are additive by contract — they are never
+renamed or repurposed — so switching on them is safe and sniffing never is.
+
+- **A null code is "fall back to `detail`", not "no error".** Most domains
+  publish no code at all, and even in a domain that does, the generic
+  `except ValueError -> 400` arm emits a bare `detail`.
+- **Map codes to member-facing copy in ONE typed place, with an `unknown`
+  fallback** (the resilient-enum rule). `BookingRejection`
+  (`features/class_booking/data/booking_rejection.dart`) is the reference: it
+  mirrors the reservation subset of the backend's `CheckinErrorCode`, pairs
+  each code with plain member wording (the raw `detail` is engineer-speak —
+  "Not a class occurrence on that date" means nothing to a member), and
+  degrades an unrecognised or absent code to the backend's `detail` and then
+  to a generic message. **A rejection is never blank.**
+- The bloc resolves the copy; the widget only renders `state.errorMessage`.
+  Never let a screen re-decide what a rejection says — that reintroduces the
+  second source of truth this rule removes.
+- `BookingState.fullClass` is a **derived getter** (`rejection == classFull`),
+  not a stored flag, so the designed inline full-class state can only be
+  reached through the code.
+- Reserve and cancel share the same classification helper. `DELETE …/signup`
+  raises no typed rejection today (it 200s with `removed: false` when there was
+  nothing to remove), so the mapping is inert there — deliberately, so the two
+  paths cannot drift if one is ever added.
+
+## A reservation is STATED, never inferred
+
+A member must be able to see that they hold a class without reading a
+destructive action. The class detail used to signal it only by the footer
+button reading "Cancel reservation" — status inferred from the presence of a
+way to undo it, which is backwards.
+
+- **`ClassReservedTag` (`shared/widgets/class_reserved_tag.dart`) is the app's
+  ONE mark for "the member holds this occurrence."** Both places a reservation
+  can be seen use it — the schedule board's `ClassListItem` row and the class
+  detail's `ClassMetaSection` — so it reads as the same object everywhere.
+  Never fork a second treatment. It is **`accent`**-toned, not
+  `primaryColor`: accent is the selection / active-state role and a held
+  reservation is a state, not an action, which also stops it competing with
+  the footer's Reserve CTA (primary orange). Its surface recipe is
+  `ErrorMessage`'s (tinted fill + hairline border + glyph + label) so the
+  screen's positive and negative statuses read as one system; only the
+  geometry differs — a self-sizing pill, not a full-width banner. **It is not
+  tappable**: cancelling stays the footer's single confirmed action.
+- **On the detail it sits between the class TITLE and the specifics block** —
+  what the class is, then where the member stands with it, then the facts. Not
+  next to the footer: a status line beside the Cancel button would restate the
+  same thing twice in one glance.
+- **`ClassDetailArgs.booked` is a SEED, not the truth.** It paints the right
+  state on the first frame (the board joined its occurrences against the
+  member's reservations), but it is a claim made by whoever navigated here —
+  and `UpcomingSessionRow` hardcodes `booked: true`, while the board's flags
+  vanish entirely whenever `HomeBloc`'s best-effort class-history leg fails.
+  So the live screen dispatches `BookingReservationSyncRequested` on mount and
+  re-derives `booked` from the member's OWN open reservations
+  (`MemberClassHistoryRepository`, matched on `ClassOccurrence.slotKey`).
+  A wrong or missing flag cannot survive the first read, so nobody taps
+  "Reserve" on a class they already hold.
+  - The confirm is **best-effort and silent**: a failure keeps the seed and
+    surfaces nothing (the screen's job is the class, and reserve is idempotent
+    anyway).
+  - It applies **only while `BookingState.isUntouched`** (not busy, both
+    success tokens still 0). Once the member has reserved or cancelled here,
+    their action is the truth and a late read must never undo it.
+  - Capture path only skips it (`live` false) — there is no member session.
+
+## Live-session rules
+
+These came from an adversarial review of running the app as a real member; treat
+them as mandatory:
+
+- **Celebration watermark.** The post-class celebration fires from a per-member
+  watermark (`celebration_watermark_<member_id>`) checked on app open/foreground.
+  A null watermark seeds **silently** (no replay storm on first run / reinstall /
+  member switch); it fires **once** for the newest unseen attendance and advances
+  only after the flow completes. The old "wins" card is removed from the flow (the
+  screen file is dormant). Which cards the flow then shows is composed per-gym —
+  see *The post-class celebration is composed, not hardcoded*.
+- **Never show a surface for a feature the gym doesn't run.** A tab, a topbar
+  tile, a celebration card or a hand-off into a screen that can only be empty
+  is worse than no entry point at all: the member gets there by a route with no
+  context and nothing to do. Compose it out at the source (the nav tab set, the
+  `InfoBar` tile set, the celebration card list) rather than letting the
+  destination render an empty state. The mirror rule is the UNKNOWN case: when
+  a flag is missing, default to showing — an empty surface is recoverable, an
+  invisible feature is not.
+- **Refresh, no polling.** Pull-to-refresh on all four tabs + refetch-on-tab-
+  focus; a foreground return drives the profile refetch and the celebration
+  check. No timers. **A pull is ONE shared action** — `AppRefresh`
+  (`core/refresh/app_refresh.dart`), wrapped by `AppRefreshView`
+  (`shared/widgets/refresh/`) on every tab, never a per-screen indicator. Four
+  legs, run concurrently and each guarded so one failure can't sink the others,
+  awaited together so the spinner tracks real completion:
+  1. **Identity → capabilities + branding.** Re-reads `GET /member/members` and
+     updates the CURRENT selection's gym name / logo / address and its three
+     capability flags in place, via `SelectedMember.refreshIdentity`. That read
+     otherwise runs exactly ONCE per session in the gate, so before this a gym
+     toggling `is_rank_enabled` in the CRM only reached the member on a
+     relaunch. **The selection ladder is never re-run** — `refreshIdentity`
+     cannot take a member id, and a member missing from the fresh list (staff
+     archived them) leaves the last-known identity standing: stale data is
+     recoverable, silently acting as a different member is not.
+  2. **Theme** — `GymThemeHydration().applyForGym`, so a CRM theme change lands
+     without a relaunch either.
+  3. **The shared `MemberProfileBloc`** (rank, points, streak, week strip).
+  4. **The screen's own bloc**, when it owns anything the profile doesn't.
+  Nothing is surfaced from the pull itself: each leg's failure mode is already
+  designed (the screens keep last-good content and render their own error /
+  retry states).
+  Two rules when adding a tab or a scroll view under one: the scrollable needs
+  `physics: const AlwaysScrollableScrollPhysics()` or a page shorter than the
+  viewport refuses the drag, and the tab root wraps itself in
+  `SelectedMemberScope` so new capability flags re-compose the page that is
+  actually on screen (the shell re-keys on member id alone, which a refresh
+  never changes).
+- **A refresh event is awaited through its `RefreshSignal`, never a delay.**
+  Every `*RefreshRequested` event carries an optional POSITIONAL
+  `RefreshSignal` (`core/refresh/refresh_signal.dart`) that its handler
+  completes in a `finally`; `dispatchRefresh(bloc, XRefreshRequested.new)`
+  awaits it. Watching the state stream instead is not equivalent — a handler
+  that early-returns or re-emits an equal state emits nothing, and the
+  indicator would hang to its timeout. The field is positional and optional so
+  every fire-and-forget `const XRefreshRequested()` call site stays valid, and
+  it is excluded from `props`.
+- **No placeholder creator avatars.** The served video feed carries no
+  `channel_avatar_url` today — the field arrives as an **empty string**, not
+  null. Every video card therefore resolves it through the one shared rule,
+  `creatorAvatarProvider` (`shared/widgets/video_recc_card/creator_avatar.dart`),
+  which returns null for a null/empty/whitespace URL; the card then **omits the
+  `CreatorAvatar` entirely** — no placeholder circle, no ring, no reserved gap
+  (the avatar-to-text gap lives on the parent `Row`'s `spacing:`, so it
+  disappears with the avatar). When a real URL is present the avatar renders as
+  before. Same law as the picker's missing gym logo above; never re-express the
+  emptiness check at a call site. (The topbar's rank belt is the one deliberate
+  exception — permanent chrome, so it falls back instead of collapsing; see
+  *The topbar's info bar shows the member's REAL belt* above.)
+- **Reset on switch.** Changing `SelectedMember` resets and reloads every
+  feature bloc (via the `app_shell` re-key) — no stale data bleeds across profiles.
+
+## QR check-in (a seam, not the real contract)
+
+`features/qr_checkin/` is the topbar tile → `mobile_scanner` camera → pick today's
+class → confirm → a quick streak count-up (the count-up segment of the celebration
+animation, auto-dismissing). **The scanned payload is NOT parsed** and the confirm
+is **stub-success** — no check-in endpoint exists for a member (by design; a member
+can't self-check-in). `CheckinConfirmArgs` carries only the class name + points and
+is the **seam for kiosk Phase G**: the real backend `src/kiosk/` nonce contract
+(scan → staff-gated check-in → streak + points in the response) will flow through
+these same screens once it lands. Don't wire a real member check-in here.
+
+## Videos open on YouTube (there is no in-app player)
+
+Every video surface — the videos tab's hero + carousels, a genre's full list,
+the profile's "Videos to level up" carousel, and the post-booking
+recommendation's "Watch" — hands the video to the OS through the one shared
+helper `features/videos/presentation/widgets/video_link_helpers.dart`
+(`videoUriFor` → `launchVideoFor` → `openVideoFor`). Never build a second
+launch path or an in-app player.
+
+- **The URI**: the card's own `url` when it's present and has a scheme,
+  otherwise `https://www.youtube.com/watch?v=<video_id>` built from the
+  card's `videoId`. A card with neither never launches (and never crashes).
+- **The mode is always `LaunchMode.externalApplication`** so the YouTube app
+  takes it when installed. This needs the manifest `<queries>` `https` VIEW
+  intent (see `url_launcher` under *Dependencies*).
+- **A failed launch is visible**: `openVideoFor` captures the
+  `ScaffoldMessenger` **before** the await and shows a SnackBar when nothing
+  handled the intent — never a dead tap.
+- **Every open is REPORTED, and reported exactly ONCE.** A `video_clicked`
+  activity is what the member's video-taste profile learns from
+  (`member_profile_source.sql`), so an unreported open is a video the member
+  chose that personalization throws away. Two writers exist and they must never
+  both fire for one tap:
+  - **Feed opens** (hero, carousels, a genre list, the profile's level-up
+    carousel) are reported by `openVideoFor` itself — it dispatches
+    `VideoOpenedFromFeed` to the app-lifetime `VideoClickBloc` reached through
+    `VideoClickScope` (an `InheritedWidget` mounted above `MaterialApp` in
+    `main.dart`, so BOTH navigators' routes sit under it). That is why no feed
+    call site wires a reporter of its own. `VideoClickScope.maybeOf` returns
+    null outside the shell, so a widget test or the capture harness opens the
+    video and simply reports nothing.
+  - **The recommendation** is reported by its own rec-scoped route
+    (`VideoRecOpened` → `recordRecClick`), which additionally stamps the served
+    rec row. So `VideoReccScreen` passes **`openVideoFor(..., reportOpen:
+    false)`** — without it one tap would write two rows and double-weight the
+    taste profile.
+  - The report is **append-only server-side** (a re-watch is real signal), and
+    **fire-and-forget** here: dispatching is synchronous and `VideoClickBloc`
+    swallows its own failures, emits nothing, and never throws, so a slow or
+    failing report can never delay the launch or surface an error.
+- **The rec screen records, then launches, then closes.** "Watch" dispatches
+  `VideoRecOpened` first (the bloc fire-and-forgets the click, so it can't
+  delay the launch), then launches, and pops **only on success** — a failed
+  launch keeps the recommendation on screen to retry instead of dropping the
+  member out of the flow with nothing.
+- **Video thumbnails are square.** `VideoReccCard`'s `roundThumbnail`
+  defaults to **false**: YouTube burns caption text to the thumbnail edge and
+  a `radiusBig` corner clips it. The compact carousel card is the deliberate
+  exception — its thumbnail has no radius of its own; it inherits the card
+  frame's `radiusSmall` clip, which is the card surface, not the thumbnail.
 
 ## Search the web for conventions before designing
 
@@ -97,7 +779,7 @@ How to apply:
 **DRY** — single source of truth for each piece of logic.
 **KISS** — favor simplicity over complexity.
 **YAGNI** — don't add features until needed.
-**Separation of Concerns** — separate UI from any logic that creeps in.
+**Separation of Concerns** — keep UI, business logic (bloc), and data (repository) separate.
 
 ## No assumptions
 
@@ -108,6 +790,9 @@ When a decision has more than one reasonable answer, ask and wait for the user's
 This file is a living document — exactly like a skill, it must track reality. Whenever the code genuinely diverges from what this CLAUDE.md says (a new live backend call, a renamed system, an added dependency, a rule the code has outgrown on purpose, a feature that changed the architecture), **update this file in the same change** so the doc and the code never drift apart. Never leave it stale: a stale rule produces false "violation" findings in review and misleads the next contributor. If a documented rule is what diverged, fix the doc to match the new reality; if the divergence is a mistake, fix the code. Either way, doc and code must agree when you are done.
 
 ## Always delete dead code
+
+*(Temporarily suspended for the one dormant batch above — that batch awaits a
+consolidated removal approval. Everything else: this rule is in force.)*
 
 When something is removed, **remove it completely** — don't leave orphans behind.
 
@@ -141,7 +826,7 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 - **NEVER hardcode spacing, padding, radius, border widths, divider thickness, or icon sizes.** Use `DesignConstants.spacing*`, `DesignConstants.padding*`, `DesignConstants.radius*`, `DesignConstants.buttonBorder` / `buttonBorderSize`, `DesignConstants.dividerThickness`, and `DesignConstants.iconSize{Xs|Sm|Md|Lg|Xl|2xl}` (T-shirt scale, 16/20/24/28/32/36).
 - **Image dimensions ARE allowed inline.** `Image.asset(width:, height:)`, asset-bound `SizedBox` constraints, and layout `aspectRatio:` are per-asset values — they're not fungible design tokens, and there is no `imageSize*` catalog. Type the literal pixel value (or hoist it to a private `_kFoo` const at the top of the file when reused). Same for one-off `Positioned(left:/top:/...)` math when laying out an image overlay.
 - **`_kFoo` private file-scoped constants are also allowed for scroll-position math, sliver / pinned-header heights, and pure layout arithmetic that has no `DesignConstants` equivalent.** Examples: `_kTopbarHeight = 268`, `_kDateRowHeight = 50`, `_kCardWidth = 258`. The carve-out is for *layout math that is intrinsically per-screen and not a fungible design token*. If the same number appears across multiple screens or controls, it's not a `_k` candidate — escalate to add a `DesignConstants` token instead.
-- **Prototype status is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
+- **Live data is NOT a license to inline values.** If you find yourself typing a hex code, a `Color(0xFF...)`, or a literal pixel number for spacing/padding/radius/border/divider/icon-size, stop. Use the constant — or ask if a new one needs to exist. The whole point of theming is that one edit to `design_constants.dart` reskins the entire app; that property dies the moment a single screen inlines a value.
 - **`design_constants.dart` is runtime-driven, not immutable.** The brand colours (`primaryColor`, `backgroundColor`, `text`, `accent`) are static getters that resolve live from the loaded tenant customization via `BrandColor.color(slot, fallback: <const CombatDen default>)`. Derived shades (`primaryColor50/25/10`, `darkPrimary`, `text2nd/3rd`, `card`, `popup`, `divider`) are getters off those bases. Status/semantic colours (`goodGreen`, `okYellow`, `badRed`, `hyperlink`, the `*Dark` variants) stay hardcoded and are NOT brandable. The const fallback is the CombatDen palette, used verbatim when no customization is loaded. Do not hand-edit token values or the `BrandColor` wiring, and do not add/rename tokens without explicit permission.
 - The customization **engine** (the shared `theme_flutter` package, imported as `package:theme_flutter/...`) is app-agnostic: it fetches the tenant's resolved customization at startup, disk-caches the last-good copy, and warns LOUDLY in the logs (never throws) if a slot the app declared in `lib/core/app_slots.dart` (`CombatDenSlots`) is missing. The engine was extracted from this app's old `lib/customization/` so CRM can share it for the live theme preview; this app injects its `CombatDenSlots` manifest + `AppConfig` into `ThemeRuntime.initialize`. The old `Brand`/`BrandScope` enum + bjj demo were **deleted** — per-tenant variation now comes from the engine, not a compile-time enum. (`design_constants.dart` is runtime-driven from the engine; this app is the customization host.)
 - Images: the `BrandImage` widget is URL-first — a bundled-asset filename that maps to a customization slot renders the fetched image (disk-cached via `cached_network_image`) and falls back to the bundled asset otherwise. Call sites are unchanged.
@@ -158,7 +843,7 @@ If unsure whether something is truly dead, grep for it. If it has zero reference
 
 **App Theme**
 
-- Global `ThemeData` lives in `lib/shared/themes/app_theme.dart` and is wired in `main.dart`. It maps DesignConstants into Material 3's `ColorScheme` and `TextTheme` so stock Material widgets (`ElevatedButton`, `Text`, `Scaffold`, etc.) auto-theme.
+- Global `ThemeData` lives in `lib/shared/themes/app_theme.dart` and is wired in `main.dart`. It maps DesignConstants into Material 3's `ColorScheme` and `TextTheme` so stock Material widgets (`ElevatedButton`, `Text`, `Scaffold`, etc.) auto-theme. `main.dart` rebuilds it on `ThemeRuntime.changes` so a live re-theme repaints stock chrome.
 - For widget-specific styling beyond what the global theme provides, reach into `DesignConstants` directly. Don't add one-off overrides at the call site.
 
 ## Current ThemeConfig Preset (where the live look comes from)
@@ -171,15 +856,18 @@ the ThemeService. There is no single canonical palette; never assume
 or hardcode one. The customization surface is **open-ended and growing** —
 colours and images are just the start; over time more of the app (copy,
 layout, enabled features) becomes tenant-customizable. Build accordingly:
-do not bake in assumptions that only colour and text vary.
+do not bake in assumptions that only colour and image vary.
 
-- **Which preset is active is declared in `lib/core/app_config.dart`** —
+- **`lib/core/app_config.dart` declares the BOOT/fallback preset** —
   `AppConfig.appId` (tenant, e.g. `combatden`) and `AppConfig.designId` (the
-  preset/run, e.g. `20260518T131056Z`). This is the app's identity, not part
-  of the customization package. **Read this file first** to learn what is
-  actually loaded.
-- **The preset lives in `../ThemeService/apps/<appId>/<designId>/`.**
-  Before diagnosing or changing anything about how the app looks, read:
+  preset the runtime initializes on so the login/gate screens paint branded
+  before a member is chosen). It is **not** the live gym theme: once a member is
+  selected, the live look comes from that member's gym via *Theme hydration*
+  above (`theme_design_id` → `ThemeRuntime.selectDesign`), and `AppConfig.designId`
+  is only the fallback/reset design. **Read `app_config.dart` first** to learn
+  what the boot default is.
+- **A preset lives in `../ThemeService/apps/<appId>/<designId>/`.**
+  Before diagnosing or changing anything about how a preset looks, read:
   - `customization.yaml` — the design brief: `design_direction` (name +
     intent, e.g. "Duck Groove") and `colors_direction`, whose
     **`colors_direction.mode`** (`light`/`dark`) says whether the preset is
@@ -189,9 +877,9 @@ do not bake in assumptions that only colour and text vary.
     image and its prompt.
   - `final_images/` — the resolved bitmap assets (logo, belt, sparkles).
 - **Never assume the dark CombatDen palette.** Always resolve the active
-  preset via `app_config.dart`, then read that preset's `customization.yaml`
-  + `output.yaml`. A light preset (`color_set.mode: light`) is a deliberate,
-  supported configuration, not a bug.
+  preset via `app_config.dart` (the boot default) or the hydrated gym design,
+  then read that preset's `customization.yaml` + `output.yaml`. A light preset
+  (`color_set.mode: light`) is a deliberate, supported configuration, not a bug.
 - The app maps only those four slots through `BrandColor` / `CombatDenSlots`.
   Elevated surfaces (`card`, `popup`) are a translucent **white** overlay
   whose alpha tracks the background's HSL lightness, so they self-adjust to
@@ -201,46 +889,35 @@ do not bake in assumptions that only colour and text vary.
   `DesignConstants.isLightCanvas`, which resolves from the loaded
   customization's `color_set.mode` (defaulting to dark when none is loaded).
 
-## Hardcoded Mock Data Conventions
-
-- **Mock data is co-located with its feature**: `lib/features/<feature>/data/mock_<thing>.dart`.
-- Use top-level `const` lists or simple factory functions returning realistic, varied data. Don't make every member named "John Doe" — give the demo screens enough texture to actually evaluate the design.
-- **Models are plain Dart classes.** No `fromJson`/`toJson` yet. Field names and types must match what the real API will eventually return (see Pydantic schemas in `../FastApiBackend/src/<domain>/<domain>_schema.py` when relevant) so the swap to real repositories is mechanical.
-- **No callbacks for "save" / "submit" actions.** Buttons can be no-ops or `print` for now. Don't pretend the prototype has logic.
-- **No real loading/error/empty states wired to conditions that can't fire yet.** If a screen needs to demo those states, drive them from a hardcoded enum at the top of the screen file so they're easy to flip during a demo:
-  ```dart
-  enum _DemoState { loaded, empty, error }
-  const _state = _DemoState.loaded;
-  ```
-
 ## Dart Standards
 
 **Imports**
 - **ALWAYS use package imports** (`package:mobile_app/...`) — never relative imports.
-- Good: `import 'package:mobile_app/features/members/data/mock_members.dart';`
-- Bad: `import '../data/mock_members.dart';`
+- Good: `import 'package:mobile_app/features/member_select/data/models/member_identity.dart';`
+- Bad: `import '../data/models/member_identity.dart';`
 
 **Naming**
-- Files: `member_card.dart`, `mock_members.dart`
-- Classes: `MemberCard`, `MembersScreen`
-- Functions/variables: `buildMemberCard`, `memberCount`
-- Constants: `kMaxItems`
-- Private: `_internalVar`, `_PrivateWidget`
+- Files: `member_row.dart`, `member_portal_repository.dart`, `member_profile_bloc.dart`.
+- Classes: `MemberRow`, `MemberPortalRepository`, `MemberProfileBloc`.
+- Functions/variables: `getMyMembers`, `memberCount`.
+- Constants: `kMaxItems`.
+- Private: `_internalVar`, `_PrivateWidget`.
+- Blocs: `FeatureBloc`, `FeatureEvent`, `FeatureState`.
 
 **Formatting**
 - Max 80 characters per line **for body code**. Package imports are exempt — Dart's formatter doesn't break import lines, and renaming folders to fit a column limit isn't worth it.
-- `dart format` for consistent formatting.
+- **Hand-format additions; `flutter analyze` is the gate.** The repo is not `dart format`-clean — a blanket format churns ~60 unrelated files including `design_constants.dart`. Match the surrounding style by hand; keep `flutter analyze` clean before committing.
 - Trailing commas on multi-line widget trees for clean diffs.
 
 **Type Hints**
 - Always annotate function parameters and return values.
-- Use `?` for nullable types. Use generics (`List<Member>`, `Map<String, int>`).
+- Use `?` for nullable types. Use generics (`List<MemberIdentity>`, `Map<String, int>`).
 
 **Resilient Enum Parsing**
-- Even though data is hardcoded today, build the muscle memory: any enum that *will* be parsed from JSON later must have a fallback in its `fromJson` (when added) using `firstWhere(..., orElse: ...)`. For now, just include an `unknown` (or equivalent default) variant on status-like enums so it's already there when real data arrives.
+- Any enum parsed from JSON must have a fallback in its `fromJson` using `firstWhere(..., orElse: ...)` so a new backend enum value never crashes the UI. Status-like enums carry an `unknown` (or equivalent default) variant; every `switch` handles the fallback.
 
 **Backend String Display**
-- Capitalize lowercase strings (`'recurring'`, `'active'`) before displaying. Even with hardcoded data, display them the way the real API will hand them to us, so the formatter call site is already in place.
+- The API hands us lowercase strings (`'recurring'`, `'active'`) — capitalize them at the render layer before displaying.
 
 ## Code Complexity & File Organization
 
@@ -348,6 +1025,11 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 - Grid/List widgets: `[Content]Grid`, `[Content]List` — `MembersGrid`, `MembersList`.
 - Avoid generic names like `CustomWidget`, `WidgetOne`.
 
+**BLoC integration in widgets**
+- **Widgets dispatch events to the bloc** — never call repository methods directly.
+- **Widgets listen to state changes** via `BlocBuilder` / `BlocListener` / `BlocConsumer`.
+- **No callbacks for business logic** — use bloc events. Callbacks are fine for simple UI interactions (a button `onTap`, a form field `onChanged`).
+
 **Widget separation**
 - Default to extracting into its own file. If a widget has a clear name and responsibility, it gets a file.
 - **Default location is shared.** A widget belongs in `lib/features/<feature>/presentation/widgets/` only if it's specifically tied to that feature's content (e.g. a class-schedule list item that knows about classes). Topbars, buttons, cards, list rows, tables, dialogs, dividers, info rows, badges, chips, sections — all live in `lib/shared/widgets/`. **When unsure, prefer shared.** Moving a feature widget to shared later is cheap; building two parallel versions because the first one was buried in a feature folder is not.
@@ -359,22 +1041,30 @@ Bad: nesting the cascade but cramming it all into one giant `build` method — t
 
 ```
 lib/
-├── main.dart
+├── main.dart                       # Supabase init → ThemeRuntime → AuthGate
 ├── core/
-│   ├── app_config.dart             # active tenant + designId (preset)
+│   ├── app_config.dart             # tenant + boot/fallback designId (preset)
 │   ├── app_routes.dart             # named-route constants + builder map
 │   ├── app_slots.dart              # CombatDenSlots: expected colour/image slots
-│   └── design_constants.dart       # runtime-driven via the theme_flutter package
+│   ├── design_constants.dart       # runtime-driven via the theme_flutter package
+│   ├── config/                     # environment (Android loopback rewrite) + supabase config
+│   ├── constants/                  # env_constants.dart (dotenv keys)
+│   ├── errors/                     # exceptions.dart (Network / Server / Forbidden)
+│   ├── network/                    # api_client.dart (JWT dio + 401 refresh + 403 guard)
+│   ├── refresh/                    # app_refresh.dart (the ONE pull action) + refresh_signal.dart
+│   └── state/                      # selected_member.dart (app-wide member identity)
 ├── features/
 │   └── <feature>/
+│       ├── bloc/                   # bloc + event + state (single-class state)
 │       ├── data/
-│       │   └── mock_<thing>.dart   # hardcoded prototype data
+│       │   ├── models/             # json_serializable models (+ *.g.dart)
+│       │   └── repositories/       # wrap ApiClient, throw typed exceptions
 │       └── presentation/
 │           ├── screens/
 │           └── widgets/
 └── shared/
     ├── themes/
-    │   └── app_theme.dart
+    │   └── app_theme.dart          # ThemeData ← DesignConstants
     └── widgets/                    # cross-feature reusables
 ```
 
@@ -384,255 +1074,28 @@ landing page: `capture_main.dart` (the theme-reel scroll), `capture_booking_main
 (the class-booking clips — "Perfectly timed content"/Video-Before-Class, plus the
 "you're in" booked-confirm variant via `CAPTURE_BOOKING_END=confirm`), and
 `capture_app_main.dart` (the Home / Points / Streak screen clips), sharing
-`capture_frame.dart`. NOT shipping code — its only app-side hooks are opt-in and
-inert in normal use (all null / false / clock-unset): `captureController` on
-`VideosScreen`; `classData` on `ClassScreen`; `captureContentOnly` on
-`ClassBookedScreen`; `value` on `LoadingDots`, which pins the loader to one
-phase of its cycle; and the global `captureRevealClock`
-(`lib/shared/widgets/animation/capture_reveal_clock.dart`) that drives the
-reveal + post-class celebration animations deterministically — read by
-`ScaleReveal`, `StaggeredReveal`, `CountUpText`, the shared celebration intro
-stage (`shared/widgets/post_class/intro/`), the points intro controller
-(`_PointSphere`), and the streak badge pulse. See `tools/capture/README.md`.
+`capture_frame.dart`.
 
-There is deliberately **no prose spec for the formats.** One existed while they
-were being designed and it drifted wrong in about fifteen places within a day —
-values that were removed, an animation direction stated backwards, a
-decomposition that turned out to be unbuildable. The enums and their
-`test/*_invariants_test.dart` gates ARE the contract: the gates assert what a
-value may and may not change, and they fail when it is broken, which a document
-cannot. Read `lib/core/formats/` and the gates. Do not reintroduce a parallel
-description of them.
-
-## Layout formats
-
-A **layout format** is one complete, reviewed arrangement of a screen, selected
-per tenant. The rules:
-
-- The enums live in `lib/core/formats/layout_formats.dart`, one per screen, and
-  the **first value is what ships today** and is the parse fallback.
-- A screen resolves its own value through `ThemeLayout.<screen>()`
-  (`lib/core/formats/theme_layout.dart`), which reads the tenant's slot
-  (declared in `lib/core/app_slots.dart`) behind the dev picker and a
-  `--dart-define`. Wrap the switch in a `FormatBuilder` so the in-app picker
-  swaps it live without remounting the screen.
-- `lib/core/formats/format_catalog.dart` lists every format and carries the
-  `implemented` flag the dev picker shows — flip it when a screen is wired.
-- **A format changes ARRANGEMENT ONLY.** No element is added, none removed, no
-  variant reaches data the shipped screen did not already have. This is not a
-  convention, it is enforced: every screen with a format has an invariants test
-  (`test/<screen>_invariants_test.dart`, one per screen, always run) that pumps
-  EVERY value at real phone size and asserts the full element set — and that any
-  single-commit-point action, e.g. the class screen's one reserve CTA, is still
-  there exactly once. Add to that test in the same change as a new value, and
-  MUTATION-TEST it: break an element, confirm the gate fails, restore it. A gate
-  that cannot fail is worthless.
-- Per-screen layouts live in `features/<feature>/presentation/layouts/`, one
-  file per value, composing a shared payload (`*_layout_data.dart`) and the
-  shared `parts/` — with the section widgets in `presentation/widgets/` gaining
-  **presentation** props (treatment / position enums) but never new data props.
-  The shell's version of the same shape is `shared/widgets/topbar/layouts/`.
-- Each screen also has a golden preview (`test/*_preview_test.dart`, tagged
-  `golden`) rendering every value to `test/goldens/` for side-by-side review.
-  Regenerate with
-  `flutter test --tags golden --update-goldens --run-skipped`.
-
-## Motion formats
-
-A **motion format** is the same idea one level down: the enums live in
-`lib/core/formats/motion_formats.dart` and a surface resolves its value
-through `ThemeMotion.<slot>()`, which reads the same shared chain as
-`ThemeLayout` (see *Format resolution* below). The difference is the
-invariant:
-
-- **A motion format changes TIMING AND ENTRANCE ONLY.** It may not change
-  which elements exist, what the surface is fed, **where the settled
-  content sits**, or the app's motion law. **No value may overshoot** —
-  ease-out only, no bounce, no elastic, no anticipation ("back") curve.
-  Energy comes from stagger density. Note that a range check alone does
-  NOT catch a bounce: gate **monotonicity** too, since a bounce is a
-  reversal that still ends at 1.0.
-- **Every value must be an entrance, and a legible one.** There is no
-  "no animation" value on any motion enum — an element or card that
-  never animates in is not a treatment a tenant gets to pick. Values do
-  NOT have to be the same length (`burst` should be punchier than
-  `orbit`); the rule is a floor, never a band. A value whose motion is
-  inherently quick pays for legibility with a lead-in — a held beat, or
-  better a run-up that builds — rather than by being abrupt.
-- **The floor is per surface**, because a card and a single element are
-  read differently:
-  - `celebration_intro`: at least **1500ms** total, and nothing above
-    half opacity in the first **350ms**. A composed moment is run-up +
-    event + settle, which cannot fit under ~1.5s without collapsing
-    into a flash.
-  - `reveal_style`: each value's own run clears
-    `kRevealLegibilityFloor` (**240ms**,
-    `shared/widgets/animation/reveal/reveal_frame.dart`) and stays
-    inside `MotionSpec.elementDurationCeiling` (300ms). Under a quarter
-    second an entrance stops reading as a transition and reads as a cut.
-  - `count_up_style`: at least **900ms** total and **600ms** of visibly
-    changing figure. A saccade onto a moving target plus numeral
-    recognition costs ~250-400ms, and reading the settled figure another
-    ~250ms, so a shorter count is over before it is seen.
-  - `loader_style`: cycle at least **800ms** — set below the shipped
-    1100ms deliberately, so the floor constrains future values instead
-    of restating today's. A loader takes NO lead-in: a waiting state
-    that shows nothing for a beat reads as a freeze.
-- The **shipped value of each enum keeps its exact timing**, lead-in
-  included (i.e. usually none). It is the parse fallback, so padding it
-  would change what every unbranded build already ships.
-- `celebration_intro` is wired. `lib/shared/widgets/post_class/intro/`
-  holds it: `celebration_intro_frame.dart` is the pure per-instant model
-  (`CelebrationIntroFrame`) plus one value's whole contract
-  (`CelebrationIntroSpec` — total, hand-off, particle field, frame
-  function); one file per value declares a spec; `celebration_intro_figure.dart`
-  is the only widget that paints one; and `celebration_intro_stage.dart`
-  holds the `FormatBuilder`-wrapped switch **and** the whole
-  `PostClassController` contract (CTA inert while playing, tap-to-skip,
-  exactly one `markDone`, capture-clock driving). A card supplies its
-  hero mark, its particle mark, and its settled content — it never
-  implements an intro.
-- `reveal_style` is wired, and it is the one slot every screen feels:
-  `lib/shared/widgets/animation/reveal/` holds it, in the same shape as
-  the intro. `reveal_frame.dart` is the pure per-instant model
-  (`RevealFrame` — opacity, rise, slide, scale, clip, every default the
-  SETTLED state) plus `RevealGeometry` (the call site's own `offset` /
-  `startScale`) and one value's whole contract (`RevealSpec` — lead-in,
-  legibility floor, frame function); one file per value declares a spec;
-  `reveal_figure.dart` + `reveal_wipe_clipper.dart` are the only things
-  that paint one; and `reveal_stage.dart` holds the
-  `FormatBuilder`-wrapped switch and the whole runner contract (delay +
-  lead-in, self-run vs capture clock, a wrapper chain fixed for the
-  entrance so a stateful child is never re-parented mid-reveal).
-  `StaggeredReveal` and `ScaleReveal` keep their exact public APIs and
-  are now thin faces on that engine — they differ only in the geometry
-  they bring, which is why `fadeUp` reproduces BOTH shipped entrances
-  frame for frame. A call site owns WHEN (its `delay`, and therefore the
-  stagger order); the value owns only HOW. `offset: 0` means "do not
-  move me" and every value honours it.
-- Because the values are pure `double t -> frame` functions, the gate can
-  assert the motion law numerically rather than by eye:
-  `test/celebration_intro_invariants_test.dart` samples every value's
-  frames for overshoot, scans the module for banned curves, and pumps
-  every value (× every celebration layout) at real phone size.
-  `test/reveal_style_invariants_test.dart` is the same gate for reveals,
-  and it checks monotonicity as well as range — a bounce is a REVERSAL,
-  which a range check alone waves through — plus that every value lands
-  on the exact pixels an un-revealed element occupies, that the stagger a
-  call site authored is never reordered, and that an unknown wire value
-  (`"none"`, a typo) still degrades to the shipped `fadeUp`. Same rule
-  as the layout gates — add to it in the same change as a new value, and
-  mutation-test it.
-- **The intro owns the stage until it is done.** The figure and the
-  settled content are never both mounted: the card settles when the
-  intro finishes, not before. `flipCount` used to reveal the card
-  mid-turn so the count-up overlapped the flip; on a device that read as
-  the card giving up on its own animation and jumping ahead, and the
-  overlap path was also the only thing that could displace the settled
-  card (it dropped the stat ~190pt under `figureTop`). There is
-  deliberately no "hand off early" knob to reintroduce it with.
-- **Only the streak card is on the shared stage.** The points card keeps
-  its own `_PointSphere`, because the shipped `orbit` value is the streak
-  ring: routing points through it would replace the shipped points intro
-  for every tenant, which the "first value renders exactly what ships
-  today" guarantee forbids.
-<<<<<<< HEAD
-- **`loader_style` is wired, and it governs every waiting state.**
-  `lib/shared/widgets/animation/loader/` holds it, same split as the
-  intro: `loader_frame.dart` is the pure per-instant model (`LoaderMark`
-  / `LoaderFrame`) plus one value's whole contract (`LoaderSpec` —
-  shape, cycle, mark count, frame function); one file per value declares
-  a spec; the `loader_*_field.dart` widgets are the only things that
-  paint one, always inside the same `LoaderBox` (the shipped dots'
-  footprint); and `loading_dots.dart` holds the `FormatBuilder`-wrapped
-  switch plus the repeating controller. Every surface that waits renders
-  `LoadingDots` — the videos feed, the home schedule, the rewards grid,
-  the tag list, the recommendation flow and the booking confirmation —
-  so there is one waiting state to brand, not six. (The name is the
-  shipped value's; `tools/capture/` imports it.) The one spinner
-  deliberately left alone is the gym-browser's pagination footer, an
-  inline "fetching more" affordance rather than a screen's waiting
-  state. `test/loader_style_invariants_test.dart` is the gate: every
-  value renders one indicator in the same box, moves, never settles,
-  closes its loop, honours a pinned `value` for capture, disposes its
-  controller, and never overshoots — plus a floor on cycle length, since
-  a repeat too quick to read is a fault light, not a loader.
-
-## Format resolution
-
-Layout and motion share ONE precedence chain, in
-`lib/core/formats/format_resolver.dart`. Highest first: a widget's
-`formatOverride` argument (tests, preview sheets) → `FormatStore` (the
-in-app dev picker) → `FormatOverrides` (`--dart-define`) → the tenant's
-customization slot → the value that ships. `ThemeLayout`, `ThemeMotion`
-and the dev picker all read through it; **never re-implement the chain**
-— three hand-written copies is exactly how the picker came to draw a
-value the app was not using.
-
-**A theme carries its own format slots, so loading one releases every
-pin** (`FormatStore.bindTo`, wired once in `main.dart` against
-`ThemeRuntime.changes`). The theme sets the formats; a pin overrides it
-until the next load, and "Reset" means back to the theme, not back to
-the shipped default. Every pin is released, not just the slots the
-incoming theme mentions.
-
-An unrecognised wire value resolves to the enum's first value
-(`parseFormat`'s `orElse`), so a retired value like `celebration_intro:
-none` degrades to `orbit` instead of breaking a screen. That is
-load-bearing, not incidental, and the gate asserts it.
-
-`CombatDenSlots.expectedLayouts` / `expectedMotion` are documentation
-only — they are deliberately NOT passed to `ThemeRuntime.initialize`,
-because an absent format slot is a supported state (the tenant has not
-opted in) and warning on it would fire on every unbranded build.
-=======
-- `transition_style` is wired, and its seam is the **theme**, not the
-  navigator: `lib/shared/themes/transitions/` holds one
-  `PageTransitionsBuilder` per authored value plus `app_page_transitions.dart`,
-  whose `PageTransitionsTheme` `AppTheme.forCanvas()` installs on
-  `MaterialApp.theme`. Sitting there means the enum can only decide how a
-  route animates — it never sees which route was pushed and cannot touch
-  the back stack. Resolution is **deferred**: one delegating builder per
-  `TargetPlatform` reads `ThemeMotion.transition()` at the moment a route
-  animates, so the dev picker is live on the next navigation with no
-  rebuild (a `FormatBuilder` would be wrong here — there is no build-time
-  switch, and rebuilding the theme re-keys the tree). The shipped
-  `platformDefault` hands the route straight back to Flutter's own
-  `const PageTransitionsTheme()` for that platform, read from the
-  framework rather than copied, so it stays a no-op if the framework's
-  default moves. Two extra rules apply to a transition because it answers
-  a tap: **no lead-in** (delay reads as input lag, never as drama) and a
-  **legibility floor** (`TransitionMotion.legibilityFloor`, 200ms) that
-  every authored value must clear — values may differ in length, but a
-  movement too short to perceive is a flicker, not a transition.
-  `platformDefault` and `none` sit outside the floor on purpose.
-  `test/transition_style_invariants_test.dart` is the gate: it samples
-  the rendered geometry numerically for overshoot and lead-in, proves
-  push/pop/replace still behave, and proves `platformDefault` is
-  frame-for-frame identical to the theme the app carried before.
->>>>>>> worktree-agent-a76fe566f85428698
+> ⚠️ **The capture harness is currently out of step with the live app and needs a
+> separate update — do NOT assume it runs.** It was built against the old
+> prototype path: it drives the dormant `selected_gym.dart` singleton
+> (`selectedGym.select(...)`) and pages the **VideoService** gym browser
+> (`style_select`'s `GymsPager`, `localhost:8002`) to pick a gym/theme. The live
+> app replaced that with `SelectedMember` + Supabase auth + the member portal, so
+> the harness can't set up a live member session. Re-pointing it (auth + member
+> selection + member-portal reads, or a fixture path) is its own task. Until then
+> the `make capture*` targets and their `tools/capture/README.md` describe the old
+> flow — treat them as stale.
 
 ## Development Commands
 
-- `flutter run` — run the app in debug mode (hot reload).
+- `flutter run` — run the app in debug mode (hot reload). Pass the dev dart-defines to land pre-authenticated: `--dart-define=DEV_AUTOLOGIN_EMAIL=... --dart-define=DEV_AUTOLOGIN_PASSWORD=...` (the `make run` target wires these). The live app needs the backend on `:8000` + Supabase + a seeded member.
 - `flutter run --release` — release mode.
-- `flutter analyze` — static analysis. **Must be clean before committing.**
+- `flutter analyze` — static analysis. **Must be clean before committing — this is the gate.**
 - `flutter pub get` — install dependencies.
-- `flutter pub upgrade` — upgrade dependencies.
+- Code-gen: `dart run build_runner build --delete-conflicting-outputs` after adding/changing a `json_serializable` model.
 - `flutter clean` — clean build artifacts.
-- `make capture` / `make capture-booking` / `make capture-app` / `make
-  capture-shots` / `make stitch` — dev-only landing-page capture: render real
-  screens to frame-exact webm (or PNG screenshots). `capture` = the video-feed
-  theme reel (one per theme); `capture-booking` = the class-booking clips (class
-  detail → ~1s dots → "Video Before Class", one per discipline; or the "you're
-  in" confirm variant); `capture-app` = the Home / Points / Streak screen clips,
-  each branded to barre / muaythai / reformer; `capture-shots` = static
-  screenshots for any discipline (PNGs to `LandingPage/media-src/screenshots/`) of
-  the Home / Rewards / Videos screens plus the `wins` (Today's wins stats-final),
-  `booked` ("Class Booked" confirmation) and `prevideo` ("Video Before Class")
-  screens. Needs a running emulator + both backends
-  (`make api` in `../ThemeService` and `../VideoService`). See
-  `tools/capture/README.md`.
+- `make capture` / `make capture-booking` / `make capture-app` / `make capture-shots` / `make stitch` — dev-only landing-page capture. **See the capture-harness warning above — these are stale against the live app** (they render via the dormant VideoService/`selectedGym` path and need a harness update before they work again).
 
 ## Code Quality
 
@@ -644,19 +1107,78 @@ opted in) and warning on it would fire on every unbranded build.
 
 ## Dependencies
 
-- **Add dependencies with `flutter pub add <package>`.** Never edit `pubspec.yaml` by hand.
-- Dev dependencies: `flutter pub add --dev <package>`.
+- **Add dependencies with `flutter pub add <package>`.** Never edit `pubspec.yaml` by hand. Dev deps: `flutter pub add --dev <package>`.
 
-Current dependencies (intentionally minimal):
-- `google_fonts` — for Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
-- `material_symbols_icons` — for `Symbols.*_sharp` icons.
-- `path_provider` — used **only** by the dev-only capture harness
-  (`tools/capture/`) to write exported frames to the device's external files
-  dir. Not used by any shipping screen; it's a benign platform util, not part of
-  the real-data stack.
-- `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the live-feature deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`) that back the customization engine; those are the documented live exceptions, not the start of the real-data stack. (`lottie` is a direct MobileApp dep — it backs only the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself; the engine no longer renders Lottie.)
+**This list documents dependencies that carry rules or scope** — what they're for and where they may (or may not) be used.
 
-If you find yourself wanting to add `flutter_bloc`, `dio`, `supabase_flutter`, or anything else from the real-data stack, **stop**. That's the signal that this app is leaving prototype mode. Talk to the user before pulling those in.
+Scoped / significant dependencies:
+- `flutter_bloc` / `equatable` — state management for every live feature (Screen → Bloc → Repository). Events/states use `equatable`.
+- `dio` — HTTP client behind `ApiClient` for the FastApiBackend member portal. Route every backend call through `ApiClient`, never a raw `Dio`. (`theme_flutter` also pulls a transitive `dio` for the customization engine — that one is package-internal.)
+- `supabase_flutter` — **auth only** (GoTrue JWT for `ApiClient`, session refresh, `authStateChanges`). The mobile client holds no DB privileges.
+- `flutter_dotenv` — loads `.env.dev` / `.env.prod` at startup for `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `API_BASE_URL` (see *Configuration*).
+- `json_annotation` / `json_serializable` / `build_runner` — code-gen for API response models (`*.g.dart`).
+- `mobile_scanner` — the QR check-in camera scanner (`features/qr_checkin/`). Only there.
+- `shared_preferences` — persists the `SelectedMember` identity + the celebration watermark.
+- `google_fonts` — Jura via `GoogleFonts.jura()` (referenced by `DesignConstants.baseFont`).
+- `url_launcher` — hands a URI to the OS. Two call sites, each behind its own
+  helper file (a URI builder + a launcher returning bool, so no `BuildContext`
+  crosses an async gap and a failure surfaces as a `ScaffoldMessenger`
+  SnackBar):
+  - the class-detail Location section's "Open in Maps" deep link
+    (`features/class_booking/presentation/widgets/class_location_helpers.dart`:
+    `geo:0,0?q=<encoded>` on Android, `https://maps.apple.com/?q=<encoded>` on
+    iOS);
+  - **video playback** — there is no in-app player, so every video tap opens
+    YouTube externally
+    (`features/videos/presentation/widgets/video_link_helpers.dart`:
+    `videoUriFor` / `launchVideoFor` / `openVideoFor`, always
+    `LaunchMode.externalApplication` so the YouTube app takes it when
+    installed and the browser otherwise; `openVideoFor` also reports the open
+    to the member portal). See *Videos open on YouTube*.
+
+  Android 11+ package visibility means these intents silently fail unless
+  `android/app/src/main/AndroidManifest.xml`'s `<queries>` block declares a
+  `VIEW` intent for the `geo` and `https` schemes — that block is
+  load-bearing, don't drop it.
+- `url_launcher_platform_interface` + `plugin_platform_interface` — **dev
+  deps only** (both already transitive; declared so tests may import them).
+  They exist for `test/helpers/fake_url_launcher.dart` — see *Testing*.
+- `material_symbols_icons` — `Symbols.*_sharp` icons.
+- `lottie` — backs **only** the bundled booking "done" checkmark animation, which the app plays and tints to the brand primary itself (the engine no longer renders Lottie).
+- `path_provider` — used **only** by the dev-only capture harness (`tools/capture/`) to write exported frames. Not part of any shipping screen.
+- `theme_flutter` (path dep, `../ThemeService/ThemeFlutter`) — the shared white-label runtime extracted from this app's old `lib/customization/`. It carries the customization-engine deps (`dio`, `flutter_svg`, `cached_network_image`, `get_it`, `shared_preferences`); its `get_it` is a **transitive** locator internal to the package — **app code does NOT use `get_it`** (DI is manual constructor injection, see *State-management model*).
+
+## Testing
+
+- **Use `bloc_test` + `mocktail`.** Blocs hold the logic, so they get the coverage: build the bloc with a mocked repository, `act` an event, assert the emitted state sequence (loading → loaded/error). Mock repositories and `ApiClient`; never hit a live backend in a test.
+- **`url_launcher` is asserted through the platform interface, not a code
+  seam.** `test/helpers/fake_url_launcher.dart` (`FakeUrlLauncher`) records
+  what the app asked the OS to open; install it with
+  `UrlLauncherPlatform.instance = FakeUrlLauncher()` (pass `succeeds: false`
+  for the "nothing handled it" path). App code stays free of test hooks.
+- **A widget test that drives `SelectedMember` must seed
+  `SharedPreferences.setMockInitialValues({})` and `reset()` it in teardown** —
+  it is a process-wide global, so a leaked selection (or a leaked capability
+  flag) changes the next test's app shape. The same applies to
+  `CelebrationRewardsGate.instance`: a test that primes it (via
+  `test/helpers/fake_rewards_catalog.dart`) must `reset()` it in teardown, or a
+  leaked catalog decides the next test's celebration flow.
+- **A screen that builds its own `ApiClient` needs dotenv**:
+  `dotenv.loadFromString(envString: 'API_BASE_URL=http://localhost:8000')` in
+  `setUp`. The request never leaves the test, but the URL has to resolve.
+- `flutter test` before committing.
+
+## Configuration (dotenv + dart-defines)
+
+- **dotenv (`.env.dev` / `.env.prod`)** — the auth/backend URLs loaded at startup via `flutter_dotenv` (keys in `lib/core/constants/env_constants.dart`; debug → `.env.dev`, release → `.env.prod`, selected in `lib/core/config/environment.dart`): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `API_BASE_URL`. URL-valued keys route through `EnvironmentConfig.url(...)` for the Android-emulator loopback rewrite. `.env.example` documents the shape; the env files are flutter assets and are gitignored — never commit real secrets. (A fresh worktree has none until `setup_worktree_env.sh` copies them.)
+- **dart-defines** — the dev-only auto-login (`DEV_AUTOLOGIN_EMAIL` / `DEV_AUTOLOGIN_PASSWORD`, empty in prod → normal login flow), read by `LoginBloc` via `String.fromEnvironment`.
+
+## Sibling systems in this monorepo
+
+- `../FastApiBackend/` — the app's backend. **All** live calls go to its member portal (`/api/v1/member/...`) via `ApiClient`. Contract: the Pydantic schemas in `../FastApiBackend/src/member_portal/` (and the domain schemas it reuses).
+- `../ThemeService/ThemeFlutter/` — the shared `theme_flutter` white-label runtime (path dep) that resolves branding; the gym's `theme_design_id` (from the showcase read) selects the live design.
+- `../CRM/` — the gym-admin web app, which shares this app's design language. Shared widget candidates often live there too (check `../CRM/lib/shared/widgets/` before building a new shared widget).
+- `../Database/` — Supabase (auth + the shared Postgres the backend reads/writes). `openapi.json` is an optional gitignored local dump.
 
 ---
 
