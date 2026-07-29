@@ -3,14 +3,16 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import 'package:mobile_app/core/design_constants.dart';
 
-/// DEBUG-ONLY. The identity sheet's Developer rows: the two screens a push
+/// DEBUG-ONLY. The identity sheet's Developer rows: the three screens a push
 /// notification lands a member on, opened by hand.
 ///
-/// Neither is otherwise reachable while the app is running — the post-class
+/// None is otherwise reachable while the app is running — the post-class
 /// celebration only fires off a fresh staff check-in (and burns its watermark
-/// doing it), and "Drill of the Day" is never shown automatically. This
-/// previews what the member SEES on those screens; it says nothing about push
-/// delivery or the 24h timing, which land with the notification work.
+/// doing it), a real belt promotion burns ITS watermark on first sight so
+/// nobody can look at it twice, and "Drill of the Day" is never shown
+/// automatically. This previews what the member SEES on those screens; it says
+/// nothing about push delivery or the 24h timing, which land with the
+/// notification work.
 ///
 /// Compiled out of release builds entirely: the caller wraps it in
 /// `if (kDebugMode)`.
@@ -18,11 +20,15 @@ class IdentitySheetDevSection extends StatelessWidget {
   const IdentitySheetDevSection({
     super.key,
     required this.onCelebration,
+    required this.onPromotion,
     required this.onSummary,
   });
 
   /// Force the post-class celebration flow open (watermark untouched).
   final VoidCallback onCelebration;
+
+  /// Open the belt-promotion card (watermark untouched).
+  final VoidCallback onPromotion;
 
   /// Open "Drill of the Day".
   final VoidCallback onSummary;
@@ -42,6 +48,11 @@ class IdentitySheetDevSection extends StatelessWidget {
           icon: Symbols.celebration_sharp,
           label: 'Post-class celebration',
           onTap: onCelebration,
+        ),
+        _DevRow(
+          icon: Symbols.military_tech_sharp,
+          label: 'Belt promotion',
+          onTap: onPromotion,
         ),
         _DevRow(
           icon: Symbols.play_circle_sharp,

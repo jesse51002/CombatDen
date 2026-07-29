@@ -17,6 +17,7 @@ import 'package:mobile_app/features/profile/data/models/billing_rank.dart';
 import 'package:mobile_app/features/profile/data/models/billing_retention.dart';
 import 'package:mobile_app/features/profile/data/models/member_profile.dart';
 import 'package:mobile_app/features/rewards/data/repositories/member_rewards_repository.dart';
+import 'package:mobile_app/features/stats/data/celebration_data.dart';
 import 'package:mobile_app/features/stats/data/celebration_rewards_gate.dart';
 import 'package:mobile_app/features/stats/presentation/screens/points_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
@@ -75,10 +76,10 @@ Future<void> _selectGym({
     );
 
 /// Records the route names the card navigates to — a `NavigatorObserver`
-/// rather than an `onGenerateRoute` hook because `MaterialApp.home` claims
-/// `'/'` itself, so the home route would never reach a generator. Both hooks
-/// are recorded: a card hands off with `pushReplacementNamed` (a REPLACE) and
-/// ends the flow with `pushNamedAndRemoveUntil` (a PUSH).
+/// rather than an `onGenerateRoute` hook because the initial route is built by
+/// `onGenerateInitialRoutes` and would never reach a generator. Both hooks are
+/// recorded: a card hands off with `pushReplacementNamed` (a REPLACE) and ends
+/// the flow with `pushNamedAndRemoveUntil` (a PUSH).
 class _RecordingObserver extends NavigatorObserver {
   final List<String?> pushed = <String?>[];
 
@@ -93,11 +94,25 @@ class _RecordingObserver extends NavigatorObserver {
   }
 }
 
-/// Mounts [card] under a recording navigator and the shared profile bloc.
+/// The route argument a class celebration always carries. `occurredAt` is what
+/// `classAttended` reads, and it is what keeps the four class cards composed
+/// IN: entered with no argument at all, a card falls back to
+/// `CelebrationData.empty()`, the flow list is empty and every CTA correctly
+/// reads "Done".
+CelebrationData _afterClass() => CelebrationData(
+      className: 'No-Gi Grappling',
+      pointsWorth: 30,
+      occurredAt: DateTime.utc(2026, 7, 23, 18),
+    );
+
+/// Mounts [card] under a recording navigator and the shared profile bloc, as
+/// the initial route so it carries the celebration payload the real flow
+/// threads screen-to-screen.
 Future<_RecordingObserver> _pumpCard(
   WidgetTester tester,
   Widget card, {
   BillingRank? rank,
+  CelebrationData? data,
 }) async {
   final observer = _RecordingObserver();
   final bloc = _MockProfileBloc();
@@ -112,7 +127,13 @@ Future<_RecordingObserver> _pumpCard(
   await tester.pumpWidget(
     MaterialApp(
       navigatorObservers: [observer],
-      home: BlocProvider<MemberProfileBloc>.value(value: bloc, child: card),
+      onGenerateInitialRoutes: (name) => [
+        MaterialPageRoute<void>(
+          settings: RouteSettings(name: name, arguments: data ?? _afterClass()),
+          builder: (_) =>
+              BlocProvider<MemberProfileBloc>.value(value: bloc, child: card),
+        ),
+      ],
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
         settings: settings,
         builder: (_) => const SizedBox.shrink(),

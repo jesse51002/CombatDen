@@ -38,6 +38,7 @@ class _StreakScreenState extends State<StreakScreen> {
       builder: (context, state) {
         final next = nextCelebrationCard(
           current: AppRoutes.postClassStreak,
+          data: data,
           hasRank: state.profile?.rank != null,
           pointsBalance: state.profile?.retention.pointsBalance,
         );

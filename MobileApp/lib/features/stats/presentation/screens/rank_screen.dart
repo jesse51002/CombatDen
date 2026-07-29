@@ -74,6 +74,7 @@ class _RankScreenState extends State<RankScreen> {
         // member gets told there is another card and then dropped home.
         final next = nextCelebrationCard(
           current: AppRoutes.postClassRank,
+          data: data,
           hasRank: true,
           pointsBalance: profile.retention.pointsBalance,
         );

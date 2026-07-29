@@ -57,8 +57,10 @@ class NextRankBadge extends StatelessWidget {
 
 /// The next-rank belt art: the payload's `next_rank_image_url` via
 /// [CachedNetworkImageProvider], falling back to the themed slot (bundled
-/// asset under it) when absent or on a load error — the same idiom
-/// `RankHeader._Belt` uses for the member's CURRENT belt.
+/// asset under it) when absent or on a load error — the same ladder the shared
+/// `RankBeltImage` runs for the member's CURRENT belt, but on the different
+/// `nextRankBeltImage` slot. Behaviourally identical; folding it onto the
+/// shared widget (via its `slot` parameter) is a separate change.
 class _Belt extends StatelessWidget {
   const _Belt({required this.imageUrl, required this.badgeAsset});
 

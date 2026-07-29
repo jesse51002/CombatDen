@@ -1,12 +1,9 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:mobile_app/core/app_slots.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/features/stats/data/mock_stats.dart';
 import 'package:mobile_app/shared/widgets/animation/count_up_text.dart';
-import 'package:mobile_app/shared/widgets/api_image.dart';
-import 'package:theme_flutter/theme/theme_image.dart';
 import 'package:mobile_app/shared/widgets/post_class/post_class_controller.dart';
+import 'package:mobile_app/shared/widgets/rank/rank_belt_image.dart';
 
 // Per-screen layout/timing math, file-scoped per CLAUDE.md's _k carve-out.
 const Duration _kEntrance = Duration(milliseconds: 420);
@@ -33,7 +30,8 @@ const double _kSlotHeight = 50;
 /// `GlobalKey` post-frame, so the landing point matches the layout
 /// exactly regardless of screen size or rank-text width.
 ///
-/// The art it flies is the MEMBER's own belt, not the theme's — see [_Belt].
+/// The art it flies is the MEMBER's own belt, not the theme's — it resolves
+/// through the app's one shared [RankBeltImage] ladder.
 class RankBody extends StatefulWidget {
   const RankBody({super.key, required this.stats, this.controller});
 
@@ -150,7 +148,7 @@ class _RankBodyState extends State<RankBody>
     double stackW,
     double stackH,
   ) {
-    final belt = _Belt(
+    final belt = RankBeltImage(
       imageUrl: widget.stats.rankImageUrl,
       asset: widget.stats.beltAsset,
     );
@@ -187,55 +185,6 @@ class _RankBodyState extends State<RankBody>
       width: width,
       height: height,
       child: belt,
-    );
-  }
-}
-
-/// The flying belt's art: the member's OWN rank image ([imageUrl], disk-cached
-/// via [CachedNetworkImageProvider]) with the themed [CombatDenSlots.rankBelt]
-/// slot — and the bundled [asset] under that — as the fallback, taken both when
-/// the URL is absent and when it fails to load. Same idiom as the topbar's
-/// `InfoBar._Belt` and the profile's `RankHeader._Belt` /
-/// `NextRankBadge._Belt`; don't invent a fifth.
-///
-/// A blank / whitespace-only URL is ABSENT, not broken (the rule
-/// `creatorAvatarProvider` sets), so it falls back silently rather than
-/// resolving an empty request.
-///
-/// It carries no width/height on purpose: the parent sizes it frame-by-frame as
-/// it flies from centre stage into the rank row's slot, and both branches must
-/// hand the animation ONE widget that fills whatever box it is given.
-class _Belt extends StatelessWidget {
-  const _Belt({required this.imageUrl, required this.asset});
-
-  final String? imageUrl;
-  final String asset;
-
-  @override
-  Widget build(BuildContext context) {
-    final url = imageUrl?.trim() ?? '';
-    if (url.isEmpty) return _ThemedBelt(asset: asset);
-    return Image(
-      image: CachedNetworkImageProvider(url),
-      fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => _ThemedBelt(asset: asset),
-    );
-  }
-}
-
-class _ThemedBelt extends StatelessWidget {
-  const _ThemedBelt({required this.asset});
-
-  final String asset;
-
-  @override
-  Widget build(BuildContext context) {
-    return Image(
-      image: ThemeImage.image(
-        CombatDenSlots.rankBelt,
-        fallback: ApiImage.rankAsset(asset),
-      ),
-      fit: BoxFit.contain,
     );
   }
 }

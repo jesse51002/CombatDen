@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/core/design_constants.dart';
 import 'package:mobile_app/shared/widgets/animation/celebration_timings.dart';
+import 'package:mobile_app/shared/widgets/text/celebration_eyebrow.dart';
 
 /// Sparkles scattered around a hero accent — porting the loyalty-loop
 /// "+160 PTS" effect from LandingPage/onepager/onepager.jsx. Each entry is
@@ -106,11 +107,6 @@ class _SparkleHeroState extends State<SparkleHero>
   @override
   Widget build(BuildContext context) {
     final primary = DesignConstants.primaryColor;
-    final eyebrow = DesignConstants.pSmall.copyWith(
-      color: DesignConstants.text2nd,
-      fontWeight: FontWeight.w700,
-      letterSpacing: 0.24 * (DesignConstants.pSmall.fontSize ?? 11),
-    );
     return Padding(
       padding: EdgeInsets.symmetric(
         horizontal: DesignConstants.screenHorizontalPadding,
@@ -126,7 +122,7 @@ class _SparkleHeroState extends State<SparkleHero>
               if (widget.showSparkles)
                 for (var rank = 0; rank < _kSparkles.length; rank++)
                   _animatedSparkle(rank, primary),
-              _accentBlock(primary, eyebrow),
+              _accentBlock(primary),
             ],
           );
         },
@@ -152,7 +148,9 @@ class _SparkleHeroState extends State<SparkleHero>
     );
   }
 
-  Widget _accentBlock(Color primary, TextStyle eyebrow) {
+  /// The eyebrow lines come from the shared [CelebrationEyebrow] — the same
+  /// recipe the promotion card's headline uses, so the two can't drift.
+  Widget _accentBlock(Color primary) {
     final t = Curves.easeOutQuart.transform(_ctrl.value.clamp(0.0, 1.0));
     return Opacity(
       opacity: t,
@@ -163,7 +161,7 @@ class _SparkleHeroState extends State<SparkleHero>
           crossAxisAlignment: CrossAxisAlignment.center,
           spacing: DesignConstants.spacingSmall,
           children: [
-            Text(widget.top, style: eyebrow, textAlign: TextAlign.center),
+            CelebrationEyebrow(text: widget.top),
             Text(
               widget.accent,
               style: DesignConstants.big1_5.copyWith(
@@ -172,7 +170,7 @@ class _SparkleHeroState extends State<SparkleHero>
               ),
               textAlign: TextAlign.center,
             ),
-            Text(widget.bottom, style: eyebrow, textAlign: TextAlign.center),
+            CelebrationEyebrow(text: widget.bottom),
           ],
         ),
       ),

@@ -16,6 +16,7 @@ import 'package:mobile_app/features/member_select/presentation/widgets/identity_
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_sheet_header.dart';
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_sheet_sign_out_row.dart';
 import 'package:mobile_app/features/member_select/presentation/widgets/identity_switch_list.dart';
+import 'package:mobile_app/features/stats/data/celebration_data.dart';
 import 'package:mobile_app/features/stats/data/celebration_detector.dart';
 import 'package:mobile_app/shared/widgets/dialogs/sign_out_dialog.dart';
 import 'package:mobile_app/shared/widgets/dividers/section_divider.dart';
@@ -194,6 +195,15 @@ class _IdentitySheetState extends State<IdentitySheet> {
               child: IdentitySheetDevSection(
                 onCelebration: () => _devOpen(
                   (navigator) => CelebrationDetector().fireNow(navigator),
+                ),
+                // The screen renders the member's real `latest_promotion`; with
+                // none it previews the first-assignment state off their own
+                // current belt. The watermark is never touched either way.
+                onPromotion: () => _devOpen(
+                  (navigator) => navigator.pushNamed(
+                    AppRoutes.promotion,
+                    arguments: const CelebrationData(promoted: true),
+                  ),
                 ),
                 onSummary: () => _devOpen(
                   (navigator) => navigator.pushNamed(AppRoutes.summary),

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -42,6 +43,13 @@ class _CountUpTextState extends State<CountUpText>
   late final AnimationController _ctrl;
   late final Size _digitSize;
 
+  /// The pending [delay] before the roll starts, held so [dispose] can CANCEL
+  /// it. A bare `Future.delayed` outlives the widget: the callback's `mounted`
+  /// check keeps it harmless, but the timer itself stays pending — which hangs
+  /// `pumpAndSettle` and trips the test binding's "a Timer is still pending
+  /// even after the widget tree was disposed" check.
+  Timer? _startTimer;
+
   @override
   void initState() {
     super.initState();
@@ -54,7 +62,7 @@ class _CountUpTextState extends State<CountUpText>
     if (widget.delay == Duration.zero) {
       _ctrl.forward();
     } else {
-      Future.delayed(widget.delay, () {
+      _startTimer = Timer(widget.delay, () {
         if (mounted) _ctrl.forward();
       });
     }
@@ -73,6 +81,7 @@ class _CountUpTextState extends State<CountUpText>
 
   @override
   void dispose() {
+    _startTimer?.cancel();
     _ctrl.dispose();
     super.dispose();
   }

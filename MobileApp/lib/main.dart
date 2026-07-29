@@ -23,6 +23,7 @@ import 'package:mobile_app/features/rewards/presentation/screens/my_rewards_scre
 import 'package:mobile_app/features/rewards/presentation/screens/points_store_screen.dart';
 import 'package:mobile_app/features/rewards/presentation/screens/summary_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/points_screen.dart';
+import 'package:mobile_app/features/stats/presentation/screens/promotion_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rank_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/rewards_card_screen.dart';
 import 'package:mobile_app/features/stats/presentation/screens/streak_screen.dart';
@@ -53,6 +54,7 @@ final Map<String, WidgetBuilder> _routeBuilders = {
   AppRoutes.myRewards: (_) => const MyRewardsScreen(),
   AppRoutes.pointsStore: (_) => const PointsStoreScreen(),
   AppRoutes.summary: (_) => const SummaryScreen(),
+  AppRoutes.promotion: (_) => const PromotionScreen(),
   AppRoutes.postClassStreak: (_) => const StreakScreen(),
   AppRoutes.postClassPoints: (_) => const PointsScreen(),
   AppRoutes.postClassRewards: (_) => const RewardsCardScreen(),
