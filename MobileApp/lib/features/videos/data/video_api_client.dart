@@ -52,7 +52,7 @@ class VideoApiClient {
   Future<List<Video>> fetchPreview() async {
     try {
       final response = await _dio.get<dynamic>(
-        '/gyms/$gymId/videos/preview',
+        '/presets/templates/$gymId/videos/preview',
         queryParameters: {'per_tag': _kPreviewPerTag},
       );
       final data = response.data;
@@ -78,7 +78,7 @@ class VideoApiClient {
   Future<List<Video>> fetchTag(String tag) async {
     try {
       final response = await _dio.get<dynamic>(
-        '/gyms/$gymId/videos',
+        '/presets/templates/$gymId/videos',
         queryParameters: {'video_type': tag, 'limit': _kTagLimit},
       );
       final data = response.data;
