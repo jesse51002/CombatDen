@@ -10,6 +10,8 @@ from schema.output.expansion_cost import ExpansionCostLog, ExpansionEntry
 from schema.output.expansion_kind import ExpansionKind
 from schema.output.font_output import FontOutput
 from schema.output.font_set import FontSet
+from schema.output.format_output import FormatOutput
+from schema.output.format_set import FormatSet
 from schema.output.icon_attribution import IconAttribution
 from schema.output.icon_output import IconOutput
 from schema.output.icon_set import IconSet
@@ -32,6 +34,8 @@ __all__ = [
     "ExpansionKind",
     "FontOutput",
     "FontSet",
+    "FormatOutput",
+    "FormatSet",
     "IconAttribution",
     "IconOutput",
     "IconSet",

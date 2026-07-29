@@ -1,0 +1,19 @@
+/*
+ * Styles for ./HomeScheduleScroll.tsx
+ * (ports MobileApp/.../layouts/parts/home_schedule_scroll.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * The scroller's content column — `CustomScrollView`'s slivers, in order.
+ *
+ * The bottom padding is the room the persistent bottom nav needs, so the last
+ * day scrolls clear of it instead of ending underneath it. It is the same 64
+ * the profile screen's `_kBottomScrollPadding` reserves, for the same reason.
+ */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: 64px;
+}

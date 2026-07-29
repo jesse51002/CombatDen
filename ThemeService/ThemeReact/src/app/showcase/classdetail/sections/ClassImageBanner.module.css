@@ -1,0 +1,54 @@
+/*
+ * Styles for ./ClassImageBanner.tsx
+ * (ports MobileApp/.../widgets/class_image_banner.dart).
+ *
+ * `--sc-*` only. The frame is what carries the SHAPE and the degraded fill, so
+ * a failed photo leaves a `card`-coloured block of exactly the right size
+ * rather than collapsing the layout around it — `errorBuilder`'s own behaviour.
+ */
+
+.frame {
+  flex: 0 0 auto;
+  overflow: hidden;
+  /* `ColoredBox(color: DesignConstants.card)` — the errorBuilder fill. */
+  background: var(--sc-card);
+}
+
+/* `BoxFit.cover` at whatever size the treatment gives the frame. */
+.img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* `_kBannerHeight` 248 — the full-width strip that ships. */
+.banner {
+  width: 100%;
+  height: 248px;
+}
+
+/* `_kCompactHeight` 160 — shortened so a fixed header still leaves room. */
+.compact {
+  width: 100%;
+  height: 160px;
+}
+
+/* `_kHeroRatio` 4/5 — the tall hero the meta block sits on top of. */
+.hero {
+  width: 100%;
+  aspect-ratio: 4 / 5;
+}
+
+/* `SizedBox.expand` — fills whatever box it is given. */
+.backdrop {
+  width: 100%;
+  height: 100%;
+}
+
+/* `_kThumbSize` 96, `radiusSmall` corners — inline with the title. */
+.thumb {
+  width: 96px;
+  height: 96px;
+  border-radius: var(--sc-radius-small);
+}

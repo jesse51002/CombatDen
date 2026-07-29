@@ -1,0 +1,28 @@
+/*
+ * Styles for ./showcaseScreen.tsx — the island's ROOT box, and nothing else.
+ * Every one of the nine surfaces brings its own stylesheet.
+ *
+ * Everything here reads `--sc-*` and nothing else. Those variables are written
+ * onto `.root` by ./ShowcaseThemeVars.tsx; the surrounding admin chrome's
+ * `--gw-*` / `--adm-*` share token NAMES with different VALUES and must never
+ * appear inside the phone (eslint.config.js Gates 2a/2b).
+ *
+ * The layout is sized in the phone's own logical pixels (390x844) because that
+ * is the box ../widgets/PhoneFrame.tsx renders it into at 1:1 before scaling.
+ */
+
+/*
+ * The one element the whole token surface lands on. It is also the screen's
+ * own canvas, so an unstyled frame is impossible: the background and ink are
+ * variables written in the same commit as the children.
+ */
+.root {
+  width: 100%;
+  height: 100%;
+  background: var(--sc-background);
+  color: var(--sc-text);
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color-scheme: var(--sc-canvas);
+  overflow: hidden;
+}

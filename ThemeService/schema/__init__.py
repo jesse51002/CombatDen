@@ -15,6 +15,8 @@ from schema.output import (
     ExpansionKind,
     FontOutput,
     FontSet,
+    FormatOutput,
+    FormatSet,
     IconAttribution,
     IconOutput,
     IconSet,
@@ -28,10 +30,19 @@ from schema.output import (
     TextOutput,
     TextSet,
 )
-from schema.primitives import AbsolutePath, HexColor, HslColor, OklchColor, RgbColor
+from schema.primitives import (
+    AbsolutePath,
+    HexColor,
+    HslColor,
+    OklchColor,
+    PathSegment,
+    RgbColor,
+)
 from schema.slots import (
     ColorSlot,
     FontSlot,
+    FormatSlot,
+    FormatValue,
     IconSlot,
     ImageSlot,
     SlotBase,
@@ -58,6 +69,10 @@ __all__ = [
     "FontOutput",
     "FontSet",
     "FontSlot",
+    "FormatOutput",
+    "FormatSet",
+    "FormatSlot",
+    "FormatValue",
     "HexColor",
     "HslColor",
     "IconAttribution",
@@ -72,6 +87,7 @@ __all__ = [
     "OklchColor",
     "Output",
     "OverwriteSpecs",
+    "PathSegment",
     "RgbColor",
     "RunCost",
     "SlotBase",

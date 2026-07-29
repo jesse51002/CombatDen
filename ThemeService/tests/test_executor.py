@@ -20,7 +20,8 @@ from schema import (
     ExpansionEntry,
     ExpansionKind,
     FontOutput,
-    FontSet,
+    FormatOutput,
+    FormatSet,
     IconOutput,
     IconSet,
     ImageOutput,
@@ -31,7 +32,7 @@ from schema import (
     RunCost,
     TextOutput,
 )
-from src.core.errors import GraphError
+from src.core.errors import GraphError, PipelineError
 from src.core.run_context import RunContext
 from src.executor.orchestrator import Pipeline
 from src.executor.registry import ModuleRegistry
@@ -44,6 +45,8 @@ _COLOR = DependencyKind.COLOR.value
 _FONT = DependencyKind.FONT.value
 _TEXT = DependencyKind.TEXT.value
 _ICON = DependencyKind.ICON.value
+_CATEGORY = DependencyKind.CATEGORY.value
+_FORMAT = DependencyKind.FORMAT.value
 
 # Committed demo fixture: a real (partial) run — colour + one image done,
 # fonts/texts/icons declared in app.yaml but absent from output.yaml.
@@ -305,6 +308,92 @@ def test_assemble_color_failure_yields_valid_empty_output(
     assert out.text_set.texts == {}
 
 
+# --- the destructive overwrite guard (Pipeline._overwrite_existing) --------
+
+
+def _finished_run(root: Path) -> Path:
+    """A finished run at ``<root>/apps/demo/Style``: output.yaml + one
+    delivered image — the artifacts an overwrite clears."""
+    run = root / "apps" / "demo" / "Style"
+    (run / "final_images").mkdir(parents=True)
+    (run / "final_images" / "hero.png").write_bytes(b"expensive bytes")
+    (run / "output.yaml").write_text("app: demo\n", encoding="utf-8")
+    return run
+
+
+def _overwrite_ctx(out_root: Path) -> RunContext:
+    """A run context targeting ``<out_root>/demo/Style`` in place."""
+    app = AppFormat.model_validate(
+        {
+            "id": "demo",
+            "display_name": "Demo",
+            "images": [{"id": "hero", "description": "a hero"}],
+            "colors": _COLORS,
+            "fonts": _FONTS,
+        }
+    )
+    return RunContext(
+        app, Customization.model_validate(_CUST), out_root, run_id="Style"
+    )
+
+
+def test_overwrite_refuses_a_run_dir_that_symlinks_out_of_the_output_root(
+    tmp_path: Path,
+) -> None:
+    """A symlinked run dir resolving into ANOTHER output root is refused —
+    nothing in the other root is touched.
+
+    This is the git-worktree shape exactly: a worktree's
+    ``apps/<app_id>/<run_id>`` entries are symlinks into the primary
+    checkout, so ``.resolve()`` lands on a directory whose grandparent is
+    *also* named ``apps``. A guard that compared that name passed, and the
+    rmtree deleted the primary checkout's real (gitignored, unrecoverable)
+    run. The guard compares path identity against this run's own
+    ``out_root`` instead, so the escape is impossible.
+    """
+    # tmp_path itself can sit behind a symlink (/tmp -> /var/tmp on some
+    # systems); resolve up front so the assertions compare like with like.
+    base = tmp_path.resolve()
+    victim = _finished_run(base / "primary")
+
+    out_root = base / "worktree" / "apps"
+    (out_root / "demo").mkdir(parents=True)
+    (out_root / "demo" / "Style").symlink_to(victim, target_is_directory=True)
+
+    ctx = _overwrite_ctx(out_root)
+    assert ctx.run_dir.is_symlink()
+    assert ctx.run_dir.resolve() == victim
+
+    with pytest.raises(PipelineError, match="outside this run's output root"):
+        Pipeline._overwrite_existing(ctx)
+
+    # The other checkout's run is untouched.
+    assert (victim / "output.yaml").read_text() == "app: demo\n"
+    assert (victim / "final_images" / "hero.png").read_bytes() == (
+        b"expensive bytes"
+    )
+
+
+def test_overwrite_clears_a_run_dir_inside_its_own_output_root(
+    tmp_path: Path,
+) -> None:
+    """The normal in-place re-run still clears its produced artifacts: a run
+    dir that really is inside the configured output root passes the guard."""
+    base = tmp_path.resolve()
+    out_root = base / "apps"
+    run = _finished_run(base)  # <base>/apps/demo/Style — inside out_root
+
+    ctx = _overwrite_ctx(out_root)
+    assert ctx.run_dir == run
+
+    Pipeline._overwrite_existing(ctx)
+
+    assert not (run / "output.yaml").exists()
+    assert not (run / "final_images" / "hero.png").exists()
+    # The emptied asset dirs are recreated, ready for the re-run.
+    assert (run / "final_images").is_dir()
+
+
 # --- expand: seed reconstruction (src/executor/seed.py) --------------------
 
 
@@ -320,24 +409,159 @@ def test_node_slots_mirrors_built_graph(tmp_path: Path) -> None:
     assert ns[_COLOR] == {"primary", "background", "text", "accent"}
     assert ns[_FONT] == {"display", "body"}
     assert ns["hero"] == {"hero"}
+    # The classification root owns exactly one pseudo-slot, its own key.
+    assert ns[_CATEGORY] == {_CATEGORY}
+    # The format root owns a REAL per-slot inventory (unlike classification),
+    # so its key never appears as a slot id of its own.
+    assert ns[_FORMAT] == {"home_format", "rewards_format"}
+    assert _FORMAT not in all_slot_ids(app)
+
+
+def test_no_declared_categories_skips_the_classification_node(
+    tmp_path: Path,
+) -> None:
+    """An app with no ``categories`` vocabulary gets no classification node,
+    no pseudo-slot in the seed keyspace, and no LLM call — it keeps working
+    exactly as it did before classification existed."""
+    ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
+    assert ctx.app.categories == []
+
+    graph = _graph(ctx)
+    assert graph.category is None
+    assert _CATEGORY not in Pipeline._build_digraph(graph).nodes
+    assert _CATEGORY not in node_slots(ctx.app)
+    assert _CATEGORY not in all_slot_ids(ctx.app)
+    # And nothing seeds it, even from an output.yaml that carries a category.
+    saved = _demo_output()
+    assert _CATEGORY not in build_seed(ctx.app, saved)
+
+
+def test_no_declared_formats_skips_the_format_node(tmp_path: Path) -> None:
+    """An app with no ``formats`` inventory gets no format node, no format
+    slots in the seed keyspace, and no LLM call — the consuming client just
+    renders the arrangement it ships."""
+    ctx = _ctx(tmp_path, [{"id": "hero", "description": "a hero"}])
+    assert ctx.app.formats == []
+
+    graph = _graph(ctx)
+    assert graph.format is None
+    assert _FORMAT not in Pipeline._build_digraph(graph).nodes
+    assert _FORMAT not in node_slots(ctx.app)
+    # And nothing seeds a format, even from an output.yaml carrying one.
+    saved = _demo_output().model_copy(
+        update={
+            "format_set": FormatSet(
+                formats={"home_format": FormatOutput(value="dayPager")}
+            )
+        }
+    )
+    assert "home_format" not in build_seed(ctx.app, saved)
+
+
+def test_build_digraph_includes_format_node_when_app_declares_formats(
+    tmp_path: Path,
+) -> None:
+    """An app that declares format slots gets a format root in the DAG,
+    level-0 alongside colour and font (it reads only the brief); nothing
+    depends on it, so it costs the run no wall-clock time."""
+    app = _demo_app()
+    ctx = RunContext(app, Customization.model_validate(_CUST), tmp_path)
+    graph = Pipeline._build_digraph(_graph(ctx))
+
+    gens = [sorted(level) for level in nx.topological_generations(graph)]
+    assert _FORMAT in gens[0]
+    assert set(graph.predecessors(_FORMAT)) == set()
+    assert set(graph.successors(_FORMAT)) == set()
+
+
+def test_build_seed_skips_a_format_value_outside_its_slot_vocabulary() -> None:
+    """A saved format token that is no longer in THAT slot's declared values
+    is not seeded — an ``expand`` pass re-picks it, rather than carrying a
+    token the client can no longer parse (it would silently fall back to its
+    shipped arrangement, a regression nobody would trace back to here). The
+    slot's still-valid sibling is seeded as normal."""
+    app = _demo_app()
+    saved = _demo_output().model_copy(
+        update={
+            "format_set": FormatSet(
+                formats={
+                    # Was a declared value once; the vocabulary moved on.
+                    "home_format": FormatOutput(value="boardGrid"),
+                    "rewards_format": FormatOutput(value="listRows"),
+                }
+            )
+        }
+    )
+    assert "boardGrid" not in {
+        e.value
+        for s in app.formats
+        if s.id == "home_format"
+        for e in s.values
+    }
+
+    seed = build_seed(app, saved)
+    assert "home_format" not in seed
+    assert "home_format" in all_slot_ids(app) - seed.keys()
+    assert seed["rewards_format"].value == "listRows"
+
+
+def test_build_digraph_includes_category_node_when_app_declares_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """An app that declares ``categories`` gets a classification root in the
+    DAG, level-0 alongside colour and font (it reads only the brief);
+    nothing depends on it."""
+    app = _demo_app()
+    ctx = RunContext(app, Customization.model_validate(_CUST), tmp_path)
+    graph = Pipeline._build_digraph(_graph(ctx))
+
+    gens = [sorted(level) for level in nx.topological_generations(graph)]
+    assert _CATEGORY in gens[0]
+    assert set(graph.predecessors(_CATEGORY)) == set()
+    assert set(graph.successors(_CATEGORY)) == set()
 
 
 def test_build_seed_is_slot_level() -> None:
-    """A saved run with the colours + one image done seeds exactly those
-    SLOTS (per-item outputs verbatim); every absent slot is left to make."""
+    """A saved run with the colours + one image + a category done seeds
+    exactly those SLOTS (per-item outputs verbatim); every absent slot is left
+    to make."""
     app, output = _demo_app(), _demo_output()
     seed = build_seed(app, output)
 
-    assert set(seed) == {"primary", "background", "text", "accent", "hero"}
+    assert set(seed) == {
+        "primary", "background", "text", "accent", "hero", _CATEGORY,
+    }
     # Seeded values are the saved per-item models verbatim.
     assert seed["primary"] is output.color_set.colors["primary"]
     assert seed["hero"] is output.image_set.images["hero"]
-    # To-(re)generate is the slot complement: the absent fonts/texts/icons.
+    # The classification pseudo-slot rebuilds its carrier from the scalar.
+    assert seed[_CATEGORY].value == output.category
+    # To-(re)generate is the slot complement: the absent fonts/texts/icons
+    # and the two never-resolved format slots.
     assert all_slot_ids(app) - seed.keys() == {
         "display", "body",
         "booked_screen", "cancel_cta", "home_greeting",
         "home_tab", "search_action", "celebration_badge",
+        "home_format", "rewards_format",
     }
+
+
+def test_build_seed_skips_a_category_outside_the_vocabulary() -> None:
+    """A saved category that is no longer one of the app's declared values is
+    NOT seeded — an ``expand`` pass re-classifies it instead of carrying a
+    value the styles API would skip anyway."""
+    app = _demo_app()
+    stale = _demo_output().model_copy(update={"category": "Brutalist"})
+    assert stale.category not in app.categories
+
+    seed = build_seed(app, stale)
+    assert _CATEGORY not in seed
+    assert _CATEGORY in all_slot_ids(app) - seed.keys()
+
+    # An un-classified run behaves the same way.
+    assert _CATEGORY not in build_seed(
+        app, _demo_output().model_copy(update={"category": None})
+    )
 
 
 def test_dropping_a_seed_slot_makes_it_dirty(tmp_path: Path) -> None:
@@ -469,12 +693,17 @@ def test_build_all_threads_specs_seed_and_declared(tmp_path: Path) -> None:
 
 
 def _all_nodes(graph: Any) -> list[Any]:
-    """Every node object on a built Graph (text/icon may be None)."""
+    """Every node object on a built Graph (text/icon/category/format may be
+    None)."""
     nodes = [graph.color, graph.font, *graph.images]
     if graph.text is not None:
         nodes.append(graph.text)
     if graph.icon is not None:
         nodes.append(graph.icon)
+    if graph.category is not None:
+        nodes.append(graph.category)
+    if graph.format is not None:
+        nodes.append(graph.format)
     return nodes
 
 

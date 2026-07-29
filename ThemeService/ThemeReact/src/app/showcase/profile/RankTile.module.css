@@ -1,0 +1,33 @@
+/*
+ * Styles for ./RankTile.tsx (ports MobileApp/lib/features/profile/presentation/
+ * layouts/parts/rank_tile.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * `Container(height: _kTileHeight, padding: spacingMedium, color: card,
+ * borderRadius: radiusSmall, clipBehavior: antiAlias)`. `_kTileHeight` is the
+ * Dart's own file-local const, not a design token: the pair reads as a pair
+ * because both cells are exactly this tall.
+ */
+.tile {
+  --rt-tile-height: 176px;
+
+  height: var(--rt-tile-height);
+  padding: var(--sc-spacing-medium);
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* `Center(child: child)`. */
+.centre {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 100%;
+}

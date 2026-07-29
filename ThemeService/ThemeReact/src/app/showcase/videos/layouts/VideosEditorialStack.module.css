@@ -1,0 +1,24 @@
+/*
+ * Styles for ./VideosEditorialStack.tsx (ports MobileApp/lib/features/videos/
+ * presentation/layouts/videos_editorial_stack.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingBig)`. */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding)` around each section.
+ *
+ * The inset lives on the arrangement rather than inside the section because
+ * this is the arrangement's own decision: the hero above deliberately has none,
+ * and the two would otherwise disagree about where the page's edge is.
+ */
+.sectionInset {
+  padding-inline: var(--sc-screen-padding-x);
+}

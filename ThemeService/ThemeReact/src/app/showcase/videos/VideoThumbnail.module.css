@@ -1,0 +1,12 @@
+/*
+ * Styles for ./VideoThumbnail.tsx.
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Image(fit: BoxFit.cover)` filling whatever box the owning card sized. */
+.thumb {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

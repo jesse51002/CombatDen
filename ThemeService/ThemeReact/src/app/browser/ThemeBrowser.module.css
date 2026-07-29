@@ -1,0 +1,74 @@
+/*
+ * Styles for ./ThemeBrowser.tsx (ports CRM/lib/features/members/presentation/
+ * widgets/member_app/theme_tab/live_theme_preview_tab.dart).
+ */
+
+.browser {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+/*
+ * The phone view is Dart's `Row`/`Column` of `Expanded`s: it fills the space it
+ * is given and its side pane scrolls INSIDE that. On the web the page is the
+ * scroller (the library needs it that way), and `flex: 1` inside a
+ * `min-height: 100dvh` shell grows with its content instead of capping it — so
+ * the 3000px catalog would push the whole document tall and the pane would
+ * never scroll. Capping the mode that must not scroll the page is what restores
+ * the Dart behaviour. `--app-bottom-gutter` comes from ../App.module.css.
+ */
+.phone {
+  /*
+   * The sticky chrome above this view is `navHeight` tall PLUS the 1px hairline
+   * GWNav always draws under it (`borderBottom: 1px solid …` in chrome.jsx —
+   * transparent until scrolled, but always occupying a pixel). Miss it and the
+   * page overflows by exactly that pixel and grows a scrollbar.
+   */
+  --phone-chrome-height: calc(var(--adm-nav-height) + 1px);
+
+  /* `flex: none` first: a flex item's `flex-basis: 0%` outranks its `height`. */
+  flex: none;
+  /*
+   * `--app-viewtabs-height` is the view-switcher band (../ViewTabs.module.css),
+   * which sits between the nav and this view and is therefore height this one
+   * does not get. Without the term the browse view grows a 48px scrollbar — in
+   * the one mode deliberately sized never to scroll. The band publishes its own
+   * height on :root so this stays a contract rather than a re-measured literal.
+   */
+  height: calc(
+    100dvh - var(--phone-chrome-height) - var(--app-viewtabs-height, 0px) -
+      var(--app-bottom-gutter, 0px)
+  );
+}
+
+/* Wide: `Row(spacing: spacingBig)` — phone beside the picker. */
+.split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: var(--adm-space-big);
+  align-items: stretch;
+}
+
+.sidePane {
+  flex: none;
+  min-height: 0;
+}
+
+/* Narrow: `Column(spacing: spacingLarge)` — back button above the phone. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--adm-space-large);
+}
+
+/* `Align(alignment: Alignment.centerLeft)`. */
+.backRow {
+  display: flex;
+  justify-content: flex-start;
+}

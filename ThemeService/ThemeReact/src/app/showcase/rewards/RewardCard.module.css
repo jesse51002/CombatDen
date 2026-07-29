@@ -1,0 +1,166 @@
+/*
+ * Styles for ./RewardCard.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/widgets/reward_card/layouts/).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ *
+ * One rule per BOX an arrangement needs. The elements inside those boxes are
+ * ./rewardCardParts.module.css's business, and nothing here restyles one — that
+ * separation is what keeps "an arrangement rearranges, it never adds or drops"
+ * checkable rather than aspirational.
+ */
+
+/*
+ * `RewardCardShell` — the raised surface a card sits on: card fill, big radius,
+ * and the clip that lets the image bleed to the rounded corners.
+ * `imageTop`, `poster` and `tile` all sit on it; the row and the hero do not.
+ */
+.shell {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-big);
+  overflow: hidden;
+}
+
+/* `Padding(all: paddingSmall) > Column(min, stretch, spacing: spacingMedium)`. */
+.body {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+  padding: var(--sc-padding-small);
+}
+
+/* ------------------------------------------------------------------------ */
+/* `RewardCardLayout.thumbLeft` — the full-width row.                        */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * `Container(padding: symmetric(vertical: spacingLarge), border: Border(bottom:
+ * divider @ dividerThickness)) > Row(center, spacing: spacingLarge)`.
+ *
+ * No gap between rows in ./layouts/RewardsListRows.module.css on purpose: each
+ * row owns its vertical padding and closes with this hairline, which IS the
+ * rhythm.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-large);
+  padding-block: var(--sc-spacing-large);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-divider);
+}
+
+/* `SizedBox(width: 76)` — the square thumb's edge. */
+.thumb {
+  flex: 0 0 76px;
+}
+
+/*
+ * `Expanded(child: _RowMeta)`. `min-width: 0` is what makes `flex: 1 1 0`
+ * behave like Flutter's `Expanded`: without it the cell refuses to shrink below
+ * its text's intrinsic width and a long title pushes the action off the row.
+ */
+.rowMeta {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-small);
+}
+
+/* `Row(mainAxisSize: min, spacing: spacingMedium)` — shrink-wrapped, hence the
+   `align-self`; its two `Flexible` children may each shrink. */
+.rowInline {
+  align-self: flex-start;
+  max-width: 100%;
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* The trailing action keeps its size; only the meta cell absorbs the slack. */
+.row button {
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------------------ */
+/* `RewardCardLayout.poster` — one reward, given the whole deck.             */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * The poster fills the page the deck hands it; its image then takes whatever
+ * that leaves after the title, the cost and the action
+ * (./rewardCardParts.module.css's `.flexFill`).
+ */
+.poster {
+  height: 100%;
+}
+
+/* ------------------------------------------------------------------------ */
+/* `RewardCardLayout.tile` — the dense square in a cost band.                */
+/* ------------------------------------------------------------------------ */
+
+/* `Padding(all: spacingMedium) > Column(min, stretch, spacing: spacingSmall)`. */
+.tileBody {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-small);
+  padding: var(--sc-spacing-medium);
+}
+
+/* ------------------------------------------------------------------------ */
+/* `RewardCardLayout.hero` — the promoted reward, full bleed.                */
+/* ------------------------------------------------------------------------ */
+
+/*
+ * `AspectRatio(16 / 9) > Stack(fit: expand)`. 16:9 is a per-image ratio, not a
+ * spacing token. No radius and no clip: the hero runs edge to edge, which is
+ * what makes ./layouts/RewardsStorefrontHero.tsx read as a storefront rather
+ * than as a larger card.
+ */
+.hero {
+  position: relative;
+  aspect-ratio: 16 / 9;
+}
+
+/*
+ * `_HeroScrim` — `LinearGradient(topCenter -> bottomCenter,
+ * [background @ 0, background @ 0.85], stops: [0.35, 1])`.
+ *
+ * `transparent` is the top stop rather than a 0-alpha mix of the background,
+ * and that is safe rather than sloppy: CSS interpolates gradients with
+ * PREMULTIPLIED alpha, so a fully transparent stop contributes no colour and
+ * the ramp stays pure background at every point — which is exactly what
+ * Flutter's `Color.lerp` between `base@0` and `base@0.85` produces.
+ */
+.heroScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 35%,
+    color-mix(in srgb, var(--sc-background) 85%, transparent) 100%
+  );
+}
+
+/*
+ * `Positioned(left: 0, right: 0, bottom: 0) > Padding(paddingSmall) >
+ * Column(min, stretch, spacing: spacingMedium)`.
+ */
+.heroBody {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+  padding: var(--sc-padding-small);
+}

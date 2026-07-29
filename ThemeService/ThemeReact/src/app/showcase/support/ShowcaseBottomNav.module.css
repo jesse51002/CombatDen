@@ -1,0 +1,100 @@
+/*
+ * Styles for ./ShowcaseBottomNav.tsx
+ * (ports CRM/lib/showcase/support/showcase_bottom_nav.dart).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * THE SHIPPED ARRANGEMENT IS THE BASE RULE. `NavFourUp` (every
+ * `app_shell_format` but `markOnly`) renders with the bare `.nav` / `.item` /
+ * `.label` classes and nothing else, so the markup four screens have always
+ * produced is byte-identical. `.pillInset` / `.pill` / `.visuallyHidden` are
+ * only ever added by `NavFloatingPill`.
+ */
+
+/* `NavFourUp` — `Container(color: backgroundColor, border top: text3rd)` over a 64px row. */
+.nav {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  background: var(--sc-background);
+  border-top: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+}
+
+/*
+ * `NavFloatingPill` — `Padding(left/right: spacingBig, bottom: spacingMedium)`.
+ * The pill has no top rule and no full-bleed fill, which is what makes it read
+ * as floating over the canvas rather than closing it off.
+ */
+.pillInset {
+  flex: 0 0 auto;
+  padding: 0 var(--sc-spacing-big) var(--sc-spacing-medium);
+}
+
+/*
+ * `Container(height: 56, color: card, borderRadius: 56 / 2, border: divider,
+ * clipBehavior: antiAlias)`. The radius is the Dart expression, not a token:
+ * it is half the pill's own height, so it stays a capsule at any height.
+ */
+.pill {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  background: var(--sc-card);
+  border: var(--sc-divider-thickness) solid var(--sc-divider);
+  border-radius: 28px;
+  overflow: hidden;
+}
+
+/* `Expanded(child: _NavItem)` — `Padding(vertical: spacingMedium)` + centred. */
+.item {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  /* `Column(mainAxisSize: min, spacing: spacingTiny)`. */
+  gap: var(--sc-spacing-tiny);
+  padding-block: var(--sc-spacing-medium);
+}
+
+.label {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: inherit;
+  text-align: center;
+  /* `maxLines: 2, overflow: ellipsis`. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+/*
+ * `AppNavItem(showLabel: false)` — the floating pill's labels.
+ *
+ * Dart keeps the label built and swaps it for `Semantics(label: label, child:
+ * SizedBox.shrink())`; this is the same trade. THE POINT IS WHAT IT IS NOT:
+ * `display: none`, `visibility: hidden` and simply not rendering the span all
+ * strip the destination's accessible name, which would make the pill a reduced
+ * nav rather than a rearranged one. The clip technique takes it out of the
+ * visual layout only. (Deliberately duplicated from ./ShowcaseTopbar.module.css
+ * — CSS Modules are per-file, and eight lines beats a `composes` indirection
+ * between two sibling sheets.)
+ */
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

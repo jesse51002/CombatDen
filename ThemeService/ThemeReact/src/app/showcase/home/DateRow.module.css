@@ -1,0 +1,72 @@
+/*
+ * Styles for ./DateRow.tsx
+ * (ports MobileApp/.../class_schedule/date_row.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ *
+ * Lifted unchanged from the shipped HomeNotBookedBody.module.css, so the
+ * arrangement that ships keeps exactly the rail it had.
+ */
+
+/*
+ * `SliverPersistentHeader(pinned: true, delegate: DateRowHeaderDelegate)`.
+ *
+ * `position: sticky` IS a pinned sliver: the row scrolls up with the topbar
+ * until it reaches the top of the scroller, then stays while the days move
+ * under it. The opaque `background` is what makes that legible — without it the
+ * class rows would show through as they pass underneath, which a sliver never
+ * does because it paints its own box.
+ *
+ * `Container(color: backgroundColor, border bottom: text3rd, padding:
+ * only(top: spacingSmall, bottom: spacingTiny))` — `date_row.dart`'s own box.
+ * The horizontal inset belongs to the scroller inside it, which is what lets a
+ * pill scroll all the way to the edge instead of stopping at a padding wall.
+ */
+.dateStrip {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: 0 0 auto;
+  width: 100%;
+  padding-top: var(--sc-spacing-small);
+  padding-bottom: var(--sc-spacing-tiny);
+  background: var(--sc-background);
+  border-bottom: var(--sc-divider-thickness) solid var(--sc-text-3rd);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.dateStrip::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * `SliverPersistentHeader(pinned: false)` — the rail scrolls away with the
+ * content instead of holding the top. `nextUpHero`'s call, and the reason it
+ * pairs that with the segmented chips: a rail that leaves has to read as a
+ * control while it is there, not as a permanent index.
+ */
+.unpinned {
+  position: static;
+}
+
+/*
+ * `ListView.separated(scrollDirection: horizontal, padding: only(left:
+ * paddingBig, right: spacingMedium), separatorBuilder: SizedBox(spacingBig))`.
+ *
+ * IT IS MEANT TO RUN OFF THE EDGE. The real board carries 14 days and grows to
+ * 60, so this row has always been a scroller whose trailing pills sit past the
+ * screen — the app centres the selected one rather than fitting them all.
+ * `width: max-content` keeps the pills at their natural pitch and lets the row
+ * scroll, which is the widget being ported.
+ */
+.dateRow {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-big);
+  width: max-content;
+  padding-left: var(--sc-padding-big);
+  padding-right: var(--sc-spacing-medium);
+}

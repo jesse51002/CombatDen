@@ -1,0 +1,44 @@
+/*
+ * The two column shapes the five points-store arrangements are built on
+ * (ports the `Column` each of MobileApp/lib/features/rewards/presentation/
+ * layouts/rewards_*.dart opens with).
+ *
+ * `--sc-*` only — the member app's values. See ../../ShowcaseThemeVars.tsx.
+ *
+ * THE SPLIT IS ABOUT WHERE THE SCROLL LIVES, and it is the one frame decision a
+ * `rewards_format` makes:
+ *
+ *   * `.scrollStack` — `SingleChildScrollView > Column(spacing: spacingBig)`.
+ *     The whole surface scrolls as one, headline included. `cardGrid`,
+ *     `listRows` and `storefrontHero`. Their screen passes `bodyScroll` to
+ *     ../../support/ShowcaseScaffold.tsx and this column just grows.
+ *   * `.pinnedStack` — `Column(spacing: spacingLarge)` filling the body, with
+ *     an `Expanded` scroller as its last child. The topbar, tabs and points
+ *     headline PIN and only the store moves. `posterDeck` (whose deck must be
+ *     given a height to fill) and `priceLadder` (whose whole idea is that the
+ *     balance stays on screen while the ladder scrolls under it). Their screen
+ *     passes no `bodyScroll`, so the scaffold's body stays a plain clipped box
+ *     and the inner scroller is the only one.
+ */
+
+.scrollStack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  /* Room for the persistent bottom nav, so the last row scrolls clear of it. */
+  padding-bottom: var(--sc-spacing-big);
+}
+
+/*
+ * `min-height: 0` is what lets the `Expanded` child below actually shrink; the
+ * `height: 100%` is what gives it something definite to be a fraction of.
+ */
+.pinnedStack {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  height: 100%;
+  min-height: 0;
+}

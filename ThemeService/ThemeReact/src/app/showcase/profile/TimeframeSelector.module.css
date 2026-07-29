@@ -1,0 +1,83 @@
+/*
+ * Styles for ./TimeframeSelector.tsx (ports MobileApp/lib/features/profile/
+ * presentation/widgets/rank_summary/timeframe_selector.dart and
+ * shared/widgets/pills/timeframe_pill.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+/* `pills` — `Row(center, mainAxisSize: min, spacing: spacingBig)`. */
+.pills {
+  justify-content: center;
+  gap: var(--sc-spacing-big);
+}
+
+/* `inline` — `Row(start, mainAxisSize: min, spacing: spacingMedium)`. */
+.inline {
+  justify-content: flex-start;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * `segmented` — `Row(spacing: spacingTiny)` of `Expanded` pills: equal-width
+ * chips sharing one full-width track.
+ */
+.segmented {
+  gap: var(--sc-spacing-tiny);
+}
+
+.segmented .pill {
+  flex: 1 1 0;
+  /* An `Expanded` pill is sized by the row, so its own label padding must not
+     fight the share it was given. */
+  padding-inline: 0;
+  min-width: 0;
+}
+
+/* `tile` — `Column(mainAxisSize: min, spacing: spacingSmall)` of two rows. */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-spacing-small);
+}
+
+/* Each `Row(center, mainAxisSize: min, spacing: spacingSmall)`. */
+.tileRow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sc-spacing-small);
+}
+
+/*
+ * `TimeframePill` — `Container(height: pillHeightMd, padding: horizontal:
+ * screenHorizontalPadding, borderRadius: radiusBig)` over `Text(h2)`.
+ * An inactive pill has NO border at all (Dart passes `null`), which is what
+ * makes the selected one read as the only chip in the row. The transparent
+ * border keeps the inactive pill the same size as the active one, which is
+ * what Flutter gets from laying the border out inside the box.
+ */
+.pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  height: var(--sc-pill-height-md);
+  padding-inline: var(--sc-screen-padding-x);
+  border: var(--sc-button-border) solid transparent;
+  border-radius: var(--sc-radius-big);
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+  color: var(--sc-text-3rd);
+  white-space: nowrap;
+}
+
+/* `isActive` — `Border.all(color: accent, width: buttonBorder)` and `accent` ink. */
+.pillActive {
+  border-color: var(--sc-accent);
+  color: var(--sc-accent);
+}

@@ -1,0 +1,41 @@
+/*
+ * Styles for ./VideoViewAllAction.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/video_view_all_action.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `_Label` — `Text('view all', decoration: underline, decorationColor: text)`. */
+.viewAll {
+  flex: 0 0 auto;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text);
+  text-decoration: underline;
+  text-decoration-color: var(--sc-text);
+}
+
+/*
+ * `_Surface` — `Container(color: card, borderRadius: radiusSmall)` around a
+ * `Center`. The two treatments that use it differ only in how they take their
+ * height: `row` from its own padding, `tile` from the grid cell's aspect.
+ */
+.surface {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sc-card);
+  border-radius: var(--sc-radius-small);
+}
+
+/* `VideoViewAllStyle.row` — `padding: symmetric(vertical: paddingSmall)`. */
+.rowSurface {
+  padding-block: var(--sc-padding-small);
+}
+
+/*
+ * `VideoViewAllStyle.tile` — `AspectRatio(16 / 9)`, so the action reads as the
+ * last tile of the mosaic rather than as a control bolted under it.
+ */
+.tile {
+  aspect-ratio: 16 / 9;
+}

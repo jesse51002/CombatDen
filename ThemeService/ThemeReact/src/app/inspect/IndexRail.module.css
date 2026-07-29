@@ -1,0 +1,73 @@
+/* Styles for ./IndexRail.tsx — the sheet's sticky contents column. */
+
+.rail {
+  position: sticky;
+  /* Below the landing nav, with the section heads' own scroll-margin. */
+  top: calc(var(--adm-nav-height) + var(--adm-space-big));
+  align-self: start;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * A hairline runs down the whole column and each entry sits against it; the
+ * current entry replaces its own segment with sapphire. The mark is therefore
+ * part of the rule rather than a second stripe beside it — the same move the
+ * view tabs make with their underline, and the same restraint: this and the
+ * tab underline are the only sapphire on the page.
+ */
+.entry {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: var(--adm-space-medium) 0 var(--adm-space-medium) var(--adm-space-large);
+  border-left: 1px solid var(--adm-line);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.entry:hover {
+  border-left-color: var(--adm-text-3rd);
+}
+
+.entry[aria-current] {
+  border-left-color: var(--adm-sapphire);
+}
+
+.label {
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  letter-spacing: var(--adm-h3-tracking);
+  color: var(--adm-text-2nd);
+  transition: color 0.15s ease;
+}
+
+.entry:hover .label,
+.entry[aria-current] .label {
+  color: var(--adm-ink);
+}
+
+.count {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+.entry:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--adm-radius-small);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .entry,
+  .label {
+    transition: none;
+  }
+}

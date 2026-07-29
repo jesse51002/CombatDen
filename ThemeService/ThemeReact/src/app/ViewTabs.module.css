@@ -1,0 +1,119 @@
+/*
+ * Styles for ./ViewTabs.tsx — the view switcher band under the landing nav.
+ *
+ * THE 48px HEIGHT IS A CONTRACT WITH THE PHONE VIEW.
+ * ./browser/ThemeBrowser.module.css sizes its phone mode as
+ * `100dvh - --phone-chrome-height - --app-bottom-gutter`, and
+ * `--phone-chrome-height` counts ONLY the landing nav (68px + its hairline).
+ * Every pixel this band occupies is therefore a pixel the phone view overflows
+ * by. 48px is what the scaffold this replaced already cost, so the redesign
+ * does not widen an existing overflow — but it does not close it either, and
+ * it cannot from here: the fix is one term in that file's `calc`, and that file
+ * belongs to another surface. `--app-viewtabs-height` is published globally so
+ * the fix is `- var(--app-viewtabs-height)` rather than a re-measured literal.
+ */
+
+:global(:root) {
+  --app-viewtabs-height: 48px;
+}
+
+/*
+ * The band runs full-bleed so its rule reaches both edges like the nav's own,
+ * while the tabs inside align to the shared 1180 measure (../App.module.css,
+ * ./chrome/GWNav.tsx). Two elements, because one cannot do both.
+ */
+.band {
+  position: relative;
+  z-index: 1;
+  height: var(--app-viewtabs-height);
+  border-bottom: 1px solid var(--adm-line);
+  background: var(--adm-ground);
+}
+
+.tabs {
+  display: flex;
+  align-items: stretch;
+  gap: var(--adm-space-big);
+  height: 100%;
+  max-width: var(--adm-nav-max-width);
+  margin-inline: auto;
+  /* GWNav's desktop gutter, so the labels line up with the wordmark above. */
+  padding-inline: var(--adm-padding-big);
+}
+
+.tab {
+  position: relative;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--adm-text-2nd);
+  font-family: var(--adm-font);
+  font-size: var(--adm-h2-size);
+  font-weight: var(--adm-h2-weight);
+  letter-spacing: var(--adm-h2-tracking);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color 0.15s ease;
+}
+
+/*
+ * The underline is a pseudo-element that is always present and only changes
+ * colour, so the indicator cannot shift the label's baseline as it moves and
+ * a hover can preview the slot the mark will land in.
+ *
+ * `bottom: -1px` puts it ON the band's hairline rather than above it — the
+ * mark replaces that segment of rule instead of stacking a second line under
+ * the label.
+ */
+.tab::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+  background: transparent;
+  transition: background 0.15s ease;
+}
+
+.tab:hover {
+  color: var(--adm-ink);
+}
+
+.tab:hover::after {
+  background: var(--adm-line);
+}
+
+/*
+ * The page's ONE sapphire (../../../CRM/DESIGN.md, "The One Light Rule"): it
+ * marks where you are, and nothing else on any of the three views claims it.
+ */
+.tab[aria-current='page'] {
+  color: var(--adm-ink);
+}
+
+.tab[aria-current='page']::after,
+.tab[aria-current='page']:hover::after {
+  background: var(--adm-sapphire);
+}
+
+.tab:focus-visible {
+  /* The band is 48px tall; the page-wide 2px offset would clip on its rule. */
+  outline-offset: -2px;
+  border-radius: var(--adm-radius-small);
+}
+
+@media (max-width: 768px) {
+  .tabs {
+    gap: var(--adm-space-large);
+    /* GWNav's own mobile gutter, matching ../App.module.css. */
+    padding-inline: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab,
+  .tab::after {
+    transition: none;
+  }
+}

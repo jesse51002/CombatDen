@@ -1,0 +1,61 @@
+/*
+ * Styles for ./RewardsCarousel.tsx
+ * (ports CRM/lib/showcase/celebrations/rewards_carousel.dart).
+ *
+ * `--sc-*` for the design tokens (see ../ShowcaseThemeVars.tsx); `--rc-*` for
+ * the carousel's own geometry, which the component writes inline from
+ * ./rewardsCoverFlow.ts. No transform is declared here — the driver owns every
+ * one of them, because each is a live function of the fractional page.
+ */
+
+/*
+ * `SizedBox(height: _featuredSize)` around a `PageView(clipBehavior: Clip.none)`.
+ * The circle is wider than one page slot on purpose — that overlap IS the cover
+ * flow — so nothing here may clip.
+ */
+.carousel {
+  position: relative;
+  height: var(--rc-size);
+  overflow: visible;
+}
+
+/*
+ * One page slot: `viewportFraction` of the carousel's width, centred, with the
+ * circle centred inside it. Flex centring (not a block) is what lets an
+ * oversized circle overflow EQUALLY on both sides rather than only to the right.
+ */
+.page {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--rc-viewport-fraction);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  will-change: transform;
+}
+
+/*
+ * `_RewardCircle` — `Container(shape: circle, border: text @ buttonBorderSize,
+ * clipBehavior: antiAlias)`. `background` is the `errorBuilder`'s
+ * `ColoredBox(card)`, showing through whenever the photo is absent or dead.
+ */
+.circle {
+  flex: 0 0 auto;
+  width: var(--rc-size);
+  height: var(--rc-size);
+  border: var(--sc-button-border-size) solid var(--sc-text);
+  border-radius: var(--sc-radius-circle);
+  overflow: hidden;
+  background: var(--sc-card);
+  will-change: transform;
+}
+
+/* `Image(fit: BoxFit.cover)`. */
+.photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

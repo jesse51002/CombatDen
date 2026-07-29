@@ -1,0 +1,50 @@
+/*
+ * Styles for ./ClassItemDense.tsx
+ * (ports .../class_item/layouts/class_item_dense.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(stretch, spacing: spacingMedium)` — the row over its hairline. */
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sc-spacing-medium);
+}
+
+/*
+ * `Padding(horizontal: screenHorizontalPadding, vertical: spacingSmall)` over
+ * `Row(center, spacing: spacingMedium)`.
+ */
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  padding: var(--sc-spacing-small) var(--sc-screen-padding-x);
+}
+
+/* `ClassItemThumb(44x44, radiusSmall)`, leading. */
+.photo {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+  background: var(--sc-card);
+}
+
+.photoImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* `Expanded(child: ClassItemMeta(tight: true))` — the `spacingSmall` gap. */
+.info {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-small);
+}

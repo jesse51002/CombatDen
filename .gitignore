@@ -5,3 +5,7 @@ __pycache__
 CRM/.env.dev
 CRM/.env.prod
 openapi.json
+
+# Node (ThemeService/ThemeReact — the only npm package in the repo)
+node_modules/
+*.tsbuildinfo

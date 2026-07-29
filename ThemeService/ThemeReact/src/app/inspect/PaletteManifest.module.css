@@ -1,0 +1,97 @@
+/* Styles for ./PaletteManifest.tsx — the full flat palette. */
+
+/*
+ * Five groups across the measure at desktop, so the whole manifest is one
+ * block rather than five stacked lists. Each role's eight keys read as a
+ * column; the shared trio is visibly the short one, which is the point.
+ */
+.manifest {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--adm-space-big) var(--adm-space-large);
+}
+
+.group {
+  min-width: 0;
+}
+
+.groupLabel {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-medium);
+  margin: 0 0 var(--adm-space-medium);
+  padding-bottom: var(--adm-space-small);
+  border-bottom: 1px solid var(--adm-line);
+  font-family: var(--gw-mono);
+  font-size: var(--adm-h3-size);
+  font-weight: var(--adm-h3-weight);
+  color: var(--adm-ink);
+}
+
+.groupCount {
+  font-weight: var(--adm-p-weight);
+  color: var(--adm-text-2nd);
+}
+
+.entries {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-small);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/*
+ * Swatch, key, value on one line. The key column takes the slack and the hex
+ * is pinned right, so 35 values form a straight edge to scan down instead of a
+ * ragged one that has to be read word by word.
+ */
+.entry {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  /* `start`, not `center`: a key that wraps to two lines must still hang off
+     the same first baseline as its swatch and hex. */
+  align-items: start;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.swatch {
+  width: 18px;
+  height: 18px;
+  /* Nudged onto the key's first-line baseline now the row aligns to `start`. */
+  margin-top: 2px;
+  border: 1px solid var(--adm-line);
+  border-radius: 3px;
+}
+
+.key,
+.hex {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+}
+
+/*
+ * The key WRAPS; it is never clipped. At four columns the key gets ~113px,
+ * about 17 mono characters, so an ellipsis eats the tail of exactly the long
+ * ones — `background_regul…`, `accent_regular_t…` — and the tail is what
+ * distinguishes them. This section's claim is that all 35 tokens are there to
+ * be read, and a truncated key is not read. Same call ./AssetPlates.module.css
+ * makes for `next_rank_belt_image`, for the same reason.
+ */
+.key {
+  color: var(--adm-ink);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.hex {
+  color: var(--adm-text-2nd);
+  /* Fixed-width by construction, so this one may stay on a single line. */
+  white-space: nowrap;
+  /* Tabular so the 6- and 8-digit values keep one right edge. */
+  font-variant-numeric: tabular-nums;
+}

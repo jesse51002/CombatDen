@@ -1,0 +1,64 @@
+/*
+ * Styles for ./ClassInstructorSection.tsx
+ * (ports MobileApp/.../widgets/class_instructor_section.dart).
+ */
+
+.content {
+  display: flex;
+  /* `crossAxisAlignment: center, spacing: spacingMedium` in all three values. */
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* `Row(children: [Expanded(_Bio), _Avatar(132)])` — ships today. */
+.avatarTrailing {
+  flex-direction: row;
+}
+
+/* `Column(crossAxisAlignment: center)` — headshot centred over the bio. */
+.avatarTop {
+  flex-direction: column;
+}
+
+/* `Row(children: [_Avatar(56), Expanded(_Bio)])` — the compact strip. */
+.row {
+  flex-direction: row;
+}
+
+/*
+ * `Expanded(child: _Bio)` in the two row values. `min-width: 0` is what lets a
+ * flex child shrink below its content width, so a long bio wraps instead of
+ * pushing the headshot off the edge.
+ */
+.bio {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+}
+
+/* `ClipOval` at `_kAvatarLg` 132, over the `card` degrade fill. */
+.avatar {
+  flex: 0 0 auto;
+  width: 132px;
+  height: 132px;
+  overflow: hidden;
+  border-radius: var(--sc-radius-circle);
+  background: var(--sc-card);
+}
+
+/* `_kAvatarSm` 56 — the `row` value. */
+.avatarSmall {
+  width: 56px;
+  height: 56px;
+}
+
+.avatarImg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

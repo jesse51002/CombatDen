@@ -302,9 +302,11 @@ class OutputService:
             # or one whose category isn't in the app.yaml-declared
             # vocabulary — is skipped, not listed unfilterable. Warn (once
             # per run per list build — this loop is cache-gated) so a
-            # dropped theme isn't silent: today categories are hand-stamped,
-            # so a missing/typo'd stamp is the likely cause of a run vanishing
-            # from the picker.
+            # dropped theme isn't silent. The pipeline's classification node
+            # produces the category, so either warning means a run that
+            # never went through it (or predates the app's current
+            # vocabulary): `scripts/expand` backfills it, `scripts/regen
+            # --slot category` re-files it.
             category = output.category
             if category is None:
                 logger.warning(

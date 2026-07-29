@@ -1,0 +1,190 @@
+/*
+ * Styles for ./rewardCardParts.tsx
+ * (ports MobileApp/lib/features/rewards/presentation/widgets/reward_card/parts/).
+ *
+ * `--sc-*` only — the member app's values. See ../ShowcaseThemeVars.tsx.
+ *
+ * Every rule here is a PART's own look. Nothing in this file knows which of the
+ * five card arrangements is rendering it; the arrangement supplies the box (see
+ * ./RewardCard.module.css) and the part fills it the same way every time.
+ */
+
+/*
+ * `RewardImageHero` — `Stack(fit: StackFit.expand)`, optionally inside an
+ * `AspectRatio`. The `card` fill IS Dart's `errorBuilder: ColoredBox(card)`:
+ * the <img> is removed on error, so what shows through is this background.
+ */
+.imageHero {
+  position: relative;
+  background: var(--sc-card);
+}
+
+/* `kRewardImageRatio` — the shipped 3:2. */
+.ratio32 {
+  aspect-ratio: 1.5;
+}
+
+/* `aspectRatio: 1` — the band tile and the row's thumb. */
+.square {
+  aspect-ratio: 1;
+}
+
+/*
+ * `Expanded(child: RewardImageHero(aspectRatio: null))` — the poster's image
+ * takes whatever height the deck leaves after the title, cost and action, so a
+ * poster adapts to the phone instead of pinning a ratio that overflows a short
+ * screen. `min-height: 0` is what lets it actually shrink.
+ */
+.flexFill {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+/*
+ * The same `aspectRatio: null`, but inside a `Stack(fit: expand)` rather than a
+ * Column: the hero's image fills the 16:9 box its card already pins.
+ */
+.absoluteFill {
+  position: absolute;
+  inset: 0;
+}
+
+/* `borderRadius` — the row's thumb rounds itself; it sits outside a card clip. */
+.rounded {
+  border-radius: var(--sc-radius-small);
+  overflow: hidden;
+}
+
+/* `Image(fit: BoxFit.cover)`. */
+.photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/*
+ * `RewardPriceTag` — `Container(padding: symmetric(horizontal: spacingMedium,
+ * vertical: spacingTiny), color: primary, borderRadius: radiusSmall)` over
+ * `Text(pSmall @ primaryButtonText, w700, maxLines: 1, ellipsis)`.
+ *
+ * `primaryButtonText` is the theme's own `regular_text` derivation of
+ * `primary` — the service's AA-checked answer to "what reads on this fill".
+ */
+.priceTag {
+  display: inline-block;
+  padding: var(--sc-spacing-tiny) var(--sc-spacing-medium);
+  border-radius: var(--sc-radius-small);
+  background: var(--sc-primary);
+  font: var(--sc-type-p-small);
+  font-weight: 700;
+  letter-spacing: var(--sc-type-p-small-ls);
+  color: var(--sc-primary-button-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * `Positioned(top: spacingMedium, right: spacingMedium)`. This is the ONLY
+ * place the tag is positioned: over an image it rides the corner, and inline
+ * beside the cost (the row layout) it stays an ordinary chip in the flow.
+ */
+.imageHero .priceTag {
+  position: absolute;
+  top: var(--sc-spacing-medium);
+  right: var(--sc-spacing-medium);
+}
+
+/* `SizedBox(height: kRewardTitleTwoLine) > Align(topCenter)`. */
+.titleSlot {
+  height: 42px;
+  overflow: hidden;
+}
+
+/*
+ * `Text(title, maxLines: …, overflow: ellipsis)`.
+ *
+ * `pre-line` is load-bearing: one sample title carries a literal `\n`
+ * (./mockPointsStore.ts) that Flutter's `Text` breaks on, and the default
+ * `normal` would collapse it to a space.
+ */
+.title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  white-space: pre-line;
+  color: var(--sc-text);
+}
+
+.clamp1 {
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+}
+
+.clamp2 {
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+}
+
+/* `style: h2` — the shipped card, the row and the poster. */
+.titleH2 {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+}
+
+/* `style: h1` — the promoted hero. */
+.titleH1 {
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+}
+
+/* `style: p` — the dense band tile. */
+.titleP {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+}
+
+/* `RewardPointsCost` — `Text('… pts', maxLines: 1, ellipsis)`, in the brand. */
+.cost {
+  color: var(--sc-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The shipped `h2 @ primary`. */
+.costH2 {
+  font: var(--sc-type-h2);
+  letter-spacing: var(--sc-type-h2-ls);
+}
+
+/* `h1 @ primary` — the poster, where the cost is the second-loudest thing. */
+.costH1 {
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+}
+
+/* `h3 @ primary` — the row, where the cost sits inline beside the tag. */
+.costH3 {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+}
+
+/* `pSmall @ primary, w700` — the band tile. */
+.costPSmall {
+  font: var(--sc-type-p-small);
+  font-weight: 700;
+  letter-spacing: var(--sc-type-p-small-ls);
+}
+
+/* `textAlign` — presentation, and the only thing that moves between layouts. */
+.alignCenter {
+  text-align: center;
+}
+
+.alignLeft {
+  text-align: left;
+}

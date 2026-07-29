@@ -1,0 +1,149 @@
+/*
+ * Styles for ./SlotPlate.tsx — one image slot's frame.
+ *
+ * The plate carries the run's ONE authored motion, in two halves of a single
+ * idea: while a slot is working, a slow band travels its ground; when the art
+ * lands, it develops up out of an already-visible frame. Nothing else on this
+ * sheet animates — the numbers move because they are numbers.
+ */
+
+.plate {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+  margin: 0;
+}
+
+/*
+ * The ground the asset was authored against. The hairline is what keeps a
+ * pale-ground plate from dissolving into this page's near-white chrome — a
+ * plate must read as a bounded object whichever way the brief went.
+ */
+.surface {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  padding: var(--adm-space-large);
+  overflow: hidden;
+  border: 1px solid var(--adm-line);
+  border-radius: var(--adm-radius-big);
+}
+
+/*
+ * "Working." A short bar tracking the plate's bottom edge, drawn in the plate's
+ * OWN ink — the black-or-white the surface already resolved by contrast against
+ * its ground (see ./SlotPlate.tsx), so it reads on a near-black plate and a
+ * near-white one alike. A translucent white wash would have been invisible on
+ * half the briefs this engine is sold against.
+ */
+.running::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 36%;
+  height: 2px;
+  background: currentcolor;
+  opacity: 0.55;
+  animation: track 1700ms ease-in-out infinite;
+}
+
+/* -100% to 178% of its OWN width carries the bar across the full plate. */
+@keyframes track {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(178%);
+  }
+}
+
+/*
+ * The arrival. `cubic-bezier(0.19, 1, 0.22, 1)` IS `Curves.easeOutExpo` — the
+ * curve this codebase ports by hand in JS (../showcase/celebrations/curves.ts)
+ * and gets for free in CSS. The frame is already on screen; only the art moves,
+ * so nothing shifts under the reader's eye as ten of these land over minutes.
+ */
+.art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  animation: develop 560ms cubic-bezier(0.19, 1, 0.22, 1) both;
+}
+
+@keyframes develop {
+  from {
+    opacity: 0;
+    transform: scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * Inherits the plate's own ink (see ./SlotPlate.tsx): a chrome text colour
+ * cannot be used on a surface the chrome does not control, and a fixed grey
+ * that reads on a near-black ground vanishes on a near-white one. `opacity`
+ * carries the quietness so the derived colour stays a single value.
+ */
+.note {
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  text-align: center;
+  opacity: 0.62;
+}
+
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.slot,
+.timing {
+  min-width: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+}
+
+/*
+ * Wraps rather than truncates. The slot id is the one thing a reader might
+ * carry away, and `next_rank_belt_ima…` loses exactly the part that
+ * distinguishes it from `rank_belt`.
+ */
+.slot {
+  overflow-wrap: anywhere;
+  color: var(--adm-ink);
+}
+
+.timing {
+  flex: none;
+  white-space: nowrap;
+  /* A climbing counter must not resize its own column. */
+  font-variant-numeric: tabular-nums;
+  color: var(--adm-text-2nd);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* The bar becomes a still rule across the whole edge: "working" is still
+     legible from the plate alone, and nothing moves. */
+  .running::after {
+    width: 100%;
+    transform: none;
+    opacity: 0.35;
+    animation: none;
+  }
+
+  .art {
+    animation: none;
+  }
+}

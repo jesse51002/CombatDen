@@ -1,0 +1,39 @@
+/*
+ * Styles for ./RankGraphStrip.tsx (ports MobileApp/lib/features/profile/
+ * presentation/layouts/parts/rank_graph_strip.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(stretch, mainAxisSize: min, spacing: spacingMedium)`. */
+.strip {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-medium);
+}
+
+/* `Padding(horizontal: screenHorizontalPadding) > Row(spacing: spacingMedium)`. */
+.header {
+  display: flex;
+  align-items: center;
+  gap: var(--sc-spacing-medium);
+  padding-inline: var(--sc-screen-padding-x);
+}
+
+/* `Expanded(child: TimeframeSelector(inline))`. */
+.selector {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/*
+ * `Icon(_open ? expand_less_sharp : expand_more_sharp, size: iconSizeMd,
+ * color: text2nd)` — the open state, so the glyph is turned rather than swapped.
+ */
+.chevron {
+  flex: 0 0 auto;
+  /* The glyph sizes itself from its own `size` prop, which already defaults to
+     `iconSizeMd`; only the tint and the turn belong here. */
+  color: var(--sc-text-2nd);
+  transform: rotate(180deg);
+}

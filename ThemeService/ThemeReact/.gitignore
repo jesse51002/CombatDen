@@ -1,0 +1,9 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+# Local base-URL overrides (see .env.example).
+.env
+.env.local

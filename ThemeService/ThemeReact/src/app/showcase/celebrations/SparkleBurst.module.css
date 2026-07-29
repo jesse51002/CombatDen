@@ -1,0 +1,75 @@
+/*
+ * Styles for ./SparkleBurst.tsx
+ * (ports CRM/lib/showcase/celebrations/sparkle_burst.dart).
+ *
+ * `--sc-*` for the design tokens (see ../ShowcaseThemeVars.tsx); `--sp-*` for
+ * this burst's own geometry and motion, which the component derives from
+ * ./sparkleGeometry.ts and writes inline — so no offset, delay or point of the
+ * star is restated as a literal here.
+ */
+
+/*
+ * `SizedBox(width: size, height: size)` around a
+ * `Stack(alignment: center, clipBehavior: Clip.none)`.
+ *
+ * `overflow: visible` is the `Clip.none`: particles sit up to 150px from the
+ * centre and are meant to escape this box. Whatever clipping happens is the
+ * HOST stack's (Flutter's `Stack` clips by default), which is why the wins hero
+ * carries the `overflow: hidden` and this does not.
+ */
+.burst {
+  position: relative;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/*
+ * One `_particle`: `Transform.translate(offset)` over `Opacity` over
+ * `Transform.scale`, painted by `_SparkleStarPainter`.
+ *
+ * The three transforms collapse into one declaration in the keyframes below.
+ * Order matters and matches Dart's nesting: centre on the parent, translate to
+ * the scatter offset, then scale about the star's OWN centre.
+ */
+.particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: var(--sp-size);
+  height: var(--sp-size);
+  background: var(--sc-primary);
+  clip-path: var(--sp-star);
+  animation: sparkleIn var(--sp-fade-ms) var(--sp-ease) var(--sp-delay-ms) both;
+}
+
+/*
+ * `opacity: eased * s.$4` and `scale: 0.6 + 0.4 * eased`.
+ *
+ * Both are LINEAR in `eased`, so interpolating each endpoint-to-endpoint under
+ * the ease-out-quart timing function reproduces the Dart's per-frame value
+ * exactly rather than approximating it.
+ */
+@keyframes sparkleIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate(var(--sp-dx), var(--sp-dy))
+      scale(var(--sp-start-scale));
+  }
+
+  to {
+    opacity: var(--sp-opacity);
+    transform: translate(-50%, -50%) translate(var(--sp-dx), var(--sp-dy)) scale(1);
+  }
+}
+
+/*
+ * `MediaQuery.disableAnimationsOf` — the scatter renders settled. `both` would
+ * otherwise hold every particle at the `from` frame (invisible) forever.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .particle {
+    animation: none;
+    opacity: var(--sp-opacity);
+    transform: translate(-50%, -50%) translate(var(--sp-dx), var(--sp-dy));
+  }
+}

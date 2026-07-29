@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from src.core.asset_uploader import upload_run_assets
 from src.core.config import settings
+from src.core.errors import PipelineError
 from src.core.run_context import RUN_ID_FORMAT, RunContext
 from src.executor.orchestrator import PipelineResult
 from schema import (
@@ -50,22 +51,27 @@ class Writer:
         the output before the dump.
 
         ``prior_category`` is the classification of a run this write
-        *overwrites*: the assembled ``Output`` carries no ``category`` (the
-        pipeline classification step is a README TODO — categories are
-        hand-stamped today), so a full in-place re-run must carry the prior
-        run's stamp forward or the theme silently drops out of the picker.
-        The caller (``src/cli.py``) captures it from the existing
-        ``output.yaml`` *before* the pipeline clears that file, and passes it
-        here. A fresh run has no prior file → ``None`` → the run stays
-        uncategorised, which is correct until the classification step exists.
+        *overwrites*, and it is a **fallback, not an override**: the run's own
+        classification node produces the category now, so a full in-place
+        re-run re-classifies from the brief exactly as it re-makes every other
+        slot. The prior stamp is used only when this run produced nothing —
+        the app declares no ``categories`` vocabulary, or the classification
+        node failed — so a provider blip or a classification-less app never
+        drops a listed theme out of the picker. The caller (``src/cli.py``)
+        captures it from the existing ``output.yaml`` *before* the pipeline
+        clears that file. A fresh run of an app with no vocabulary has neither
+        and stays uncategorised.
         """
         app_path = run_ctx.run_dir / APP_PROVENANCE_NAME
         cust_path = run_ctx.run_dir / CUSTOMIZATION_PROVENANCE_NAME
         output_path = run_ctx.output_path()
 
         run_cost = self._run_cost(result)
+        category = self._resolve_category(
+            result.output.category, prior_category, run_ctx
+        )
         output = result.output.model_copy(
-            update={"cost": run_cost, "category": prior_category}
+            update={"cost": run_cost, "category": category}
         )
         self._stamp_versions(output, run_ctx)
 
@@ -107,12 +113,17 @@ class Writer:
 
         - ``output.yaml`` is re-dumped from the merged ``Output`` (the seeded
           done nodes plus whatever this pass (re)generated), but its ``cost``
-          block is set to ``original_cost`` and its ``category`` to
-          ``original_category`` — both carried forward from the file we loaded
-          — so a partial pass never overwrites the original full-run cost, nor
-          drops the run's (today hand-stamped) classification. The assembled
-          ``Output`` carries neither, so without this carry-forward every
-          regen/expand would silently un-list the theme from the picker.
+          block is set to ``original_cost`` — carried forward from the file we
+          loaded — so a partial pass never overwrites the original full-run
+          cost. ``original_category`` is a **fallback** for the classification
+          the same way ``prior_category`` is on ``write``: a seeded pass
+          normally returns the run's own category through the classification
+          node (verbatim when it was already classified, freshly picked when
+          this pass backfilled it), and the loaded value is used only when the
+          pass produced none — the run dir's frozen ``app.yaml`` snapshot
+          declares no ``categories``, or the node failed. Without that
+          fallback an expand against an old snapshot would silently un-list
+          the theme from the picker.
         - ``expansion_cost.yaml`` gains one appended ``ExpansionEntry``
           recording *this* pass: its ``kind`` (expand vs regenerate), when it
           ran, which node keys it (re)generated, the per-slot
@@ -122,8 +133,11 @@ class Writer:
         The dir's ``app.yaml`` / ``customization.yaml`` are left alone — they
         are the inputs the caller curated, not artifacts this writer owns.
         """
+        category = self._resolve_category(
+            result.output.category, original_category, run_ctx
+        )
         output = result.output.model_copy(
-            update={"cost": original_cost, "category": original_category}
+            update={"cost": original_cost, "category": category}
         )
         self._stamp_versions(output, run_ctx)
         self._dump_model(output, run_ctx.output_path())
@@ -159,6 +173,72 @@ class Writer:
             len(log.expansions),
             "y" if len(log.expansions) == 1 else "ies",
         )
+
+    @staticmethod
+    def _resolve_category(
+        produced: str | None,
+        carried: str | None,
+        run_ctx: RunContext,
+    ) -> str | None:
+        """The ``category`` to stamp on ``output.yaml``, validated against the
+        app's declared vocabulary before it is written.
+
+        ``produced`` is what this pass's classification node resolved (``None``
+        when the app declares no vocabulary, or the node failed); ``carried``
+        is the value the overwritten/reopened ``output.yaml`` already had.
+        Produced wins — a re-run re-classifies — and the carried value is the
+        fallback that keeps a listed theme listed when nothing was produced.
+
+        Validating here, at write time, is what stops a bad value reaching the
+        artifact. The styles endpoint skips any run whose category is not in
+        the declared vocabulary, so an unvalidated write surfaces only as the
+        theme silently vanishing from the picker — a symptom nobody traces back
+        to the write. The two sources are treated differently on purpose:
+
+        - A **produced** value outside the vocabulary is an internal
+          contradiction (the node built its response schema *from* that
+          vocabulary and the seed only seeds in-vocabulary values), so it is a
+          bug, not data — raise rather than write a run the picker will drop.
+        - A **carried** value outside it is stale artifact data — the app's
+          vocabulary changed under a run classified against the old one. The
+          pass already spent real money, so failing the write would be the
+          expensive answer to someone else's edit: log it loudly and write the
+          run uncategorised, leaving ``expand`` / ``regen --slot category`` to
+          re-file it.
+
+        An app that declares no vocabulary is not checked at all — the same
+        rule the styles endpoint applies.
+        """
+        declared = run_ctx.app.categories
+        if produced is not None:
+            if declared and produced not in declared:
+                raise PipelineError(
+                    f"refusing to write category {produced!r}: not in the "
+                    f"{run_ctx.app_id} app.yaml vocabulary {sorted(declared)}"
+                )
+            return produced
+        if carried is not None:
+            if declared and carried not in declared:
+                logger.error(
+                    "dropping stale category %r on %s/%s: not in the "
+                    "app.yaml vocabulary %s — the run is written "
+                    "uncategorised and will not be listed by the styles API "
+                    "until it is re-classified",
+                    carried,
+                    run_ctx.app_id,
+                    run_ctx.run_id,
+                    sorted(declared),
+                )
+                return None
+            return carried
+        if declared:
+            logger.warning(
+                "run %s/%s has no category — it will not be listed by the "
+                "styles API until it is classified",
+                run_ctx.app_id,
+                run_ctx.run_id,
+            )
+        return None
 
     @staticmethod
     def _load_expansion_log(path: Path) -> ExpansionCostLog:

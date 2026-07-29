@@ -1,0 +1,52 @@
+/*
+ * Styles for ./ClassItemMeta.tsx
+ * (ports .../class_schedule/class_item/class_item_meta.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ *
+ * The COLUMN BOX is not here: it is the treatment's (see the component header).
+ * These are the lines inside it, identical in all five treatments.
+ */
+
+/* `Text(classData.name, style: h3)`. */
+.name {
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text);
+}
+
+/* `Text(classData.mentor, style: p.copyWith(color: text2nd))`. */
+.mentor {
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}
+
+/* `_BookedMark` — `Row(min, spacing: spacingSmall)`, `h3` at `text`. */
+.booked {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  font: var(--sc-type-h3);
+  letter-spacing: var(--sc-type-h3-ls);
+  color: var(--sc-text);
+}
+
+.bookedIcon {
+  flex: 0 0 auto;
+  color: var(--sc-text);
+}
+
+/* `_Attendees` — the same row at `p` / `text2nd`. */
+.attending {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-2nd);
+}
+
+.attendingIcon {
+  flex: 0 0 auto;
+  color: var(--sc-text-2nd);
+}

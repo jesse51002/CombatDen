@@ -1,0 +1,112 @@
+/* Styles for ./TypeSpecimen.tsx — one font slot, set. */
+
+.specimen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+/*
+ * The plate caption from ./AssetPlates.module.css, on the specimen's own terms:
+ * identifier left, the small factual classification right, both mono. Reused so
+ * "sans-serif" reads as the same KIND of value as "png" — a fact about the
+ * object, not a badge attached to it.
+ */
+.caption {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--adm-space-medium);
+  min-width: 0;
+}
+
+.slot,
+.category {
+  margin: 0;
+  min-width: 0;
+  font-family: var(--gw-mono);
+  font-size: var(--adm-p-small-size);
+  letter-spacing: var(--adm-p-small-tracking);
+  color: var(--adm-text-2nd);
+}
+
+.category {
+  flex: none;
+  white-space: nowrap;
+}
+
+.missing,
+.noProse {
+  margin: 0;
+  font-size: var(--adm-p-size);
+  letter-spacing: var(--adm-p-tracking);
+  color: var(--adm-text-2nd);
+}
+
+/*
+ * The family name at specimen scale. `clamp` because the names run from
+ * "Lora" to "Libre Baskerville" across the catalog and a fixed size would
+ * either wrap the long ones or waste the short ones.
+ */
+.family {
+  margin: 0;
+  font-size: clamp(32px, 4.4vw, 52px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+  color: var(--adm-ink);
+}
+
+/*
+ * The run's own name for the face — the type section's answer to a colour's
+ * "Red Corner" (./ColorRole.module.css `.name`). Set in the face like every
+ * pipeline-authored word on this sheet, and at book weight so the family above
+ * stays the heading and this reads as its subtitle rather than a second one.
+ */
+.faceName {
+  margin: calc(-1 * var(--adm-space-small)) 0 0;
+  font-size: clamp(19px, 2vw, 22px);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  color: var(--adm-ink);
+}
+
+.characters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--adm-space-tiny);
+  padding-top: var(--adm-space-medium);
+  border-top: 1px solid var(--adm-line);
+  overflow: hidden;
+  font-size: 17px;
+  line-height: 1.5;
+  color: var(--adm-text-2nd);
+  /* One line each: the shape of the ramp matters, a wrapped ramp does not. */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A generated headline, set the size a headline is set. */
+.line {
+  margin: 0;
+  font-size: clamp(22px, 2.6vw, 30px);
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--adm-ink);
+}
+
+/*
+ * The run's reasoning, set at the size body copy is read — the same treatment
+ * ./ColorRole.module.css `.description` gives a colour's prose, because it is
+ * the same kind of thing: the engine explaining a decision it made.
+ */
+.description {
+  max-width: 68ch;
+  margin: var(--adm-space-small) 0 0;
+  font-size: var(--adm-p-big-size);
+  line-height: 1.7;
+  color: var(--adm-ink);
+}

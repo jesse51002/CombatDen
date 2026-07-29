@@ -1,0 +1,24 @@
+/*
+ * Styles for ./ClassHeroScrim.tsx
+ * (ports MobileApp/.../layouts/parts/class_hero_scrim.dart).
+ *
+ * `color-mix` takes the LIVE `--sc-background` to an alpha — the same
+ * technique ../../profile/RankHeader.module.css's scrim uses, and for the same
+ * reason: writing the channels here would freeze one theme's background into
+ * this stylesheet.
+ */
+
+/* `SizedBox(height: _kScrimHeight 180)`, background 0.92 -> 0. */
+.scrim {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 180px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sc-background) 92%, transparent),
+    color-mix(in srgb, var(--sc-background) 0%, transparent)
+  );
+}

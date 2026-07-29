@@ -1,0 +1,145 @@
+/*
+ * Styles for ./ClassMetaSection.tsx (ports MobileApp/.../widgets/
+ * {class_meta_section,class_meta_spec_table,class_attending_row}.dart).
+ */
+
+.meta {
+  min-width: 0;
+}
+
+/*
+ * `_OverlayMeta` — the same block on a fade to the page background, so it reads
+ * against a photograph instead of against the page. Keyed to `background`
+ * rather than to a literal black: a light preset fades to its own canvas and
+ * the text tokens keep the contrast they were picked for.
+ *
+ * `color-mix` is what takes a LIVE `--sc-*` colour to an alpha, the same way
+ * ../../profile/RankHeader.module.css's scrim does — writing the channels here
+ * would freeze the theme's background into this stylesheet, which is the one
+ * thing the token indirection exists to prevent.
+ */
+.overlay {
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--sc-background) 0%, transparent),
+    color-mix(in srgb, var(--sc-background) 94%, transparent)
+  );
+  /* `fromLTRB(screenHorizontalPadding, spacingBig, …, spacingLarge)`. */
+  padding: var(--sc-spacing-big) var(--sc-screen-padding-x) var(--sc-spacing-large);
+}
+
+/* `_StackedMeta` — `Column(start, spacing: spacingMedium)`. */
+.stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* `Text(name, style: DesignConstants.h1)`. */
+.title {
+  margin: 0;
+  font: var(--sc-type-h1);
+  letter-spacing: var(--sc-type-h1-ls);
+  color: var(--sc-text);
+}
+
+/* `_SpecificsBlock` — `Column(start, spacing: spacingTiny)`. */
+.specifics {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sc-spacing-tiny);
+}
+
+/* `_MetaText` — `pBig` / `text2nd`. */
+.metaText {
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+}
+
+/* `ClassAttendingRow` — `Row(min, center, spacing: spacingSmall)`. */
+.attending {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sc-spacing-small);
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+}
+
+/* `Icon(person, size: iconSizeSm, color: primary)`. */
+.attendingIcon {
+  flex: 0 0 auto;
+  width: var(--sc-icon-sm);
+  height: var(--sc-icon-sm);
+  color: var(--sc-primary);
+}
+
+/* ---- `ClassMetaSpecTable` ---- */
+
+/* `Column(start, spacing: spacingLarge)`. */
+.specTable {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+  min-width: 0;
+}
+
+/* `Row(crossAxisAlignment: start, spacing: spacingMedium)` — thumb + title. */
+.specHead {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/* `Expanded(child: Text(name, style: h1))`. */
+.specTitle {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* `Column(start, spacing: spacingSmall)`. */
+.specRows {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-small);
+}
+
+/* `_SpecRow` — `Row(crossAxisAlignment: start, spacing: spacingMedium)`. */
+.specRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sc-spacing-medium);
+  min-width: 0;
+}
+
+/*
+ * `SizedBox(width: _kLabelWidth 96)`. Fixed so the values line up into a column
+ * of their own — that alignment is the whole point of the treatment.
+ */
+.specLabel {
+  flex: 0 0 96px;
+  width: 96px;
+  font: var(--sc-type-p);
+  letter-spacing: var(--sc-type-p-ls);
+  color: var(--sc-text-3rd);
+}
+
+/* `Expanded(child: …)`. */
+.specCell {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* `_SpecValue` — `pBig` / `text2nd`. */
+.specValue {
+  font: var(--sc-type-p-big);
+  letter-spacing: var(--sc-type-p-big-ls);
+  color: var(--sc-text-2nd);
+}

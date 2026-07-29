@@ -1,0 +1,16 @@
+/*
+ * Styles for ./CreatorAvatar.tsx
+ * (ports MobileApp/lib/shared/widgets/video_recc_card/creator_avatar.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/* `ClipOval > Image(fit: BoxFit.cover)`. The size is set inline by the caller. */
+.avatar {
+  flex: 0 0 auto;
+  border-radius: var(--sc-radius-circle);
+  object-fit: cover;
+  display: block;
+  /* Shows through while the avatar is still in flight, so a row never flashes
+     a transparent hole against the card. */
+  background: var(--sc-card);
+}

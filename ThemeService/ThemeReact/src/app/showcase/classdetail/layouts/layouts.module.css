@@ -1,0 +1,175 @@
+/*
+ * Styles for the five `class_format` arrangements
+ * (ports MobileApp/.../class_booking/presentation/layouts/*.dart).
+ *
+ * ONE stylesheet for the five, because they share their skeleton — a column
+ * whose body scrolls and whose action is pinned — and differ only in what they
+ * put where. Splitting it five ways would repeat `.column` / `.scrollBody` five
+ * times and let them drift.
+ *
+ * `--sc-*` only. See ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch)` — body over the pinned action. */
+.column {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  height: 100%;
+  min-height: 0;
+}
+
+/*
+ * `Expanded(child: SingleChildScrollView(...))`.
+ *
+ * `overflow-x: hidden` is spelled out rather than left at `visible`: when one
+ * axis is a scroller the `visible` one COMPUTES to `auto`, which would give
+ * every arrangement a sideways scrollbar it never uses (../../../CLAUDE.md).
+ * The scrollbar is hidden for the same reason ../../support/
+ * ShowcaseScaffold.module.css hides its own — a desktop track drawn down the
+ * inside of a phone mock is what gives the mock away.
+ */
+.scrollBody {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.scrollBody::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- overlayHero ---- */
+
+/* `Stack(banner, scrim, topbar, meta)`. */
+.hero {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+/* `Positioned(top: 0, left: 0, right: 0)`. */
+.heroTop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* `Positioned(left: 0, right: 0, bottom: 0)` — the meta on the photo's foot. */
+.heroBottom {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* ---- sectionTabs ---- */
+
+/* `Padding(all: screenHorizontalPadding)` around the meta. */
+.tabsMeta {
+  flex: 0 0 auto;
+  padding: var(--sc-screen-padding-x);
+}
+
+/*
+ * `Expanded(child: GestureDetector(child: IndexedStack(...)))`.
+ *
+ * `touch-action: pan-y` hands the browser the vertical scroll and keeps the
+ * horizontal for the tab swipe, which is what stops the two fighting.
+ */
+.paneHost {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  touch-action: pan-y;
+}
+
+/*
+ * One tab's content — `_Pane`, a scroller so a long bio still reaches its end
+ * inside a short pane. `fromLTRB(screenHorizontalPadding, spacingBig, …)`.
+ *
+ * Inactive panes carry the `hidden` ATTRIBUTE rather than being unmounted, so
+ * every section stays in the tree (see ../ClassSectionTabs.tsx). `[hidden]`
+ * needs the explicit `display: none` because this rule's `display: block` would
+ * otherwise win on specificity.
+ */
+.pane {
+  display: block;
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  padding: var(--sc-spacing-big) var(--sc-screen-padding-x);
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pane[hidden] {
+  display: none;
+}
+
+.pane::-webkit-scrollbar {
+  display: none;
+}
+
+/* ---- detailSheet ---- */
+
+/* `LayoutBuilder > Stack` — the fixed backdrop the sheet rides over. */
+.sheetHost {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* `Positioned.fill(banner backdrop)`. */
+.backdrop {
+  position: absolute;
+  inset: 0;
+}
+
+/* `Positioned(top: 0, left: 0, right: 0)` — the topbar over the photo. */
+.sheetTopbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/*
+ * `AnimatedPositioned(top: _top * height, left: 0, right: 0, bottom: 0)`. The
+ * `top` and its transition are inline, because both are per-frame drag state.
+ */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* ---- specBrief ---- */
+
+/*
+ * `Padding(fromLTRB(screenHorizontalPadding, spacingBig, …, spacingBig))` over
+ * a `Column(stretch, spacing: spacingBig)`.
+ */
+.specBody {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-big);
+  padding: var(--sc-spacing-big) var(--sc-screen-padding-x);
+}
+
+/* `Column(start, spacing: spacingLarge)` — the instructor + location strips. */
+.specStrips {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}

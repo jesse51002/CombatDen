@@ -1,0 +1,36 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./dist/types",
+    // Pinned so index.d.ts lands at dist/types/index.d.ts (what package.json's
+    // "types" points at), not dist/types/src/lib/index.d.ts.
+    "rootDir": "./src/lib",
+    // NOTE `build:types` passes --force. tsc is incremental and its build-info
+    // lives outside dist/, so a `rm -rf dist` followed by a build would
+    // otherwise emit NOTHING and leave package.json's "types" dangling.
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.lib.tsbuildinfo",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["vite/client"]
+  },
+  // Tests are typechecked by tsconfig.test.json, not here — they must not land
+  // in the shipped dist/types.
+  "include": ["src/lib"],
+  "exclude": ["src/lib/**/__tests__/**"]
+}

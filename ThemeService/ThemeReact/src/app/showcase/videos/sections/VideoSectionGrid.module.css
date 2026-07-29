@@ -1,0 +1,28 @@
+/*
+ * Styles for ./VideoSectionGrid.tsx (ports MobileApp/lib/features/videos/
+ * presentation/widgets/sections/video_section_grid.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Column(crossAxisAlignment: stretch, spacing: spacingLarge)`. */
+.section {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--sc-spacing-large);
+}
+
+/*
+ * `_kColumns` rows of `Expanded` cells, one `spacingLarge` apart in both axes.
+ *
+ * `align-items: start` is Dart's `crossAxisAlignment: start` on each row: a
+ * cell whose title wraps to two lines must not stretch its neighbour to match,
+ * or the grid stops reading as tiles. `minmax(0, 1fr)` rather than `1fr` is
+ * what keeps a long title from widening its own column past its share.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--sc-spacing-large);
+}

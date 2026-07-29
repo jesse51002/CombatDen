@@ -1,0 +1,16 @@
+/*
+ * Styles for ./ClassItemRule.tsx
+ * (ports .../class_schedule/class_item/class_item_rule.dart).
+ * `--sc-*` only — see ../../ShowcaseThemeVars.tsx.
+ */
+
+/* `Container(height: buttonBorder, color: divider)`. */
+.divider {
+  height: var(--sc-button-border);
+  background: var(--sc-divider);
+}
+
+/* `hairline: true` — `height: dividerThickness`. */
+.hairline {
+  height: var(--sc-divider-thickness);
+}

@@ -17,6 +17,7 @@ from schema import (
     ColorRole,
     Complexity,
     Customization,
+    FormatOutput,
     ImageOutput,
     OklchColor,
     OverwriteSpecs,
@@ -25,9 +26,30 @@ from src.core.errors import ProviderError
 from src.core.run_context import RunContext
 from src.core.util import load_yaml
 from src.modules.base import DependencyKind
+from src.modules.categories.category_models import (
+    CategoryOutput,
+    build_category_selection_model,
+)
+from src.modules.categories.category_node import (
+    CATEGORY_SLOT_ID,
+    CategoryNode,
+)
+from src.modules.categories.category_selection_service import (
+    CATEGORY_PROMPT_PATH,
+    CategorySelectionService,
+)
 from src.modules.colors.color_models import LLMSlotResponse, build_color_response_model
 from src.modules.colors.color_node import ColorNode
 from src.modules.colors.color_models import LLMPalette
+from src.modules.formats.format_models import (
+    LLMFormatResponse,
+    build_format_response_model,
+)
+from src.modules.formats.format_node import FormatNode
+from src.modules.formats.format_selection_service import (
+    FORMAT_PROMPT_PATH,
+    FormatSelectionService,
+)
 from src.modules.images.background_service import (
     BG_MAX_ATTEMPTS,
     BackgroundService,
@@ -1292,6 +1314,389 @@ def test_build_icon_match_model_rejects_non_member() -> None:
         model(a=LLMIconResponse(icon="rocket", match_reason="x"))
     ok = model(a=LLMIconResponse(icon=None, match_reason="no match"))
     assert ok.a.icon is None
+
+
+# --------------------------------------------------------------------------
+# Classification node (src/modules/categories)
+# --------------------------------------------------------------------------
+
+
+class _FakeCompletion:
+    """Minimal litellm completion stand-in: ``choices[0].message`` with the
+    two access shapes ``LiteLLMClient`` uses (``["content"]`` + attribute)."""
+
+    class _Message:
+        def __init__(self, content: str) -> None:
+            self.content = content
+
+        def model_dump(self) -> dict:
+            return {"role": "assistant", "content": self.content}
+
+        def __getitem__(self, key: str) -> str:
+            if key == "content":
+                return self.content
+            raise KeyError(key)
+
+    class _Choice:
+        def __init__(self, content: str) -> None:
+            self.message = _FakeCompletion._Message(content)
+
+    def __init__(self, content: str) -> None:
+        self.choices = [self._Choice(content)]
+
+
+class _CategoryStubLLM:
+    """Stub LLMClient for the classification node: returns a canned pick and
+    records the prompts it was shown."""
+
+    cost = 0.0
+    cost_by_model: dict[str, float] = {}
+
+    def __init__(self, pick: str) -> None:
+        self._pick = pick
+        self.prompts: list[str] = []
+        self.schemas: list[str] = []
+
+    async def complete(self, *a: Any, **k: Any) -> Any:
+        raise AssertionError("complete() not expected in these tests")
+
+    async def complete_structured(
+        self, messages: list[dict], *, schema: Any, **kw: Any
+    ) -> Any:
+        self.prompts.append(messages[0]["content"])
+        self.schemas.append(getattr(schema, "__name__", ""))
+        # Constructing the per-request model runs its vocabulary validator.
+        return schema(category=self._pick, reason="fits")
+
+
+def test_category_node_picks_from_the_declared_vocabulary(
+    tmp_path: Path,
+) -> None:
+    """The node returns one of the app's own declared values, records the
+    pseudo-slot as regenerated, and asks under the stable schema name."""
+    ctx = _run_ctx(tmp_path)
+    llm = _CategoryStubLLM("Modern")
+    node = CategoryNode(ctx, llm=llm)
+
+    out = asyncio.run(node.run())
+
+    assert out.value == "Modern"
+    assert out.value in ctx.app.categories
+    assert out.reason
+    assert node.regenerated == {CATEGORY_SLOT_ID}
+    assert llm.schemas == ["CategorySelection"]
+
+
+def test_category_node_seeded_does_not_call_the_llm(tmp_path: Path) -> None:
+    """A run already classified seeds the node done: the saved value comes
+    back verbatim and no call is made — reopening a classified run never
+    re-spends on classification."""
+    ctx = _run_ctx(tmp_path)
+    llm = _CategoryStubLLM("Classic")
+    node = CategoryNode(
+        ctx, llm=llm, seed={CATEGORY_SLOT_ID: CategoryOutput(value="Modern")}
+    )
+
+    out = asyncio.run(node.run())
+
+    assert out.value == "Modern"  # the seed, not the stub's pick
+    assert node.dirty() == set()
+    assert node.regenerated == set()
+    assert llm.schemas == []
+
+
+def test_category_prompt_is_data_driven(tmp_path: Path) -> None:
+    """The prompt is built entirely from the two YAMLs — every declared
+    bucket and the design brief appear, and the run's steering is folded in.
+    Nothing app-specific is hardcoded in Python."""
+    ctx = _run_ctx(tmp_path)
+    ctx.overwrite_specs = OverwriteSpecs(specs="file it as the older style")
+    llm = _CategoryStubLLM("Classic")
+    asyncio.run(CategoryNode(ctx, llm=llm).run())
+
+    prompt = llm.prompts[0]
+    for bucket in ctx.app.categories:
+        assert f"- {bucket}" in prompt
+    assert ctx.cust.design_direction.name in prompt
+    assert ctx.cust.design_direction.short_desc in prompt
+    assert "file it as the older style" in prompt
+    # The rule text lives in the .md, never in Python.
+    assert CATEGORY_PROMPT_PATH.is_file()
+    assert "$categories" in CATEGORY_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def test_build_category_selection_model_rejects_non_member() -> None:
+    """A pick outside the app's declared vocabulary fails validation (so it
+    re-rides the structured-output retry loop instead of being written), and
+    the error names the permitted values so the re-ask is actionable."""
+    model = build_category_selection_model(frozenset({"Modern", "Classic"}))
+    with pytest.raises(ValidationError) as exc:
+        model(category="Brutalist", reason="x")
+    assert "Modern" in str(exc.value) and "Classic" in str(exc.value)
+    assert model(category="Modern", reason="x").category == "Modern"
+
+
+def test_category_out_of_vocabulary_is_reasked_not_written(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Through the REAL client retry loop: an out-of-vocabulary answer is fed
+    back and re-asked, and only the in-vocabulary answer is returned. The
+    vocabulary is never enforced by a static enum — it is the app's own."""
+    import json
+
+    import litellm
+
+    from src.shared.services.llm_client import LiteLLMClient
+
+    ctx = _run_ctx(tmp_path)
+    replies = [
+        json.dumps({"category": "Brutalist", "reason": "made up"}),
+        json.dumps({"category": "Classic", "reason": "period detailing"}),
+    ]
+    seen: list[int] = []
+
+    async def fake_acompletion(**kwargs):
+        seen.append(len(kwargs["messages"]))
+        return _FakeCompletion(replies[len(seen) - 1])
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+
+    out = asyncio.run(
+        CategorySelectionService(LiteLLMClient()).resolve(
+            ctx, model="anthropic/claude-haiku-4-5"
+        )
+    )
+
+    assert out.value == "Classic"
+    assert len(seen) == 2  # first answer rejected, re-asked once
+    assert seen[1] > seen[0]  # the correction turns were appended
+
+
+def test_category_service_requires_a_vocabulary(tmp_path: Path) -> None:
+    """Defense-in-depth: with no declared categories there is nothing to
+    classify against, so the service refuses rather than inventing a value.
+    (The registry never builds the node in that case.)"""
+    ctx = _run_ctx(tmp_path)
+    ctx.app = ctx.app.model_copy(update={"categories": []})
+    with pytest.raises(ProviderError, match="no categories"):
+        asyncio.run(
+            CategorySelectionService(_CategoryStubLLM("Modern")).resolve(ctx)
+        )
+
+
+# --- formats: the layout-format node (src/modules/formats/) ---------------
+
+
+class _FormatStubLLM:
+    """Stub LLMClient for the format node: answers every requested slot with
+    a canned pick from THAT slot's own vocabulary, and records what it saw."""
+
+    cost = 0.0
+    cost_by_model: dict[str, float] = {}
+
+    def __init__(self, picks: dict[str, str]) -> None:
+        self._picks = picks
+        self.prompts: list[str] = []
+        self.schemas: list[str] = []
+        self.asked: list[list[str]] = []
+
+    async def complete(self, *a: Any, **k: Any) -> Any:
+        raise AssertionError("complete() not expected in these tests")
+
+    async def complete_structured(
+        self, messages: list[dict], *, schema: Any, **kw: Any
+    ) -> Any:
+        self.prompts.append(messages[0]["content"])
+        self.schemas.append(getattr(schema, "__name__", ""))
+        requested = list(schema.model_fields)
+        self.asked.append(requested)
+        # Constructing the per-request model runs its per-slot validator.
+        return schema(
+            **{
+                sid: LLMFormatResponse(value=self._picks[sid], reason="fits")
+                for sid in requested
+            }
+        )
+
+
+def test_format_node_picks_one_value_per_declared_slot(
+    tmp_path: Path,
+) -> None:
+    """One batched call answers every declared slot, each value from THAT
+    slot's own vocabulary, and every slot is recorded as regenerated."""
+    ctx = _run_ctx(tmp_path)
+    llm = _FormatStubLLM({"home_format": "dayPager", "rewards_format": "listRows"})
+    node = FormatNode(ctx, llm=llm)
+
+    out = asyncio.run(node.run())
+
+    declared = {slot.id: {e.value for e in slot.values} for slot in ctx.app.formats}
+    assert set(out.formats) == set(declared)
+    for slot_id, resolved in out.formats.items():
+        assert resolved.value in declared[slot_id]
+        assert resolved.reason
+    assert node.regenerated == set(declared)
+    # ONE call for every slot, under the stable schema name.
+    assert llm.schemas == ["FormatSelection"]
+    assert sorted(llm.asked[0]) == sorted(declared)
+
+
+def test_format_node_seeded_does_not_call_the_llm(tmp_path: Path) -> None:
+    """A run whose formats are already chosen seeds the node done: the saved
+    values come back verbatim and no call is made, so reopening (``expand``)
+    never re-spends on an arrangement already decided."""
+    ctx = _run_ctx(tmp_path)
+    llm = _FormatStubLLM({"home_format": "timeSpine", "rewards_format": "cardGrid"})
+    seed = {
+        "home_format": FormatOutput(value="agendaList", reason="saved"),
+        "rewards_format": FormatOutput(value="listRows", reason="saved"),
+    }
+    node = FormatNode(ctx, llm=llm, seed=seed)
+
+    out = asyncio.run(node.run())
+
+    assert out.formats["home_format"].value == "agendaList"  # the seed
+    assert out.formats["rewards_format"].value == "listRows"
+    assert node.dirty() == set()
+    assert node.regenerated == set()
+    assert llm.schemas == []
+
+
+def test_format_node_partial_regen_narrows_the_call(tmp_path: Path) -> None:
+    """``regen --slot home_format`` drops one slot from the seed: only that
+    slot is asked for and re-made, the untouched slot is kept verbatim, and
+    the already-decided pick is shown to the model as fixed context."""
+    ctx = _run_ctx(tmp_path)
+    llm = _FormatStubLLM({"home_format": "timeSpine"})
+    node = FormatNode(
+        ctx,
+        llm=llm,
+        seed={"rewards_format": FormatOutput(value="cardGrid", reason="kept")},
+    )
+
+    out = asyncio.run(node.run())
+
+    assert node.dirty() == {"home_format"}
+    assert node.regenerated == {"home_format"}
+    assert out.formats["home_format"].value == "timeSpine"
+    # The untouched slot survives verbatim, reason included.
+    assert out.formats["rewards_format"].value == "cardGrid"
+    assert out.formats["rewards_format"].reason == "kept"
+    # Only the dirty slot was in the closed schema...
+    assert llm.asked == [["home_format"]]
+    # ...and the fixed pick was shown so the re-roll stays coherent with it.
+    assert "rewards_format: cardGrid" in llm.prompts[0]
+
+
+def test_format_prompt_is_data_driven(tmp_path: Path) -> None:
+    """The prompt is built entirely from the two YAMLs — every slot id, every
+    declared value AND its description, plus the brief and the run's steering.
+    Nothing app-specific is hardcoded in Python."""
+    ctx = _run_ctx(tmp_path)
+    ctx.overwrite_specs = OverwriteSpecs(specs="keep the schedule dense")
+    llm = _FormatStubLLM({"home_format": "dayPager", "rewards_format": "listRows"})
+    asyncio.run(FormatNode(ctx, llm=llm).run())
+
+    prompt = llm.prompts[0]
+    for slot in ctx.app.formats:
+        assert f"- {slot.id}: {slot.description}" in prompt
+        for entry in slot.values:
+            assert f"- {entry.value}: {entry.description}" in prompt
+    assert ctx.cust.design_direction.name in prompt
+    assert ctx.cust.design_direction.short_desc in prompt
+    assert "keep the schedule dense" in prompt
+    # A fresh run has no fixed context, and says so rather than leaving a hole.
+    assert "(none — every slot below is open)" in prompt
+    # The rule text lives in the .md, never in Python.
+    assert FORMAT_PROMPT_PATH.is_file()
+    assert "$slots" in FORMAT_PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def test_build_format_response_model_rejects_a_value_outside_its_slot() -> None:
+    """A value outside ITS OWN slot's vocabulary fails validation (so it
+    re-rides the structured-output retry loop instead of being written), and
+    the error names the offending slot and its permitted values."""
+    app = AppFormat.model_validate(load_yaml(APP_YAML))
+    model = build_format_response_model(app.formats)
+    ok = {
+        "home_format": LLMFormatResponse(value="dayPager", reason="x"),
+        "rewards_format": LLMFormatResponse(value="listRows", reason="x"),
+    }
+
+    with pytest.raises(ValidationError) as exc:
+        model(**{**ok, "home_format": LLMFormatResponse(value="mosaic", reason="x")})
+    message = str(exc.value)
+    assert "home_format" in message and "mosaic" in message
+    assert "agendaList" in message  # the permitted values are named
+    # A value that belongs to a DIFFERENT slot is rejected just the same —
+    # per-slot vocabularies, not one shared pool.
+    with pytest.raises(ValidationError):
+        model(**{**ok, "home_format": LLMFormatResponse(value="listRows", reason="x")})
+
+    assert model(**ok).home_format.value == "dayPager"
+
+
+def test_build_format_response_model_requires_every_asked_slot() -> None:
+    """A missing slot needs no validator of its own: every field on the closed
+    model is required, so an omitted slot is the same ValidationError the retry
+    loop re-asks on."""
+    app = AppFormat.model_validate(load_yaml(APP_YAML))
+    model = build_format_response_model(app.formats)
+
+    with pytest.raises(ValidationError) as exc:
+        model(home_format=LLMFormatResponse(value="dayPager", reason="x"))
+    assert "rewards_format" in str(exc.value)
+
+
+def test_format_out_of_vocabulary_is_reasked_not_written(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Through the REAL client retry loop: an out-of-vocabulary pick is fed
+    back and re-asked, and only the in-vocabulary answer is returned. The
+    vocabulary is never a static enum — it is the app's own, per slot."""
+    import json
+
+    import litellm
+
+    from src.shared.services.llm_client import LiteLLMClient
+
+    ctx = _run_ctx(tmp_path)
+    good = {
+        "home_format": {"value": "dayPager", "reason": "dense days"},
+        "rewards_format": {"value": "listRows", "reason": "plain"},
+    }
+    replies = [
+        json.dumps({**good, "home_format": {"value": "mosaic", "reason": "made up"}}),
+        json.dumps(good),
+    ]
+    seen: list[int] = []
+
+    async def fake_acompletion(**kwargs):
+        seen.append(len(kwargs["messages"]))
+        return _FakeCompletion(replies[len(seen) - 1])
+
+    monkeypatch.setattr(litellm, "acompletion", fake_acompletion)
+
+    out = asyncio.run(
+        FormatSelectionService(LiteLLMClient()).resolve(
+            ctx, model="anthropic/claude-haiku-4-5"
+        )
+    )
+
+    assert out.formats["home_format"].value == "dayPager"
+    assert len(seen) == 2  # first answer rejected, re-asked once
+    assert seen[1] > seen[0]  # the correction turns were appended
+
+
+def test_format_service_requires_a_declared_inventory(tmp_path: Path) -> None:
+    """Defense-in-depth: with no declared format slots there is nothing to
+    pick and no vocabulary to pick from, so the service refuses rather than
+    inventing one. (The registry never builds the node in that case — see
+    ``test_no_declared_formats_skips_the_format_node``.)"""
+    ctx = _run_ctx(tmp_path)
+    ctx.app = ctx.app.model_copy(update={"formats": []})
+    with pytest.raises(ProviderError, match="no formats"):
+        asyncio.run(FormatSelectionService(_FormatStubLLM({})).resolve(ctx))
 
 
 def test_recraft_call_cost_from_price_table() -> None:

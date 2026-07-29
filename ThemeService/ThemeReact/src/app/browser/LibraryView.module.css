@@ -1,0 +1,103 @@
+/*
+ * Styles for ./LibraryView.tsx (ports CRM/lib/features/members/presentation/
+ * widgets/themes_library/library_view.dart).
+ *
+ * The two `--lib-gap-*` variables carry the Dart column `spacing:` values,
+ * which both TIGHTEN on collapse:
+ *   outer   spacingBig (32) → spacingMedium (8)
+ *   title→controls  spacingLarge (16) → 0
+ */
+
+.view {
+  --lib-gap-outer: var(--adm-space-big);
+  --lib-gap-title: var(--adm-space-large);
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--lib-gap-outer);
+  width: 100%;
+}
+
+.collapsed {
+  --lib-gap-outer: var(--adm-space-medium);
+  --lib-gap-title: 0px;
+}
+
+/*
+ * Fixed chrome over a scrolling body. Sticks below the 68px landing nav and
+ * carries the ground colour so cards pass UNDER it rather than through it.
+ */
+.chrome {
+  position: sticky;
+  top: var(--adm-nav-height);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lib-gap-title);
+  padding-top: var(--adm-space-large);
+  background: var(--adm-ground);
+}
+
+/* Only the title collapses; the search + filters stay put. */
+.titleWrap {
+  display: grid;
+  grid-template-rows: 1fr;
+  width: 100%;
+  /* `AnimatedSize(duration: 200ms, curve: Curves.easeInOut)`. */
+  transition: grid-template-rows 0.2s ease-in-out;
+}
+
+.collapsed .titleWrap {
+  grid-template-rows: 0fr;
+}
+
+.titleClip {
+  overflow: hidden;
+}
+
+.title {
+  margin: 0;
+  text-align: center;
+  font-size: var(--adm-h1-size);
+  font-weight: var(--adm-h1-weight);
+  letter-spacing: var(--adm-h1-tracking);
+  color: var(--adm-ink);
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--adm-space-medium);
+  width: 100%;
+  /* The gap the chrome would otherwise lose to the hairline sitting flush. */
+  padding-bottom: var(--adm-space-medium);
+}
+
+/* `_kSearchMaxWidth = 480`. */
+.search {
+  width: 100%;
+  max-width: 480px;
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--adm-space-medium);
+  padding-block: var(--adm-space-big);
+  text-align: center;
+}
+
+.emptyIcon {
+  color: var(--adm-text-3rd);
+}
+
+.emptyText {
+  margin: 0;
+  font-size: var(--adm-p-size);
+  font-weight: var(--adm-p-weight);
+  letter-spacing: var(--adm-p-tracking);
+  color: var(--adm-text-2nd);
+}

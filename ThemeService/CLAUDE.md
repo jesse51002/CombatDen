@@ -40,12 +40,13 @@ This file is a living document — exactly like a skill (above), it must track r
 A run directory's **produced artifacts** — `output.yaml`, `expansion_cost.yaml`,
 and the files under `final_images/` / `images/` / `icons/` — are **never edited
 by hand**. To change anything in an existing run you use the scripts:
-`scripts/expand` (fill not-yet-done slots), `scripts/regen` (re-make
-colour/font/text/icon slots), `scripts/regen_image` (images),
-`scripts/edit_customization` (a validated, targeted edit of the brief
-`customization.yaml`), or a full pipeline run (`src/cli.py`). The brief is the
-one editable *input* — and even it goes through `edit_customization` (which
-re-validates), not raw text munging; `app.yaml` is architect-owned.
+`scripts/expand` (fill not-yet-done slots, including a missing `category`),
+`scripts/regen` (re-make colour/font/text/icon slots, or `category`),
+`scripts/regen_image` (images), `scripts/edit_customization` (a validated,
+targeted edit of the brief `customization.yaml`), or a full pipeline run
+(`src/cli.py`). The brief is the one editable *input* — and even it goes
+through `edit_customization` (which re-validates), not raw text munging;
+`app.yaml` is architect-owned.
 
 If a change someone wants **cannot** be expressed through those scripts, do NOT
 work around it by editing an artifact — say so plainly and surface it as a
@@ -118,11 +119,45 @@ only makes sense for one app, push back — it belongs in YAML.
 ## Async everywhere
 
 Every service and module method is `async`. The pipeline core is provider- and
-transport-agnostic and is expected to move behind a FastAPI app later; the CLI
-is just one entrypoint over the async core. Do not introduce blocking I/O — use
-async clients (`litellm.acompletion` / `litellm.aimage_generation`) and
-`await` everything. Keep modules independently awaitable so they
-can be gathered concurrently later without a refactor.
+transport-agnostic; the CLI (`src/cli.py`) and the studio app
+(`src/studio/`, see below) are two entrypoints over the same async core. Do
+not introduce blocking I/O — use async clients (`litellm.acompletion` /
+`litellm.aimage_generation`) and `await` everything. Keep modules
+independently awaitable so they can be gathered concurrently later without a
+refactor.
+
+### Watching a run: the progress sink
+
+`Pipeline.run()` takes an optional `progress: ProgressSink | None`. Given
+one, the run reports itself as it happens; given none (the CLI's default),
+nothing is emitted and the run behaves exactly as it always has.
+
+- `src/executor/progress_event.py` — `ProgressEventKind` (run started /
+  level started / node started / node finished / node failed / run
+  finished) and the `ProgressEvent` model that carries them.
+- `src/executor/progress_sink.py` — the `ProgressSink` ABC. It lives beside
+  the executor, **not** in `src/shared/interfaces/` (that holds the
+  *provider* contracts — LLM, image generation, fonts, icons); a sink is an
+  observer, not a provider.
+
+Two rules hold the design together:
+
+- **The sink is an interface, never a transport.** The executor knows
+  nothing about HTTP, SSE, JSON or FastAPI; it hands a Pydantic model to
+  whatever it was given. Anything wire-shaped belongs in the caller
+  (`src/studio/`), never here.
+- **A sink must not raise.** An emit failure would abort a paid run over a
+  display concern. Swallow and log inside the sink.
+
+Every node is timed with `perf_counter` from the moment it acquires the
+concurrency semaphore (its own work, not its queueing), and the run total is
+timed end to end. Both are **logged whether or not a sink is passed** — that
+is the package's only timing instrumentation, and it is how anyone knows what
+a run actually costs in wall-clock time.
+
+`ProgressEvent.image_slot` is set only on the per-slot image nodes (read off
+the built node set, so it stays app-agnostic). It is what lets a watcher know
+`final_images/<slot>.png` just landed and can be displayed.
 
 ---
 
@@ -138,6 +173,15 @@ and is the only place parallelism may later be added (a bounded gather),
 with zero module changes. A module that loops slots or returns a
 "set of everything" is the smell; push that loop up into the executor.
 
+**Progress is the same rule.** Because the executor owns iteration, it is
+also the only place that can know a level started, a node started, a node
+took 4.2 s, or the whole run took six minutes — so *all* progress
+emission lives in `src/executor/orchestrator.py` and **no module carries
+any progress code**. Do not add a callback, a listener, or a "notify"
+parameter to a node or a sub-service; if something isn't observable from
+the executor, that is a signal about where the loop lives, not a reason
+to reach into a module.
+
 ### A module's `run()` returns its full output
 
 Each module returns its **complete, self-contained output exactly as it
@@ -146,6 +190,15 @@ to fetch the rest. The node-return-type ⇄ output-group mapping is 1:1:
 `ColorNode → ColorPalette` (= `color_set`), `FontNode → FontSet`
 (= `font_set`), `ImageNode → ImageOutput` (= `image_set.images[id]`),
 and so on.
+
+The one node whose output is a **run-wide scalar** rather than a group is
+`CategoryNode → CategoryOutput` (= the top-level `category` string). Its
+return model is a thin carrier that lives with the module
+(`src/modules/categories/category_models.py`), **not** under `schema/output/`
+— the run gains no new output group, only a value for a field the artifact
+already has. `CategoryOutput.value` is exactly that field, so the seed
+round-trip below holds unchanged. Anything a carrier holds beyond it (the
+model's `reason`) is call-local and is not serialized.
 
 **Why this is a hard invariant, not a style note:** the `expand` flow
 (`scripts/expand/run.py`, `src/executor/seed.py`) reconstructs the
@@ -170,6 +223,11 @@ another `RootModel[str]` and reuse it across schemas. Don't repeat
 the same regex check across multiple field validators when one
 primitive captures it.
 
+`PathSegment` is the one to reach for whenever a **caller-supplied name
+becomes a path**: a run folder under `<out_root>/<app_id>/` (the CLI's
+`--run-name`, the studio's launch) or a saved brief's filename stem. One
+rule, one place — not a near-identical guard per caller.
+
 ---
 
 ## Output groups
@@ -188,6 +246,33 @@ that is why they are read back with `extra="ignore"` like `Output` /
 is a deliberate breaking change that requires migrating every existing
 `apps/<app>/*/output.yaml` (and the `tests/data/` fixtures).
 
+The rule is about **groups** — a collection of resolved items. A single
+run-wide value is a plain field on `Output`, not a one-field wrapper:
+`category` is a bare `str | None`, which is what every consumer (the styles
+API, `ThemeFlutter`, `ThemeReact`, `../FastApiBackend`) reads. Reshaping it
+into a group is exactly the breaking change described above, so a new
+run-wide scalar goes on `Output` directly.
+
+---
+
+## Two non-Python siblings live in here
+
+This directory is a Python package, but it also hosts the two **client runtimes**
+that consume the API it serves. Neither is Python; neither is part of the poetry
+project, the test suite, or the Docker image (both are in `.dockerignore`, and
+the `Dockerfile` only `COPY`s `src/ schema/ resources/ apps/`).
+
+- **`ThemeFlutter/`** — the `theme_flutter` Dart package. A path dep of
+  `../CRM` and `../MobileApp`.
+- **`ThemeReact/`** — the `theme-react` npm package: the same runtime for the
+  web, plus the standalone theme browser app. **npm, not poetry.** Driven by the
+  `react-*` Makefile targets (`react-install` / `react-dev` / `react-build` /
+  `react-check`); `react-dev` serves on `:8080` and needs `make api` alongside it.
+
+They share nothing with this package but the HTTP contract `make api` serves —
+no imports, no types, no toolchain. Each has its own `CLAUDE.md`; read it before
+working in there. When the API's wire shape changes, both clients are downstream.
+
 ---
 
 ## Dependencies
@@ -200,6 +285,84 @@ Poetry resolve and write the lock. Run all code, scripts, and tests via
 bare `python3` or the raw `.venv/bin/*` entrypoints. `poetry run` resolves
 the project venv itself, so it sidesteps the stale hardcoded-shebang
 breakage the `.venv/bin/*` scripts hit when this package was renamed.
+
+---
+
+## Two FastAPI apps, and why they are separate
+
+- **`src/api/`** — the read-only output API. Deployed (App Runner, :8001
+  locally). Serves *finished* runs.
+- **`src/studio/`** — the local launch surface. `make studio`, bound to
+  **127.0.0.1:8002**, never deployed. Writes a brief, starts a run, streams
+  its progress.
+
+**Never merge the studio into `src/api/`.** Both `Settings` classes
+instantiate at import time, and `src/api/config.py` deliberately needs only
+`APPS_ROOT` / `CORS_ORIGINS` / `ASSETS_CDN_BASE_URL` / `GOOGLE_FONTS_API_KEY`
+— `src/api/` **never imports `src.core.config`**, which is exactly what lets
+the deployed container boot without the four provider keys. Importing the
+pipeline into the read API destroys that property. The studio imports the
+pipeline freely; it runs on a laptop that has the keys.
+
+Rules that hold inside `src/studio/`:
+
+- **Nothing wire-shaped leaks down.** The studio owns SSE framing, JSONL,
+  HTTP status mapping; the executor owns `ProgressEvent`. Anything
+  transport-flavoured belongs here, never in `src/executor/`.
+- **State lives in `.studio/`, never in a run directory.** One append-only
+  `.studio/runs/<run_id>.jsonl` per launch, and committed briefs under
+  `.studio/briefs/`. Writing anything into `apps/<app_id>/<run_id>/` would
+  break the iron-clad rule above. `.studio/` is gitignored.
+- **The launch path only ever CREATES a run directory.** A name collision is
+  refused, never re-run in place — that keeps
+  `Pipeline._overwrite_existing`'s delete path unreachable from a browser.
+- **One run at a time, globally**, refused with 409 rather than queued: the
+  providers rate-limit and concurrent runs get throttled
+  (`.claude/skills/brand-brief/SKILL.md`). This guards the studio only; a
+  `python -m src` in a terminal is invisible to it.
+- **Briefs never overwrite `apps/<app_id>/customization.yaml`.** That is a
+  checked-in input and what `make run` generates from. The brief contract is
+  `schema/customization.py` — **five** fields, `extra="forbid"` — and
+  `BriefRequest.build` runs that model, so there is exactly one definition of
+  a valid brief. Never add a sixth field.
+- **One commit path, two callers.** The plain form (`POST /briefs`) and the
+  conversational agent (`POST /brief-agent`) both write through
+  `BriefService.commit`. The agent is a *caller* of that path, never a second
+  one — `BriefRequest.from_brief` is the only flattening it does, and it lives
+  beside `build()` so the two directions can't disagree.
+- **The agent authors; code commits.** `src/studio/agent/` holds a Pydantic AI
+  agent with **ZERO tools**: it converses to propose a `Customization`, ask a
+  multiple-choice `AgentQuestion`, or reply in text, and it writes nothing.
+  The accept path (`accepted_brief` in the POST body) runs the deterministic
+  commit FIRST, then re-runs the agent on a short outcome note so it can
+  acknowledge — a brief is never reported saved because a model said so. If
+  that post-save call throws, the turn degrades to a fixed reply rather than
+  propagating: the save already succeeded. **Never give this agent a tool** —
+  a tool would be a second way to write a brief, around `BriefService`.
+- **The agent is stateless and optional.** The client holds the transcript and
+  posts it back each turn (serialized with Pydantic AI's
+  `ModelMessagesTypeAdapter`); there is no session store to expire. And when
+  `ANTHROPIC_API_KEY` is empty the agent is simply **not built** — the studio
+  boots, launches runs and commits form briefs exactly as before, and only
+  `POST /brief-agent` fails (503). Keep that property: an unconfigured
+  optional feature must never take the app down with it.
+- **Two LLM libraries, one boundary.** litellm drives every *pipeline* call
+  (`src/modules/`, `src/shared/services/`); Pydantic AI drives the studio's
+  conversational agent and nothing else. Its model id is a **bare** Anthropic
+  name from `src/studio/config.py` (`brief_agent_model`) — never a litellm
+  `provider/model` string — because the agent names its provider explicitly.
+  The key is read from `src.core.config` rather than redeclared on the studio
+  settings: the studio already imports the pipeline, so one secret keeps one
+  definition and one env var.
+- **The system prompt is a file, never a literal.** It lives at
+  `src/studio/agent/prompts/brief_agent_system.md` and is read at use, like
+  every other prompt in this package. It is the web-app port of the
+  `brand-brief` skill (`.claude/skills/brand-brief/`) — the same ≤10-question,
+  one-at-a-time, multiple-choice-by-default interview, and the same hard rules
+  (stylised never photoreal, brand-not-app prose, no colour values, only
+  contrast-satisfiable palettes). **When that skill's rules change, change
+  this prompt in the same edit**, and vice versa; they are one interview with
+  two front doors.
 
 ---
 

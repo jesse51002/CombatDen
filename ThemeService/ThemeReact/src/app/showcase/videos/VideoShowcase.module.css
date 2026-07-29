@@ -1,0 +1,23 @@
+/*
+ * Styles for ./VideoShowcase.tsx (ports MobileApp/lib/features/videos/
+ * presentation/screens/videos_screen.dart).
+ * `--sc-*` only — see ../ShowcaseThemeVars.tsx.
+ */
+
+/*
+ * The scroller's content column — the `CustomScrollView`'s sliver list under
+ * `SliverPadding(only(bottom: spacingBig))`. The bottom padding is the Dart's
+ * own, and it is what stops the last section from ending flush against the
+ * bottom nav.
+ *
+ * NO `gap` and NO `overflow`, both on purpose. The arrangement's own column
+ * supplies the feed's rhythm; and the sticky bands in `mosaic` / `tagRail`
+ * stick to the scaffold's body scroller, so an `overflow` here would make this
+ * box the scroll container instead and pin them to the wrong edge.
+ */
+.feed {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding-bottom: var(--sc-spacing-big);
+}

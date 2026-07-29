@@ -8,34 +8,57 @@ Takes a brand brief, produces a fully customized app.
 
 Two YAMLs you write (`app.yaml`, `customization.yaml`), one the pipeline
 produces (`output.yaml`). Customized surface: **images, colours, fonts,
-text, and icons.**
+text, and icons** — plus the run's own **classification**.
 
 The pipeline is a **dependency DAG**, not a fixed sequence. The registry
 turns the two YAMLs into a node set — one **colour node**, one **font
-node**, plus a **text node** and an **icon node** (each built only when
-the app declares the matching slots), and one **image node per image
-slot**. The executor levels that graph topologically and resolves each
-level **concurrently**.
+node**, plus a **text node**, an **icon node** and a **classification
+node** (each built only when the app declares the matching inventory),
+and one **image node per image slot**. The executor levels that graph
+topologically and resolves each level **concurrently**.
 
-Colour, font, text and icon are the **level-0 roots** and run side by
-side: the colour node resolves the four base slots in one structured LLM
-call and then **derives the full palette deterministically** (elevated
-surfaces, faded variants, contrast — see *Colour* below), the font node
-picks every font in one call (validated live against the Google Fonts
-catalogue), the text node rewrites every copy slot in one batched,
-length-bounded call, and the icon node matches each slot against a
-curated set (generating any the set can't cover). The font, text and icon
-roots have no dependents. **Every image node depends on the colour
-node** — image nodes paint with the palette. An image slot may also
-declare `depends_on` other image slots — a **soft reference** for **visual
-continuity**: the dependency's look is folded into this slot's prompt as a
-style reference (never fed in as an input image).
+Colour, font, text, icon and classification are the **level-0 roots** and
+run side by side: the colour node resolves the four base slots in one
+structured LLM call and then **derives the full palette deterministically**
+(elevated surfaces, faded variants, contrast — see *Colour* below), the
+font node picks every font in one call (validated live against the Google
+Fonts catalogue), the text node rewrites every copy slot in one batched,
+length-bounded call, the icon node matches each slot against a curated set
+(generating any the set can't cover), and the classification node files the
+run into one of the app's declared `categories` (see *Classification*
+below). The font, text, icon and classification roots have no dependents.
+**Every image node depends on the colour node** — image nodes paint with
+the palette. An image slot may also declare `depends_on` other image
+slots — a **soft reference** for **visual continuity**: the dependency's
+look is folded into this slot's prompt as a style reference (never fed in
+as an input image).
 
 The graph is validated (acyclic, every dependency satisfied) **before
 any paid call**. The run is then **fault-tolerant**: a node that fails
 skips only its transitive dependents — every other node still resolves
 and is written. The writer assembles whatever resolved into
 `output.yaml` and totals what the run cost.
+
+### Watching a run happen
+
+A run is **timed and observable**. Every node is measured with
+`perf_counter` from the moment it acquires the concurrency semaphore (its
+own work, not its wait), and the whole run is timed end to end; both are
+logged on every run, sink or no sink — so "how long does a run take" is now
+a question with an answer.
+
+`Pipeline.run()` also takes an optional `progress` sink. Given one it
+narrates itself — run started, each level, each node's start / finish
+(with its elapsed) / failure (with the error), and the run total with its
+cost. Given none (what the CLI passes) nothing is emitted and the run is
+byte-for-byte what it always was.
+
+Because the **executor** owns iteration, that is where every emission lives:
+the modules carry no progress code at all. The sink is an interface
+(`src/executor/progress_sink.py`) over a plain Pydantic event
+(`src/executor/progress_event.py`) — the pipeline core stays
+transport-agnostic and knows nothing of HTTP or SSE. The `studio` app is
+the one implementation today (see *The studio* below).
 
 The whole graph, conceptually (which roots and per-slot nodes appear
 depends entirely on what the app's `app.yaml` declares):
@@ -50,6 +73,7 @@ flowchart TD
     Font["font node (root)<br/>display · body — one LLM call, Google-Fonts-validated"]
     Text["text node (root, if text slots)<br/>copy slots — one batched, length-bounded call"]
     Icon["icon node (root, if icon slots)<br/>set selection + per-slot match, Recraft fallback"]
+    Cat["classification node (root, if app.yaml categories)<br/>one LLM call — picks the run's category<br/>from the app's own declared vocabulary"]
     Images["image node × N<br/>one per image slot"]
     Color --> Images
     Images -. "depends_on — visual reference only" .-> Images
@@ -89,7 +113,8 @@ flowchart LR
 
 ## The modules
 
-Six atomic modules, one per customized surface. Each resolves the
+Six atomic modules: one per customized surface (colour, fonts, text,
+images, icons) plus the run's own classification. Each resolves the
 smallest indivisible unit (the executor owns iteration); the module
 itself never loops the slot inventory.
 
@@ -202,6 +227,65 @@ icon in it; any slot the set can't honestly cover is generated via
 Recraft. Icons are monochrome (`currentColor`) so the app tints them per
 theme — there is no per-slot colour field.
 
+### Classification
+
+```mermaid
+flowchart LR
+  S["design name + brand brief<br/>+ app.yaml categories"]
+  L["one LLM call<br/>(Haiku, structured)"]
+  V["vocabulary check<br/>re-ask; rejected again at write time"]
+  S --> L --> V
+```
+
+Every run's `output.yaml` carries a top-level `category`, and the style
+picker **requires** it: `GET /apps/{app_id}/styles` skips any run with no
+category, or whose category isn't in the app's declared vocabulary. The
+classification node is what produces it, so a new theme lands listable with
+no manual step.
+
+The node reads only the design name and the brand brief — never the resolved
+colours or images — so it is a level-0 root and costs the run no wall-clock
+time (about $0.003 a run).
+
+**App-agnostic, like everything else.** The buckets come from the app's own
+`app.yaml`:
+
+```yaml
+categories:
+  - Fighting
+  - Yoga
+  # …
+```
+
+No class value exists in Python. The response schema is built **per request**
+from that list and a validator rejects anything outside it, so an invented
+value is fed back and re-asked on the existing structured-output retry loop
+rather than written. An app that declares no `categories` never gets the node
+at all and runs exactly as it did before — the styles endpoint skips the
+vocabulary check for such an app too.
+
+The value is then checked **again at write time**, because a category the
+app doesn't declare has no loud failure mode — the theme just quietly stops
+appearing in the picker:
+
+- A value this pass **produced** that isn't declared fails the write. It
+  cannot happen through the node (the schema is built from the vocabulary),
+  so it is an assertion against a bug, not a data path.
+- A value **carried forward** from the run's existing `output.yaml` that the
+  app no longer declares is stale data, not a bug in this pass — it is logged
+  as an error and dropped, and the run is still written (the pass already
+  spent money). Re-file it with `regen --slot category`.
+
+Because classification is a node and not a bolt-on step, it inherits every
+reopen lever for free: `expand` **backfills** a run that has no category,
+`regen --slot category [--spec "…"]` re-rolls one that was mis-filed, and a
+run that is already classified seeds the node done — reopening it never
+re-spends on classification. A full in-place re-run re-classifies from the
+brief exactly as it re-makes every other slot; the value on the file being
+overwritten is kept only as a fallback for when nothing was produced (the app
+declares no vocabulary, or the call failed), so a blip never drops a listed
+theme out of the picker.
+
 ---
 
 ## Configuration
@@ -244,6 +328,13 @@ stays in harmony (colour also re-checks WCAG-AA against the fixed
 background/text). A node whose slots are all seeded does no work. So **to
 re-roll a slot you just drop it from the seed** — the scripts do exactly that.
 
+The run's classification joins that same map under the pseudo-slot id
+`category` (it is one run-wide value, not a per-slot inventory), which is what
+makes it expandable, regenerable and free to preserve like everything else. It
+seeds only when the saved value is still one of the app's declared
+`categories`, so a stamp that went stale against a changed vocabulary is
+re-made rather than carried.
+
 Steering rides one object, `OverwriteSpecs`, threaded through and recorded on
 every per-item output (so a slot says what produced it) and on the ledger:
 
@@ -258,13 +349,16 @@ Three standalone entrypoints (run from the package root, like `make`):
 
 - **`scripts/expand`** — `--run-dir <dir> [--app-yaml <path>]`. Generates only
   the slots declared in `app.yaml` but missing from `output.yaml` — resume a
-  partial run, or fill newly-added slots. The run dir's `app.yaml` is a frozen
-  snapshot, so to expand against an **updated** inventory pass the live one
-  (`--app-yaml apps/<app_id>/app.yaml`); the snapshot is then refreshed to match.
+  partial run, fill newly-added slots, or **backfill the classification** of a
+  run that has none. The run dir's `app.yaml` is a frozen snapshot, so to
+  expand against an **updated** inventory pass the live one (`--app-yaml
+  apps/<app_id>/app.yaml`); the snapshot is then refreshed to match. That is
+  also how an older run reaches a vocabulary its snapshot predates.
 - **`scripts/regen`** — `--run-dir <dir> --slot <id> [--slot <id> …]
-  [--spec "…"]`. Re-makes one or more colour/font/text/icon slots,
-  preserving everything else. Naming several slots of one atomic node re-rolls
-  them together (harmonised). Images are out of scope here.
+  [--spec "…"]`. Re-makes one or more colour/font/text/icon slots — or
+  `category`, the classification node's single pseudo-slot — preserving
+  everything else. Naming several slots of one atomic node re-rolls them
+  together (harmonised). Images are out of scope here.
 - **`scripts/regen_image`** — `--run-dir <dir> --slot <image_id> [--spec "…"]
   --mode create_new|edit_current_image`. `create_new` generates a fresh image;
   `edit_current_image` edits the existing one (image-to-image — the prompt says
@@ -283,30 +377,141 @@ The first three preserve `output.yaml`'s original `cost` and append one entry to
 `regenerate`), the slots (re)generated, the `OverwriteSpecs` applied, and that
 pass's spend.
 
+---
+
+## The studio — press a button, watch a theme generate
+
+`make studio` serves a **local-only** FastAPI app on **127.0.0.1:8002**. It
+writes a brief, launches a run, and streams that run's progress to a
+browser. It is the launch surface; the read-only API (`make api`, :8001) is
+still the thing that serves finished themes.
+
+It is a **separate app from `src/api/`, deliberately.** Both `Settings`
+classes instantiate at import time, and `src/api/` never imports
+`src.core.config` — which is exactly what lets the deployed App Runner
+container boot with only `GOOGLE_FONTS_API_KEY` set. Pulling the pipeline
+into the read API would drag the four provider keys in with it and break
+that. The studio imports the pipeline freely because it runs on a laptop
+that has the keys.
+
+### The endpoints
+
+| | |
+| --- | --- |
+| `POST /briefs` | Validate the five brief fields and write `.studio/briefs/<slug>.yaml`. |
+| `POST /brief-agent` | One turn of the conversational brief interview — and, when the turn carries an accepted brief, the commit. |
+| `POST /runs` | Start a run from a brief + a **new** run name. Returns a `run_id` immediately — it never blocks on generation. |
+| `GET /runs/{id}/events` | Server-Sent Events: the run, live. |
+| `GET /runs/{id}` | The same records as one snapshot (the poll fallback). |
+| `GET /runs/{id}/images/{slot}` | One slot's PNG, **servable mid-run**. |
+| `GET /runs/active` | The run currently in flight, or `null`. |
+
+### Four things worth knowing
+
+**The stream replays from index 0.** Every subscriber gets every record from
+the beginning, so a tab that opens late — or reconnects — misses nothing.
+Each frame is a default (unnamed) `message` event carrying one `RunRecord`
+as JSON, with the record's index as the SSE `id:`, so a client needs only
+`EventSource.onmessage`. **The client must `close()` on the terminal record**
+(`kind === "settled"`): the server ends the stream there and an open
+`EventSource` reconnects automatically — and would be replayed from 0 again,
+forever. There is no `sse-starlette` and no npm dependency on either side;
+`StreamingResponse` and the browser's built-in `EventSource` are enough.
+
+**One run at a time, globally.** The pipeline hits rate-limited LLM / image
+providers and concurrent runs get throttled, so a second launch is refused
+with **409** carrying the active run's id/app/name rather than queued. This
+guards the studio only — someone running `python -m src` in a terminal at
+the same time is invisible to it.
+
+**The launch path only ever CREATES a run directory.** A name that already
+exists is refused (409), never re-run in place, so the pipeline's
+destructive in-place overwrite is unreachable from a browser.
+
+**State lives in `.studio/`, never in a run.** Each launch appends one JSON
+line per record to `.studio/runs/<run_id>.jsonl` — outside every run
+directory, because a run's produced artifacts are the pipeline's alone. A
+log whose last line is not a terminal record identifies a **crashed** run,
+which nothing else can tell you: done-ness is otherwise inferred purely from
+`output.yaml` being on disk, and that cannot distinguish "still going" from
+"the process died half way". `.studio/` is gitignored.
+
+### Images as they land
+
+`GET /runs/{id}/images/{slot}` serves the PNG straight off disk, so a client
+can display each image the moment its `node_finished` event arrives carrying
+that slot's `image_slot`. The read API cannot answer this during a run —
+`OutputService.image_file` loads the run's `output.yaml` first, and that file
+is written only when the whole run finishes (and it 307-redirects to the CDN
+by default, where a run made thirty seconds ago on a laptop does not exist).
+That is the read API being right about its own job — serving *finished* runs
+— so the studio serves the live bytes itself.
+
+### The brief form
+
+`POST /briefs` takes the five brief fields flat (`name`, `short_desc`,
+`long_desc`, `colors_description`, `mode`) and writes
+`.studio/briefs/<slug>.yaml`. The contract is `schema/customization.py` —
+five fields, `extra="forbid"`, non-empty validators — and `BriefRequest.build`
+runs *that* model, so there is never a second copy of what a valid brief is.
+A blank field is a 422 and nothing is written.
+
+Briefs land in `.studio/briefs/`, **not** `apps/<app_id>/customization.yaml`:
+that file is a checked-in input and what `make run` generates from, so
+writing it here would silently change what a plain `make run` does. A launch
+consumes either an inline `brief` or a saved `brief_slug` — exactly one.
+
+### The brief agent — the same brief, by conversation
+
+`POST /brief-agent` is a **Pydantic AI** agent that interviews someone about
+their brand and proposes the brief for them. It is the web port of the
+`brand-brief` skill (`.claude/skills/brand-brief/`): the same ≈10-question,
+one-at-a-time, multiple-choice-by-default interview, held to the same rules
+(stylised never photoreal, brand prose that never names app screens, colour
+kept to mood / hue-family / saturation / mode, and only palettes the pipeline's
+contrast contract can actually satisfy). The skill is bound to Claude Code's
+interactive tooling and can't run from a browser — which is the whole reason
+this exists.
+
+**The agent authors; code commits.** It has **zero tools** and writes nothing.
+Each turn it emits exactly one of three things:
+
+- **text** — its next question, or a short acknowledgement;
+- a **question** — `{question, options (2–6), multi_select}`, rendered as
+  chips, whose selection becomes the next turn's message;
+- a **proposal** — a short chat message **plus** the finished five-field brief.
+  The message is required: a proposal never lands in the review panel without
+  a word in the conversation.
+
+**Accept is the same endpoint.** When the owner accepts, the browser posts the
+reviewed brief back as `accepted_brief`; the server runs the deterministic
+`BriefService.commit` **first** — the same call the plain form makes — and only
+then re-runs the agent on a short "it was saved" note so it can acknowledge and
+invite more changes. A brief is never reported saved because a model said so,
+and if that post-save call fails the turn still reports the save. The response
+carries where it landed, so the browser can launch a run from that `brief_slug`
+without re-deriving the filename.
+
+**No sessions.** The client holds the transcript and posts it back each turn
+(serialized with Pydantic AI's own message adapter), so there is nothing to
+store and nothing to expire — the studio can restart mid-interview.
+
+**Optional by construction.** With no `ANTHROPIC_API_KEY` the agent is never
+built: everything else in the studio works exactly as before and only
+`POST /brief-agent` answers 503. The model is a bare Anthropic name in
+`src/studio/config.py` (`brief_agent_model`, override with `BRIEF_AGENT_MODEL`);
+the key comes from the pipeline config the studio already imports, so that one
+secret keeps a single definition.
+
+> This is the one place Pydantic AI is used. Every *pipeline* call still goes
+> through litellm; the agent is conversational, so it gets the conversational
+> library. Its system prompt is a file
+> (`src/studio/agent/prompts/brief_agent_system.md`) read at use, like every
+> other prompt here.
+
+---
+
 ## TODO
-
-### Classification pipeline step — categorise each run at production time
-
-Every run's `output.yaml` carries a top-level `category` — one of the values
-the app declares under `categories` in its `app.yaml` (app-agnostic: the code
-supports "classification", the class values are the app's own; for combatden
-they are the 8 parent gym-type buckets). The style picker requires it: an
-uncategorised run — or one whose value isn't in the declared vocabulary — is
-skipped by `GET /apps/{app_id}/styles`.
-
-Today the value is **stamped into the artifact by hand** (all 76 combatden
-runs were backfilled this way). The missing piece is a **pipeline
-classification step**: a cheap structured LLM call at run production (and an
-`expand`-style backfill script for existing runs) that reads the design brief
-/ design name and picks the category from the app.yaml vocabulary, so a new
-theme lands classified without any manual step. Until it exists, stamping the
-`category` line is part of producing a new named style. Once a run is stamped,
-every in-place lever carries the stamp forward — `regen`, `regen_image` and
-`expand` thread it through `Writer.write_expansion`, and a full in-place re-run
-(`src/cli.py` pointed at an existing dir) captures the prior `output.yaml`'s
-`category` before the pipeline clears the file and re-stamps it via
-`Writer.write` — so re-touching a run never silently drops the theme from the
-picker.
 
 ### Corner rounding — one paid call, the rest derived
 
@@ -352,7 +557,8 @@ codebase/CustomizationService/
 ├── src/
 │   ├── __main__, cli    # CLI entrypoint
 │   ├── core/            # config, errors, run_context, logging, util
-│   ├── executor/        # orchestrator (the DAG), registry, writer
+│   ├── executor/        # orchestrator (the DAG), registry, writer,
+│   │                    #   progress_event + progress_sink (watch a run)
 │   ├── modules/         # base = Node + DependencyKind
 │   │   ├── colors/      # ColorNode + scheme (LLM) / correction /
 │   │   │                #   derivation / surface services, prompts/*.md
@@ -361,8 +567,10 @@ codebase/CustomizationService/
 │   │   ├── fonts/       # FontNode + font selection service
 │   │   │                #   (Google Fonts catalog), prompts/*.md
 │   │   ├── texts/       # TextNode + text generation service, prompts/*.md
-│   │   └── icons/       # IconNode + set selection / matching /
-│   │                    #   generation services, prompts/*.md
+│   │   ├── icons/       # IconNode + set selection / matching /
+│   │   │                #   generation services, prompts/*.md
+│   │   └── categories/  # CategoryNode + category selection service
+│   │                    #   (the run's app.yaml-declared bucket), prompts/*.md
 │   ├── shared/
 │   │   ├── interfaces/  # LLMClient, ImageGenerator, BackgroundRemover,
 │   │   │                #   GoogleFontsCatalog, IconSetCatalog
@@ -370,9 +578,16 @@ codebase/CustomizationService/
 │   │                    #   Recraft remover, Google Fonts catalog,
 │   │                    #   local icon set catalog, Recraft icon generator,
 │   │                    #   cost, prompts/*.md
-│   └── api/             # read-only FastAPI over output.yaml
-├── tests/               # core, modules, executor, pipeline, services, api
+│   ├── api/             # read-only FastAPI over output.yaml (deployed)
+│   └── studio/          # local launch surface: POST a brief, launch a
+│                        #   run, stream it (SSE) — routers, schema/,
+│                        #   service/ (registry, launcher, reader, briefs),
+│                        #   agent/ (Pydantic AI brief interviewer +
+│                        #   prompts/) — the one non-litellm LLM caller
+├── tests/               # core, modules, executor, pipeline, services,
+│                        #   api, studio, studio agent (no key, no network)
 ├── scripts/             # expand, regen, regen_image, edit_customization, …
+├── .studio/             # gitignored: run logs (jsonl) + committed briefs
 └── apps/
     ├── combatden/       # app.yaml, customization.yaml, runs
     └── smoketest/       # app.yaml, customization.yaml, runs (every module)
@@ -380,6 +595,7 @@ codebase/CustomizationService/
 
 `make test` runs the suite; `make run` customizes `apps/combatden/` end
 to end, `make smoke` does the same on `apps/smoketest/` (the one app that
-exercises all six modules); `make api` serves the read-only output API.
-Entry point: `src/executor/orchestrator.py`. Read the schemas for the
-exact YAML shapes; read `apps/combatden/` for a worked example.
+exercises all six modules); `make api` serves the read-only output API and
+`make studio` serves the local launch surface. Entry point:
+`src/executor/orchestrator.py`. Read the schemas for the exact YAML shapes;
+read `apps/combatden/` for a worked example.

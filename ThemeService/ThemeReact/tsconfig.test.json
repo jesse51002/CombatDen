@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+
+    "noEmit": true,
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
+
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": ["src/**/__tests__/**/*.ts", "src/**/__tests__/**/*.tsx"],
+  // The APP's tests are typechecked by tsconfig.app.json, whose `include`
+  // (`src/app`) already covers them. They cannot be checked here: this project
+  // reaches its subject through a project REFERENCE, which resolves via emitted
+  // declarations, and the app project is `noEmit` — so an app test importing
+  // `../widgets/FillGrid` would fail with TS6307. The library's tests are
+  // unaffected; tsconfig.lib.json emits declarations.
+  "exclude": ["src/app/**"],
+  "references": [{ "path": "./tsconfig.lib.json" }]
+}

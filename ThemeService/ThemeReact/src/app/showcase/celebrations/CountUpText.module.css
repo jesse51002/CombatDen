@@ -1,0 +1,74 @@
+/*
+ * Styles for ./CountUpText.tsx
+ * (ports CRM/lib/shared/widgets/animation/count_up_text.dart).
+ *
+ * NO TYPE TOKEN IS SET HERE ON PURPOSE. The digits inherit `font`,
+ * `letter-spacing` and `color` from whichever `--sc-type-*` rung the caller
+ * put on its own box, which is how a `TextStyle` argument ports — and it is
+ * also what makes the cell self-measuring: the sizer below is laid out in the
+ * real font at the real size, so it measures exactly what `TextPainter` does.
+ */
+
+/* `Row(mainAxisSize: min, mainAxisAlignment: center, crossAxisAlignment: center)`. */
+.root {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The prefix, the suffix and the thousands separators — plain `Text`s. */
+.glyph {
+  flex: 0 0 auto;
+  white-space: pre;
+}
+
+/*
+ * `SizedBox(digitSize) > ClipRect` — one digit's window. The reel's own box
+ * comes from the sizer inside it; the strip is taken out of flow so its
+ * `count` cells cannot stretch the window.
+ */
+.reel {
+  position: relative;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+/*
+ * `_measureDigitCell`: all ten digits stacked in ONE grid cell, so the track
+ * takes the widest and tallest of them — Dart's `max` over ten `TextPainter`
+ * layouts, made by the layout engine instead of by hand.
+ *
+ * `visibility: hidden` rather than `display: none`: it must still be laid out.
+ */
+.sizer {
+  display: grid;
+  visibility: hidden;
+}
+
+.sizer > span {
+  grid-area: 1 / 1;
+}
+
+/*
+ * `Column` of digit cells inside an `OverflowBox(alignment: topCenter)`, moved
+ * by `Transform.translate`. The driver writes the transform; a percentage is
+ * relative to the STRIP's own height, which is exactly `count` cells — so no
+ * measurement crosses into JS.
+ */
+.strip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  will-change: transform;
+}
+
+/*
+ * One cell. A block with a single line lays out at the font's own line box —
+ * the same metric the sizer's grid track took — so every cell is exactly one
+ * window tall and the reel never drifts.
+ */
+.digit {
+  display: block;
+  text-align: center;
+}

@@ -1,5 +1,6 @@
 """The customizable slot types: `ColorSlot`, `ImageSlot`, `FontSlot`,
-`TextSlot`, `IconSlot`."""
+`TextSlot`, `IconSlot`, `FormatSlot` (+ its `FormatValue` vocabulary
+entry)."""
 
 from __future__ import annotations
 
@@ -150,3 +151,92 @@ class TextSlot(SlotBase):
         if self.min_chars > self.max_chars:
             self.min_chars = self.max_chars
         return self
+
+
+class FormatValue(BaseModel):
+    """One entry in a format slot's vocabulary: the literal wire token
+    plus what arrangement / behaviour choosing it produces.
+
+    Deliberately NOT a ``SlotBase``. A slot ``id`` is a snake_case
+    identifier this package keys by (seed, regen target, output key); a
+    format *value* is an opaque token owned by the consuming client and
+    written into ``output.yaml`` verbatim — this package never transforms
+    its casing or shape. So it is validated for transport hygiene only
+    (non-empty, single whitespace-free token), never against a casing
+    convention: a client whose values are ``lowerCamelCase`` and one whose
+    values are ``kebab-case`` are both the app's business.
+
+    ``description`` is what makes a pick *good*. It is the only thing the
+    LLM reads to decide, exactly like an image or colour slot's
+    description — a vocabulary of bare tokens is one the model has to
+    guess at.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    value: str
+    description: str
+
+    @field_validator("value")
+    @classmethod
+    def _value_is_one_token(cls, v: str) -> str:
+        """A single, whitespace-free wire token. Surrounding or internal
+        whitespace is a YAML typo, not a value: the client matches the
+        token literally, so ``" agendaList"`` or ``"agenda List"`` would
+        silently miss and fall back."""
+        if not v.strip():
+            raise ValueError("format value must be non-empty")
+        if v != v.strip() or len(v.split()) != 1:
+            raise ValueError(
+                f"format value {v!r} must be a single token with no "
+                "surrounding or internal whitespace"
+            )
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def _description_non_empty(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("format value description must be non-empty")
+        return v
+
+
+class FormatSlot(SlotBase):
+    """A named arrangement / behaviour choice the pipeline resolves to
+    exactly one value from the slot's OWN declared vocabulary.
+
+    Unlike every other slot kind, a format slot carries its vocabulary
+    with it: colours resolve to a computed oklch, fonts to a Google Fonts
+    family, copy to free text, but a format resolves to one token from a
+    closed list only this app knows. That list lives here, in
+    ``app.yaml``, so the pipeline supports "choose one of these" and never
+    holds an app's arrangements (the app-agnostic rule). The classification
+    node's ``categories`` is the same idea one level up — a single run-wide
+    vocabulary rather than one per slot.
+
+    The consuming client owns the fallback: a slot the pipeline never
+    resolved is simply absent from ``format_set``, and the client renders
+    whatever it ships by default. That is why a failed or unpicked format
+    is a non-event, and why nothing in here needs a "default" field.
+    """
+
+    values: list[FormatValue]
+
+    @field_validator("values")
+    @classmethod
+    def _values_well_formed(cls, v: list[FormatValue]) -> list[FormatValue]:
+        """A non-empty vocabulary with unique tokens. Empty would give the
+        LLM nothing to choose from (and the per-request response model
+        nothing to validate against); a duplicate token means two
+        descriptions compete for one wire value and the second silently
+        wins."""
+        if not v:
+            raise ValueError(
+                "format slot must declare at least one value "
+                "(the closed vocabulary the pipeline picks from)"
+            )
+        values = [entry.value for entry in v]
+        if len(values) != len(set(values)):
+            dupes = sorted({x for x in values if values.count(x) > 1})
+            raise ValueError(f"duplicate format values: {dupes}")
+        return v

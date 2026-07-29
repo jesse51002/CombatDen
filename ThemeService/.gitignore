@@ -15,6 +15,11 @@ apps/*/*/
 # Local dev secrets (never commit)
 .env
 
+# The studio app's local state: one append-only run log per launch
+# (.studio/runs/<run_id>.jsonl) and the briefs the form commits
+# (.studio/briefs/<slug>.yaml). Machine-local, never shared.
+.studio/
+
 # Vendored ColorMcp source is committed; build outputs are regenerated
 vendor/colormcp/node_modules/
 vendor/colormcp/dist/
